@@ -803,6 +803,22 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
     except Exception:
         _LOGGER.exception("Failed to register Switches API")
 
+    # Register Media Players API (v7.16.0)
+    try:
+        from copilot_core.api.v1.media_players import media_bp
+        app.register_blueprint(media_bp)
+        _LOGGER.info("Registered Media Players API (/api/v1/media/*)")
+    except Exception:
+        _LOGGER.exception("Failed to register Media Players API")
+
+    # Register Groups API (v7.16.0)
+    try:
+        from copilot_core.api.v1.groups import groups_bp
+        app.register_blueprint(groups_bp)
+        _LOGGER.info("Registered Groups API (/api/v1/groups/*)")
+    except Exception:
+        _LOGGER.exception("Failed to register Groups API")
+
     # Register HomeKit Bridge API (v3.4.0)
     try:
         from copilot_core.api.v1.homekit import homekit_bp
