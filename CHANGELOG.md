@@ -1,13 +1,1 @@
--e # CHANGELOG
-
-## v7.8.11-dev (2026-02-24)
-- Fixed error isolation and connection pooling
-- Tagged test-p0-202602240530
-- Updated RELEASE_NOTES for P0 fixes
-
-## v7.8.12 (2026-02-24)
-- Phase 5: NotificationSensor + SceneIntelligenceSensor
-- 31 API endpoints registered
-
-## v7.8.13 (2026-02-24)
-- Cross-Home Sharing + Autopilot Runner v0.1.0
+# CHANGELOG\n\n## v7.8.11-dev (2026-02-24)\n- Fixed error isolation and connection pooling\n- Tagged test-p0-202602240530\n- Updated RELEASE_NOTES for P0 fixes\n- Tagged test-p0-202602240620\n- Tagged test-p0-202602240640\n- Tagged test-p0-202602240650\n- Tagged test-p0-202602240710\n- Tagged test-p0-202602240730\n- Tagged test-p0-202602240740\n- Tagged test-p0-202602240750\n- Tagged test-p0-202602240840\n- Pytest: Import errors during collection (core)\n\n## v7.8.12 (2026-02-24)\n- Phase 5: NotificationSensor + SceneIntelligenceSensor\n- 31 API endpoints registered\n\n## v7.8.13 (2026-02-24)\n- Cross-Home Sharing + Autopilot Runner v0.1.0
