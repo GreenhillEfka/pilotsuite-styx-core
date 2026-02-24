@@ -729,6 +729,22 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
     except Exception:
         _LOGGER.exception("Failed to register Routine Patterns API")
 
+    # Register Push Notifications API (v7.12.0)
+    try:
+        from copilot_core.api.v1.push_notifications import push_notifications_bp
+        app.register_blueprint(push_notifications_bp)
+        _LOGGER.info("Registered Push Notifications API (/api/v1/notifications/*)")
+    except Exception:
+        _LOGGER.exception("Failed to register Push Notifications API")
+
+    # Register System Status API (v7.12.0)
+    try:
+        from copilot_core.api.v1.system_status import system_status_bp
+        app.register_blueprint(system_status_bp)
+        _LOGGER.info("Registered System Status API (/api/v1/system/*)")
+    except Exception:
+        _LOGGER.exception("Failed to register System Status API")
+
     # Register HomeKit Bridge API (v3.4.0)
     try:
         from copilot_core.api.v1.homekit import homekit_bp

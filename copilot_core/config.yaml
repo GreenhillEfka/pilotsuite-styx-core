@@ -1,5 +1,5 @@
 name: PilotSuite Core
-version: "7.11.1"
+version: "7.12.1"
 slug: copilot_core
 description: "PilotSuite Styx — AI Home Copilot with Brain Architecture, Neural Sensors, and local LLM conversation."
 url: https://github.com/GreenhillEfka/pilotsuite-styx-core
