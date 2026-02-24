@@ -1,0 +1,10 @@
+{
+  "task": "release_notes",
+  "success": true,
+  "duration_s": 0.0,
+  "timestamp": "2026-02-23T11:17:33.172848",
+  "details": {
+    "release_notes_count": 1,
+    "notes_file": "/config/.openclaw/workspace/ha-copilot-repo/autopilot_RELEASE_NOTES.md"
+  }
+}

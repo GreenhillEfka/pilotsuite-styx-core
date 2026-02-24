@@ -39,6 +39,11 @@ from copilot_core.tags.api import init_tags_api as setup_tag_api
 from copilot_core.webhook_pusher import WebhookPusher
 from copilot_core.household import HouseholdProfile
 from copilot_core.neurons.manager import NeuronManager
+
+# PilotSuite Phase 5 APIs
+from copilot_core.sharing.api import sharing_bp
+from copilot_core.api.v1.notifications import bp as notifications_bp
+from copilot_core.collective_intelligence.api import federated_bp
 from copilot_core.telegram import TelegramBot
 from copilot_core.module_registry import ModuleRegistry
 from copilot_core.automation_creator import AutomationCreator
@@ -736,9 +741,8 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         _LOGGER.info("Registered Error Status API (/api/v1/errors/*)")
     except Exception:
         _LOGGER.exception("Failed to register Error Status API")
-        _LOGGER.exception("Failed to register Vector API")
-
-    # Register Sharing API (fix: was never wired)
+    # Register Sharing API (Phase 5 — Cross-home sync & discovery)
+>>>>>>> main
     try:
         from copilot_core.sharing.api import sharing_bp
         app.register_blueprint(sharing_bp)
@@ -753,6 +757,22 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         _LOGGER.info("Registered Onyx bridge API (/api/v1/onyx/*)")
     except Exception:
         _LOGGER.exception("Failed to register Onyx bridge API")
+
+    # Register Notifications API (Phase 5 — Push notifications)
+    try:
+        from copilot_core.api.v1.notifications import bp as notifications_bp
+        app.register_blueprint(notifications_bp, url_prefix="/api/v1")
+        _LOGGER.info("Registered Notifications API (/api/v1/notifications/*)")
+    except Exception:
+        _LOGGER.exception("Failed to register Notifications API")
+
+    # Register Collective Intelligence API (Phase 5 — Federated learning)
+    try:
+        from copilot_core.collective_intelligence.api import federated_bp
+        app.register_blueprint(federated_bp, url_prefix="/api/v1")
+        _LOGGER.info("Registered Collective Intelligence API (/api/v1/federated/*)")
+    except Exception:
+        _LOGGER.exception("Failed to register Collective Intelligence API")
 
     # Register PilotSuite MCP Server (expose skills to external AI clients)
     from copilot_core.mcp_server import mcp_bp

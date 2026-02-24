@@ -1,4 +1,4 @@
-name: Production Guard
+name: Production Guard (pilotsuite-styx-core)
 
 on:
   schedule:
@@ -7,37 +7,7 @@ on:
 
 jobs:
   critical-path:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install dependencies
-        run: |
-          python -m pip install flask flask-compress waitress requests pyyaml \
-            pydantic psutil python-ulid numpy pytest pytest-asyncio pytest-cov
-
-      - name: Syntax check
-        run: |
-          python -m py_compile $(find copilot_core/rootfs/usr/src/app -name '*.py')
-
-      - name: Critical path tests
-        env:
-          PYTHONPATH: copilot_core/rootfs/usr/src/app
-          COPILOT_DEV_LOG_DIR: /tmp
-          COPILOT_TX_LOG_DIR: /tmp
-          COPILOT_BRAIN_GRAPH_DB_DIR: /tmp
-          COPILOT_MOOD_DB_DIR: /tmp
-          COPILOT_VECTOR_DB_DIR: /tmp
-        run: |
-          python -m pytest -q \
-            copilot_core/rootfs/usr/src/app/tests/test_app_smoke.py \
-            copilot_core/rootfs/usr/src/app/tests/test_status_endpoint.py \
-            copilot_core/rootfs/usr/src/app/tests/test_auth_security.py \
-            copilot_core/rootfs/usr/src/app/tests/test_events_endpoint.py \
-            copilot_core/rootfs/usr/src/app/tests/test_full_flow.py \
-            copilot_core/rootfs/usr/src/app/tests/test_e2e_pipeline.py
+    uses: ./.github/workflows/pilotsuite-dev/github-action-shared.yml
+    with:
+      repo-name: "pilotsuite-styx-core"
+      repo-path: "pilotsuite-dev/pilotsuite-styx-core"

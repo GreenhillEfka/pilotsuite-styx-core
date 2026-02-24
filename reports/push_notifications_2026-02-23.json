@@ -1,0 +1,11 @@
+{
+  "task": "push_notifications",
+  "success": true,
+  "duration_s": 0.0,
+  "timestamp": "2026-02-23T11:17:33.171387",
+  "details": {
+    "ha_notify_fallback": false,
+    "has_placeholder": true,
+    "status": "ready"
+  }
+}

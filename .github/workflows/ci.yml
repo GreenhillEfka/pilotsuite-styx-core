@@ -1,86 +1,13 @@
-name: CI
+name: CI (pilotsuite-styx-core)
 
 on:
   push:
+    branches: [main, dev]
   pull_request:
 
 jobs:
-  lint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Syntax check (py_compile)
-        run: |
-          python -m py_compile $(find copilot_core/rootfs/usr/src/app -name '*.py')
-
-      - name: Install dependencies
-        run: |
-          pip install flask flask-compress waitress requests pyyaml \
-            pydantic psutil python-ulid numpy
-
-      - name: Import smoke test (create_app)
-        env:
-          PYTHONPATH: copilot_core/rootfs/usr/src/app
-        run: |
-          python - <<'PY'
-          from copilot_core.app import create_app
-          app = create_app()
-          assert app is not None
-          print('create_app ok')
-          PY
-
-  test:
-    runs-on: ubuntu-latest
-    needs: lint
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install dependencies
-        run: |
-          pip install flask flask-compress waitress requests pyyaml \
-            pydantic psutil python-ulid numpy pytest pytest-cov pytest-asyncio
-
-      - name: Run full test suite
-        env:
-          PYTHONPATH: copilot_core/rootfs/usr/src/app
-          COPILOT_DEV_LOG_DIR: /tmp
-          COPILOT_TX_LOG_DIR: /tmp
-          COPILOT_BRAIN_GRAPH_DB_DIR: /tmp
-          COPILOT_MOOD_DB_DIR: /tmp
-          COPILOT_VECTOR_DB_DIR: /tmp
-        run: |
-          python -m pytest copilot_core/rootfs/usr/src/app/tests -v --tb=short \
-            --cov=copilot_core/rootfs/usr/src/app/copilot_core \
-            --cov-report=term-missing \
-            -x
-
-  security:
-    runs-on: ubuntu-latest
-    needs: lint
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install bandit
-        run: pip install bandit
-
-      - name: Security scan (bandit)
-        run: |
-          bandit -r copilot_core/rootfs/usr/src/app/copilot_core \
-            -ll --skip B101,B404,B603 \
-            -f txt || true
+  ci:
+    uses: ./.github/workflows/pilotsuite-dev/github-action-shared.yml
+    with:
+      repo-name: "pilotsuite-styx-core"
+      repo-path: "pilotsuite-dev/pilotsuite-styx-core"
