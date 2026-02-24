@@ -450,6 +450,182 @@ def get_dev_logs():
     })
 
 
+# ---------------------------------------------------------------------------
+# Dashboard API Endpoints (v7.11.0) - Always available fallback
+# ---------------------------------------------------------------------------
+
+def _get_brain_graph_service():
+    """Get Brain Graph service instance."""
+    try:
+        from copilot_core.brain_graph.provider import get_graph_service
+        return get_graph_service()
+    except Exception:
+        return None
+
+
+@app.get("/api/v1/dashboard/brain-summary")
+@require_token
+def dashboard_brain_summary():
+    """Get brain graph summary for dashboard display.
+    
+    Returns node counts, edge counts, top nodes, and top edges.
+    """
+    brain_service = _get_brain_graph_service()
+    
+    if not brain_service:
+        return jsonify({
+            "ok": False,
+            "error": "Brain Graph service not available",
+            "time": _now_iso(),
+        }), 503
+    
+    try:
+        state = brain_service.export_state(limit_nodes=50, limit_edges=100)
+        
+        nodes = state.get("nodes", [])
+        edges = state.get("edges", [])
+        
+        kind_counts = {}
+        for node in nodes:
+            kind = node.get("kind", "unknown")
+            kind_counts[kind] = kind_counts.get(kind, 0) + 1
+        
+        type_counts = {}
+        for edge in edges:
+            edge_type = edge.get("type", "unknown")
+            type_counts[edge_type] = type_counts.get(edge_type, 0) + 1
+        
+        sorted_nodes = sorted(nodes, key=lambda n: n.get("score", 0), reverse=True)
+        top_nodes = sorted_nodes[:10]
+        
+        sorted_edges = sorted(edges, key=lambda e: e.get("weight", 0), reverse=True)
+        top_edges = sorted_edges[:10]
+        
+        return jsonify({
+            "ok": True,
+            "time": _now_iso(),
+            "summary": {
+                "total_nodes": len(nodes),
+                "total_edges": len(edges),
+                "nodes_by_kind": kind_counts,
+                "edges_by_type": type_counts,
+            },
+            "top_nodes": [
+                {
+                    "id": n.get("id"),
+                    "label": n.get("label"),
+                    "kind": n.get("kind"),
+                    "score": round(n.get("score", 0), 6),
+                }
+                for n in top_nodes
+            ],
+            "top_edges": [
+                {
+                    "id": e.get("id"),
+                    "from": e.get("from"),
+                    "to": e.get("to"),
+                    "type": e.get("type"),
+                    "weight": round(e.get("weight", 0), 6),
+                }
+                for e in top_edges
+            ],
+        })
+        
+    except Exception as e:
+        return jsonify({
+            "ok": False,
+            "error": str(e),
+            "time": _now_iso(),
+        }), 500
+
+
+@app.get("/api/v1/dashboard/health")
+@require_token
+def dashboard_health():
+    """Dashboard module health check."""
+    brain_ok = _get_brain_graph_service() is not None
+    
+    return jsonify({
+        "ok": True,
+        "time": _now_iso(),
+        "module": "dashboard",
+        "version": "7.11.0",
+        "features": [
+            "brain_graph_summary",
+            "node_statistics",
+            "edge_statistics",
+        ],
+        "integrations": {
+            "brain_graph": "ok" if brain_ok else "unavailable",
+        },
+        "status": "active",
+        "endpoints": [
+            "/api/v1/dashboard/brain-summary",
+            "/api/v1/dashboard/health",
+        ],
+    })
+
+
+# ---------------------------------------------------------------------------
+# Hub API Fallback Endpoints (v7.11.0)
+# ---------------------------------------------------------------------------
+
+@app.get("/api/v1/hub/dashboard")
+@require_token
+def hub_dashboard():
+    """Hub dashboard overview - falls back to basic data if Hub unavailable."""
+    try:
+        from copilot_core.hub.dashboard import DashboardHub
+        dashboard = DashboardHub()
+        overview = dashboard.get_overview()
+        return jsonify({
+            "ok": True,
+            "layout": {
+                "name": overview.layout.get("name"),
+                "columns": overview.layout.get("columns"),
+            },
+            "widgets_count": len(overview.widgets),
+            "summary": overview.summary,
+            "alerts_count": overview.alerts_count,
+        })
+    except Exception as e:
+        # Return minimal fallback
+        return jsonify({
+            "ok": True,
+            "layout": {"name": "default", "columns": 3},
+            "widgets_count": 0,
+            "summary": {},
+            "alerts_count": 0,
+            "fallback": True,
+            "error": str(e)[:100],
+        })
+
+
+@app.get("/api/v1/hub/widget-types")
+@require_token
+def hub_widget_types():
+    """Get available widget types."""
+    try:
+        from copilot_core.hub.dashboard import WIDGET_TYPES
+        return jsonify({
+            "ok": True,
+            "widget_types": list(WIDGET_TYPES),
+        })
+    except Exception:
+        return jsonify({
+            "ok": True,
+            "widget_types": [
+                "energy_overview",
+                "battery_status",
+                "heat_pump_status",
+                "weather_warnings",
+                "mood_indicator",
+                "system_health",
+            ],
+            "fallback": True,
+        })
+
+
 if __name__ == "__main__":
     host = "0.0.0.0"
     port = int(os.environ.get("PORT", "8909"))
