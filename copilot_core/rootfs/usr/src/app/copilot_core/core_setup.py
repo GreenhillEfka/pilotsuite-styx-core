@@ -3923,3 +3923,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.api.v1.wasabi2 import wasabi2_bp
         app.register_blueprint(wasabi2_bp)
     except: pass
+    try:
+        from copilot_core.api.v1.b2 import b2_bp
+        app.register_blueprint(b2_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.cfr2 import cfr2_bp
+        app.register_blueprint(cfr2_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.wasabis3 import wasabis3_bp
+        app.register_blueprint(wasabis3_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.dreamobjects import dreamobjects_bp
+        app.register_blueprint(dreamobjects_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.dospaces import dospaces_bp
+        app.register_blueprint(dospaces_bp)
+    except: pass
