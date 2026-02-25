@@ -1,5 +1,8 @@
 # PilotSuite Release Maschine
 
+> **⚠️ WICHTIG: Lesen Sie zuerst RELEASE_STRICT.md für vollständige Release-Regeln!**
+> Dieses Dokument beschreibt den Workflow, RELEASE_STRICT.md die konkreten Regeln.
+
 ## Rollen & Verantwortung
 
 | Agent | Branch | Aufgabe | Cron |
