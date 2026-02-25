@@ -4183,3 +4183,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.api.v1.armadillo import armadillo_bp
         app.register_blueprint(armadillo_bp)
     except: pass
+    try:
+        from copilot_core.api.v1.gsl import gsl_bp
+        app.register_blueprint(gsl_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.blas import blas_bp
+        app.register_blueprint(blas_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.lapack import lapack_bp
+        app.register_blueprint(lapack_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.fftw import fftw_bp
+        app.register_blueprint(fftw_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.openblas import openblas_bp
+        app.register_blueprint(openblas_bp)
+    except: pass
