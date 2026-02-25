@@ -3203,3 +3203,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.api.v1.spaces import spaces_bp
         app.register_blueprint(spaces_bp)
     except: pass
+    try:
+        from copilot_core.api.v1.bunny import bunny_bp
+        app.register_blueprint(bunny_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.akamai import akamai_bp
+        app.register_blueprint(akamai_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.fastly import fastly_bp
+        app.register_blueprint(fastly_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.keycdn import keycdn_bp
+        app.register_blueprint(keycdn_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.cfworkers import cfworkers_bp
+        app.register_blueprint(cfworkers_bp)
+    except: pass
