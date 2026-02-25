@@ -2563,3 +2563,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.api.v1.mailscanner import mailscanner_bp
         app.register_blueprint(mailscanner_bp)
     except: pass
+    try:
+        from copilot_core.api.v1.postgrey import postgrey_bp
+        app.register_blueprint(postgrey_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.razor import razor_bp
+        app.register_blueprint(razor_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.pyzor import pyzor_bp
+        app.register_blueprint(pyzor_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.dcc import dcc_bp
+        app.register_blueprint(dcc_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.rmilter import rmilter_bp
+        app.register_blueprint(rmilter_bp)
+    except: pass
