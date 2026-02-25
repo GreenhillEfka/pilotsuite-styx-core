@@ -41,7 +41,7 @@ jobs:
           from pathlib import Path
 
           cfg = Path("copilot_core/config.yaml").read_text(encoding="utf-8")
-          version_match = re.search(r'^version:\\s*"?(.*?)"?\\s*$', cfg, flags=re.MULTILINE)
+          version_match = re.search(r'^version:\s*"?(.*?)"?\s*$', cfg, flags=re.MULTILINE)
           if not version_match:
               raise SystemExit("copilot_core/config.yaml missing version")
           config_version = version_match.group(1).strip()
