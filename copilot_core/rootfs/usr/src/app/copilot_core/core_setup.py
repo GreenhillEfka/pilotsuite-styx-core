@@ -4243,3 +4243,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.api.v1.pytorch import pytorch_bp
         app.register_blueprint(pytorch_bp)
     except: pass
+    try:
+        from copilot_core.api.v1.tensorflow import tensorflow_bp
+        app.register_blueprint(tensorflow_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.jax import jax_bp
+        app.register_blueprint(jax_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.keras import keras_bp
+        app.register_blueprint(keras_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.fastai import fastai_bp
+        app.register_blueprint(fastai_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.pytorchlightning import pytorchlightning_bp
+        app.register_blueprint(pytorchlightning_bp)
+    except: pass
