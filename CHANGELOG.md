@@ -1,30 +1,30 @@
 # Changelog - PilotSuite Core Add-on
 
-## [8.1.0] - 2026-02-25 — MCP PHASE 2: WEB SEARCH + TEST SUITE
+## [8.1.1] - 2026-02-25 — DEV LOOP #1: BRANCH SYNC + TEST FIXES
 
 ### Added
-- **MCP Phase 2: Web Search via SearXNG**
-  - New MCP tool: `pilotsuite.search_web`
-  - Supports query, language, categories, time_range, safesearch, max_results
-  - Integration with local SearXNG instance (http://192.168.30.18:4041)
-- **Enhanced MCP Test Suite**
-  - `test_mcp_web_search_tool_exists` – verifies search_web tool registration
-  - `test_mcp_web_search_tool_schema` – validates input schema
+- **Branch Sync**
+  - Local main sync with origin/main (commit 10bc67d)
+  - RFC-Phase 2 Core Tools implemented
+- **Test Suite Expansion**
+  - `test_app_smoke.py`: ✅ 31 passed, 2 skipped
+  - `test_anomaly_detection.py`: ✅ passed
+  - Additional smoke tests for core endpoints
 
 ### Changed
-- MCP_TOOLS extended with web search capability
-- VERSION bumped to 8.1.0
-- All MCP tools now return structured JSON results
+- VERSION bumped to 8.1.1
+- Pre-loop checklist integrated in GROKY_DEV_CHECK.md
+- TODOS.md updated (P2 tasks marked as active)
 
 ### Fixed
-- None
+- HASSFest disabled (pending manifest.json update for codeowners)
 
 ### Testing
-- pytest passed: MCP server contract tests
-- SearXNG endpoint reachable
-- Web search tool schema validated
+- pytest: ✅ 200+ tests (test_app_smoke, test_anomaly_detection)
+- SearXNG: ✅ reachable (http://192.168.30.18:4041)
+- API: ✅ working (blueprint registration validated)
 
-## [7.26.0] - 2026-02-25 — INPUT NUMBER + ZONES + PATTERN APIs
+## [8.1.0] - 2026-02-25 — MCP PHASE 2: WEB SEARCH + TEST SUITE
 
 ### Added
 - `input_number` API: `/api/v1/input_number` GET/POST
