@@ -3103,3 +3103,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.api.v1.goatcounter import goatcounter_bp
         app.register_blueprint(goatcounter_bp)
     except: pass
+    try:
+        from copilot_core.api.v1.simpleanalytics import simpleanalytics_bp
+        app.register_blueprint(simpleanalytics_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.pirsch import pirsch_bp
+        app.register_blueprint(pirsch_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.faux import faux_bp
+        app.register_blueprint(faux_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.ackee import ackee_bp
+        app.register_blueprint(ackee_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.shynet import shynet_bp
+        app.register_blueprint(shynet_bp)
+    except: pass
