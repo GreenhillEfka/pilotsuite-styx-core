@@ -3503,3 +3503,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.api.v1.consul import consul_bp
         app.register_blueprint(consul_bp)
     except: pass
+    try:
+        from copilot_core.api.v1.vault import vault_bp
+        app.register_blueprint(vault_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.waypoint import waypoint_bp
+        app.register_blueprint(waypoint_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.boundary import boundary_bp
+        app.register_blueprint(boundary_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.tfcloud import tfcloud_bp
+        app.register_blueprint(tfcloud_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.pulumi_esc import pulumi_esc_bp
+        app.register_blueprint(pulumi_esc_bp)
+    except: pass
