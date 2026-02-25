@@ -4003,3 +4003,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.api.v1.vsphere import vsphere_bp
         app.register_blueprint(vsphere_bp)
     except: pass
+    try:
+        from copilot_core.api.v1.libvirt import libvirt_bp
+        app.register_blueprint(libvirt_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.cloudstack import cloudstack_bp
+        app.register_blueprint(cloudstack_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.openstack import openstack_bp
+        app.register_blueprint(openstack_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.opennebula import opennebula_bp
+        app.register_blueprint(opennebula_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.eucalyptus import eucalyptus_bp
+        app.register_blueprint(eucalyptus_bp)
+    except: pass
