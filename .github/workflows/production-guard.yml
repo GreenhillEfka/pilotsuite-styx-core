@@ -26,8 +26,13 @@ jobs:
           if git rev-parse "$TAG" >/dev/null 2>&1; then
             echo "✅ Tag $TAG exists"
           else
-            echo "❌ Tag $TAG does NOT exist"
-            exit 1
+            if [ "${GITHUB_EVENT_NAME}" = "push" ]; then
+              echo "⚠️ Tag $TAG does NOT exist yet (push event)."
+              echo "ℹ️ Release tags are created after merge/release; strict check runs on schedule/workflow_dispatch."
+            else
+              echo "❌ Tag $TAG does NOT exist"
+              exit 1
+            fi
           fi
 
       - name: Add-on metadata sanity
