@@ -2743,3 +2743,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.api.v1.astro import astro_bp
         app.register_blueprint(astro_bp)
     except: pass
+    try:
+        from copilot_core.api.v1.eleventy import eleventy_bp
+        app.register_blueprint(eleventy_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.sveltekit import sveltekit_bp
+        app.register_blueprint(sveltekit_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.remix import remix_bp
+        app.register_blueprint(remix_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.qwik import qwik_bp
+        app.register_blueprint(qwik_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.solidstart import solidstart_bp
+        app.register_blueprint(solidstart_bp)
+    except: pass
