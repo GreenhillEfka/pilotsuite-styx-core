@@ -2003,3 +2003,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.api.v1.ntfy import ntfy_bp
         app.register_blueprint(ntfy_bp)
     except: pass
+    try:
+        from copilot_core.api.v1.matrix import matrix_bp
+        app.register_blueprint(matrix_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.element import element_bp
+        app.register_blueprint(element_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.synapse import synapse_bp
+        app.register_blueprint(synapse_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.dendrite import dendrite_bp
+        app.register_blueprint(dendrite_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.conduit import conduit_bp
+        app.register_blueprint(conduit_bp)
+    except: pass
