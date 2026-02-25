@@ -2603,3 +2603,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.api.v1.kerberos import kerberos_bp
         app.register_blueprint(kerberos_bp)
     except: pass
+    try:
+        from copilot_core.api.v1.sssd import sssd_bp
+        app.register_blueprint(sssd_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.winbind import winbind_bp
+        app.register_blueprint(winbind_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.nscd import nscd_bp
+        app.register_blueprint(nscd_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.nss import nss_bp
+        app.register_blueprint(nss_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.pam import pam_bp
+        app.register_blueprint(pam_bp)
+    except: pass
