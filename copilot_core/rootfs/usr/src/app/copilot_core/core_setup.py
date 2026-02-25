@@ -4223,3 +4223,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.api.v1.dask2 import dask2_bp
         app.register_blueprint(dask2_bp)
     except: pass
+    try:
+        from copilot_core.api.v1.xgboost import xgboost_bp
+        app.register_blueprint(xgboost_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.lightgbm import lightgbm_bp
+        app.register_blueprint(lightgbm_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.catboost import catboost_bp
+        app.register_blueprint(catboost_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.sklearn import sklearn_bp
+        app.register_blueprint(sklearn_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.pytorch import pytorch_bp
+        app.register_blueprint(pytorch_bp)
+    except: pass
