@@ -828,3 +828,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.energy.api import init_energy_api
         if services.get("energy_service"):
             init_energy_api(services["energy_service"])
+    try:
+        from copilot_core.api.v1.counter import counter_bp
+        app.register_blueprint(counter_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.timer import timer_bp
+        app.register_blueprint(timer_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.binary_sensor import binary_bp
+        app.register_blueprint(binary_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.calendar import calendar_bp
+        app.register_blueprint(calendar_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.camera import camera_bp
+        app.register_blueprint(camera_bp)
+    except: pass
