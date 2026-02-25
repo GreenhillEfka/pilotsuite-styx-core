@@ -3083,3 +3083,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.api.v1.pendo import pendo_bp
         app.register_blueprint(pendo_bp)
     except: pass
+    try:
+        from copilot_core.api.v1.posthog import posthog_bp
+        app.register_blueprint(posthog_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.matomo import matomo_bp
+        app.register_blueprint(matomo_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.plausible import plausible_bp
+        app.register_blueprint(plausible_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.fathom import fathom_bp
+        app.register_blueprint(fathom_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.goatcounter import goatcounter_bp
+        app.register_blueprint(goatcounter_bp)
+    except: pass
