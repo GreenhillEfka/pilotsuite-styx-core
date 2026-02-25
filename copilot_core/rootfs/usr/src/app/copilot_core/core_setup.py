@@ -2543,3 +2543,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.api.v1.arc import arc_bp
         app.register_blueprint(arc_bp)
     except: pass
+    try:
+        from copilot_core.api.v1.clamav import clamav_bp
+        app.register_blueprint(clamav_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.rspamd import rspamd_bp
+        app.register_blueprint(rspamd_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.spamassassin import spamassassin_bp
+        app.register_blueprint(spamassassin_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.amavis import amavis_bp
+        app.register_blueprint(amavis_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.mailscanner import mailscanner_bp
+        app.register_blueprint(mailscanner_bp)
+    except: pass
