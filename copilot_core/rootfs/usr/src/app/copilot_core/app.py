@@ -144,6 +144,13 @@ def create_app() -> Flask:
 
     # Register API modules
     app.register_blueprint(api_v1)
+    try:
+        from copilot_core.api.v1.conversation import openai_compat_bp
+
+        # OpenAI-compatible endpoints stay at root /v1/* (not nested under /api/v1).
+        app.register_blueprint(openai_compat_bp)
+    except Exception:
+        logging.getLogger(__name__).exception("Failed to register OpenAI compatibility blueprint")
 
     # Standalone Onyx bridge endpoints (/api/v1/onyx/*)
     try:
@@ -152,11 +159,12 @@ def create_app() -> Flask:
     except Exception:
         logging.getLogger(__name__).exception("Failed to register Onyx bridge blueprint")
 
-    # Initialize Tags API v2 (FIX: Flask Blueprint rewrite)
-    from copilot_core.tags.api import init_tags_api
+    # Initialize + register Tags API v2
+    from copilot_core.tags.api import bp as tags_bp, init_tags_api
     from copilot_core.tags import TagRegistry
     tags_registry = TagRegistry()
     init_tags_api(tags_registry)
+    app.register_blueprint(tags_bp)
 
     @app.get("/")
     def index():
@@ -173,7 +181,12 @@ def create_app() -> Flask:
 
     @app.get("/version")
     def version():
-        return jsonify({"version": cfg.version, "time": _now_iso()})
+        return jsonify({"name": "Styx", "version": cfg.version, "time": _now_iso()})
+
+    @app.get("/ready")
+    def ready():
+        # Lightweight readiness probe for orchestration and tests.
+        return jsonify({"ok": True, "name": "Styx", "version": cfg.version, "time": _now_iso()})
 
     @app.get("/api/v1/status")
     def api_status():

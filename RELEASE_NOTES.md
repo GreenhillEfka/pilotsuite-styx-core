@@ -1,5 +1,27 @@
 # Release Notes - PilotSuite Core
 
+## [8.4.1] - 2026-02-25 — STABILITY RECOVERY FOR v8.4 LINE
+
+### Changed
+- Restored full `conversation.py` implementation and re-enabled dashboard/chat runtime routes.
+- Added app-level registration for OpenAI-compatible `/v1/*` endpoints.
+- Added `/ready` endpoint and extended `/version` payload with `name: Styx`.
+- Registered tags API blueprint during app startup (`/api/v1/tags`, `/api/v1/assignments`).
+- Normalized API prefixes for newly added modules to avoid double-prefix routing.
+- Version sync to `8.4.1` in `config.yaml`, runtime `VERSION`, and `manifest.json`.
+
+### Fixed
+- Import crash in API blueprint (`weather.bp` missing).
+- Multiple dashboard/backend chat regressions from minimal conversation stub.
+- Graph snapshot/state endpoints now degrade gracefully on unavailable DB files.
+- Legacy compatibility symbols restored in error modules:
+  - `ErrorBoundary`, `register_error_handler`
+  - `ErrorStatus`, `get_global_status`
+
+### Testing
+- Core app test suite: `2025 passed, 1 skipped, 22 subtests passed`
+- HA integration suite: `561 passed, 5 skipped`
+
 ## [8.1.1] - 2026-02-25 — VERSION SYNC
 
 ### Added

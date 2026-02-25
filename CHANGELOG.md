@@ -1,5 +1,26 @@
 # Changelog - PilotSuite Core Add-on
 
+## [8.4.1] - 2026-02-25 — API RECOVERY + COMPATIBILITY HARDENING
+
+### Changed
+- Recovered full conversation API implementation (`/api/v1/chat/*` + `/v1/*` compatibility paths).
+- Registered OpenAI-compatible blueprint in app startup.
+- Normalized newly added API blueprints to relative prefixes to avoid `/api/v1/api/v1/*` double paths.
+- Added readiness endpoint (`/ready`) and enriched `/version` with `name: Styx`.
+- Registered tags blueprint in `create_app` so `/api/v1/tags` and `/api/v1/assignments` are available.
+- Aligned add-on version files to `8.4.1` (`config.yaml`, `VERSION`, `manifest.json`).
+
+### Fixed
+- Core app import/boot failure caused by missing `bp` export in weather API.
+- Dashboard/API failures caused by broken conversation stub in `api/v1/conversation.py`.
+- Graph SVG and graph endpoints now return safe fallback state instead of 500 on unavailable DB path.
+- LLM provider HTTP wrappers now keep connection pooling and still support monkeypatched request calls in tests.
+- Backward-compatible exports restored: `ErrorBoundary`, `register_error_handler`, `ErrorStatus`, `get_global_status`.
+
+### Testing
+- `pytest -q tests` in `copilot_core/rootfs/usr/src/app`: **2025 passed, 1 skipped, 22 subtests passed**
+- `pytest -q` in `pilotsuite-styx-ha`: **561 passed, 5 skipped**
+
 ## [8.1.1] - 2026-02-25 — DEV LOOP #1: BRANCH SYNC + TEST FIXES
 
 ### Added

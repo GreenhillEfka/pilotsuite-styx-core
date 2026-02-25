@@ -86,6 +86,13 @@ class ModuleErrorBoundary:
         self.last_error = None
 
 
+class ErrorBoundary(ModuleErrorBoundary):
+    """Backward-compatible alias expected by legacy tests/modules."""
+
+    def __init__(self, module_name: str = "core", fail_fast: bool = False):
+        super().__init__(module_name=module_name, fail_fast=fail_fast)
+
+
 def safe_execute(module_name: str, func: Callable[P, T], *args: P.args, **kwargs: P.kwargs) -> Optional[T]:
     """
     Execute a function with error isolation.
@@ -95,6 +102,11 @@ def safe_execute(module_name: str, func: Callable[P, T], *args: P.args, **kwargs
     """
     boundary = ModuleErrorBoundary(module_name)
     return boundary.execute(func, *args, **kwargs)
+
+
+def register_error_handler(module_name: str, fail_fast: bool = False):
+    """Return a decorator compatible with older `register_error_handler` API."""
+    return ModuleErrorBoundary(module_name=module_name, fail_fast=fail_fast).wrap
 
 
 # Connection pool with HA session management
@@ -156,6 +168,8 @@ ha_conn_pool = HAConnectionPool()
 
 __all__ = [
     "ModuleErrorBoundary",
+    "ErrorBoundary",
+    "register_error_handler",
     "safe_execute",
     "HAConnectionPool",
     "ha_conn_pool",

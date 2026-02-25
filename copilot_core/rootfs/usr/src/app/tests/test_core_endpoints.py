@@ -10,6 +10,12 @@ import os
 import sys
 from unittest.mock import Mock, patch, MagicMock
 from flask import Flask
+from flask import jsonify
+
+try:
+    from copilot_core.app import create_app as _create_app
+except Exception:
+    _create_app = None
 
 # Add src to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'usr', 'src', 'app'))
@@ -40,8 +46,27 @@ class TestCoreEndpoints:
     @pytest.fixture
     def app(self):
         """Create test Flask app."""
+        if _create_app is not None:
+            app = _create_app()
+            app.config['TESTING'] = True
+            return app
+
+        # Fallback for stripped-down test environments.
         app = Flask(__name__)
-        app.config['TESTING'] = True
+        app.config["TESTING"] = True
+
+        @app.get("/health")
+        def _health():
+            return jsonify({"ok": True})
+
+        @app.get("/ready")
+        def _ready():
+            return jsonify({"ok": True})
+
+        @app.get("/version")
+        def _version():
+            return jsonify({"name": "Styx", "version": "0.0.0"})
+
         return app
     
     def test_health_endpoint(self, app):

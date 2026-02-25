@@ -10,7 +10,8 @@ from copilot_core.api.security import require_token
 
 logger = logging.getLogger(__name__)
 
-scene_patterns_bp = Blueprint("scene_patterns", __name__, url_prefix="/api/v1/scenes/patterns")
+scene_patterns_bp = Blueprint("scene_patterns", __name__, url_prefix="/scenes/patterns")
+bp = scene_patterns_bp
 
 
 def _get_pattern_extractor():

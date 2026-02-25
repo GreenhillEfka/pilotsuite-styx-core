@@ -9,7 +9,8 @@ from copilot_core.api.security import require_token
 
 logger = logging.getLogger(__name__)
 
-input_number_bp = Blueprint("input_number", __name__, url_prefix="/api/v1/input_number")
+input_number_bp = Blueprint("input_number", __name__, url_prefix="/input_number")
+bp = input_number_bp
 
 
 def _get_ha_hass():

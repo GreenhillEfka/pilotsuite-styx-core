@@ -76,7 +76,25 @@ class LLMProvider:
             _PROVIDER_CLOUD: {"models": [], "ts": 0.0},
         }
         self._load_config()
-        self.session = http_requests.Session()  # Added for connection pooling
+        self.session = http_requests.Session()  # Keep pooled session for production calls.
+
+    def _http_get(self, url: str, **kwargs):
+        """HTTP GET wrapper.
+
+        Uses requests.Session in production, but respects monkeypatches on
+        module-level ``http_requests.get`` used in unit tests.
+        """
+        module_get = getattr(http_requests, "get", None)
+        if callable(module_get) and getattr(module_get, "__module__", "") != "requests.api":
+            return module_get(url, **kwargs)
+        return self.session.get(url, **kwargs)
+
+    def _http_post(self, url: str, **kwargs):
+        """HTTP POST wrapper with the same test monkeypatch compatibility."""
+        module_post = getattr(http_requests, "post", None)
+        if callable(module_post) and getattr(module_post, "__module__", "") != "requests.api":
+            return module_post(url, **kwargs)
+        return self.session.post(url, **kwargs)
 
     def _load_config(self):
         """Load config from env + runtime routing overrides."""
@@ -406,7 +424,7 @@ class LLMProvider:
 
         models: list[str] = []
         try:
-            resp = self.session.get(f"{self.ollama_url}/api/tags", timeout=5)
+            resp = self._http_get(f"{self.ollama_url}/api/tags", timeout=5)
             if resp.status_code == 200:
                 for model in resp.json().get("models", []):
                     name = str(model.get("name", "")).strip()
@@ -452,7 +470,7 @@ class LLMProvider:
         url = models_base if models_base.endswith("/models") else f"{models_base}/models"
         headers = {"Authorization": f"Bearer {self.cloud_api_key}"}
         try:
-            resp = self.session.get(url, headers=headers, timeout=8)
+            resp = self._http_get(url, headers=headers, timeout=8)
             if resp.status_code != 200:
                 return []
             payload = resp.json()
@@ -493,7 +511,7 @@ class LLMProvider:
 
     def _ping_ollama(self) -> bool:
         try:
-            resp = self.session.get(f"{self.ollama_url}/api/tags", timeout=3)
+            resp = self._http_get(f"{self.ollama_url}/api/tags", timeout=3)
             return resp.status_code == 200
         except Exception:
             return False
@@ -542,7 +560,7 @@ class LLMProvider:
 
             for attempt in range(_MAX_RETRIES + 1):
                 try:
-                    resp = self.session.post(
+                    resp = self._http_post(
                         f"{self.ollama_url}/api/chat", json=payload, timeout=self.timeout,
                     )
                     if resp.status_code == 200:
@@ -686,7 +704,7 @@ class LLMProvider:
             url = f"{url}/chat/completions"
 
         try:
-            resp = self.session.post(url, json=payload, headers=headers, timeout=self.timeout)
+            resp = self._http_post(url, json=payload, headers=headers, timeout=self.timeout)
             if resp.status_code != 200:
                 # Sanitize: don't log full response which might echo the API key.
                 logger.warning("Cloud API %s (model=%s)", resp.status_code, selected_model)

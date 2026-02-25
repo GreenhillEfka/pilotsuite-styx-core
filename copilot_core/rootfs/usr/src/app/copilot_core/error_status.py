@@ -117,3 +117,27 @@ def get_error_history(limit: int = 10) -> List[Dict]:
 def get_module_errors(module: str) -> List[Dict]:
     """Get errors for a specific module."""
     return error_history.get_by_module(module, limit=10)
+
+
+@dataclass
+class ErrorStatus:
+    """Backward-compatible status object expected by legacy tests/modules."""
+
+    total_errors: int
+    modules_with_errors: int
+    error_counts: Dict[str, int]
+    last_10: List[Dict]
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+
+def get_global_status() -> ErrorStatus:
+    """Return global error status in object form (legacy compatibility)."""
+    summary = get_error_status()
+    return ErrorStatus(
+        total_errors=int(summary.get("total_errors", 0)),
+        modules_with_errors=int(summary.get("modules_with_errors", 0)),
+        error_counts=dict(summary.get("error_counts", {})),
+        last_10=list(summary.get("last_10", [])),
+    )

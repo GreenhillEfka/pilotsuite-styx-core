@@ -3,6 +3,16 @@
 This file exists so Home Assistant can show an add-on changelog.
 For full history, see the repository-level `CHANGELOG.md`.
 
+## 8.4.1
+- Conversation API wiederhergestellt (vollständige `chat`- und `v1`-Routen) inkl. Alias-Handling.
+- OpenAI-Compat-Blueprint (`/v1/models`, `/v1/chat/completions`) wird beim App-Start registriert.
+- Neue API-Module auf relative Prefixe normalisiert (kein doppeltes `/api/v1/api/v1/...`).
+- `tags`-Blueprint wird nun in `create_app` registriert (`/api/v1/tags`, `/api/v1/assignments`).
+- `/ready` Endpoint ergänzt, `/version` liefert zusätzlich `name: Styx`.
+- Graph-Endpunkte liefern Fallback statt 500 bei nicht verfügbarer DB.
+- LLM-HTTP-Wrapper verbessert: test-kompatibles Monkeypatching + Session-Pooling im Produktivbetrieb.
+- Versionen synchronisiert: `config.yaml`, `manifest.json`, `VERSION` → `8.4.1`.
+
 ## 7.8.8
 - LLM-Routing erweitert: Primary/Secondary Provider (`offline`/`cloud`) mit robustem Fallback.
 - Neue API-Endpunkte fuer Routing/Katalog:

@@ -11,7 +11,8 @@ from copilot_core.api.security import require_token
 
 logger = logging.getLogger(__name__)
 
-zones_bp = Blueprint("zones", __name__, url_prefix="/api/v1/zones")
+zones_bp = Blueprint("zones", __name__, url_prefix="/zones")
+bp = zones_bp
 
 
 def _get_ha_hass():

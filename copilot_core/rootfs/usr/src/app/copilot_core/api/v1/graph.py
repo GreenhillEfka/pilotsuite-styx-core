@@ -1,14 +1,16 @@
 from __future__ import annotations
 
-import time
 import hashlib
 import json
+import logging
+import time
 from flask import Blueprint, jsonify, make_response, request
 
 from copilot_core.brain_graph.provider import get_graph_service
 from copilot_core.performance import brain_graph_cache
 
 bp = Blueprint("graph", __name__, url_prefix="/graph")
+_LOGGER = logging.getLogger(__name__)
 
 from copilot_core.api.security import validate_token as _validate_token
 
@@ -28,6 +30,24 @@ def _compute_cache_key(prefix: str, **params) -> str:
     sorted_params = json.dumps(params, sort_keys=True, default=str)
     content = f"{prefix}:{sorted_params}"
     return hashlib.sha256(content.encode()).hexdigest()[:16]
+
+
+def _fallback_graph_state(limit_nodes: int, limit_edges: int) -> dict:
+    return {
+        "version": 1,
+        "nodes": [],
+        "edges": [],
+        "limits": {"nodes": limit_nodes, "edges": limit_edges},
+        "generated_at_ms": int(time.time() * 1000),
+    }
+
+
+def _safe_graph_state(*, limit_nodes: int, limit_edges: int, **kwargs) -> dict:
+    try:
+        return _svc().get_graph_state(limit_nodes=limit_nodes, limit_edges=limit_edges, **kwargs)
+    except Exception:
+        _LOGGER.warning("graph_state unavailable, returning fallback state", exc_info=True)
+        return _fallback_graph_state(limit_nodes=limit_nodes, limit_edges=limit_edges)
 
 
 @bp.get("/state")
@@ -83,7 +103,7 @@ def graph_state():
     kinds = [k for k in kinds if isinstance(k, str)]
     domains = [d for d in domains if isinstance(d, str)]
     
-    state = _svc().get_graph_state(
+    state = _safe_graph_state(
         kinds=kinds if kinds else None,
         domains=domains if domains else None,
         center_node=center if center else None,
@@ -105,7 +125,7 @@ def graph_stats():
     # Get cache stats
     cache_stats = brain_graph_cache.get_stats()
     
-    state = _svc().get_graph_state(limit_nodes=1, limit_edges=1)
+    state = _safe_graph_state(limit_nodes=1, limit_edges=1)
     return jsonify({
         "version": 1,
         "ok": True,
@@ -127,7 +147,11 @@ def graph_stats():
 @bp.get("/patterns")
 def graph_patterns():
     """Pattern summary for health checks."""
-    patterns = _svc().infer_patterns()
+    try:
+        patterns = _svc().infer_patterns()
+    except Exception:
+        _LOGGER.warning("graph_patterns unavailable, returning empty result", exc_info=True)
+        patterns = []
     return jsonify({
         "version": 1,
         "ok": True,
@@ -141,7 +165,7 @@ def graph_snapshot_svg():
     """Generate a live SVG visualization of the brain graph."""
     import math
 
-    state = _svc().get_graph_state(limit_nodes=60, limit_edges=120)
+    state = _safe_graph_state(limit_nodes=60, limit_edges=120)
     nodes = state.get("nodes", [])
     edges = state.get("edges", [])
 

@@ -10,7 +10,8 @@ from copilot_core.api.security import require_token
 
 logger = logging.getLogger(__name__)
 
-push_notifications_bp = Blueprint("push_notifications", __name__, url_prefix="/api/v1/notifications")
+push_notifications_bp = Blueprint("push_notifications", __name__, url_prefix="/notifications")
+bp = push_notifications_bp
 
 
 def _get_push_service():
