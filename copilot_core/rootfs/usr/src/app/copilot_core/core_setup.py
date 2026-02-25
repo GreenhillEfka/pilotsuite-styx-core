@@ -4143,3 +4143,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.api.v1.sycl import sycl_bp
         app.register_blueprint(sycl_bp)
     except: pass
+    try:
+        from copilot_core.api.v1.oneapi import oneapi_bp
+        app.register_blueprint(oneapi_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.openacc import openacc_bp
+        app.register_blueprint(openacc_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.mpi import mpi_bp
+        app.register_blueprint(mpi_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.openmp import openmp_bp
+        app.register_blueprint(openmp_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.cudapython import cudapython_bp
+        app.register_blueprint(cudapython_bp)
+    except: pass
