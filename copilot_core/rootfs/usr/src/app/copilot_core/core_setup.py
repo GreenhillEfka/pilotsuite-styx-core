@@ -3763,3 +3763,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.api.v1.temporal import temporal_bp
         app.register_blueprint(temporal_bp)
     except: pass
+    try:
+        from copilot_core.api.v1.kubeflow import kubeflow_bp
+        app.register_blueprint(kubeflow_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.mlflow import mlflow_bp
+        app.register_blueprint(mlflow_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.seldon import seldon_bp
+        app.register_blueprint(seldon_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.kserve import kserve_bp
+        app.register_blueprint(kserve_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.bentoml import bentoml_bp
+        app.register_blueprint(bentoml_bp)
+    except: pass
