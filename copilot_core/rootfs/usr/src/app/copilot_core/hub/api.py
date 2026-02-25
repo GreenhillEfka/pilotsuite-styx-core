@@ -3,10 +3,16 @@
 from __future__ import annotations
 
 import logging
+import os
+import re
+from collections import defaultdict
 from flask import Blueprint, jsonify, request
 from dataclasses import asdict
 
 from copilot_core.api.security import require_token
+from copilot_core.habitus.automation_advisor import HabitusAutomationAdvisor
+
+import requests
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +35,199 @@ _notification_engine: object | None = None
 _integration_hub: object | None = None
 _brain_architecture: object | None = None
 _brain_activity: object | None = None
+_habitus_automation_advisor: HabitusAutomationAdvisor | None = None
+
+_SUPERVISOR_API = os.environ.get("SUPERVISOR_API", "http://supervisor/core/api")
+_EXTERNAL_HA_API = os.environ.get("HOME_ASSISTANT_URL", os.environ.get("HA_URL", "http://homeassistant.local:8123")).rstrip("/")
+_RELEVANT_ZONE_DOMAINS = {
+    "light",
+    "binary_sensor",
+    "sensor",
+    "climate",
+    "switch",
+    "cover",
+    "fan",
+    "lock",
+    "media_player",
+    "camera",
+}
+_DEFAULT_HABITUS_ZONE_DEFS = [
+    {"zone_id": "zone:wohnbereich", "name": "Wohnbereich", "room_id": "room:wohnbereich", "keywords": ["wohn", "living", "sofa", "tv"]},
+    {"zone_id": "zone:kochbereich", "name": "Kochbereich", "room_id": "room:kochbereich", "keywords": ["koch", "kueche", "küche", "kitchen", "esszimmer", "dining"]},
+    {"zone_id": "zone:schlafbereich", "name": "Schlafbereich", "room_id": "room:schlafbereich", "keywords": ["schlaf", "bett", "bedroom", "sleep"]},
+    {"zone_id": "zone:badbereich", "name": "Badbereich", "room_id": "room:badbereich", "keywords": ["bad", "toilet", "wc", "shower", "bade"]},
+    {"zone_id": "zone:aussenbereich", "name": "Aussenbereich", "room_id": "room:aussenbereich", "keywords": ["aussen", "außen", "garten", "terrasse", "balcony", "outdoor", "flutlicht"]},
+    {"zone_id": "zone:gangbereich", "name": "Gangbereich", "room_id": "room:gangbereich", "keywords": ["gang", "flur", "eingang", "hall", "corridor"]},
+    {"zone_id": "zone:buerobereich", "name": "Buerobereich", "room_id": "room:buerobereich", "keywords": ["buero", "büro", "office", "arbeits", "desk"]},
+]
+
+
+def _get_habitus_automation_advisor() -> HabitusAutomationAdvisor:
+    global _habitus_automation_advisor
+    if _habitus_automation_advisor is None:
+        _habitus_automation_advisor = HabitusAutomationAdvisor()
+    return _habitus_automation_advisor
+
+
+def _get_automation_creator():
+    try:
+        from flask import current_app
+
+        services = current_app.config.get("COPILOT_SERVICES", {}) if current_app else {}
+        return services.get("automation_creator")
+    except Exception:
+        return None
+
+
+def _collect_habitus_rules(limit: int, min_confidence: float = 0.55, zone: str = "") -> list[dict]:
+    try:
+        from copilot_core.habitus.api import _collect_rules
+
+        return _collect_rules(limit=max(1, min(limit, 200)), min_confidence=min_confidence, zone=zone or None)
+    except Exception:
+        return []
+
+
+def _fetch_supervisor_states() -> list[dict]:
+    token = os.environ.get("SUPERVISOR_TOKEN", "").strip()
+    if token:
+        try:
+            resp = requests.get(
+                f"{_SUPERVISOR_API}/states",
+                headers={"Authorization": f"Bearer {token}"},
+                timeout=12,
+            )
+            if resp.ok:
+                data = resp.json()
+                if isinstance(data, list):
+                    return data
+        except Exception:
+            pass
+    ext_token = os.environ.get("HOME_ASSISTANT_TOKEN", os.environ.get("HA_TOKEN", "")).strip()
+    if ext_token:
+        try:
+            resp = requests.get(
+                f"{_EXTERNAL_HA_API}/api/states",
+                headers={"Authorization": f"Bearer {ext_token}"},
+                timeout=12,
+            )
+            if resp.ok:
+                data = resp.json()
+                if isinstance(data, list):
+                    return data
+        except Exception:
+            pass
+    return []
+
+
+def _zone_role(entity_id: str) -> str:
+    eid = str(entity_id or "").lower()
+    domain = eid.split(".", 1)[0] if "." in eid else ""
+    if domain == "light":
+        return "lights"
+    if domain == "climate":
+        return "heating"
+    if domain == "media_player":
+        return "media"
+    if domain == "camera":
+        return "camera"
+    if domain == "cover":
+        return "cover"
+    if domain == "lock":
+        return "lock"
+    if domain == "binary_sensor":
+        if re.search(r"door|tuer|fenster|window|gate", eid):
+            return "door"
+        if re.search(r"motion|presence|occupancy|bewegung|praesenz|anwesen", eid):
+            return "motion"
+        return "other"
+    if domain == "sensor":
+        if re.search(r"co2|carbon", eid):
+            return "co2"
+        if re.search(r"humidity|feucht", eid):
+            return "humidity"
+        if re.search(r"noise|sound|larm|laerm", eid):
+            return "noise"
+        if re.search(r"lux|illuminance|brightness|hellig", eid):
+            return "brightness"
+        if re.search(r"temp", eid):
+            return "temperature"
+        if re.search(r"power|watt", eid):
+            return "power"
+        if re.search(r"energy|kwh", eid):
+            return "energy"
+    return "other"
+
+
+def _infer_neuron_tags(antecedent: str, consequent: str) -> list[str]:
+    text = f"{antecedent} {consequent}".lower()
+    out: list[str] = []
+    if any(k in text for k in ("motion", "presence", "occupancy", "bewegung", "praesenz", "anwesen")):
+        out.append("context.presence")
+    if any(k in text for k in ("light", "hellig", "illuminance", "lux")):
+        out.append("context.light_level")
+    if any(k in text for k in ("climate", "heating", "temperature", "humidity", "co2")):
+        out.append("state.energy_level")
+    if any(k in text for k in ("media_player", "tv", "music", "speaker")):
+        out.append("context.activity")
+    if any(k in text for k in ("camera", "door", "window", "lock")):
+        out.append("context.security")
+    if not out:
+        out.append("context.activity")
+    return out
+
+
+def _role_map(entity_ids: list[str]) -> dict[str, list[str]]:
+    roles: dict[str, list[str]] = defaultdict(list)
+    seen: set[str] = set()
+    for eid in entity_ids:
+        if not eid or eid in seen:
+            continue
+        seen.add(eid)
+        roles[_zone_role(eid)].append(eid)
+    return {k: v for k, v in roles.items() if v}
+
+
+def _build_habitus_recommendations(states: list[dict]) -> list[dict]:
+    zones_out = []
+    for z in _DEFAULT_HABITUS_ZONE_DEFS:
+        keywords = [str(k).lower() for k in z.get("keywords", []) if str(k)]
+        matched: list[str] = []
+        for st in states:
+            entity_id = str(st.get("entity_id", ""))
+            if "." not in entity_id:
+                continue
+            domain = entity_id.split(".", 1)[0]
+            if domain not in _RELEVANT_ZONE_DOMAINS:
+                continue
+            attrs = st.get("attributes") or {}
+            text = f"{entity_id} {attrs.get('friendly_name', '')}".lower()
+            if any(keyword in text for keyword in keywords):
+                matched.append(entity_id)
+
+        matched = sorted(dict.fromkeys(matched))
+        roles = _role_map(matched)
+        zones_out.append(
+            {
+                "zone_id": z["zone_id"],
+                "name": z["name"],
+                "room_id": z["room_id"],
+                "keywords": keywords,
+                "recommended_entities": matched,
+                "recommended_count": len(matched),
+                "entity_roles": roles,
+                "standard_metrics_present": {
+                    "motion": bool(roles.get("motion")),
+                    "brightness": bool(roles.get("brightness")),
+                    "noise": bool(roles.get("noise")),
+                    "humidity": bool(roles.get("humidity")),
+                    "heating": bool(roles.get("heating")),
+                    "co2": bool(roles.get("co2")),
+                    "camera": bool(roles.get("camera")),
+                },
+            }
+        )
+    return zones_out
 
 
 def _get_module_registry():
@@ -689,6 +888,174 @@ def get_zone_modes():
     if not _zone_engine:
         return jsonify({"error": "Zone engine not initialized"}), 503
     return jsonify({"ok": True, "modes": _zone_engine.get_modes()})
+
+
+# ── Habitus Management + Automation (v8.5.1) ──────────────────────────────
+
+
+@hub_bp.route("/habitus/management/recommendations", methods=["GET"])
+@require_token
+def get_habitus_management_recommendations():
+    """Return zone-oriented entity recommendations from current HA states."""
+    states = _fetch_supervisor_states()
+    if not states:
+        return jsonify({"ok": False, "error": "supervisor_states_unavailable", "zones": []}), 503
+
+    zones_out = _build_habitus_recommendations(states)
+
+    return jsonify(
+        {
+            "ok": True,
+            "zone_count": len(zones_out),
+            "zones": zones_out,
+            "source": "supervisor_states",
+        }
+    )
+
+
+@hub_bp.route("/habitus/management/bootstrap_zones", methods=["POST"])
+@require_token
+def bootstrap_habitus_zones():
+    """Create/update default habitus zones from live HA entities."""
+    if not _zone_engine:
+        return jsonify({"ok": False, "error": "zone_engine_not_initialized"}), 503
+
+    body = request.get_json(silent=True) or {}
+    overwrite = bool(body.get("overwrite", True))
+    states = _fetch_supervisor_states()
+    if not states:
+        return jsonify({"ok": False, "error": "recommendations_unavailable"}), 503
+    recommendations = _build_habitus_recommendations(states)
+
+    zones_created = 0
+    zones_updated = 0
+    zone_results = []
+
+    for zone in recommendations:
+        zone_id = str(zone.get("zone_id", "")).strip()
+        room_id = str(zone.get("room_id", "")).strip()
+        name = str(zone.get("name", zone_id))
+        entities = [str(e) for e in zone.get("recommended_entities", []) if str(e)]
+        roles = zone.get("entity_roles", {}) if isinstance(zone.get("entity_roles"), dict) else {}
+
+        if not zone_id or not room_id:
+            continue
+
+        # Register/refresh room
+        _zone_engine.register_room(room_id=room_id, name=name, entities=entities)
+        existing = _zone_engine.get_zone(zone_id)
+        if existing and overwrite:
+            _zone_engine.delete_zone(zone_id)
+            existing = None
+
+        if existing:
+            zones_updated += 1
+            created = False
+        else:
+            _zone_engine.create_zone(zone_id=zone_id, name=name, room_ids=[room_id], icon="mdi:home-floor-1")
+            zones_created += 1
+            created = True
+
+        _zone_engine.set_zone_settings(
+            zone_id,
+            {
+                "entity_roles": roles,
+                "ux_defaults": {
+                    "standard_metrics": ["motion", "brightness", "noise", "humidity", "heating", "co2", "camera"],
+                    "show_suggestions": True,
+                },
+            },
+        )
+        zone_results.append(
+            {
+                "zone_id": zone_id,
+                "name": name,
+                "created": created,
+                "entity_count": len(entities),
+                "room_id": room_id,
+            }
+        )
+
+    return jsonify(
+        {
+            "ok": True,
+            "created": zones_created,
+            "updated": zones_updated,
+            "zones": zone_results,
+        }
+    )
+
+
+@hub_bp.route("/habitus/automation/suggestions", methods=["GET"])
+@require_token
+def get_habitus_automation_suggestions():
+    """Generate automation suggestions from habitus rules."""
+    try:
+        limit = max(1, min(int(request.args.get("limit", "20")), 100))
+    except ValueError:
+        return jsonify({"ok": False, "error": "invalid_limit"}), 400
+    try:
+        min_confidence = max(0.0, min(float(request.args.get("min_confidence", "0.55")), 1.0))
+    except ValueError:
+        return jsonify({"ok": False, "error": "invalid_min_confidence"}), 400
+
+    zone = str(request.args.get("zone", "")).strip()
+    rules = _collect_habitus_rules(limit=max(limit * 3, limit), min_confidence=min_confidence, zone=zone)
+    advisor = _get_habitus_automation_advisor()
+    suggestions = advisor.build_suggestions(rules, zone=zone, limit=limit, min_confidence=min_confidence)
+    return jsonify(
+        {
+            "ok": True,
+            "zone": zone,
+            "count": len(suggestions),
+            "rules_analyzed": len(rules),
+            "suggestions": suggestions,
+        }
+    )
+
+
+@hub_bp.route("/habitus/automation/apply", methods=["POST"])
+@require_token
+def apply_habitus_automation_suggestion():
+    """Apply one habitus automation suggestion through AutomationCreator."""
+    body = request.get_json(silent=True) or {}
+    suggestion_id = str(body.get("suggestion_id", "")).strip()
+
+    advisor = _get_habitus_automation_advisor()
+    cached = advisor.get_cached(suggestion_id) if suggestion_id else None
+    payload = (cached or {}).get("automation_payload") if cached else None
+    if payload is None:
+        antecedent = str(body.get("antecedent", "")).strip()
+        consequent = str(body.get("consequent", "")).strip()
+        if not antecedent or not consequent:
+            return jsonify({"ok": False, "error": "missing_suggestion"}), 400
+        payload = {
+            "antecedent": antecedent,
+            "consequent": consequent,
+            "alias": str(body.get("alias") or f"Habitus: {antecedent[:40]} -> {consequent[:40]}"),
+            "metadata": {
+                "source": "habitus",
+                "neurons": body.get("neurons") or _infer_neuron_tags(antecedent, consequent),
+                "zone": body.get("zone", ""),
+            },
+        }
+
+    creator = _get_automation_creator()
+    if creator is None:
+        return jsonify({"ok": False, "error": "automation_creator_unavailable"}), 503
+
+    result = creator.create_from_suggestion(payload)
+    if not result.get("ok"):
+        return jsonify({"ok": False, "error": result.get("error", "apply_failed"), "detail": result}), 502
+
+    return jsonify(
+        {
+            "ok": True,
+            "result": result,
+            "suggestion_id": suggestion_id or None,
+            "neurons": (cached or {}).get("neurons") or payload.get("metadata", {}).get("neurons") or [],
+        }
+    )
 
 
 # ── Light Intelligence endpoints (v6.5.0) ──────────────────────────────────

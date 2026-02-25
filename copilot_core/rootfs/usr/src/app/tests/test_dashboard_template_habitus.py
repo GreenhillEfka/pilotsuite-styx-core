@@ -74,3 +74,20 @@ def test_dashboard_template_has_media_assignment_dropdown_controls() -> None:
     assert 'id="media-zone-select"' in text
     assert 'id="media-player-select"' in text
     assert "assignMediaPlayer" in text
+
+
+def test_dashboard_template_exposes_neuron_brain_mode_and_synapse_view() -> None:
+    text = _dashboard_template()
+    assert 'id="brain-mode-neuron"' in text
+    assert 'id="brain-mode-entity"' in text
+    assert "setBrainMode('neuron')" in text
+    assert "/api/v1/hub/brain/synapses" in text
+
+
+def test_dashboard_template_exposes_event_log_chat_history_tabs() -> None:
+    text = _dashboard_template()
+    assert 'id="history-tabs"' in text
+    assert "setHistoryTab('events')" in text
+    assert "setHistoryTab('logs')" in text
+    assert "/api/v1/events?limit=40" in text
+    assert "/api/v1/dev/logs?limit=40" in text

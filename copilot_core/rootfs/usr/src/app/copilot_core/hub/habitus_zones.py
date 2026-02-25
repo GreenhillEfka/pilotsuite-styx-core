@@ -11,10 +11,13 @@ Features:
 
 from __future__ import annotations
 
+import json
 import logging
+import os
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -138,11 +141,136 @@ _ZONE_MODES = {
 class HabitusZoneEngine:
     """Engine for managing Habitus-Zonen."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        storage_path: str | None = None,
+        *,
+        enable_persistence: bool = True,
+    ) -> None:
         self._rooms: dict[str, RoomConfig] = {}
         self._zones: dict[str, HabitusZone] = {}
         self._entity_values: dict[str, Any] = {}  # entity_id -> current value
         self._entity_types: dict[str, str] = {}  # entity_id -> domain (light, sensor, etc.)
+        self._persistence_enabled = bool(enable_persistence)
+        default_store = os.environ.get("HABITUS_ZONES_STORE", "/data/hub_habitus_zones.json")
+        self._storage_path = Path(storage_path or default_store)
+        if self._persistence_enabled:
+            self._load_state()
+
+    # ── Persistence ────────────────────────────────────────────────────
+
+    def _resolve_writable_store(self) -> Path | None:
+        if not self._persistence_enabled:
+            return None
+        path = self._storage_path
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            if not path.exists():
+                path.touch()
+            return path
+        except Exception:
+            fallback_dir = os.environ.get("COPILOT_HABITUS_DIR", "").strip()
+            if not fallback_dir:
+                logger.warning("Habitus persistence disabled: store path not writable (%s)", path)
+                self._persistence_enabled = False
+                return None
+            fallback = Path(fallback_dir) / path.name
+            fallback.parent.mkdir(parents=True, exist_ok=True)
+            self._storage_path = fallback
+            return fallback
+
+    def _persist_state(self) -> None:
+        path = self._resolve_writable_store()
+        if path is None:
+            return
+        payload = {
+            "rooms": [
+                {
+                    "room_id": room.room_id,
+                    "name": room.name,
+                    "area_id": room.area_id,
+                    "entities": list(room.entities),
+                    "floor": room.floor,
+                    "icon": room.icon,
+                }
+                for room in self._rooms.values()
+            ],
+            "zones": [
+                {
+                    "zone_id": zone.zone_id,
+                    "name": zone.name,
+                    "rooms": list(zone.rooms),
+                    "icon": zone.icon,
+                    "mode": zone.mode,
+                    "entities": list(zone.entities),
+                    "enabled": zone.enabled,
+                    "priority": zone.priority,
+                    "settings": dict(zone.settings or {}),
+                }
+                for zone in self._zones.values()
+            ],
+        }
+        try:
+            path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        except Exception as exc:
+            logger.warning("Failed to persist habitus zones state: %s", exc)
+
+    def _load_state(self) -> None:
+        path = self._resolve_writable_store()
+        if path is None:
+            return
+        if not path.exists():
+            return
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8") or "{}")
+        except Exception:
+            return
+
+        rooms = raw.get("rooms", [])
+        zones = raw.get("zones", [])
+        if isinstance(rooms, list):
+            for room in rooms:
+                if not isinstance(room, dict):
+                    continue
+                rid = str(room.get("room_id") or "").strip()
+                if not rid:
+                    continue
+                cfg = RoomConfig(
+                    room_id=rid,
+                    name=str(room.get("name") or rid),
+                    area_id=str(room.get("area_id") or ""),
+                    entities=[str(e) for e in (room.get("entities") or []) if str(e)],
+                    floor=str(room.get("floor") or ""),
+                    icon=str(room.get("icon") or "mdi:door"),
+                )
+                self._rooms[rid] = cfg
+                for entity_id in cfg.entities:
+                    domain = entity_id.split(".", 1)[0] if "." in entity_id else "unknown"
+                    self._entity_types[entity_id] = domain
+
+        if isinstance(zones, list):
+            for zone in zones:
+                if not isinstance(zone, dict):
+                    continue
+                zid = str(zone.get("zone_id") or "").strip()
+                if not zid:
+                    continue
+                self._zones[zid] = HabitusZone(
+                    zone_id=zid,
+                    name=str(zone.get("name") or zid),
+                    rooms=[str(r) for r in (zone.get("rooms") or []) if str(r)],
+                    icon=str(zone.get("icon") or "mdi:home-floor-1"),
+                    mode=str(zone.get("mode") or "active"),
+                    entities=[str(e) for e in (zone.get("entities") or []) if str(e)],
+                    enabled=bool(zone.get("enabled", True)),
+                    priority=int(zone.get("priority", 0)),
+                    settings=dict(zone.get("settings") or {}),
+                )
+        logger.info(
+            "HabitusZoneEngine state loaded: %d rooms, %d zones",
+            len(self._rooms),
+            len(self._zones),
+        )
 
     # ── Room management ─────────────────────────────────────────────────
 
@@ -166,6 +294,7 @@ class HabitusZoneEngine:
             self._entity_types[entity_id] = domain
 
         logger.info("Raum '%s' registriert mit %d Entitäten", name, len(room.entities))
+        self._persist_state()
         return room
 
     def update_room_entities(self, room_id: str, entities: list[str]) -> bool:
@@ -182,6 +311,7 @@ class HabitusZoneEngine:
         for zone in self._zones.values():
             if room_id in zone.rooms:
                 self._refresh_zone_entities(zone)
+        self._persist_state()
         return True
 
     def get_room(self, room_id: str) -> dict[str, Any] | None:
@@ -220,6 +350,7 @@ class HabitusZoneEngine:
         self._zones[zone_id] = zone
         logger.info("Habitus-Zone '%s' erstellt mit %d Räumen, %d Entitäten",
                      name, len(zone.rooms), len(zone.entities))
+        self._persist_state()
         return zone
 
     def create_zone_from_template(self, template_id: str) -> HabitusZone | None:
@@ -253,6 +384,7 @@ class HabitusZoneEngine:
             return True  # already assigned
         zone.rooms.append(room_id)
         self._refresh_zone_entities(zone)
+        self._persist_state()
         return True
 
     def remove_room_from_zone(self, zone_id: str, room_id: str) -> bool:
@@ -262,6 +394,7 @@ class HabitusZoneEngine:
             return False
         zone.rooms.remove(room_id)
         self._refresh_zone_entities(zone)
+        self._persist_state()
         return True
 
     def delete_zone(self, zone_id: str) -> bool:
@@ -269,6 +402,7 @@ class HabitusZoneEngine:
         if zone_id not in self._zones:
             return False
         del self._zones[zone_id]
+        self._persist_state()
         return True
 
     def set_zone_mode(self, zone_id: str, mode: str) -> bool:
@@ -278,6 +412,7 @@ class HabitusZoneEngine:
             return False
         zone.mode = mode
         logger.info("Zone '%s' Modus → %s", zone.name, _ZONE_MODES[mode]["name"])
+        self._persist_state()
         return True
 
     def set_zone_enabled(self, zone_id: str, enabled: bool) -> bool:
@@ -286,6 +421,7 @@ class HabitusZoneEngine:
         if not zone:
             return False
         zone.enabled = enabled
+        self._persist_state()
         return True
 
     def set_zone_settings(self, zone_id: str, settings: dict[str, Any]) -> bool:
@@ -294,6 +430,7 @@ class HabitusZoneEngine:
         if not zone:
             return False
         zone.settings.update(settings)
+        self._persist_state()
         return True
 
     # ── Entity state tracking ───────────────────────────────────────────

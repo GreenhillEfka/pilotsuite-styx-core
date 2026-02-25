@@ -1,5 +1,30 @@
 # Changelog - PilotSuite Core Add-on
 
+## [8.6.0] - 2026-02-25 — HABITUS AUTOMATION + NEURON BRAIN UX
+
+### Added
+- New Habitus management + automation endpoints:
+  - `GET /api/v1/hub/habitus/management/recommendations`
+  - `POST /api/v1/hub/habitus/management/bootstrap_zones`
+  - `GET /api/v1/hub/habitus/automation/suggestions`
+  - `POST /api/v1/hub/habitus/automation/apply`
+- New `HabitusAutomationAdvisor` module (`copilot_core/habitus/automation_advisor.py`) to map mined rules to neuron tags + actionable automation payloads.
+- Dashboard upgrades:
+  - Neuron Brain mode with module-colored neurons
+  - Synapse/automation connectivity overlay
+  - Zone-activity pulsing
+  - Dedicated Live/Event/Log/Chat history tabs.
+
+### Changed
+- Habitus zone recommendations now include camera entities and camera metric coverage.
+- Entity assignment suggestions include camera domain and improved confidence combos.
+- Habitus zone engine persistence hardening:
+  - deterministic disable-on-unwritable behavior unless explicit fallback directory is configured.
+
+### Validation
+- `pytest -q tests/test_habitus_management_api_helpers.py tests/test_habitus_zones.py tests/test_bootstrap_routes.py tests/test_dashboard_template_habitus.py`
+- Result: **52 passed**
+
 ## [8.5.0] - 2026-02-25 — MUSIKWOLKE/LICHT/SZENEN CONFIG + DASHBOARD UX ROUND
 
 ### Added

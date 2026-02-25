@@ -27,7 +27,7 @@ SUPERVISOR_API = os.environ.get("SUPERVISOR_API", "http://supervisor/core/api")
 # Domains worth suggesting for zone assignment
 RELEVANT_DOMAINS = {
     "light", "binary_sensor", "sensor", "climate",
-    "switch", "cover", "fan", "lock", "media_player",
+    "switch", "cover", "fan", "lock", "media_player", "camera",
 }
 
 # Words that don't indicate a room (strip from entity_id)
@@ -36,6 +36,7 @@ NOISE_WORDS = {
     "temperature", "humidity", "co2", "lux", "brightness",
     "decke", "wand", "boden", "tisch", "haupt", "haupt",
     "light", "switch", "climate", "cover", "fan", "lock",
+    "camera", "cam",
     "1", "2", "3", "4", "a", "b", "c",
     "entry", "main", "secondary", "primary", "aux",
 }
@@ -45,6 +46,7 @@ _DOMAIN_BONUS = {
     frozenset({"light", "binary_sensor"}): 0.2,
     frozenset({"light", "sensor"}): 0.15,
     frozenset({"light", "climate"}): 0.25,
+    frozenset({"camera", "binary_sensor"}): 0.2,
 }
 
 

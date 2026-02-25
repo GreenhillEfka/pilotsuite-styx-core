@@ -1,5 +1,30 @@
 # Release Notes - PilotSuite Core
 
+## [8.6.0] - 2026-02-25 — HABITUS MANAGEMENT + NEURON BRAIN
+
+### Added
+- Habitus management/bootstrap APIs:
+  - `/api/v1/hub/habitus/management/recommendations`
+  - `/api/v1/hub/habitus/management/bootstrap_zones`
+- Habitus automation APIs:
+  - `/api/v1/hub/habitus/automation/suggestions`
+  - `/api/v1/hub/habitus/automation/apply`
+- New `HabitusAutomationAdvisor` to convert A→B rules into neuron-tagged automation payloads.
+
+### Improved
+- Dashboard (`/`) now includes:
+  - Neuron Brain mode with module-color encoding
+  - Synapse visualization from automations + brain synapses
+  - Pulsing activity for modules impacted by active zones
+  - Tabbed history views for Live, Events, Logs, and Chat.
+- Habitus recommendations and assignment heuristics now include camera entities.
+
+### Stability
+- Habitus zone persistence now degrades safely when storage path is not writable (no test pollution, explicit fallback only).
+
+### Testing
+- 52 targeted tests passed for habitus management helpers, zone engine, route wiring, and dashboard template regressions.
+
 ## [8.5.0] - 2026-02-25 — MODULE CONFIG + ADAPTIVE AUTOMATION
 
 ### Added

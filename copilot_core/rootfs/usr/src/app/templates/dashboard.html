@@ -72,6 +72,8 @@ a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
 .brain-controls{position:absolute;top:10px;right:10px;display:flex;gap:4px;z-index:5}
 .brain-controls button{background:var(--card);border:1px solid var(--border);color:var(--dim);width:28px;height:28px;border-radius:6px;cursor:pointer;font-size:12px}
 .brain-controls button:hover{color:var(--text);border-color:var(--accent)}
+.brain-controls .mode{width:auto;height:28px;padding:0 8px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.4px}
+.brain-controls .mode.active{background:rgba(124,106,239,.18);color:var(--accent2);border-color:var(--accent)}
 
 /* Module pipeline indicators */
 .pipelines{display:flex;gap:6px;flex-wrap:wrap;padding:4px 0}
@@ -100,8 +102,23 @@ a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
 /* History panel */
 .history-panel{max-height:180px;overflow-y:auto;background:var(--card);border:1px solid var(--border);border-radius:var(--radius);flex-shrink:0}
 .history-panel .hd{padding:8px 14px;font-size:11px;font-weight:600;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--card);z-index:1}
+.history-tabs{display:flex;gap:4px;padding:6px 10px;border-bottom:1px solid rgba(30,42,58,.4);position:sticky;top:30px;background:var(--card);z-index:1}
+.history-tabs button{background:var(--surface);border:1px solid var(--border);color:var(--dim);font-size:10px;padding:3px 8px;border-radius:6px;cursor:pointer}
+.history-tabs button.active{color:var(--accent2);border-color:var(--accent)}
 .hist-item{padding:6px 14px;font-size:11px;border-bottom:1px solid rgba(30,42,58,.3);display:flex;gap:8px;align-items:center}
 .hist-item .ht{color:var(--dim);font-size:10px;flex-shrink:0;width:40px}
+.hist-item .kind{font-size:9px;padding:1px 5px;border-radius:4px;border:1px solid var(--border);color:var(--dim);flex-shrink:0}
+.hist-item .kind.event{color:var(--cyan);border-color:rgba(34,211,238,.35)}
+.hist-item .kind.log{color:var(--yellow);border-color:rgba(251,191,36,.35)}
+.hist-item .kind.chat{color:var(--accent2);border-color:rgba(124,106,239,.35)}
+
+/* Neuron brain */
+@keyframes neuronPulse{
+  0%,100%{opacity:.95;transform:scale(1)}
+  50%{opacity:.45;transform:scale(1.18)}
+}
+.brain-neuron-active{animation:neuronPulse 1.5s ease-in-out infinite;transform-origin:center}
+.brain-module-node{filter:url(#glow)}
 
 /* Suggestions bar (legacy compat) */
 .suggest-bar{display:flex;gap:8px;overflow-x:auto;padding:8px 0;flex-shrink:0}
@@ -246,7 +263,11 @@ a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
   <div class="styx-brain">
     <div class="brain-wrap" id="brain-canvas">
       <div class="brain-legend" id="brain-legend"></div>
-      <div class="brain-controls"><button onclick="reloadBrain()" title="Neu laden">&#x21bb;</button></div>
+      <div class="brain-controls">
+        <button class="mode active" id="brain-mode-neuron" onclick="setBrainMode('neuron')" title="Neuronen-Brain">Neuron</button>
+        <button class="mode" id="brain-mode-entity" onclick="setBrainMode('entity')" title="Entity-Graph">Entity</button>
+        <button onclick="reloadBrain()" title="Neu laden">&#x21bb;</button>
+      </div>
       <div class="loading"><div class="spinner"></div>Brain Graph laden...</div>
     </div>
     <!-- Suggestion Inbox -->
@@ -291,6 +312,12 @@ a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
     <!-- History -->
     <div class="history-panel" id="history-panel">
       <div class="hd">Verlauf &amp; Aktivitaet</div>
+      <div class="history-tabs" id="history-tabs">
+        <button class="active" data-tab="live" onclick="setHistoryTab('live')">Live</button>
+        <button data-tab="events" onclick="setHistoryTab('events')">Events</button>
+        <button data-tab="logs" onclick="setHistoryTab('logs')">Logs</button>
+        <button data-tab="chat" onclick="setHistoryTab('chat')">Chat</button>
+      </div>
       <div id="history-items"><div class="hist-item"><span class="ht">jetzt</span><span>PilotSuite gestartet</span></div></div>
     </div>
   </div>
@@ -337,7 +364,16 @@ a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
 <div class="card" style="margin-top:14px">
   <h2><span class="ic">&#x1f4a1;</span> Entitäts-Zuordnungsvorschläge</h2>
   <p style="font-size:11px;color:var(--dim);margin-bottom:10px">Erkannte Entitätsgruppen — mögliche Habituszonen. Klicke auf eine Gruppe um Details zu sehen.</p>
+  <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
+    <button onclick="bootstrapHabitusZones()" style="background:var(--accent2);color:#fff;border:none;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:11px;font-weight:600">&#x1f680; Standardzonen anlegen/aktualisieren</button>
+    <span id="hab-bootstrap-status" style="font-size:11px;color:var(--dim)">Bereit</span>
+  </div>
   <div id="hab-entity-suggestions"><div class="loading"><div class="spinner"></div>Analysiere...</div></div>
+</div>
+<div class="card" style="margin-top:14px">
+  <h2><span class="ic">&#x2699;&#xfe0f;</span> Habitus-Automationsvorschläge</h2>
+  <p style="font-size:11px;color:var(--dim);margin-bottom:10px">Aus Habitus-Regeln abgeleitet, inkl. Neuronen-Mapping. Vorschlag per Klick als HA-Automation anlegen.</p>
+  <div id="hab-auto-suggestions"><div class="loading"><div class="spinner"></div>Analysiere Regeln...</div></div>
 </div>
 </div>
 
@@ -655,9 +691,56 @@ const MODULE_CONFIG_SPECS={
   },
 };
 
+const _NEURON_MODULE_HINTS=[
+  {prefix:'context.presence',module:'proactive'},
+  {prefix:'context.activity',module:'media_zones'},
+  {prefix:'context.light',module:'light_intelligence'},
+  {prefix:'context.weather',module:'weather_context'},
+  {prefix:'context.security',module:'camera_context'},
+  {prefix:'state.energy',module:'energy_context'},
+  {prefix:'state.stress',module:'mood_engine'},
+  {prefix:'state.comfort',module:'mood_engine'},
+  {prefix:'state.',module:'neurons'},
+  {prefix:'mood.',module:'mood_engine'},
+];
+
+function _moduleColor(moduleId){
+  const mod=(MODULE_DEFS||[]).find((m)=>m.id===moduleId);
+  if(mod&&mod.color&&String(mod.color).startsWith('var(')){
+    const key=String(mod.color).slice(4,-1).trim();
+    const val=getComputedStyle(document.documentElement).getPropertyValue(key).trim();
+    if(val)return val;
+  }
+  if(mod&&mod.color)return mod.color;
+  return '#6b7a8d';
+}
+
+function _neuronToModule(neuronId){
+  const nid=String(neuronId||'').toLowerCase();
+  for(const rule of _NEURON_MODULE_HINTS){
+    if(nid.startsWith(rule.prefix))return rule.module;
+  }
+  return 'neurons';
+}
+
+function _moduleFromEntityExpr(expr){
+  const txt=String(expr||'').toLowerCase();
+  if(/camera|motion|presence|occupancy|bewegung/.test(txt))return 'camera_context';
+  if(/media_player|speaker|music|tv|radio/.test(txt))return 'media_zones';
+  if(/light|hellig|lux|illuminance/.test(txt))return 'light_intelligence';
+  if(/weather|regen|wind|forecast|dwd/.test(txt))return 'weather_context';
+  if(/temperatur|humidity|co2|energy|power|grid|solar/.test(txt))return 'energy_context';
+  if(/person|zone|home|away/.test(txt))return 'proactive';
+  return 'habitus_miner';
+}
+
 // State
 let chatHistory=[];
+let chatHistoryMeta=[];
 let historyLog=[];
+let eventHistory=[];
+let logHistory=[];
+let historyTab='live';
 let moduleStates=JSON.parse(localStorage.getItem('styx_module_states')||'{}');
 let _moduleHealth=null;
 let _healthTs=0;
@@ -666,6 +749,8 @@ let _roomsAutofilled=false;
 let _moduleStatesSyncedAt=0;
 let _selectedModuleConfig='habitus_miner';
 let _chatStatus=null;
+let brainMode=localStorage.getItem('styx_brain_mode')||'neuron';
+let _zoneActivityByModule={};
 const CHAT_MODEL_STORAGE_KEY='styx_chat_model';
 
 // -- Helpers --
@@ -891,9 +976,78 @@ function addHistory(text){
   historyLog.unshift({time:t,text});
   renderHistory();
 }
+function _fmtTime(ts){
+  if(!ts)return '--:--';
+  const d=new Date(ts);
+  if(Number.isNaN(d.getTime()))return '--:--';
+  return d.getHours().toString().padStart(2,'0')+':'+d.getMinutes().toString().padStart(2,'0');
+}
+function setHistoryTab(tab){
+  historyTab=String(tab||'live');
+  document.querySelectorAll('#history-tabs button').forEach((b)=>{
+    b.classList.toggle('active',b.dataset.tab===historyTab);
+  });
+  if(historyTab==='events')loadEventHistory();
+  if(historyTab==='logs')loadLogHistory();
+  if(historyTab==='chat')loadChatHistory();
+  renderHistory();
+}
 function renderHistory(){
   const c=$('history-items');if(!c)return;
-  c.innerHTML=historyLog.slice(0,30).map(h=>`<div class="hist-item"><span class="ht">${h.time}</span><span>${h.text}</span></div>`).join('');
+  if(historyTab==='events'){
+    if(!eventHistory.length){
+      c.innerHTML='<div class="hist-item"><span class="ht">--</span><span>Keine Events</span></div>';
+      return;
+    }
+    c.innerHTML=eventHistory.slice(0,40).map((e)=>{
+      const t=_fmtTime(e.ts||e.timestamp);
+      const entity=escapeHtml(e.entity_id||e.entity||e.domain||'event');
+      const kind=escapeHtml(e.kind||e.event_type||'event');
+      const state=escapeHtml(String(e.state_to??e.state??e.action??''));
+      const tail=state?` \u2192 ${state}`:'';
+      return `<div class="hist-item"><span class="ht">${t}</span><span class="kind event">EVENT</span><span>${entity} <span style="color:var(--dim)">(${kind})</span>${tail}</span></div>`;
+    }).join('');
+    return;
+  }
+  if(historyTab==='logs'){
+    if(!logHistory.length){
+      c.innerHTML='<div class="hist-item"><span class="ht">--</span><span>Keine Logs</span></div>';
+      return;
+    }
+    c.innerHTML=logHistory.slice(0,40).map((l)=>{
+      const t=_fmtTime(l.ts||l.timestamp||l.time);
+      const lvl=String(l.level||'info').toUpperCase();
+      const msg=escapeHtml(l.msg||l.message||l.event||'Log');
+      return `<div class="hist-item"><span class="ht">${t}</span><span class="kind log">${lvl}</span><span>${msg}</span></div>`;
+    }).join('');
+    return;
+  }
+  if(historyTab==='chat'){
+    if(!chatHistoryMeta.length){
+      c.innerHTML='<div class="hist-item"><span class="ht">--</span><span>Keine Chat-Historie</span></div>';
+      return;
+    }
+    c.innerHTML=chatHistoryMeta.slice(0,40).map((m)=>{
+      const t=_fmtTime(m.timestamp||m.ts);
+      const kind=m.role==='assistant'?'STYX':'USER';
+      const txt=escapeHtml(String(m.content||'')).slice(0,120);
+      return `<div class="hist-item"><span class="ht">${t}</span><span class="kind chat">${kind}</span><span>${txt}</span></div>`;
+    }).join('');
+    return;
+  }
+  c.innerHTML=historyLog.slice(0,40).map(h=>`<div class="hist-item"><span class="ht">${h.time}</span><span class="kind">LIVE</span><span>${escapeHtml(h.text)}</span></div>`).join('');
+}
+
+async function loadEventHistory(){
+  const data=await api('/api/v1/events?limit=40');
+  eventHistory=Array.isArray(data?.events)?data.events:[];
+  if(historyTab==='events')renderHistory();
+}
+
+async function loadLogHistory(){
+  const data=await api('/api/v1/dev/logs?limit=40');
+  logHistory=Array.isArray(data?.items)?data.items:[];
+  if(historyTab==='logs')renderHistory();
 }
 
 // -- Navigation --
@@ -916,6 +1070,7 @@ function navigateTo(p){
 // ==================================================
 async function loadStyx(){
   try{
+    setHistoryTab(historyTab);
     // Load status
     const status=await api('/chat/status');
     _chatStatus=status;
@@ -936,6 +1091,7 @@ async function loadStyx(){
       document.title='PilotSuite \u2014 '+escapeHtml(name);
       addHistory('API-Modus: '+API_MODE+(API?(' ('+API+')'):''));
       await loadChatHistory();
+      await Promise.allSettled([loadEventHistory(),loadLogHistory()]);
     }else{
       dot.className='dot dot-red';txt.textContent='API offline';
       addHistory('\u26a0\ufe0f Core API nicht erreichbar');
@@ -944,7 +1100,7 @@ async function loadStyx(){
     // Load pipelines (real health)
     loadPipelines();
     // Load brain
-    loadBrainGraph();
+    setBrainMode(brainMode);
     // Load suggestion inbox
     loadSuggestionInbox();
     addHistory('Dashboard geladen');
@@ -978,8 +1134,24 @@ async function loadPipelines(){
 }
 
 // -- Brain Graph --
-let brainNodes=[],brainEdges=[];
+let brainNodes=[],brainEdges=[],brainNeurons=[],brainSynapses=[];
+function setBrainMode(mode){
+  brainMode=String(mode||'neuron');
+  localStorage.setItem('styx_brain_mode',brainMode);
+  $('brain-mode-neuron')?.classList.toggle('active',brainMode==='neuron');
+  $('brain-mode-entity')?.classList.toggle('active',brainMode==='entity');
+  loadBrainGraph();
+}
 async function loadBrainGraph(){
+  if(brainMode==='entity'){
+    await loadEntityBrain();
+  }else{
+    await loadNeuronBrain();
+  }
+}
+function reloadBrain(){loadBrainGraph()}
+
+async function loadEntityBrain(){
   const data=await api('/api/v1/graph/state?limitNodes=120&limitEdges=300');
   const c=$('brain-canvas');
   if(!data||!data.nodes||!data.nodes.length){
@@ -988,13 +1160,12 @@ async function loadBrainGraph(){
     return;
   }
   brainNodes=data.nodes;brainEdges=data.edges||[];
-  addHistory(brainNodes.length+' Brain-Nodes geladen');
-  renderBrain(c,brainNodes,brainEdges);
-  renderLegend();
+  addHistory(brainNodes.length+' Entity-Nodes geladen');
+  renderEntityBrain(c,brainNodes,brainEdges);
+  renderEntityLegend();
 }
-function reloadBrain(){loadBrainGraph()}
 
-function renderBrain(container,nodes,edges){
+function renderEntityBrain(container,nodes,edges){
   const rect=container.getBoundingClientRect();
   const W=rect.width||800,H=rect.height||500;
   const nodeMap={};
@@ -1002,7 +1173,6 @@ function renderBrain(container,nodes,edges){
     n.x=W/2+(Math.random()-.5)*W*.7;n.y=H/2+(Math.random()-.5)*H*.7;n.vx=0;n.vy=0;
     nodeMap[n.id||n.entity_id]=n;
   });
-  // Force simulation
   for(let iter=0;iter<120;iter++){
     for(let i=0;i<nodes.length;i++){
       for(let j=i+1;j<nodes.length;j++){
@@ -1027,17 +1197,14 @@ function renderBrain(container,nodes,edges){
       n.x=Math.max(25,Math.min(W-25,n.x));n.y=Math.max(25,Math.min(H-25,n.y));
     });
   }
-  // SVG
   let svg=`<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">`;
   svg+=`<defs><filter id="glow"><feGaussianBlur stdDeviation="2" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>`;
-  // Edges
   edges.forEach(e=>{
     const s=nodeMap[e.source||e.from],t=nodeMap[e.target||e.to];
     if(!s||!t)return;
     const w=Math.max(.3,Math.min(2.5,(e.weight||.5)*3));
     svg+=`<line x1="${s.x}" y1="${s.y}" x2="${t.x}" y2="${t.y}" stroke="#1e2a3a" stroke-width="${w}" stroke-opacity=".4"/>`;
   });
-  // Nodes
   nodes.forEach(n=>{
     const domain=(n.id||n.entity_id||'').split('.')[0];
     const color=DOMAIN_COLORS[domain]||DOMAIN_COLORS.default;
@@ -1047,7 +1214,6 @@ function renderBrain(container,nodes,edges){
     if(r>6)svg+=`<text x="${n.x}" y="${n.y+r+10}" text-anchor="middle" fill="#6b7a8d" font-size="7.5" font-family="Inter,sans-serif">${label}</text>`;
   });
   svg+='</svg>';
-  // Keep legend and controls
   const legend=container.querySelector('.brain-legend');
   const controls=container.querySelector('.brain-controls');
   container.innerHTML=svg;
@@ -1055,7 +1221,170 @@ function renderBrain(container,nodes,edges){
   if(controls)container.appendChild(controls);
 }
 
-function renderLegend(){
+async function _loadZoneActivityByModule(){
+  const zones=await api('/api/v1/hub/zones');
+  const out={};
+  if(!zones||!Array.isArray(zones.zones))return out;
+  const details=await Promise.allSettled(
+    zones.zones.map((z)=>api('/api/v1/hub/zones/'+encodeURIComponent(String(z.zone_id||''))))
+  );
+  details.forEach((d)=>{
+    if(d.status!=='fulfilled'||!d.value)return;
+    const detail=d.value;
+    if(!detail?.state?.occupancy)return;
+    const roleMap=(detail?.settings?.entity_roles&&typeof detail.settings.entity_roles==='object')
+      ?detail.settings.entity_roles
+      :_buildZoneRoleMap(detail?.entities||[]);
+    if(roleMap.motion||roleMap.camera){out.camera_context=(out.camera_context||0)+1;out.proactive=(out.proactive||0)+1;}
+    if(roleMap.lights||roleMap.brightness){out.light_intelligence=(out.light_intelligence||0)+1;}
+    if(roleMap.media){out.media_zones=(out.media_zones||0)+1;}
+    if(roleMap.heating||roleMap.humidity||roleMap.co2||roleMap.temperature){out.energy_context=(out.energy_context||0)+1;}
+    out.habitus_miner=(out.habitus_miner||0)+1;
+  });
+  return out;
+}
+
+async function loadNeuronBrain(){
+  const c=$('brain-canvas');
+  const [neuronsRes,synapsesRes,automationsRes,zoneActivityRes,activityRes]=await Promise.allSettled([
+    api('/api/v1/neurons'),
+    api('/api/v1/hub/brain/synapses'),
+    api('/api/v1/automations/'),
+    _loadZoneActivityByModule(),
+    api('/api/v1/hub/brain/activity'),
+  ]);
+  const neuronsData=neuronsRes.status==='fulfilled'?neuronsRes.value:null;
+  const synData=synapsesRes.status==='fulfilled'?synapsesRes.value:null;
+  const autoData=automationsRes.status==='fulfilled'?automationsRes.value:null;
+  _zoneActivityByModule=zoneActivityRes.status==='fulfilled'&&zoneActivityRes.value?zoneActivityRes.value:{};
+  const activityData=activityRes.status==='fulfilled'?activityRes.value:null;
+  if(activityData?.state==='active'){
+    _zoneActivityByModule.habitus_miner=(_zoneActivityByModule.habitus_miner||0)+1;
+    _zoneActivityByModule.neurons=(_zoneActivityByModule.neurons||0)+1;
+  }
+
+  const raw=neuronsData?.data||{};
+  const groups=['context','state','mood'];
+  const neurons=[];
+  groups.forEach((group)=>{
+    const items=raw[group]&&typeof raw[group]==='object'?raw[group]:{};
+    Object.entries(items).forEach(([name,state])=>{
+      const nid=`${group}.${name}`;
+      const value=Number(state?.value??state?.current_value??state?.score??state?.confidence??0.5);
+      neurons.push({
+        id:nid,
+        group,
+        value:Number.isFinite(value)?value:0.5,
+        module:_neuronToModule(nid),
+      });
+    });
+  });
+  brainNeurons=neurons;
+  brainSynapses=Array.isArray(synData?.synapses)?synData.synapses:[];
+  const automations=Array.isArray(autoData?.automations)?autoData.automations:[];
+
+  if(!neurons.length){
+    const inner=c.querySelector('.loading');
+    if(inner)inner.innerHTML='<div class="empty">Neuronen-Daten nicht verfuegbar.</div>';
+    return;
+  }
+  renderNeuronBrain(c,neurons,brainSynapses,automations,_zoneActivityByModule);
+  renderNeuronLegend(neurons,_zoneActivityByModule,automations.length,brainSynapses.length);
+}
+
+function renderNeuronBrain(container,neurons,synapses,automations,zoneActivity){
+  const rect=container.getBoundingClientRect();
+  const W=rect.width||800,H=rect.height||500;
+  const cx=W/2,cy=H/2;
+  const modules=[...new Set(neurons.map((n)=>n.module))];
+  const moduleNodes={};
+  const radius=Math.min(W,H)*0.30;
+  modules.forEach((mid,idx)=>{
+    const a=(Math.PI*2*idx)/Math.max(1,modules.length);
+    moduleNodes[mid]={
+      id:mid,
+      x:cx+Math.cos(a)*radius,
+      y:cy+Math.sin(a)*radius,
+      color:_moduleColor(mid),
+      active:(zoneActivity[mid]||0)>0,
+    };
+  });
+
+  const edgeWeights={};
+  const addEdge=(from,to,delta=1,source='auto')=>{
+    if(!from||!to||from===to)return;
+    const key=from+'->'+to;
+    if(!edgeWeights[key])edgeWeights[key]={from,to,weight:0,sourceCounts:{}};
+    edgeWeights[key].weight+=delta;
+    edgeWeights[key].sourceCounts[source]=(edgeWeights[key].sourceCounts[source]||0)+1;
+  };
+
+  (automations||[]).forEach((a)=>{
+    const from=_moduleFromEntityExpr(a?.antecedent||'');
+    const to=_moduleFromEntityExpr(a?.consequent||'');
+    addEdge(from,to,1,'automation');
+  });
+  (synapses||[]).forEach((s)=>{
+    const from=_moduleFromEntityExpr(s?.source||'');
+    const to=_moduleFromEntityExpr(s?.target||'');
+    const w=Math.max(1,Number(s?.strength||1));
+    addEdge(from,to,w,'synapse');
+  });
+  const edges=Object.values(edgeWeights).filter((e)=>moduleNodes[e.from]&&moduleNodes[e.to]);
+
+  const byModule={};
+  neurons.forEach((n)=>{
+    if(!byModule[n.module])byModule[n.module]=[];
+    byModule[n.module].push(n);
+  });
+  const neuronPoints={};
+  Object.entries(byModule).forEach(([mid,list])=>{
+    const base=moduleNodes[mid];
+    if(!base)return;
+    const spread=Math.max(3,list.length);
+    list.forEach((n,idx)=>{
+      const ring=28+Math.floor(idx/8)*16;
+      const a=(Math.PI*2*(idx%spread))/spread;
+      neuronPoints[n.id]={
+        ...n,
+        x:base.x+Math.cos(a)*ring,
+        y:base.y+Math.sin(a)*ring,
+      };
+    });
+  });
+
+  let svg=`<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">`;
+  svg+=`<defs><filter id="glow"><feGaussianBlur stdDeviation="2" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>`;
+  edges.forEach((e)=>{
+    const s=moduleNodes[e.from],t=moduleNodes[e.to];
+    if(!s||!t)return;
+    const w=Math.min(4,1+Math.log2(1+e.weight));
+    svg+=`<line x1="${s.x}" y1="${s.y}" x2="${t.x}" y2="${t.y}" stroke="#344255" stroke-width="${w}" stroke-opacity=".72"/>`;
+  });
+
+  Object.values(neuronPoints).forEach((n)=>{
+    const color=_moduleColor(n.module);
+    const r=3+Math.min(5,Math.max(0,n.value||0)*5);
+    const pulse=((zoneActivity[n.module]||0)>0||(n.value||0)>0.75)?'brain-neuron-active':'';
+    svg+=`<circle class="${pulse}" cx="${n.x}" cy="${n.y}" r="${r}" fill="${color}" opacity=".9"/>`;
+  });
+
+  Object.values(moduleNodes).forEach((m)=>{
+    const size=13+(m.active?3:0);
+    const stroke=m.active?'#fbbf24':'#1e2a3a';
+    svg+=`<circle class="brain-module-node ${m.active?'brain-neuron-active':''}" cx="${m.x}" cy="${m.y}" r="${size}" fill="${m.color}" stroke="${stroke}" stroke-width="2"/>`;
+    svg+=`<text x="${m.x}" y="${m.y+size+11}" text-anchor="middle" fill="#9aa7ba" font-size="8.5" font-family="Inter,sans-serif">${escapeHtml(m.id.replace(/_/g,' '))}</text>`;
+  });
+  svg+='</svg>';
+
+  const legend=container.querySelector('.brain-legend');
+  const controls=container.querySelector('.brain-controls');
+  container.innerHTML=svg;
+  if(legend)container.appendChild(legend);
+  if(controls)container.appendChild(controls);
+}
+
+function renderEntityLegend(){
   const c=$('brain-legend');if(!c)return;
   const domains={};
   brainNodes.forEach(n=>{const d=(n.id||n.entity_id||'').split('.')[0];domains[d]=(domains[d]||0)+1});
@@ -1064,6 +1393,20 @@ function renderLegend(){
     const color=DOMAIN_COLORS[d]||DOMAIN_COLORS.default;
     c.innerHTML+=`<div class="leg"><span class="dot-lg" style="background:${color}"></span>${d} (${cnt})</div>`;
   });
+}
+
+function renderNeuronLegend(neurons,zoneActivity,autoCount,synCount){
+  const c=$('brain-legend');if(!c)return;
+  const counts={};
+  neurons.forEach((n)=>{counts[n.module]=(counts[n.module]||0)+1});
+  c.innerHTML='';
+  Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0,8).forEach(([m,cnt])=>{
+    const color=_moduleColor(m);
+    const active=(zoneActivity[m]||0)>0;
+    c.innerHTML+=`<div class="leg"><span class="dot-lg" style="background:${color}"></span>${escapeHtml(m)} (${cnt})${active?' *':''}</div>`;
+  });
+  c.innerHTML+=`<div class="leg"><span class="dot-lg" style="background:#22d3ee"></span>Automationen ${autoCount}</div>`;
+  c.innerHTML+=`<div class="leg"><span class="dot-lg" style="background:#9b8afb"></span>Synapsen ${synCount}</div>`;
 }
 
 // -- Chat --
@@ -1104,13 +1447,18 @@ async function persistChatMessage(role,content){
 async function loadChatHistory(){
   const loaded=await api('/api/v1/hub/brain/activity/chat?limit=40');
   if(loaded&&loaded.ok&&Array.isArray(loaded.messages)){
+    chatHistoryMeta=loaded.messages
+      .filter(m=>m&&m.role&&m.content!==undefined)
+      .map(m=>({role:m.role,content:String(m.content||''),timestamp:m.timestamp||null}));
     chatHistory=loaded.messages
       .filter(m=>m&&m.role&&m.content!==undefined)
       .map(m=>({role:m.role,content:String(m.content||'')}));
     renderChatMessages(chatHistory);
+    if(historyTab==='chat')renderHistory();
     return true;
   }
   renderChatMessages(chatHistory);
+  if(historyTab==='chat')renderHistory();
   return false;
 }
 async function clearChatHistory(){
@@ -1124,7 +1472,9 @@ async function clearChatHistory(){
     }));
   }catch(_err){}
   chatHistory=[];
+  chatHistoryMeta=[];
   renderChatMessages(chatHistory);
+  if(historyTab==='chat')renderHistory();
   addHistory('Chatverlauf geloescht');
 }
 
@@ -1168,6 +1518,8 @@ async function sendChat(){
   const msgs=$('chat-msgs');
   msgs.appendChild(el('div','msg u',msg));msgs.scrollTop=msgs.scrollHeight;
   chatHistory.push({role:'user',content:msg});
+  chatHistoryMeta.unshift({role:'user',content:msg,timestamp:new Date().toISOString()});
+  if(historyTab==='chat')renderHistory();
   addHistory('Chat: '+msg.slice(0,40)+(msg.length>40?'...':''));
   const btn=$('chat-send');btn.disabled=true;
   const typing=el('div','msg a','<div class="spinner" style="display:inline-block;width:12px;height:12px;margin-right:6px"></div>Denkt nach...');
@@ -1180,6 +1532,8 @@ async function sendChat(){
     // XSS-safe: escape first, then convert newlines to <br>
     typing.innerHTML=escapeHtml(reply).replace(/\n/g,'<br>');
     chatHistory.push({role:'assistant',content:reply});
+    chatHistoryMeta.unshift({role:'assistant',content:reply,timestamp:new Date().toISOString()});
+    if(historyTab==='chat')renderHistory();
     persistChatMessage('assistant',reply);
     addHistory('Chat-Endpoint: '+endpoint);
     addHistory('Styx: '+reply.slice(0,40)+(reply.length>40?'...':''));
@@ -1430,6 +1784,7 @@ function _detectZoneRole(entityId){
   if(domain==='light')return 'lights';
   if(domain==='climate')return 'heating';
   if(domain==='media_player')return 'media';
+  if(domain==='camera')return 'camera';
   if(domain==='cover')return 'cover';
   if(domain==='lock')return 'lock';
   if(domain==='binary_sensor'){
@@ -1527,16 +1882,98 @@ async function loadZoneRoomOptions(forceImport=false){
       sel.appendChild(opt);
     });
 
-  if(hint)hint.textContent=`${rooms.length} Räume verfügbar. Mehrfachauswahl mit Ctrl/Cmd möglich. Standard-Rollen (Bewegung/Helligkeit/CO2/Lärm/Heizung) werden automatisch vorbelegt.`;
+  if(hint)hint.textContent=`${rooms.length} Räume verfügbar. Mehrfachauswahl mit Ctrl/Cmd möglich. Standard-Rollen (Bewegung/Helligkeit/CO2/Lärm/Heizung/Kamera) werden automatisch vorbelegt.`;
 }
 
 async function reloadZoneRoomOptions(){
   await loadZoneRoomOptions(true);
 }
 
+async function bootstrapHabitusZones(){
+  const statusEl=$('hab-bootstrap-status');
+  if(statusEl)statusEl.textContent='Bootstrap läuft...';
+  try{
+    const r=await fetch(API+'/api/v1/hub/habitus/management/bootstrap_zones',withAuth({
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({overwrite:true}),
+    }));
+    const data=await r.json().catch(()=>null);
+    if(!r.ok||data?.ok===false){
+      throw new Error(data?.error||('HTTP '+r.status));
+    }
+    const created=Number(data?.created||0);
+    const updated=Number(data?.updated||0);
+    if(statusEl)statusEl.textContent=`Fertig: ${created} erstellt, ${updated} aktualisiert`;
+    addHistory(`Habitus-Bootstrap: ${created} erstellt, ${updated} aktualisiert`);
+    await loadHabitus();
+    await loadEntitySuggestions('hab-entity-suggestions');
+  }catch(e){
+    if(statusEl)statusEl.textContent='Fehler: '+String(e.message||'unbekannt');
+    addHistory('⚠️ Habitus-Bootstrap fehlgeschlagen: '+escapeHtml(e.message||'unbekannt'));
+  }
+}
+
+async function loadHabitusAutomationSuggestions(){
+  const c=$('hab-auto-suggestions');if(!c)return;
+  try{
+    const data=await api('/api/v1/hub/habitus/automation/suggestions?limit=12&min_confidence=0.55');
+    const items=data?.suggestions||[];
+    if(!items.length){
+      c.innerHTML='<div class="empty">Keine Vorschläge verfügbar. Sammle mehr Events oder senke den Confidence-Schwellenwert.</div>';
+      return;
+    }
+    let html='<table class="tbl"><tr><th>Wenn</th><th>Dann</th><th>Konf.</th><th>Neuronen</th><th></th></tr>';
+    items.forEach((s)=>{
+      const conf=Math.round((Number(s.confidence||0))*100);
+      const ants=escapeHtml(s.antecedent||'?');
+      const cons=escapeHtml(s.consequent||'?');
+      const neurons=(s.neurons||[]).slice(0,3).map((n)=>`<span class="b b-b" style="font-size:9px">${escapeHtml(n)}</span>`).join(' ');
+      html+=`<tr>
+        <td>${ants}</td>
+        <td>${cons}</td>
+        <td>${conf}%</td>
+        <td>${neurons||'--'}</td>
+        <td><button onclick="applyHabitusAutomationSuggestion('${escapeHtml(s.suggestion_id||'')}')" class="btn-scene">&#x2713; Anwenden</button></td>
+      </tr>`;
+    });
+    html+='</table>';
+    c.innerHTML=html;
+  }catch(e){
+    c.innerHTML='<div class="empty">Habitus-Automations API nicht erreichbar</div>';
+  }
+}
+
+async function applyHabitusAutomationSuggestion(suggestionId){
+  if(!suggestionId)return;
+  try{
+    const r=await fetch(API+'/api/v1/hub/habitus/automation/apply',withAuth({
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({suggestion_id:suggestionId}),
+    }));
+    const data=await r.json().catch(()=>null);
+    if(!r.ok||data?.ok===false){
+      throw new Error(data?.error||('HTTP '+r.status));
+    }
+    const alias=data?.result?.alias||suggestionId;
+    addHistory('✅ Habitus-Automation erstellt: '+escapeHtml(alias));
+    await loadAutomations();
+    await loadHabitusAutomationSuggestions();
+  }catch(e){
+    addHistory('⚠️ Automation konnte nicht erstellt werden: '+escapeHtml(e.message||'unbekannt'));
+  }
+}
+
 async function loadHabitus(){
   const data=await api('/api/v1/habitus/rules?limit=50');
   const rules=data?.rules||data?.data||[];
+  const recData=await api('/api/v1/hub/habitus/management/recommendations');
+  const recMap=new Map();
+  (recData?.zones||[]).forEach((z)=>{
+    const zid=String(z?.zone_id||'');
+    if(zid)recMap.set(zid,z);
+  });
   $('hab-count').textContent=rules.length+' Regeln';
   const c=$('hab-rules');
   if(!rules.length){c.innerHTML='<div class="empty">Noch keine Muster. PilotSuite lernt automatisch aus Events.</div>';return}
@@ -1572,12 +2009,28 @@ async function loadHabitus(){
       const zid=String(z.zone_id||'');
       const detail=detailMap.get(zid)||{};
       const zoneName=String(z.name||detail.name||zid||'Zone');
+      const rec=recMap.get(zid)||null;
       const ents=Array.isArray(detail.entities)?detail.entities:[];
       const state=detail.state||{};
       const settings=detail.settings||{};
       const roleMap=(settings&&typeof settings==='object'&&settings.entity_roles&&typeof settings.entity_roles==='object')
         ?settings.entity_roles
         :_buildZoneRoleMap(ents);
+      const metricState=rec?.standard_metrics_present||{};
+      const metricLabels={
+        motion:'Bewegung',
+        brightness:'Helligkeit',
+        noise:'Lärm',
+        humidity:'Luftfeuchte',
+        heating:'Heizung',
+        co2:'CO₂',
+        camera:'Kamera',
+      };
+      const metricChips=Object.keys(metricLabels).map((k)=>{
+        const ok=!!metricState[k];
+        return `<span class="b ${ok?'b-g':'b-y'}" style="font-size:9px">${ok?'✓':'○'} ${metricLabels[k]}</span>`;
+      }).join(' ');
+      const recCount=Number(rec?.recommended_count||0);
       const rooms=Array.isArray(detail.rooms)?detail.rooms:[];
       const roomNames=rooms.map(r=>String(r?.name||r?.room_id||'')).filter(Boolean);
       const roomSummary=roomNames.length>3?roomNames.slice(0,3).join(', ')+` +${roomNames.length-3}`:(roomNames.join(', ')||'keine Räume');
@@ -1598,7 +2051,9 @@ async function loadHabitus(){
       const card=el('div','zone-card',
         `<h3><span style="color:var(--cyan)">&#x1f3e0;</span> ${escapeHtml(zoneName)}</h3>
         <p style="font-size:11px;color:var(--dim)">Räume: ${escapeHtml(roomSummary)} · Entitäten: ${ents.length}</p>
+        <p style="font-size:10px;color:var(--dim);margin-top:-2px">Empfohlen aus HA: ${recCount}</p>
         ${metrics?`<p style="font-size:10px;color:var(--dim);margin-top:-2px">${escapeHtml(metrics)}</p>`:''}
+        <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px">${metricChips}</div>
         ${roleChips?`<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:6px">${roleChips}</div>`:''}
         <div class="zone-entities">${ents.map(e=>`<span class="ze">${escapeHtml(e)}</span>`).join('')}</div>
         <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
@@ -1612,6 +2067,7 @@ async function loadHabitus(){
   }
 
   await loadZoneRoomOptions();
+  await loadHabitusAutomationSuggestions();
 
   // Trend from real rule confidence values
   const trendData=rules.map(r=>(r.metadata||r).confidence||0);
@@ -1690,7 +2146,7 @@ async function addZone(){
             settings:{
               entity_roles:roleMap,
               ux_defaults:{
-                standard_metrics:['motion','brightness','noise','humidity','heating','co2'],
+                standard_metrics:['motion','brightness','noise','humidity','heating','co2','camera'],
               },
             },
           }),
