@@ -2763,3 +2763,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.api.v1.solidstart import solidstart_bp
         app.register_blueprint(solidstart_bp)
     except: pass
+    try:
+        from copilot_core.api.v1.docusaurus import docusaurus_bp
+        app.register_blueprint(docusaurus_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.vuepress import vuepress_bp
+        app.register_blueprint(vuepress_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.vitepress import vitepress_bp
+        app.register_blueprint(vitepress_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.docute import docute_bp
+        app.register_blueprint(docute_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.mkdocs import mkdocs_bp
+        app.register_blueprint(mkdocs_bp)
+    except: pass
