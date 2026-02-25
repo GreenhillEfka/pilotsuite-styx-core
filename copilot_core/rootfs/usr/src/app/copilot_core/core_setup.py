@@ -2823,3 +2823,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.api.v1.postman import postman_bp
         app.register_blueprint(postman_bp)
     except: pass
+    try:
+        from copilot_core.api.v1.bruno import bruno_bp
+        app.register_blueprint(bruno_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.hoppscotch import hoppscotch_bp
+        app.register_blueprint(hoppscotch_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.swaggerui import swaggerui_bp
+        app.register_blueprint(swaggerui_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.stoplight import stoplight_bp
+        app.register_blueprint(stoplight_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.rapyd import rapyd_bp
+        app.register_blueprint(rapyd_bp)
+    except: pass
