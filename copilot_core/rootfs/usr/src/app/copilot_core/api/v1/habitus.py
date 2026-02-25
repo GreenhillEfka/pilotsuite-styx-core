@@ -26,7 +26,9 @@ def _require_auth():
 def _get_service() -> HabitusMinerService:
     """Get or create habitus miner service instance."""
     if not hasattr(current_app, '_habitus_service'):
-        cfg = current_app.config["COPILOT_CFG"]
+        cfg = current_app.config.get("COPILOT_CFG")
+        if cfg is None or not hasattr(cfg, "data_dir"):
+            raise RuntimeError("COPILOT_CFG not initialized")
         storage_dir = Path(cfg.data_dir) / "habitus_miner"
         
         # Create default config (can be overridden via API)

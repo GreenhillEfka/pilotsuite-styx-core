@@ -112,6 +112,8 @@ def graph_ops(body: GraphOpsRequest):
         _IDEM_CACHE[key] = now
 
     svc = get_graph_service()
+    if svc is None:
+        return jsonify({"ok": False, "error": "Brain graph service not available"}), 503
 
     # Ensure nodes exist (minimal scores).
     svc.touch_node(from_id, delta=0.1)
