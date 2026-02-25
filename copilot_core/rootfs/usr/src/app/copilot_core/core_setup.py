@@ -2203,3 +2203,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.api.v1.portainer import portainer_bp
         app.register_blueprint(portainer_bp)
     except: pass
+    try:
+        from copilot_core.api.v1.traefik import traefik_bp
+        app.register_blueprint(traefik_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.npm import npm_bp
+        app.register_blueprint(npm_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.caddy import caddy_bp
+        app.register_blueprint(caddy_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.haproxy import haproxy_bp
+        app.register_blueprint(haproxy_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.envoy import envoy_bp
+        app.register_blueprint(envoy_bp)
+    except: pass
