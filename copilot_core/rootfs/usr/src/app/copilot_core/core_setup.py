@@ -4163,3 +4163,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.api.v1.cudapython import cudapython_bp
         app.register_blueprint(cudapython_bp)
     except: pass
+    try:
+        from copilot_core.api.v1.juliagpu import juliagpu_bp
+        app.register_blueprint(juliagpu_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.arrayfire import arrayfire_bp
+        app.register_blueprint(arrayfire_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.eigen import eigen_bp
+        app.register_blueprint(eigen_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.boost import boost_bp
+        app.register_blueprint(boost_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.armadillo import armadillo_bp
+        app.register_blueprint(armadillo_bp)
+    except: pass
