@@ -2783,3 +2783,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.api.v1.mkdocs import mkdocs_bp
         app.register_blueprint(mkdocs_bp)
     except: pass
+    try:
+        from copilot_core.api.v1.gitbook import gitbook_bp
+        app.register_blueprint(gitbook_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.rtd import rtd_bp
+        app.register_blueprint(rtd_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.daux import daux_bp
+        app.register_blueprint(daux_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.slate import slate_bp
+        app.register_blueprint(slate_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.swagger import swagger_bp
+        app.register_blueprint(swagger_bp)
+    except: pass
