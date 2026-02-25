@@ -2323,3 +2323,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.api.v1.proxmox import proxmox_bp
         app.register_blueprint(proxmox_bp)
     except: pass
+    try:
+        from copilot_core.api.v1.ovirt import ovirt_bp
+        app.register_blueprint(ovirt_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.openstack import openstack_bp
+        app.register_blueprint(openstack_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.vmware import vmware_bp
+        app.register_blueprint(vmware_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.hyperv import hyperv_bp
+        app.register_blueprint(hyperv_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.xen import xen_bp
+        app.register_blueprint(xen_bp)
+    except: pass
