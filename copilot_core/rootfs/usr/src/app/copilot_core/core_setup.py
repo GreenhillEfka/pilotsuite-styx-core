@@ -3063,3 +3063,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.api.v1.hotjar import hotjar_bp
         app.register_blueprint(hotjar_bp)
     except: pass
+    try:
+        from copilot_core.api.v1.mixpanel import mixpanel_bp
+        app.register_blueprint(mixpanel_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.amplitude import amplitude_bp
+        app.register_blueprint(amplitude_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.segment import segment_bp
+        app.register_blueprint(segment_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.heap import heap_bp
+        app.register_blueprint(heap_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.pendo import pendo_bp
+        app.register_blueprint(pendo_bp)
+    except: pass
