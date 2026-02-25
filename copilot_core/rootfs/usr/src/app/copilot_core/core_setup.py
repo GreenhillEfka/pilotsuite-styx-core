@@ -2483,3 +2483,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.api.v1.directadmin import directadmin_bp
         app.register_blueprint(directadmin_bp)
     except: pass
+    try:
+        from copilot_core.api.v1.ispconfig import ispconfig_bp
+        app.register_blueprint(ispconfig_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.froxlor import froxlor_bp
+        app.register_blueprint(froxlor_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.virtualizor import virtualizor_bp
+        app.register_blueprint(virtualizor_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.solusvm import solusvm_bp
+        app.register_blueprint(solusvm_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.whmcs import whmcs_bp
+        app.register_blueprint(whmcs_bp)
+    except: pass
