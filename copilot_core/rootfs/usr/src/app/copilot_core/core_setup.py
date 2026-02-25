@@ -2623,3 +2623,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.api.v1.pam import pam_bp
         app.register_blueprint(pam_bp)
     except: pass
+    try:
+        from copilot_core.api.v1.freeradius import freeradius_bp
+        app.register_blueprint(freeradius_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.oidc import oidc_bp
+        app.register_blueprint(oidc_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.saml import saml_bp
+        app.register_blueprint(saml_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.oauth2 import oauth2_bp
+        app.register_blueprint(oauth2_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.ldap import ldap_bp
+        app.register_blueprint(ldap_bp)
+    except: pass
