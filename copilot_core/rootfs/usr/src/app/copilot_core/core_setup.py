@@ -1983,3 +1983,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.api.v1.splunk import splunk_bp
         app.register_blueprint(splunk_bp)
     except: pass
+    try:
+        from copilot_core.api.v1.graylog import graylog_bp
+        app.register_blueprint(graylog_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.loki import loki_bp
+        app.register_blueprint(loki_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.alertmanager import alertmanager_bp
+        app.register_blueprint(alertmanager_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.pushover import pushover_bp
+        app.register_blueprint(pushover_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.ntfy import ntfy_bp
+        app.register_blueprint(ntfy_bp)
+    except: pass
