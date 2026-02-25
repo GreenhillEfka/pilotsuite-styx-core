@@ -2643,3 +2643,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.api.v1.ldap import ldap_bp
         app.register_blueprint(ldap_bp)
     except: pass
+    try:
+        from copilot_core.api.v1.keycloak import keycloak_bp
+        app.register_blueprint(keycloak_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.dex import dex_bp
+        app.register_blueprint(dex_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.oauth2proxy import oauth2proxy_bp
+        app.register_blueprint(oauth2proxy_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.authelia import authelia_bp
+        app.register_blueprint(authelia_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.lldap import lldap_bp
+        app.register_blueprint(lldap_bp)
+    except: pass
