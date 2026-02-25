@@ -3003,3 +3003,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.api.v1.mimir import mimir_bp
         app.register_blueprint(mimir_bp)
     except: pass
+    try:
+        from copilot_core.api.v1.victorialogs import victorialogs_bp
+        app.register_blueprint(victorialogs_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.jaeger import jaeger_bp
+        app.register_blueprint(jaeger_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.zipkin import zipkin_bp
+        app.register_blueprint(zipkin_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.skywalking import skywalking_bp
+        app.register_blueprint(skywalking_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.datadog import datadog_bp
+        app.register_blueprint(datadog_bp)
+    except: pass
