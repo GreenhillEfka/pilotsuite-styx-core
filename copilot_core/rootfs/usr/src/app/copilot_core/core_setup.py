@@ -2103,3 +2103,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.api.v1.mailu import mailu_bp
         app.register_blueprint(mailu_bp)
     except: pass
+    try:
+        from copilot_core.api.v1.roundcube import roundcube_bp
+        app.register_blueprint(roundcube_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.sogo import sogo_bp
+        app.register_blueprint(sogo_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.zpush import zpush_bp
+        app.register_blueprint(zpush_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.davmail import davmail_bp
+        app.register_blueprint(davmail_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.kopano import kopano_bp
+        app.register_blueprint(kopano_bp)
+    except: pass
