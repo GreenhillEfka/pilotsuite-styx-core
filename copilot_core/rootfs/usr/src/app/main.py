@@ -188,6 +188,7 @@ app.config["STARTUP_TIME"] = _STARTUP_TIME
 app.config["PREFLIGHT"] = _preflight_results
 app.config["COPILOT_SERVICES"] = _services
 app.config["COPILOT_LLM"] = _services.get("llm_provider")
+app.config["COPILOT_MEMORY"] = _services.get("conversation_memory")
 
 # In-memory ring buffer of recent dev logs (thread-safe).
 _DEV_LOG_CACHE: list[dict] = []

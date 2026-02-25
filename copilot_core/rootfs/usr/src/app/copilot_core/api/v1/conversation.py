@@ -17,6 +17,25 @@ def _get_llm() -> object | None:
     return current_app.config.get("COPILOT_LLM")
 
 
+def _get_memory():
+    return current_app.config.get("COPILOT_MEMORY")
+
+
+def _store_exchange(messages: list, response_content: str) -> None:
+    """Best-effort store of conversation exchange in memory."""
+    memory = _get_memory()
+    if memory is None:
+        return
+    try:
+        for msg in messages:
+            if msg.get("role") == "user":
+                memory.store_message(role="user", content=msg.get("content", ""))
+        if response_content:
+            memory.store_message(role="assistant", content=response_content)
+    except Exception:
+        _LOGGER.debug("Failed to store conversation in memory", exc_info=True)
+
+
 # ------------------------------------------------------------------
 # Native conversation API
 # ------------------------------------------------------------------
@@ -54,6 +73,7 @@ def conversation_chat():
         temperature=temperature,
         max_tokens=max_tokens,
     )
+    _store_exchange(messages, result.get("content", ""))
     return jsonify({"ok": True, **result})
 
 
@@ -119,6 +139,7 @@ def chat_completions():
         response["choices"][0]["message"]["tool_calls"] = tool_calls
         response["choices"][0]["finish_reason"] = "tool_calls"
 
+    _store_exchange(messages, content)
     return jsonify(response)
 
 
