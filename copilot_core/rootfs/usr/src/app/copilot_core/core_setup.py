@@ -2523,3 +2523,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.api.v1.smtpd import smtpd_bp
         app.register_blueprint(smtpd_bp)
     except: pass
+    try:
+        from copilot_core.api.v1.opendkim import opendkim_bp
+        app.register_blueprint(opendkim_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.spf import spf_bp
+        app.register_blueprint(spf_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.dmarc import dmarc_bp
+        app.register_blueprint(dmarc_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.dkim import dkim_bp
+        app.register_blueprint(dkim_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.arc import arc_bp
+        app.register_blueprint(arc_bp)
+    except: pass
