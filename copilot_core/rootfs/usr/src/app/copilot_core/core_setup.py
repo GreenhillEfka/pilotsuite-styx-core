@@ -3743,3 +3743,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.api.v1.promop import promop_bp
         app.register_blueprint(promop_bp)
     except: pass
+    try:
+        from copilot_core.api.v1.argoworkflows import argoworkflows_bp
+        app.register_blueprint(argoworkflows_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.airflow import airflow_bp
+        app.register_blueprint(airflow_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.prefect import prefect_bp
+        app.register_blueprint(prefect_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.dagster import dagster_bp
+        app.register_blueprint(dagster_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.temporal import temporal_bp
+        app.register_blueprint(temporal_bp)
+    except: pass
