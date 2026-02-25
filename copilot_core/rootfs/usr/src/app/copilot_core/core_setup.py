@@ -3783,3 +3783,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.api.v1.bentoml import bentoml_bp
         app.register_blueprint(bentoml_bp)
     except: pass
+    try:
+        from copilot_core.api.v1.tfserving import tfserving_bp
+        app.register_blueprint(tfserving_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.torchserve import torchserve_bp
+        app.register_blueprint(torchserve_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.triton import triton_bp
+        app.register_blueprint(triton_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.onnxruntime import onnxruntime_bp
+        app.register_blueprint(onnxruntime_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.ray import ray_bp
+        app.register_blueprint(ray_bp)
+    except: pass
