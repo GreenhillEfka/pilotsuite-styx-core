@@ -195,41 +195,33 @@ class TestServiceInterface:
         assert "list_tags" in service
     
     def test_service_create_tag(self):
-        """Test async service create_tag."""
-        import asyncio
-        
+        """Test service create_tag."""
+
         registry = TagRegistry()
         service = create_tag_service(registry)
-        
-        async def run_test():
-            result = await service["create_tag"](
-                tag_id="aicp.test.tag",
-                facet="role",
-                display_de="Test",
-            )
-            assert result["status"] == "created"
-            assert result["tag_id"] == "aicp.test.tag"
-        
-        asyncio.run(run_test())
+
+        result = service["create_tag"](
+            tag_id="aicp.test.tag",
+            facet="role",
+            display_de="Test",
+        )
+        assert result["status"] == "created"
+        assert result["tag_id"] == "aicp.test.tag"
     
     def test_service_suggest_tag(self):
-        """Test async service suggest_tag."""
-        import asyncio
-        
+        """Test service suggest_tag."""
+
         registry = TagRegistry()
         service = create_tag_service(registry)
-        
-        async def run_test():
-            result = await service["suggest_tag"](
-                facet="state",
-                key="candidate",
-                namespace="sys",
-                display_de="Kandidat",
-            )
-            assert result["status"] == "suggested"
-            assert result["is_learned"] is True
-        
-        asyncio.run(run_test())
+
+        result = service["suggest_tag"](
+            facet="state",
+            key="candidate",
+            namespace="sys",
+            display_de="Kandidat",
+        )
+        assert result["status"] == "suggested"
+        assert result["is_learned"] is True
 
 
 class TestExportLabels:

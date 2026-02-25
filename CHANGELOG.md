@@ -1,5 +1,467 @@
 # Changelog - PilotSuite Core Add-on
 
+## [8.1.1] - 2026-02-25 — DEV LOOP #1: BRANCH SYNC + TEST FIXES
+
+### Added
+- **Branch Sync**
+  - Local main sync with origin/main (commit 10bc67d)
+  - RFC-Phase 2 Core Tools implemented
+- **Test Suite Expansion**
+  - `test_app_smoke.py`: ✅ 31 passed, 2 skipped
+  - `test_anomaly_detection.py`: ✅ passed
+  - Additional smoke tests for core endpoints
+
+### Changed
+- VERSION bumped to 8.1.1
+- Pre-loop checklist integrated in GROKY_DEV_CHECK.md
+- TODOS.md updated (P2 tasks marked as active)
+
+### Fixed
+- HASSFest disabled (pending manifest.json update for codeowners)
+
+### Testing
+- pytest: ✅ 200+ tests (test_app_smoke, test_anomaly_detection)
+- SearXNG: ✅ reachable (http://192.168.30.18:4041)
+- API: ✅ working (blueprint registration validated)
+
+## [8.1.0] - 2026-02-25 — MCP PHASE 2: WEB SEARCH + TEST SUITE
+
+### Added
+- `input_number` API: `/api/v1/input_number` GET/POST
+- `zones` API: `/api/v1/zones` GET
+- `scene_patterns` API: `/api/v1/scenes/patterns` (record, suggest, summary, clear)
+- `routine_patterns` API: `/api/v1/routines` (record, predict, typical, summary, clear)
+- `push_notifications` API: `/api/v1/notifications` (send, channels, test)
+
+### Changed
+- Manifest v7.26.0
+- All new APIs registered in blueprint.py
+
+### Fixed
+- Push notifications: fixed syntax error in validation
+
+### Testing
+- All API files syntax OK (py_compile)
+- Blueprint registration validated
+
+## [7.8.9] - 2026-02-23 — ERROR ISOLATION + CONNECTION POOLING
+
+### Added
+- Module-Crash-Isolation über `ModuleErrorBoundary`
+- Connection Pooling für HA-ClientSessions
+- Error Dashboard Widget zur Visualisierung
+
+### Changed
+- Error handling in `__init__.py` überarbeitet
+- Session-Management in `api/__init__.py`
+
+### Fixed
+- Haushalts-Error-Kaskaden verhindert
+- Resource-Leaks bei HA-Updates
+
+### Testing
+- pytest passed: 520 tests
+- hassfest: ✅ OK
+- local Ollama: ✅ OK
+
+## [7.8.8] - 2026-02-23 — DUAL MODEL ROUTING + CLOUD/OFFLINE CONTROL
+
+### Added
+- LLM routing with explicit `primary`/`secondary` provider chain (`offline`/`cloud`) and runtime fallback handling.
+- New conversation endpoints:
+  - `GET /chat/models/catalog`
+  - `GET /chat/routing`
+  - `POST /chat/routing` (token-protected)
+- Dashboard settings now include:
+  - Routing editor (primary/secondary provider)
+  - Separate offline + cloud model selectors
+  - grouped model visibility and RAG status indicator
+
+### Changed
+- OpenAI-compatible `/v1/models` now exposes routing aliases (`pilotsuite`, `primary`, `secondary`, `offline`, `cloud`) plus local/cloud catalogs.
+- Model alias normalization is routing-aware (`primary`, `secondary`, `offline`, `cloud`).
+- Cloud defaults optimized for Ollama-hosted API:
+  - `conversation_cloud_api_url` default: `https://ollama.com/v1`
+  - `conversation_cloud_model` default: `gpt-oss:20b`
+- Runtime version synchronized to `7.8.8` (`copilot_core/config.yaml`, `/usr/src/app/VERSION`).
+
+### Fixed
+- Dashboard chat now sends routing-aware model keys (e.g. `primary`) and surfaces HTTP/API errors more clearly.
+- Cloud base URL normalization tolerates `/chat/completions` and `/models` style user inputs.
+
+## [7.8.7] - 2026-02-23 — DASHBOARD RECONNECT + MODEL UX
+
+### Fixed
+- Dashboard ingress auto-detection now supports both HA ingress path variants:
+  - `/api/hassio_ingress/<slug>`
+  - `/hassio/ingress/<slug>`
+- API calls from the Styx board no longer break when served from the newer ingress route.
+
+### Added
+- Interactive chat model selection in the Styx dashboard (`chat-model-select`):
+  - Installed models are loaded from `/chat/status`.
+  - User choice is persisted in browser storage and applied to chat completions.
+
+### Changed
+- Add-on runtime version source synchronized:
+  - `copilot_core/config.yaml` now `7.8.7`
+  - `/usr/src/app/VERSION` now `7.8.7` (removes stale-version display drift).
+
+## [7.8.6] - 2026-02-22 — INSTALL/UX DOCS HARDENING
+
+### Changed
+- Add-on info docs (`copilot_core/DOCS.md`) now contain an exact production install flow:
+  - Core + HACS integration order
+  - canonical Lovelace dashboard YAML
+  - where to configure cloud fallback API key (`conversation_cloud_api_key`)
+  - operational smoke checks (`/health`, `/chat/status`, `/v1/chat/completions`)
+- README clarifies that add-on info screen is authoritative for install instructions.
+
+### Fixed
+- Dashboard template no longer advertises a static internal UI version label.
+
+## [7.8.5] - 2026-02-22 — VERSION LABEL CLARITY
+
+### Fixed
+- Dashboard version badge no longer starts with a misleading hardcoded `v1.0.0`.
+- Version badge now shows `--` until `/chat/status` returns the real runtime version.
+- Settings version row no longer falls back to an unrelated static version string.
+
+### Notes
+- `X-API-Version: 1.0` remains the API contract/schema version (not the add-on release version).
+
+## [7.8.4] - 2026-02-22 — DASHBOARD UX: PERSISTENT CHAT + MODULE CONFIG PANEL
+
+### Added
+- **Persistent Chat History im Styx-Dashboard**
+  - Chat lädt nun Verlauf aus `/api/v1/hub/brain/activity/chat`.
+  - User-/Assistant-Nachrichten werden nach jedem Chat-Call in den Brain-Activity-Verlauf geschrieben.
+  - Neuer Chat-Clear-Button (`/api/v1/hub/brain/activity/chat/clear`).
+- **Modul-Konfigurationspanel im Dashboard**
+  - Neue UI unter `Module -> Modul-Konfiguration`.
+  - Runtime-Config für unterstützte Module:
+    - `habitus_miner` über `/api/v1/habitus/config`
+    - `brain_graph` (Brain Activity Timeouts) über `/api/v1/hub/brain/activity` + `/api/v1/hub/brain/activity/config`
+
+### Changed
+- **Health-Checks robuster gemacht (API v1/v2/legacy tolerant)**
+  - Dashboard nutzt Fallback-Requests (`apiTry`) für Endpunkt-Varianten.
+  - Mood-Ansicht verarbeitet jetzt mehrere Antwortformate (`moods`, `zones`, `mood`).
+
+### Fixed
+- **Frontend/Backend Handshake im Dashboard**
+  - Modul- und Mood-Ansichten brechen nicht mehr sofort bei Endpoint-Drift.
+  - Chat-UX zeigt nicht nur lokalen Verlauf, sondern den echten backend-seitigen Verlauf.
+
+### Tests
+- Dashboard-Template-Tests erweitert:
+  - Ingress-Erkennung
+  - Modul-Konfigurationspanel
+  - Persistente Brain-Chat-History Hooks
+
+## [7.8.3] - 2026-02-22 — DASHBOARD API RECONNECT + MODULE CONFIG SYNC
+
+### Fixed
+- **Ingress API routing in Styx dashboard**
+  - Dashboard erkennt jetzt HA-Ingress-Pfade automatisch (`/api/hassio_ingress/<slug>`),
+    statt API-Calls immer an den Host-Root zu senden.
+  - behebt `API offline`/404 im Sidebar-Panel trotz laufendem Core.
+- **Module-Konfiguration verlässlich**
+  - Dashboard synchronisiert Modulstatus mit `/api/v1/modules/` als Backend-Source-of-Truth.
+  - Toggle-Flow speichert nur noch bei erfolgreichem Backend-Write.
+  - Bei Fehler wird der UI-Toggle sauber auf den vorherigen Zustand zurückgesetzt
+    (kein irreführender „lokal-only“ Zustand mehr).
+- **Settings-Diagnose**
+  - neue Anzeige `API Route` (Ingress vs Direct) im Settings-Tab für schnellere Fehleranalyse.
+
+### Tests
+- Template-Regression ergänzt: Ingress-Base-Erkennung im Dashboard verifiziert.
+
+## [7.8.2] - 2026-02-22 — ONYX PRODUCTION BRIDGE + E2E TOOLING
+
+### Added
+- **Onyx Bridge API** (`/api/v1/onyx/*`)
+  - `GET /api/v1/onyx/status`: Bridge-/HA-Reachability-Status fuer produktive Agent-Checks.
+  - `POST /api/v1/onyx/ha/service-call`: kontrollierter HA-Service-Call mit optionalem State-Readback (`readback_states`).
+- **E2E Script**: `tools/onyx_styx_e2e.sh`
+  - prueft in einem Lauf: Onyx-Bridge Status, HA Action, MCP Initialize, OpenAI-Chat Endpoint.
+
+### Changed
+- **Onyx OpenAPI Contract** (`docs/integrations/onyx_styx_actions.openapi.yaml`)
+  - produktive Server-Defaults (`192.168.30.18:8909`)
+  - neue Operation fuer deterministische HA-Aktionen via Onyx-Bridge
+  - Zonen-Rooms/Zone-Create fuer Habitus-Zonen-Flow
+- **Onyx Doku** (`docs/ONYX_INTEGRATION.md`)
+  - konkrete Feldwerte fuer Provider, OpenAPI-Action und MCP-Server.
+  - direkte Smoke-Test Befehle fuer Live-Verifikation.
+
+### Tests
+- Neue Tests: `tests/test_onyx_bridge_api.py`
+  - Status-Endpunkt
+  - erfolgreicher Service-Call mit Readback
+  - Domain-Allowlist Blockierung
+  - fehlender `SUPERVISOR_TOKEN` Fehlerpfad
+
+## [7.8.1] - 2026-02-22 — ONYX BRIDGE + MCP VERSION SYNC
+
+### Added
+- **Onyx Integrationsdokumentation** (`docs/ONYX_INTEGRATION.md`)
+  - klare Zielarchitektur: Onyx als Knowledge-/RAG-Frontend, Styx als Home-Action-Plane.
+  - Security-Leitlinien fuer Token, Scope und Agent-Guardrails.
+- **OpenAPI Action Contract fuer Onyx** (`docs/integrations/onyx_styx_actions.openapi.yaml`)
+  - minimales, kontrolliertes Endpoint-Set fuer Zonen/Modi/Szenen/Benachrichtigungen.
+
+### Fixed
+- **MCP Server Version jetzt runtime-synchron**
+  - `MCP_SERVER_INFO.version` nutzt jetzt `copilot_core.__version__`
+    statt veraltetem Hardcode.
+  - verhindert Versionsdrift in MCP-Clients und Dashboards.
+
+### Tests
+- Neue Tests: `tests/test_mcp_server.py`
+  - MCP version contract
+  - `initialize` Antwort inkl. `serverInfo`
+  - `tools/list` Basiskontrakt
+
+## [7.7.19] - 2026-02-22 — HABITUS DASHBOARD ZONE FLOW FIXES
+
+### Fixes
+- **Habitus dashboard zone management now uses real Hub zone endpoints**
+  - Zone listing switched from the wrong miner config endpoint to `/api/v1/hub/zones`.
+  - Zone details now load from `/api/v1/hub/zones/<zone_id>` so entity/room rendering is consistent.
+- **Zone creation flow repaired**
+  - Dashboard now creates zones via `/api/v1/hub/zones` and supports multi-room selection.
+  - If no room is selected, dashboard can register a synthetic room from explicit entity IDs and still create the zone.
+- **Room selector UX improved**
+  - New multi-select room dropdown in Habitus page (`Ctrl/Cmd` multi-select).
+  - Room list reload action added.
+  - Best-effort auto-import from entity-assignment suggestions when no rooms are present.
+
+## [7.7.18] - 2026-02-22 — DASHBOARD AUTH BRIDGE + CHAT UX RELIABILITY
+
+### Fixes
+- **Dashboard requests now reuse configured auth token automatically**
+  - Dashboard root is now rendered with the configured Core auth token injected
+    (server-side) and reused by all frontend API calls.
+  - behebt 401-Fehler im Dashboard bei gesetztem `auth_token`.
+- **Chat in Core dashboard stabilized**
+  - Chat-Requests (`/v1/chat/completions`) senden nun automatisch den Auth-Header.
+  - gleiches gilt fuer Suggestion-, Szene-, HomeKit-, Habitus-, Modul- und Haushalts-Aktionen.
+  - Ergebnis: Dashboard-Funktionen laufen konsistent auch bei aktivierter API-Authentifizierung.
+
+## [7.7.17] - 2026-02-22 — OLLAMA CLOUD ENDPOINT HARDENING
+
+### Fixes
+- **Ollama Cloud URL fest normalisiert**
+  - `https://ollama.com`, `https://ollama.com/api` und `https://ollama.com/v1`
+    werden intern auf `https://ollama.com/v1` vereinheitlicht.
+  - Dadurch nutzt Styx fuer Cloud-Fallback immer den korrekten
+    OpenAI-kompatiblen Endpoint (`/v1/chat/completions`).
+- **Modell-Mapping fuer Ollama Cloud**
+  - Inkompatible OpenAI-Defaults wie `gpt-4o-mini`, `gpt-4o`, `gpt-4.1`, `gpt-5`, `o1`, `o3`
+    werden bei Ollama Cloud automatisch auf `gpt-oss:20b` umgebogen.
+  - Verhindert `404 model not found` bei funktionierender Cloud-Verbindung.
+- **Provider-spezifischer Cloud-Default**
+  - Ollama Cloud: Default `gpt-oss:20b`
+  - Andere OpenAI-kompatible Endpoints: Default bleibt `gpt-4o-mini`
+
+### Verifikation
+- Gesamte Core-Testsuite lokal: **1962 passed, 1 skipped**.
+
+## [7.7.16] - 2026-02-22 — LLM MISCONFIG GUARDRAIL
+
+### Fixes
+- **Fehlkonfiguration `OLLAMA_MODEL=gpt-4o-mini` abgefangen**
+  - Wenn im lokalen Ollama-Modellfeld versehentlich ein Cloud-Modellname steht,
+    wird jetzt automatisch auf ein sicheres lokales Fallback (`qwen3:0.6b`) gewechselt.
+  - Verhindert lokale 404-Schleifen und den Fehler:
+    `Kein LLM-Provider verfuegbar ... model 'gpt-4o-mini' not found`.
+- Provider-Status zeigt zusaetzlich:
+  - `ollama_model_configured`
+  - `ollama_model_overridden`
+  fuer klare Diagnose bei Setup-/Migrationsfaellen.
+
+### Verifikation
+- Gesamte Core-Testsuite lokal: **1959 passed, 1 skipped**.
+
+## [7.7.15] - 2026-02-22 — DEFAULT MODEL SWITCH TO QWEN3:0.6B
+
+### Default Model Strategy
+- Add-on Default fuer `conversation_ollama_model` auf `qwen3:0.6b` gesetzt.
+- Runtime-Fallbacks in Startup-Skripten und LLM-Komponenten ebenfalls auf `qwen3:0.6b` vereinheitlicht.
+- Ergebnis: schnellere erste Antworten und geringerer RAM-Druck auf typischer HA-Hardware.
+
+### Konsistenz in Runtime und API
+- OpenAI-kompatible Conversation-API nutzt jetzt `qwen3:0.6b` als internen Default.
+- Agent-Status/Self-Heal greifen bei fehlender Modellkonfiguration ebenfalls auf `qwen3:0.6b` zurueck.
+
+### Dokumentation
+- README, Add-on-Doku und Architektur/API-Dokumente auf neue Default-Strategie aktualisiert.
+- `qwen3:4b` bleibt als optionales Qualitätsmodell fuer staerkere Systeme dokumentiert.
+
+## [7.7.14] - 2026-02-22 — SELF-HEAL + ZERO-CONFIG HARDENING
+
+### Agent Self-Heal API
+- Neuer Endpoint: `POST /api/v1/agent/self-heal` (token-protected).
+- Fuehrt best-effort Reparaturschritte aus:
+  - LLM-Provider-Konfiguration neu laden
+  - installierte Ollama-Modelle pruefen
+  - fehlende Pflichtmodelle (`qwen3:0.6b` + konfiguriertes Modell) im Hintergrund nachziehen
+- Damit kann die HA-Integration nach Zero-Config/Restart aktiv eine Reparatur ausloesen, statt nur Fehlstatus zu melden.
+
+### LLM Routing Robustness
+- Cloud-typische Modellnamen (z. B. `gpt-4o-mini`) werden ohne Cloud-Fallback nicht mehr blind an Ollama gesendet.
+- Statt wiederholter 404 wird direkt auf das konfigurierte lokale Modell geroutet.
+
+### Agent Config Konsistenz
+- Agent-Status liest Conversation-Settings jetzt robust aus:
+  - verschachtelter Config (`conversation.*`)
+  - Flat Add-on Optionen (`conversation_*`)
+  - ENV-Fallbacks (`OLLAMA_*`, `CLOUD_*`)
+- verhindert Drift zwischen effektivem Runtime-Verhalten und gemeldetem Agent-Status.
+
+### API Wiring
+- Vector API Blueprint (`/api/v1/vector/*`) ist im Core-Setup explizit registriert.
+
+### Verifikation
+- Gesamte Core-Testsuite lokal: **1958 passed, 1 skipped**.
+
+## [7.7.13] - 2026-02-22 — AGENT API + VERSION FALLBACK + MODEL ALIAS
+
+### Agent API wiring
+- `/api/v1/agent/*` Blueprint wird jetzt im Core registriert.
+- Agent-Status/Verify-Endpunkte sind damit fuer HA-Integration erreichbar (kein 404 mehr bei aktivem Modul).
+
+### Modellalias & OpenAI-Kompatibilitaet
+- OpenAI Chat-Handler normalisiert Modellalias (`pilotsuite`, `default`, `auto`, `local`, `ollama`) auf das konfigurierte Ollama-Modell.
+- `/v1/models` listet jetzt zusaetzlich das stabile Alias-Modell `pilotsuite`.
+
+### Version-Robustheit
+- Neue Runtime-Versionauflosung mit Fallback-Datei:
+  - `COPILOT_VERSION` / `BUILD_VERSION` bevorzugt
+  - sonst `/usr/src/app/VERSION`
+- Betrifft u. a. `main.py` (`/version`) und weitere Version-Exporte, um `0.0.0`-Artefakte zu vermeiden.
+
+### Tests
+- Neue Tests fuer Modellalias-Normalisierung und LLM-Alias-Routing hinzugefuegt.
+
+## [7.7.12] - 2026-02-22 — LLM FALLBACK + CLOUD CONFIG UX
+
+### Chat provider robustness
+- `LLMProvider.chat()` gibt jetzt in allen Fehlerpfaden konsistent ein Dict zurueck (kein `None` bei unvollstaendiger Cloud-Konfiguration).
+- Lokale Modellauflosung kennt Alias-Modelle wie `pilotsuite`/`auto` und nutzt direkt das konfigurierte Ollama-Standardmodell.
+- Bei expliziten externen Modellen (z. B. `gpt-4o-mini`) gilt:
+  - mit Cloud-Fallback: nach lokalem 404 direkt Cloud versuchen
+  - ohne Cloud-Fallback: auf konfiguriertes lokales Modell zurueckfallen
+- Offline-Fehlermeldungen differenzieren jetzt zwischen:
+  - Modell nicht installiert
+  - Timeout
+  - Unerreichbarkeit
+  - HTTP-Fehlern
+
+### Add-on Konfiguration (Cloud Fallback)
+- Neue Add-on Optionen in `config.yaml` + UI-Labels:
+  - `conversation_cloud_api_url`
+  - `conversation_cloud_api_key`
+  - `conversation_cloud_model`
+  - `conversation_prefer_local`
+- `start_dual.sh` exportiert diese Werte als Laufzeit-ENV (`CLOUD_API_URL`, `CLOUD_API_KEY`, `CLOUD_MODEL`, `PREFER_LOCAL`).
+- Startlog zeigt Cloud-Fallback-Status (`configured`/`disabled`) fuer schnellere Diagnose.
+
+### Tests
+- Neue Tests fuer LLM-Fallback-/Cloud-Routing und Offline-Fehlerpfade hinzugefuegt.
+
+## [7.7.11] - 2026-02-22 — RELEASE SYNC
+
+### Sync-Release
+- Core/HA Versionsstand auf `7.7.11` synchronisiert, damit beide Repos denselben releasefähigen Baseline-Stand ausweisen.
+- Keine funktionalen Core-Codeaenderungen gegenueber `7.7.10`.
+
+## [7.7.10] - 2026-02-22 — VERSION CONSISTENCY HOTFIX
+
+### Version-Drift beseitigt
+- `copilot_core.__version__` liest jetzt die Laufzeitversion aus `COPILOT_VERSION`/`BUILD_VERSION` statt aus einem veralteten Hardcode.
+- Conversation-Status (`/chat/status`) nutzt denselben Version-Source-of-Truth inklusive sauberem `0.0.0`-Fallback.
+
+### Wirkung
+- Keine verwirrenden Versionsspruenge mehr zwischen UI-/Statuspfaden (z. B. alte 3.x/0.x Artefakte trotz 7.7.x Release).
+- Konsistente Versionserkennung ueber API, Dashboard und Runtime-Diagnose.
+
+## [7.7.9] - 2026-02-22 — OLLAMA GUARANTEE + NETWORK FAILSAFE
+
+### Setup/Runtime Hardening
+- Externe Ollama-URL wird beim Start aktiv geprueft; bei Unerreichbarkeit wird automatisch auf interne Container-Ollama (`127.0.0.1:11435`) zurueckgefallen.
+- Wenn `conversation_enabled=true` und Ollama-Binary fehlt oder `ollama serve` sofort abstuerzt, startet das Add-on nicht mehr still degradiert, sondern bricht mit klarer Fehlermeldung ab.
+- Alternative Startskript-Variante (`start_with_ollama.sh`) auf dieselbe "Ollama required"-Semantik angehoben.
+
+### Readiness verbessert
+- `/ready` beruecksichtigt jetzt explizit Ollama-Verfuegbarkeit, wenn Conversation aktiv ist.
+- Readiness-Response erweitert um `ollama_required`, `ollama` und `ollama_url` zur klaren Diagnose im Betrieb.
+
+## [7.7.8] - 2026-02-22 — STARTUP + VERSION RELIABILITY PATCH
+
+### Ollama Startup Hardening
+- `HOME` wird beim Start explizit gesetzt (`/tmp` Fallback), damit `ollama serve` in HA-Containern nicht mit `Error: $HOME is not defined` abbricht.
+- Ollama bleibt der primaere lokale Runtime-Pfad im Container; externe URL wird nur bei expliziter externer Konfiguration genutzt.
+
+### Non-Blocking Modellbereitstellung
+- Modell-Pulls laufen jetzt in einem Hintergrund-Worker.
+- API-Start blockiert nicht mehr durch lange Modell-Downloads oder 60s Ready-Wartefenster.
+- Fallback-Modell (`qwen3:0.6b`) und konfiguriertes Modell werden asynchron nachgezogen.
+
+### Versionskonsistenz
+- Laufzeitversion kommt aus `COPILOT_VERSION`/`BUILD_VERSION` statt aus veralteten Hardcodes.
+- Dockerfile exportiert `COPILOT_VERSION=${BUILD_VERSION}` zur Laufzeit.
+- Semver-Fallback auf `0.0.0` fuer Test-/Dev-Umgebungen ohne Build-Metadaten.
+
+## [7.7.7] - 2026-02-22 — PRODUCTION READINESS PROGRAM
+
+### Validierung und Hardening
+- E2E-Pipeline-Test (`test_e2e_pipeline.py`) bereinigt:
+  - keine `PytestReturnNotNoneWarning` mehr
+  - keine versehentliche Testklassensammlung mehr
+- Kritischer Kommunikationspfad weiter verifiziert:
+  - Events Ingest → Brain Graph
+  - Habitus Mining → Candidates
+  - Candidate Lifecycle (pending/offered/accepted)
+
+### Dauerbetrieb / 15-Minuten Guardrail
+- Neuer GitHub-Workflow `production-guard.yml`:
+  - geplanter Lauf alle 15 Minuten
+  - Syntax-Check + kritische Pfadtests als fruehes Warnsystem
+  - Fokus auf Produktions-Stabilitaet statt nur Release-Checks
+
+### Dokumentation
+- Vision und Projektstatus auf aktuellen Release-Stand aktualisiert.
+- Architektur-/Modul-Dokumentation konsolidiert auf den verifizierten Zustand.
+
+## [7.7.6] - 2026-02-22 — STABILITY + CI HARDENING
+
+### Runtime-Stabilitaet ausserhalb des Add-on-Containers
+- Persistenz-Fallbacks fuer nicht beschreibbares `/data` hinzugefuegt:
+  - Dev Surface Logs
+  - Transaction Log (`log_fixer_tx`)
+  - Brain Graph SQLite
+  - Mood SQLite
+  - Vector Store SQLite
+- Dev-Logs und Vector-API-Endpunkte schlagen lokal/CI nicht mehr mit 500 fehl.
+
+### Fachliche Korrekturen
+- Comfort Grade Mapping korrigiert (`50` => `C` statt `D`).
+- Regionserkennung verbessert (u.a. Muenchen korrekt `DE`, Wien-Region korrekt erkannt).
+- Energy-Service Timestamp auf `Z`-Format vereinheitlicht.
+- Report-Empfehlungen bei moderater Solarabdeckung sinnvoller priorisiert.
+- Sankey-Fallback bei fehlenden Baselines/Zone-Daten korrigiert.
+- Schedule Planner:
+  - leere Device-Listen werden korrekt als leer behandelt
+  - PV-priorisierte Slot-Bewertung (effektiver Preis mit PV-Korrektur)
+
+### Test- und CI-Fixes
+- Core CI-Testpfad korrigiert (`copilot_core/rootfs/usr/src/app/tests`).
+- `pytest-asyncio` in Test-Dependencies aufgenommen.
+- CI-Testjob bricht bei Fehlern wieder korrekt ab (kein `|| true` mehr).
+- Lokale Core-Suite verifiziert: `1949 passed, 1 skipped`.
+
 ## [7.7.0] - 2026-02-21 — HA CONFORMITY RELEASE
 
 ### Kompletter HA-Konformitaets-Audit — alle Stolperstellen gefixt

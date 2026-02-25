@@ -2,7 +2,7 @@
 Web Search + News + Regional Warning Service for PilotSuite
 
 Provides the LLM assistant (Styx) with live internet access:
-  - Web search via DuckDuckGo HTML (no API key)
+  - Web search via SearXNG (local instance) with HTML parsing
   - German news aggregation from Tagesschau + Spiegel RSS
   - Regional civil protection warnings via NINA API
   - DWD weather warnings
@@ -26,7 +26,7 @@ import time
 import xml.etree.ElementTree as ET
 from html import unescape
 from typing import Any, Dict, List, Optional
-from urllib.parse import unquote
+from urllib.parse import unquote, quote
 
 import requests
 
@@ -38,8 +38,8 @@ logger = logging.getLogger(__name__)
 
 _REQUEST_TIMEOUT = 10  # seconds
 
-# DuckDuckGo HTML search endpoint (no API key required)
-_DDG_URL = "https://html.duckduckgo.com/html/"
+# SearXNG local instance
+_SEARXNG_URL = "http://192.168.30.18:4041/search"
 
 # Default German news RSS feeds
 _DEFAULT_NEWS_FEEDS: List[Dict[str, str]] = [
@@ -169,7 +169,7 @@ class WebSearchService:
     # -- Web Search ----------------------------------------------------------
 
     def search(self, query: str, max_results: int = 5) -> dict:
-        """Search the web via DuckDuckGo HTML.
+        """Search the web via local SearXNG instance.
 
         Returns::
 
@@ -185,68 +185,42 @@ class WebSearchService:
         logger.debug("Web search: %r  (max %d)", query, max_results)
 
         try:
-            resp = self._session.post(
-                _DDG_URL,
-                data={"q": query, "b": ""},
+            resp = self._session.get(
+                _SEARXNG_URL,
+                params={"q": query},
                 timeout=_REQUEST_TIMEOUT,
             )
             resp.raise_for_status()
         except requests.RequestException as exc:
-            logger.warning("DuckDuckGo request failed: %s", exc)
+            logger.warning("SearXNG request failed: %s", exc)
             return {"query": query, "results": [], "error": str(exc)}
 
-        results = self._parse_ddg_html(resp.text, max_results)
+        results = self._parse_searxng_html(resp.text, max_results)
         return {"query": query, "results": results, "error": None}
 
     @staticmethod
-    def _parse_ddg_html(html: str, max_results: int) -> List[Dict[str, str]]:
-        """Extract search results from DuckDuckGo HTML response.
-
-        The HTML contains result blocks with class ``result__a`` for links
-        and ``result__snippet`` for the description text.  We use regex
-        rather than a DOM parser to avoid a BeautifulSoup dependency.
-        """
+    def _parse_searxng_html(html: str, max_results: int) -> List[Dict[str, str]]:
+        """Extract search results from SearXNG HTML response using regex."""
         results: List[Dict[str, str]] = []
 
-        # Each result lives inside a <div class="result ..."> block.
-        # We split by these blocks and process each one.
-        result_blocks = re.split(
-            r'<div[^>]*class="[^"]*result\b[^"]*"[^>]*>', html
-        )
+        # Split by <article class="result ...">
+        result_blocks = re.split(r'<article[^>]*class="[^"]*result\b[^"]*"[^>]*>', html)
 
-        for block in result_blocks[1:]:  # skip preamble before first result
+        for block in result_blocks[1:]:  # skip preamble
             if len(results) >= max_results:
                 break
 
-            # Title + URL -- <a class="result__a" href="...">title</a>
-            link_match = re.search(
-                r'<a[^>]*class="result__a"[^>]*href="([^"]*)"[^>]*>(.*?)</a>',
-                block,
-                re.DOTALL,
-            )
-            if not link_match:
+            # Title: <h3> or <h4> with <a href="url">title</a>
+            title_match = re.search(r'<h[34][^>]*>\s*<a[^>]*href="([^"]*)"[^>]*>(.*?)</a>\s*</h[34]>', block, re.DOTALL | re.IGNORECASE)
+            if not title_match:
                 continue
 
-            raw_url = link_match.group(1)
-            title = _strip_html(link_match.group(2))
+            url = unquote(title_match.group(1).strip())
+            title = _strip_html(title_match.group(2).strip())
 
-            # DuckDuckGo wraps URLs through a redirect; extract the real URL
-            # from the uddg= parameter if present.
-            uddg_match = re.search(r"uddg=([^&]+)", raw_url)
-            if uddg_match:
-                url = unquote(uddg_match.group(1))
-            else:
-                url = raw_url
-
-            # Snippet -- <a class="result__snippet" ...>text</a>
-            snippet_match = re.search(
-                r'<a[^>]*class="result__snippet"[^>]*>(.*?)</a>',
-                block,
-                re.DOTALL,
-            )
-            snippet = (
-                _strip_html(snippet_match.group(1)) if snippet_match else ""
-            )
+            # Snippet: <p class="content">...</p>
+            snippet_match = re.search(r'<p[^>]*class="[^"]*content\b[^"]*"[^>]*>(.*?)</p>', block, re.DOTALL | re.IGNORECASE)
+            snippet = _strip_html(snippet_match.group(1).strip()) if snippet_match else ""
 
             if title and url:
                 results.append({

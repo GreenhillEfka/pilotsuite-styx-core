@@ -16,7 +16,12 @@ class DevSurfaceService:
     
     def __init__(self, max_log_entries: int = 500, log_file_path: Optional[str] = None):
         self.max_log_entries = max_log_entries
-        self.log_file_path = log_file_path or "/data/dev_logs.jsonl"
+        configured_path = (
+            log_file_path
+            or os.environ.get("COPILOT_DEV_LOG_FILE")
+            or "/data/dev_logs.jsonl"
+        )
+        self.log_file_path = self._resolve_log_file_path(configured_path)
         self._lock = threading.Lock()
         
         # Ring buffer for in-memory log entries
@@ -30,8 +35,17 @@ class DevSurfaceService:
         self._events_processed_24h = 0
         self._errors_24h = 0
         
-        # Ensure log directory exists
-        os.makedirs(os.path.dirname(self.log_file_path), exist_ok=True)
+    def _resolve_log_file_path(self, configured_path: str) -> str:
+        """Pick a writable log file path, falling back outside add-on runtime."""
+        log_dir = os.path.dirname(configured_path) or "."
+        try:
+            os.makedirs(log_dir, exist_ok=True)
+            return configured_path
+        except OSError:
+            fallback_dir = os.environ.get("COPILOT_DEV_LOG_DIR", "/tmp")
+            fallback_path = os.path.join(fallback_dir, "dev_logs.jsonl")
+            os.makedirs(os.path.dirname(fallback_path), exist_ok=True)
+            return fallback_path
     
     def log(self, level: str, module: str, message: str, **kwargs) -> DevLogEntry:
         """Add a structured log entry."""

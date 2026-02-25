@@ -47,6 +47,8 @@ RUN echo "@edge-community https://dl-cdn.alpinelinux.org/alpine/edge/community" 
 
 # Persist Ollama models in /share/ (NOT /data/) to avoid bloating HA backups
 ENV OLLAMA_MODELS=/share/pilotsuite/ollama/models
+# Export add-on build version into runtime for API/banner version reporting
+ENV COPILOT_VERSION=${BUILD_VERSION}
 
 # ── Application ──────────────────────────────────────────────────────────────
 WORKDIR /usr/src/app

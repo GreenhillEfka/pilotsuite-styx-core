@@ -9,6 +9,7 @@ from flask import Flask, jsonify, request
 
 from copilot_core.api.v1.blueprint import api_v1
 from copilot_core.api.security import validate_token, is_auth_required
+from copilot_core.versioning import get_runtime_version
 
 
 def _now_iso() -> str:
@@ -17,7 +18,7 @@ def _now_iso() -> str:
 
 @dataclass(frozen=True)
 class CopilotConfig:
-    version: str = os.environ.get("COPILOT_VERSION", "3.9.1")
+    version: str = "0.0.0"
 
     # Logging
     log_level: str = "info"
@@ -62,6 +63,7 @@ def _load_options_json(path: str = "/data/options.json") -> dict[str, Any]:
 
 def _build_config() -> CopilotConfig:
     opts = _load_options_json()
+    version = get_runtime_version()
 
     log_level = str(opts.get("log_level", "info") or "info").strip().lower()
     token = os.environ.get("COPILOT_AUTH_TOKEN", "").strip()
@@ -89,6 +91,7 @@ def _build_config() -> CopilotConfig:
     brain_graph_edges_max = int(opts.get("brain_graph_edges_max", 1500))
 
     return CopilotConfig(
+        version=version,
         log_level=log_level,
         auth_token=token,
         data_dir=data_dir,
@@ -141,6 +144,13 @@ def create_app() -> Flask:
 
     # Register API modules
     app.register_blueprint(api_v1)
+
+    # Standalone Onyx bridge endpoints (/api/v1/onyx/*)
+    try:
+        from copilot_core.api.v1.onyx_bridge import onyx_bridge_bp
+        app.register_blueprint(onyx_bridge_bp)
+    except Exception:
+        logging.getLogger(__name__).exception("Failed to register Onyx bridge blueprint")
 
     # Initialize Tags API v2 (FIX: Flask Blueprint rewrite)
     from copilot_core.tags.api import init_tags_api

@@ -85,15 +85,38 @@ def _sanitize_payload(obj):
     return obj
 
 
+def _resolve_writable_dev_log_path(preferred_path: str) -> str:
+    """Resolve a writable dev log path with fallback outside add-on runtime."""
+    global _DEV_LOG_PATH_OVERRIDE
+    fallback_dir = os.environ.get("COPILOT_DEV_LOG_DIR", "/tmp")
+    candidates = [
+        preferred_path,
+        os.path.join(fallback_dir, "dev_logs.jsonl"),
+    ]
+    for candidate in candidates:
+        try:
+            os.makedirs(os.path.dirname(candidate), exist_ok=True)
+            _DEV_LOG_PATH_OVERRIDE = candidate
+            return candidate
+        except OSError:
+            continue
+    _DEV_LOG_PATH_OVERRIDE = preferred_path
+    return preferred_path
+
+
 def _dev_log_path() -> str:
+    if _DEV_LOG_PATH_OVERRIDE:
+        return _DEV_LOG_PATH_OVERRIDE
     cfg = current_app.config.get("COPILOT_CFG")
     data_dir = getattr(cfg, "data_dir", "/data")
-    return os.path.join(data_dir, "dev_logs.jsonl")
+    preferred_path = os.path.join(data_dir, "dev_logs.jsonl")
+    return _resolve_writable_dev_log_path(preferred_path)
 
 
 # In-memory ring buffer of recent dev logs.
 _DEV_LOG_CACHE: list[dict] = []
 _DEV_LOG_CACHE_LOADED = False
+_DEV_LOG_PATH_OVERRIDE: str | None = None
 
 
 def _ensure_dev_log_cache_loaded() -> None:
@@ -122,9 +145,15 @@ def _ensure_dev_log_cache_loaded() -> None:
 
 def _append_dev_log(entry: dict) -> None:
     path = _dev_log_path()
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "a", encoding="utf-8") as fh:
-        fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    try:
+        with open(path, "a", encoding="utf-8") as fh:
+            fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    except OSError:
+        fallback = _resolve_writable_dev_log_path(
+            os.path.join(os.environ.get("COPILOT_DEV_LOG_DIR", "/tmp"), "dev_logs.jsonl")
+        )
+        with open(fallback, "a", encoding="utf-8") as fh:
+            fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
     max_cache = DEV_LOG_MAX_CACHE_DEFAULT
     try:

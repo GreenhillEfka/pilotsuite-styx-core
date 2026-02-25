@@ -86,6 +86,7 @@ a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
 /* Chat panel */
 .chat-panel{display:flex;flex-direction:column;flex:1;min-height:0;background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
 .chat-hd{padding:10px 14px;border-bottom:1px solid var(--border);font-size:12px;font-weight:600;display:flex;align-items:center;gap:8px;color:var(--accent2);flex-shrink:0}
+.chat-hd select{margin-left:4px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:11px;padding:2px 6px;max-width:180px}
 .chat-msgs{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px;min-height:0}
 .msg{max-width:85%;padding:8px 12px;border-radius:10px;font-size:13px;line-height:1.5;word-wrap:break-word}
 .msg.u{align-self:flex-end;background:linear-gradient(135deg,var(--accent),#5b4cd4);color:#fff;border-bottom-right-radius:3px}
@@ -222,7 +223,7 @@ a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
 <div class="logo">&#x2726;</div>
 <h1 id="app-title">Styx — PilotSuite</h1>
 <span class="status-pill" id="provider-status"><span class="dot dot-yellow" id="status-dot"></span><span id="status-text">Verbinde...</span></span>
-<span class="ver" id="ver-badge">v1.0.0</span>
+<span class="ver" id="ver-badge">--</span>
 </div>
 
 <!-- Navigation -->
@@ -272,7 +273,13 @@ a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
   <div class="styx-right">
     <!-- Chat -->
     <div class="chat-panel">
-      <div class="chat-hd"><span>&#x2726;</span> <span id="assistant-name">Styx</span> <span class="b b-p" id="chat-model">--</span></div>
+      <div class="chat-hd">
+        <span>&#x2726;</span>
+        <span id="assistant-name">Styx</span>
+        <span class="b b-p" id="chat-model">--</span>
+        <select id="chat-model-select" title="Chat-Modell waehlen"></select>
+        <button onclick="clearChatHistory()" title="Chatverlauf loeschen" style="margin-left:auto;background:transparent;border:1px solid var(--border);color:var(--dim);border-radius:6px;padding:2px 8px;cursor:pointer;font-size:11px">&#x1f5d1;</button>
+      </div>
       <div class="chat-msgs" id="chat-msgs">
         <div class="msg a" id="styx-greeting">Hallo! Ich bin <strong>Styx</strong>, dein PilotSuite Assistent. Ich verbinde dein Smart Home mit lokaler KI. Wie kann ich helfen?</div>
       </div>
@@ -303,11 +310,14 @@ a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
     <div id="hab-zones"><div class="loading"><div class="spinner"></div>Lade Zonen...</div></div>
     <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
       <div style="font-size:11px;color:var(--dim);margin-bottom:6px">Zone hinzufuegen</div>
-      <div style="display:flex;gap:6px">
-        <input type="text" id="new-zone-name" placeholder="Zonen-Name" style="flex:1;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text);font-size:12px;outline:none">
-        <input type="text" id="new-zone-entities" placeholder="entity_id, entity_id, ..." style="flex:2;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text);font-size:12px;outline:none">
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <input type="text" id="new-zone-name" placeholder="Zonen-Name" style="flex:1 1 180px;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text);font-size:12px;outline:none">
+        <select id="new-zone-rooms" multiple size="4" style="flex:2 1 260px;min-height:94px;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px;color:var(--text);font-size:11px;outline:none"></select>
+        <input type="text" id="new-zone-entities" placeholder="Optional: entity_id, entity_id, ..." style="flex:2 1 260px;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text);font-size:12px;outline:none">
+        <button onclick="reloadZoneRoomOptions()" style="background:var(--surface);border:1px solid var(--border);color:var(--dim);border-radius:6px;padding:6px 10px;cursor:pointer;font-size:11px;font-weight:600;white-space:nowrap">&#x21bb; Raeume</button>
         <button onclick="addZone()" style="background:var(--accent);color:#fff;border:none;border-radius:6px;padding:6px 14px;cursor:pointer;font-size:11px;font-weight:600;white-space:nowrap">+ Zone</button>
       </div>
+      <div id="new-zone-room-hint" style="margin-top:6px;font-size:10px;color:var(--dim)">Lade Raumliste...</div>
     </div>
   </div>
 </div>
@@ -356,6 +366,16 @@ a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
   </div>
 </div>
 <div class="grid g2" id="module-list"></div>
+<div class="card" style="margin-top:14px">
+  <h2><span class="ic">&#9881;</span> Modul-Konfiguration</h2>
+  <p style="font-size:11px;color:var(--dim);margin-bottom:10px">Runtime-Parameter fuer konfigurierbare Module. Quelle ist die Core-API.</p>
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+    <label for="module-config-select" style="font-size:11px;color:var(--dim)">Modul</label>
+    <select id="module-config-select" style="min-width:220px;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px;color:var(--text);font-size:12px;outline:none"></select>
+    <button onclick="loadSelectedModuleConfig(true)" style="background:var(--surface);border:1px solid var(--border);color:var(--dim);border-radius:6px;padding:6px 10px;cursor:pointer;font-size:11px;font-weight:600">&#x21bb; Reload</button>
+  </div>
+  <div id="module-config-body"><div class="empty">Waehle ein Modul.</div></div>
+</div>
 <div class="card" style="margin-top:14px">
   <h2><span class="ic">&#x1f3b5;</span> Media Zonen &amp; Musikwolke</h2>
   <p style="font-size:11px;color:var(--dim);margin-bottom:10px">Zone-Player-Zuordnung und Musikwolke Smart Audio Follow</p>
@@ -458,7 +478,11 @@ a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
     <table class="tbl" id="set-llm"></table>
   </div>
   <div class="card">
-    <h2><span class="ic">&#x1f4e6;</span> Ollama Modelle</h2>
+    <h2><span class="ic">&#9881;</span> LLM Routing</h2>
+    <div id="set-routing"><div class="loading"><div class="spinner"></div>Lade...</div></div>
+  </div>
+  <div class="card">
+    <h2><span class="ic">&#x1f4e6;</span> Verfuegbare Modelle</h2>
     <div id="set-models"><div class="loading"><div class="spinner"></div>Lade...</div></div>
   </div>
   <div class="card">
@@ -500,10 +524,27 @@ a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
 
 <script>
 // ==================================================
-// PilotSuite Dashboard — Styx v1.3.0
+// PilotSuite Dashboard — Styx
 // XSS-safe | Resilient | Real Module Health | Module Control API
 // ==================================================
-const API='';
+const DASHBOARD_AUTH_TOKEN={{ dashboard_auth_token|tojson }};
+function detectIngressBasePath(){
+  try{
+    const p=(window.location&&window.location.pathname)||'';
+    const patterns=[
+      /^(.*\/api\/hassio_ingress\/[^/]+)(?:\/.*)?$/,
+      /^(.*\/hassio\/ingress\/[^/]+)(?:\/.*)?$/,
+      /^(.*\/ingress\/[^/]+)(?:\/.*)?$/,
+    ];
+    for(const pattern of patterns){
+      const m=p.match(pattern);
+      if(m&&m[1])return m[1];
+    }
+  }catch(_err){}
+  return '';
+}
+const API=detectIngressBasePath();
+const API_MODE=API?'ingress':'direct';
 let currentModel='';
 const DOMAIN_COLORS={
   sensor:'#34d399',light:'#fbbf24',switch:'#7c6aef',binary_sensor:'#60a5fa',
@@ -532,6 +573,40 @@ const MODULE_DEFS=[
   {id:'waste_reminder',name:'Müllabfuhr',desc:'Abfuhr-Erinnerungen + TTS',icon:'&#x267b;',color:'var(--green)'},
   {id:'birthday_reminder',name:'Geburtstage',desc:'Kalender-Erinnerungen + TTS',icon:'&#x1f382;',color:'var(--pink)'},
 ];
+const MODULE_CONFIG_SPECS={
+  habitus_miner:{
+    label:'Habitus Miner',
+    getPath:'/api/v1/habitus/config',
+    postPath:'/api/v1/habitus/config',
+    parseGet:(raw)=>raw?.config||null,
+    fields:[
+      {key:'min_support_A',label:'Min Support A',type:'number',step:'0.001',min:0,max:1},
+      {key:'min_support_B',label:'Min Support B',type:'number',step:'0.001',min:0,max:1},
+      {key:'min_hits',label:'Min Hits',type:'number',step:'1',min:1,max:10000},
+      {key:'min_confidence',label:'Min Confidence',type:'number',step:'0.01',min:0,max:1},
+      {key:'min_lift',label:'Min Lift',type:'number',step:'0.1',min:0,max:100},
+      {key:'max_rules',label:'Max Rules',type:'number',step:'1',min:1,max:5000},
+      {key:'default_cooldown',label:'Default Cooldown (s)',type:'number',step:'1',min:0,max:86400},
+      {key:'include_domains',label:'Include Domains (CSV)',type:'array'},
+      {key:'exclude_domains',label:'Exclude Domains (CSV)',type:'array'},
+      {key:'exclude_same_entity',label:'Exclude Same Entity',type:'boolean'},
+      {key:'anonymize_entity_ids',label:'Anonymize Entity IDs',type:'boolean'},
+    ],
+  },
+  brain_graph:{
+    label:'Brain Activity',
+    getPath:'/api/v1/hub/brain/activity',
+    postPath:'/api/v1/hub/brain/activity/config',
+    parseGet:(raw)=>raw?{
+      idle_timeout:raw.idle_timeout_seconds,
+      sleep_timeout:raw.sleep_timeout_seconds,
+    }:null,
+    fields:[
+      {key:'idle_timeout',label:'Idle Timeout (s)',type:'number',step:'1',min:30,max:3600},
+      {key:'sleep_timeout',label:'Sleep Timeout (s)',type:'number',step:'1',min:60,max:86400},
+    ],
+  },
+};
 
 // State
 let chatHistory=[];
@@ -539,48 +614,182 @@ let historyLog=[];
 let moduleStates=JSON.parse(localStorage.getItem('styx_module_states')||'{}');
 let _moduleHealth=null;
 let _healthTs=0;
+let _hubRoomsCache=[];
+let _roomsAutofilled=false;
+let _moduleStatesSyncedAt=0;
+let _selectedModuleConfig='habitus_miner';
+let _chatStatus=null;
+const CHAT_MODEL_STORAGE_KEY='styx_chat_model';
 
 // -- Helpers --
 function $(id){return document.getElementById(id)}
 function escapeHtml(s){if(s===null||s===undefined)return'';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')}
-async function api(path){try{const r=await fetch(API+path);if(!r.ok)return null;return await r.json()}catch(e){return null}}
+function withAuth(init={}){
+  const headers={...(init.headers||{})};
+  if(DASHBOARD_AUTH_TOKEN&&!headers.Authorization&&!headers['X-Auth-Token']){
+    headers.Authorization='Bearer '+DASHBOARD_AUTH_TOKEN;
+  }
+  return {...init,headers};
+}
+async function api(path){
+  try{
+    const r=await fetch(API+path,withAuth());
+    if(!r.ok)return null;
+    return await r.json();
+  }catch(e){
+    return null;
+  }
+}
+async function apiTry(paths){
+  for(const p of paths){
+    const data=await api(p);
+    if(data)return {path:p,data};
+  }
+  return null;
+}
+async function syncModuleStates(force=false){
+  const now=Date.now();
+  if(!force&&(now-_moduleStatesSyncedAt)<15000)return moduleStates;
+  const remote=await api('/api/v1/modules/');
+  if(remote&&remote.ok&&remote.modules&&typeof remote.modules==='object'){
+    moduleStates={...moduleStates,...remote.modules};
+    localStorage.setItem('styx_module_states',JSON.stringify(moduleStates));
+    _moduleStatesSyncedAt=now;
+  }
+  return moduleStates;
+}
+function _configInputValue(raw,field){
+  if(raw===null||raw===undefined){
+    if(field.type==='boolean')return 'false';
+    return '';
+  }
+  if(field.type==='array'){
+    return Array.isArray(raw)?raw.join(', '):String(raw);
+  }
+  if(field.type==='boolean'){
+    return raw?'true':'false';
+  }
+  return String(raw);
+}
+function _parseConfigInput(input,field){
+  if(field.type==='number'){
+    const v=Number(input.value);
+    return Number.isFinite(v)?v:null;
+  }
+  if(field.type==='boolean'){
+    return input.value==='true';
+  }
+  if(field.type==='array'){
+    return String(input.value||'').split(',').map(s=>s.trim()).filter(Boolean);
+  }
+  return String(input.value||'').trim();
+}
 function badge(t,c){return`<span class="b b-${c}">${escapeHtml(t)}</span>`}
 function el(tag,cls,html){const e=document.createElement(tag);if(cls)e.className=cls;if(html)e.innerHTML=html;return e}
+function _chatModelLabel(model){
+  const value=String(model||'').trim();
+  if(!value)return '--';
+  if(value==='primary')return 'auto(primary)';
+  if(value==='secondary')return 'auto(secondary)';
+  if(value.startsWith('offline:'))return value.slice('offline:'.length);
+  if(value.startsWith('cloud:'))return value.slice('cloud:'.length)+' (cloud)';
+  return value;
+}
+function _chatModelOptionsFromStatus(status){
+  const out=[{value:'primary',label:'Auto (Primary Routing)'}];
+  if(status?.secondary_provider)out.push({value:'secondary',label:'Auto (Secondary/Fallback)'});
+  const seen=new Set(out.map((o)=>o.value));
+  const offline=status?.model_catalog?.offline?.models||status?.installed_models||[];
+  const cloud=status?.model_catalog?.cloud?.models||status?.cloud_models||[];
+  offline.forEach((m)=>{
+    const v=String(m||'').trim();
+    if(!v)return;
+    const key='offline:'+v;
+    if(seen.has(key))return;
+    seen.add(key);
+    out.push({value:key,label:'Offline · '+v});
+  });
+  cloud.forEach((m)=>{
+    const v=String(m||'').trim();
+    if(!v)return;
+    const key='cloud:'+v;
+    if(seen.has(key))return;
+    seen.add(key);
+    out.push({value:key,label:'Cloud · '+v});
+  });
+  return out;
+}
+function _restoreChatModel(defaultModel,options){
+  const preferred=String(localStorage.getItem(CHAT_MODEL_STORAGE_KEY)||'').trim();
+  const values=new Set((options||[]).map((o)=>String(o.value||'')));
+  if(preferred&&values.has(preferred))return preferred;
+  return String(defaultModel||'primary').trim()||'primary';
+}
+function _setChatModel(model,{persist=true,announce=false}={}){
+  const next=String(model||'').trim();
+  currentModel=next;
+  $('chat-model').textContent=escapeHtml(_chatModelLabel(next));
+  if(persist){
+    if(next)localStorage.setItem(CHAT_MODEL_STORAGE_KEY,next);
+    else localStorage.removeItem(CHAT_MODEL_STORAGE_KEY);
+  }
+  if(announce&&next)addHistory('Chat-Modell gesetzt: '+_chatModelLabel(next));
+}
+function _renderChatModelSelector(options,activeModel){
+  const sel=$('chat-model-select');
+  if(!sel)return;
+  sel.innerHTML='';
+  if(!Array.isArray(options)||!options.length){
+    sel.disabled=true;
+    sel.appendChild(new Option('kein Modell',''));
+    return;
+  }
+  sel.disabled=false;
+  options.forEach((opt)=>{
+    const value=String(opt?.value||'').trim();
+    const label=String(opt?.label||value||'');
+    sel.appendChild(new Option(label,value,false,value===activeModel));
+  });
+}
 
 // -- Real Module Health (cached 30s) --
 async function fetchModuleHealth(){
   const now=Date.now();
   if(_moduleHealth&&(now-_healthTs)<30000)return _moduleHealth;
   const settled=await Promise.allSettled([
-    api('/api/v1/graph/stats'),         // [0] brain_graph
-    api('/api/v1/habitus/health'),       // [1] habitus_miner
-    api('/api/v1/mood'),                 // [2] mood_engine (all zone moods)
-    api('/chat/status'),                 // [3] general + event_forwarder
-    api('/api/v1/neurons'),              // [4] neurons
-    api('/chat/memory'),                 // [5] conversation_memory
-    api('/api/v1/energy/health'),        // [6] energy_context
-    api('/api/v1/weather/health'),       // [7] weather_context
-    api('/api/v1/unifi/health'),         // [8] network (was unifi_context)
-    api('/telegram/status'),             // [9] telegram_bot
-    api('/api/v1/capabilities'),         // [10] mcp_server, kg, user_prefs
-    api('/api/v1/media/zones'),          // [11] media_zones
-    api('/api/v1/media/musikwolke'),     // [12] media_zones musikwolke
-    api('/api/v1/waste/status'),         // [13] waste_reminder
-    api('/api/v1/birthday/status'),      // [14] birthday_reminder
+    api('/api/v1/graph/stats'),                         // [0] brain_graph
+    apiTry(['/api/v1/habitus/health','/api/v1/habitus/status']), // [1]
+    apiTry(['/api/v1/mood','/api/v1/mood/state']),      // [2] mood
+    api('/chat/status'),                                 // [3]
+    apiTry(['/api/v1/neurons','/api/v1/hub/brain/activity']), // [4]
+    api('/chat/memory'),                                 // [5]
+    api('/api/v1/energy/health'),                        // [6]
+    api('/api/v1/weather/health'),                       // [7]
+    api('/api/v1/unifi/health'),                         // [8]
+    api('/telegram/status'),                             // [9]
+    api('/api/v1/capabilities'),                         // [10]
+    api('/api/v1/media/zones'),                          // [11]
+    api('/api/v1/media/musikwolke'),                     // [12]
+    api('/api/v1/waste/status'),                         // [13]
+    api('/api/v1/birthday/status'),                      // [14]
   ]);
   const v=r=>r.status==='fulfilled'?r.value:null;
-  const [gr,hr,mr,sr,nr,memr,er,wr,ur,tgr,capr,mzr,mkr,wastr,bdayr]=settled.map(v);
+  const [gr,hrWrap,mrWrap,sr,nrWrap,memr,er,wr,ur,tgr,capr,mzr,mkr,wastr,bdayr]=settled.map(v);
+  const hr=hrWrap?.data||null;
+  const mr=mrWrap?.data||null;
+  const nr=nrWrap?.data||null;
   const caps=capr?.capabilities||[];
   const feats=capr?.features||{};
-  const neurons=(nr?.neurons||nr?.data||[]);
+  const neuronCount=(nr?.neurons?.length)||(nr?.total_pulses)||0;
+  const moodZones=mr?.moods||mr?.zones||{};
   const zoneCount=mzr?.zones?Object.keys(mzr.zones).length:0;
   const mkSessions=mkr?.sessions||[];
   _moduleHealth={
     brain_graph:  gr?.ok&&(gr?.nodes||0)>0?'active':gr?.ok?'learning':'off',
     habitus_miner:hr?.status==='ok'?'active':hr?'learning':'off',
-    mood_engine:  mr?.moods&&Object.keys(mr.moods||{}).length>0?'active':mr?'learning':'off',
+    mood_engine:  Object.keys(moodZones||{}).length>0?'active':mr?'learning':'off',
     event_forwarder:sr?.available?'active':'off',
-    neurons:      neurons.length>0?'active':'learning',
+    neurons:      neuronCount>0?'active':'learning',
     knowledge_graph:caps.includes('knowledge_graph')||feats.knowledge_graph?'active':'learning',
     conversation_memory:memr?.stats?.total_messages>0?'active':memr?'learning':'off',
     media_zones:  zoneCount>0?'active':mzr?'learning':'off',
@@ -598,8 +807,8 @@ async function fetchModuleHealth(){
     _details:{
       brain_graph: gr?.ok?`${gr?.nodes||0} Nodes, ${gr?.edges||0} Edges`:'API offline',
       habitus_miner:hr?.status==='ok'?`${hr?.rules_count||0} Regeln`:(hr?'Kein Output':'API offline'),
-      mood_engine:  mr?.moods?`${Object.keys(mr.moods).length} Zonen`:(mr?'Keine Zonen':'API offline'),
-      neurons:      neurons.length>0?`${neurons.length} Signale aktiv`:'Warte auf Events',
+      mood_engine:  mr?`${Object.keys(moodZones||{}).length} Zonen`:'API offline',
+      neurons:      neuronCount>0?`${neuronCount} Signale aktiv`:'Warte auf Events',
       conversation_memory:memr?.stats?`${memr.stats.total_messages||0} Nachrichten`:'Leer',
       media_zones:  zoneCount>0?`${zoneCount} Zonen, ${mkSessions.length} Musikwolke`:(mzr?'Bereit':'Nicht gestartet'),
       energy_context:er?.status==='ok'?'Online':(er?'Degradiert':'Nicht konfiguriert'),
@@ -650,20 +859,28 @@ async function loadStyx(){
   try{
     // Load status
     const status=await api('/chat/status');
+    _chatStatus=status;
     const dot=$('status-dot'),txt=$('status-text');
     if(status){
       if(status.available){dot.className='dot dot-green';txt.textContent='Online'}
       else{dot.className='dot dot-yellow';txt.textContent='Bereit'}
-      currentModel=status.model||'';
-      $('chat-model').textContent=escapeHtml(currentModel)||'--';
-      $('ver-badge').textContent='v'+(status.version||'1.2.0');
+      const modelOptions=_chatModelOptionsFromStatus(status);
+      const preferredModel=_restoreChatModel('primary',modelOptions);
+      const optionValues=new Set(modelOptions.map((opt)=>opt.value));
+      const selectedModel=optionValues.has(preferredModel)?preferredModel:'primary';
+      _setChatModel(selectedModel,{persist:true,announce:false});
+      _renderChatModelSelector(modelOptions,selectedModel);
+      $('ver-badge').textContent=status.version?('v'+status.version):'--';
       const name=status.assistant_name||'Styx';
       $('assistant-name').textContent=escapeHtml(name);
       $('app-title').textContent=escapeHtml(name)+' \u2014 PilotSuite';
       document.title='PilotSuite \u2014 '+escapeHtml(name);
+      addHistory('API-Modus: '+API_MODE+(API?(' ('+API+')'):''));
+      await loadChatHistory();
     }else{
       dot.className='dot dot-red';txt.textContent='API offline';
       addHistory('\u26a0\ufe0f Core API nicht erreichbar');
+      renderChatMessages(chatHistory);
     }
     // Load pipelines (real health)
     loadPipelines();
@@ -684,14 +901,12 @@ async function loadPipelines(){
   const c=$('pipelines');if(!c)return;
   c.innerHTML='<div style="font-size:10px;color:var(--dim);padding:5px 0">Module pruefen...</div>';
   try{
+    await syncModuleStates();
     const health=await fetchModuleHealth();
     c.innerHTML='';
     MODULE_DEFS.forEach(m=>{
-      // User override from localStorage takes priority over detected health
       const detected=health[m.id]||'unknown';
-      const userSt=moduleStates[m.id];
-      const st=userSt||detected;
-      if(!moduleStates[m.id])moduleStates[m.id]=detected;
+      const st=moduleStates[m.id]||detected;
       const detail=health._details?.[m.id]||'';
       const d=el('div','pipe pipe-'+st,`<span class="pd"></span><span>${escapeHtml(m.name)}</span>`);
       if(detail)d.title=detail;
@@ -795,6 +1010,64 @@ function renderLegend(){
 // -- Chat --
 const chatInput=$('chat-input');
 chatInput.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendChat()}});
+const chatModelSelect=$('chat-model-select');
+chatModelSelect?.addEventListener('change',(ev)=>{
+  const next=String(ev?.target?.value||'').trim();
+  if(!next)return;
+  _setChatModel(next,{persist:true,announce:true});
+});
+function renderChatMessages(messages){
+  const msgs=$('chat-msgs');
+  if(!msgs)return;
+  msgs.innerHTML='';
+  if(!messages.length){
+    msgs.appendChild(el('div','msg a','Hallo! Ich bin <strong>Styx</strong>, dein PilotSuite Assistent. Ich verbinde dein Smart Home mit lokaler KI. Wie kann ich helfen?'));
+    return;
+  }
+  messages.forEach(m=>{
+    const cls=m.role==='user'?'u':'a';
+    const content=m.role==='assistant'
+      ?escapeHtml(m.content||'').replace(/\n/g,'<br>')
+      :escapeHtml(m.content||'');
+    msgs.appendChild(el('div','msg '+cls,content));
+  });
+  msgs.scrollTop=msgs.scrollHeight;
+}
+async function persistChatMessage(role,content){
+  try{
+    await fetch(API+'/api/v1/hub/brain/activity/chat',withAuth({
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({role,content,metadata:{source:'dashboard',api_mode:API_MODE}}),
+    }));
+  }catch(_err){}
+}
+async function loadChatHistory(){
+  const loaded=await api('/api/v1/hub/brain/activity/chat?limit=40');
+  if(loaded&&loaded.ok&&Array.isArray(loaded.messages)){
+    chatHistory=loaded.messages
+      .filter(m=>m&&m.role&&m.content!==undefined)
+      .map(m=>({role:m.role,content:String(m.content||'')}));
+    renderChatMessages(chatHistory);
+    return true;
+  }
+  renderChatMessages(chatHistory);
+  return false;
+}
+async function clearChatHistory(){
+  const ok=window.confirm('Chatverlauf wirklich loeschen?');
+  if(!ok)return;
+  try{
+    await fetch(API+'/api/v1/hub/brain/activity/chat/clear',withAuth({
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:'{}',
+    }));
+  }catch(_err){}
+  chatHistory=[];
+  renderChatMessages(chatHistory);
+  addHistory('Chatverlauf geloescht');
+}
 
 async function sendChat(){
   const input=$('chat-input'),msg=input.value.trim();
@@ -807,16 +1080,23 @@ async function sendChat(){
   const btn=$('chat-send');btn.disabled=true;
   const typing=el('div','msg a','<div class="spinner" style="display:inline-block;width:12px;height:12px;margin-right:6px"></div>Denkt nach...');
   msgs.appendChild(typing);msgs.scrollTop=msgs.scrollHeight;
+  persistChatMessage('user',msg);
   try{
-    const r=await fetch(API+'/v1/chat/completions',{
+    const r=await fetch(API+'/v1/chat/completions',withAuth({
       method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({model:currentModel,messages:chatHistory.slice(-10),stream:false})
-    });
-    const data=await r.json();
+      body:JSON.stringify({model:currentModel||'primary',messages:chatHistory.slice(-10),stream:false})
+    }));
+    let data={};
+    try{data=await r.json()}catch(_parseErr){data={error:{message:'Antwort konnte nicht gelesen werden'}}}
+    if(!r.ok){
+      const errMsg=data?.error?.message||('HTTP '+r.status);
+      throw new Error(errMsg);
+    }
     const reply=data?.choices?.[0]?.message?.content||data?.error?.message||'Keine Antwort.';
     // XSS-safe: escape first, then convert newlines to <br>
     typing.innerHTML=escapeHtml(reply).replace(/\n/g,'<br>');
     chatHistory.push({role:'assistant',content:reply});
+    persistChatMessage('assistant',reply);
     addHistory('Styx: '+reply.slice(0,40)+(reply.length>40?'...':''));
   }catch(e){typing.textContent='Fehler: '+e.message}
   btn.disabled=false;msgs.scrollTop=msgs.scrollHeight;
@@ -944,21 +1224,24 @@ async function acceptSuggestion(idx){
   addHistory('Vorschlag angenommen: '+s.antecedent+(s.consequent?' \u2192 '+s.consequent:''));
   // 1. Create hint in backend
   try{
-    const hintRes=await fetch(API+'/api/v1/hints',{
+    const hintRes=await fetch(API+'/api/v1/hints',withAuth({
       method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({text:s.antecedent+(s.consequent?' -> '+s.consequent:''),type:'automation'})
-    });
+    }));
     const hintData=await hintRes.json();
     const hintId=hintData?.hint?.id||s.id;
     // 2. Accept the hint
-    await fetch(API+'/api/v1/hints/'+hintId+'/accept',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+    await fetch(
+      API+'/api/v1/hints/'+hintId+'/accept',
+      withAuth({method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})
+    );
   }catch(e){console.warn('Hint accept error:',e)}
   // 3. Create HA Automation via Automation Creator API (v1.3.0)
   try{
-    const autoRes=await fetch(API+'/api/v1/automations/create',{
+    const autoRes=await fetch(API+'/api/v1/automations/create',withAuth({
       method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({antecedent:s.antecedent,consequent:s.consequent,confidence:s.confidence,zone:s.zone,source:s.source,type:s.type})
-    });
+    }));
     const autoData=await autoRes.json();
     if(autoData?.ok){
       addHistory('\u2705 HA-Automation erstellt: '+escapeHtml(autoData.alias||s.antecedent));
@@ -969,10 +1252,10 @@ async function acceptSuggestion(idx){
     const fromNode=s.raw?.data?.from||'ha.entity:'+s.antecedent;
     const toNode=s.raw?.data?.to||'ha.entity:'+s.consequent;
     try{
-      await fetch(API+'/api/v1/graph/ops',{
+      await fetch(API+'/api/v1/graph/ops',withAuth({
         method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({op:'touch_edge',from:fromNode,to:toNode,type:s.edgeType||'controls',delta:1.0})
-      });
+      }));
     }catch(e){console.warn('Graph ops error:',e)}
     // 4. Animate edge in Brain SVG
     animateBrainEdge(s.antecedent,s.consequent);
@@ -990,7 +1273,12 @@ async function rejectSuggestion(idx){
   addHistory('Vorschlag abgelehnt: '+s.antecedent);
   // Backend reject if it's a hint
   if(s.type==='hint'){
-    try{await fetch(API+'/api/v1/hints/'+s.id+'/reject',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})}catch(e){}
+    try{
+      await fetch(
+        API+'/api/v1/hints/'+s.id+'/reject',
+        withAuth({method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})
+      )
+    }catch(e){}
   }
   renderSuggestionInbox();
 }
@@ -1046,6 +1334,86 @@ function animateBrainEdge(fromEntity,toEntity){
 // ==================================================
 // HABITUS
 // ==================================================
+function _slugifyId(value){
+  const cleaned=String(value||'').trim().toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'');
+  return cleaned||'zone';
+}
+
+async function _autoImportRoomsFromSuggestions(){
+  const suggestions=await api('/api/v1/entity-assignment/suggestions');
+  if(!suggestions?.ok||!Array.isArray(suggestions.suggestions)||!suggestions.suggestions.length)return 0;
+  let imported=0;
+  const touched=new Set();
+  for(const s of suggestions.suggestions.slice(0,12)){
+    const roomName=String(s.room_hint||s.suggested_zone_id||'raum').replace(/^zone:/,'').trim();
+    const entities=(s.entities||[]).map(e=>e?.entity_id).filter(Boolean);
+    if(!roomName||!entities.length)continue;
+    const roomId='room:'+_slugifyId(roomName);
+    if(touched.has(roomId))continue;
+    touched.add(roomId);
+    try{
+      const resp=await fetch(API+'/api/v1/hub/zones/rooms',withAuth({
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          room_id:roomId,
+          name:roomName,
+          entities,
+        }),
+      }));
+      if(resp.ok)imported++;
+    }catch(_e){}
+  }
+  return imported;
+}
+
+async function loadZoneRoomOptions(forceImport=false){
+  const sel=$('new-zone-rooms');
+  const hint=$('new-zone-room-hint');
+  if(!sel)return;
+
+  let roomsResp=await api('/api/v1/hub/zones/rooms');
+  let rooms=Array.isArray(roomsResp?.rooms)?roomsResp.rooms:[];
+
+  if(!rooms.length&&(forceImport||!_roomsAutofilled)){
+    const imported=await _autoImportRoomsFromSuggestions();
+    if(imported>0){
+      _roomsAutofilled=true;
+      roomsResp=await api('/api/v1/hub/zones/rooms');
+      rooms=Array.isArray(roomsResp?.rooms)?roomsResp.rooms:[];
+    }
+  }
+
+  _hubRoomsCache=rooms;
+  sel.innerHTML='';
+
+  if(!rooms.length){
+    const opt=document.createElement('option');
+    opt.value='';
+    opt.textContent='Keine Räume verfügbar';
+    opt.disabled=true;
+    sel.appendChild(opt);
+    if(hint)hint.textContent='Keine Räume registriert. Optional Entitäten unten eintragen.';
+    return;
+  }
+
+  rooms
+    .slice()
+    .sort((a,b)=>String(a.name||a.room_id).localeCompare(String(b.name||b.room_id),'de'))
+    .forEach(room=>{
+      const opt=document.createElement('option');
+      opt.value=String(room.room_id||'');
+      opt.textContent=`${room.name||room.room_id} (${room.entity_count||0})`;
+      sel.appendChild(opt);
+    });
+
+  if(hint)hint.textContent=`${rooms.length} Räume verfügbar. Mehrfachauswahl mit Ctrl/Cmd möglich.`;
+}
+
+async function reloadZoneRoomOptions(){
+  await loadZoneRoomOptions(true);
+}
+
 async function loadHabitus(){
   const data=await api('/api/v1/habitus/rules?limit=50');
   const rules=data?.rules||data?.data||[];
@@ -1063,26 +1431,50 @@ async function loadHabitus(){
     c.appendChild(el('div','pat',
       `<span>${ant}</span><span class="arr">\u2192</span><span>${cons}</span><span class="meta">${conf}% | ${supp}% Supp | Lift ${lift}</span>`));
   });
-  // Zones
-  const zones=await api('/api/v1/habitus/config');
+  // Zones (Hub Zone API)
+  const zones=await api('/api/v1/hub/zones');
   const zc=$('hab-zones');
-  if(zones&&zones.zones){
+  if(zones&&Array.isArray(zones.zones)){
     zc.innerHTML='';
-    Object.entries(zones.zones).forEach(([id,z])=>{
-      const ents=(z.entities||[]);
+    const zoneList=zones.zones;
+    const details=await Promise.allSettled(
+      zoneList.map(z=>api('/api/v1/hub/zones/'+encodeURIComponent(String(z.zone_id||''))))
+    );
+    const detailMap=new Map();
+    details.forEach((item,idx)=>{
+      if(item.status!=='fulfilled')return;
+      const zid=String(zoneList[idx]?.zone_id||'');
+      if(!zid)return;
+      detailMap.set(zid,item.value||{});
+    });
+
+    zoneList.forEach(z=>{
+      const zid=String(z.zone_id||'');
+      const detail=detailMap.get(zid)||{};
+      const zoneName=String(z.name||detail.name||zid||'Zone');
+      const ents=Array.isArray(detail.entities)?detail.entities:[];
+      const rooms=Array.isArray(detail.rooms)?detail.rooms:[];
+      const roomNames=rooms.map(r=>String(r?.name||r?.room_id||'')).filter(Boolean);
+      const roomSummary=roomNames.length>3?roomNames.slice(0,3).join(', ')+` +${roomNames.length-3}`:(roomNames.join(', ')||'keine Räume');
+      const zoneIdJson=JSON.stringify(zid);
+      const zoneNameJson=JSON.stringify(zoneName);
+      const entsJson=JSON.stringify(ents);
       const card=el('div','zone-card',
-        `<h3><span style="color:var(--cyan)">&#x1f3e0;</span> ${escapeHtml(z.name||id)}</h3>
-        <p style="font-size:11px;color:var(--dim)">${escapeHtml(z.description||'Zone: '+id)}</p>
+        `<h3><span style="color:var(--cyan)">&#x1f3e0;</span> ${escapeHtml(zoneName)}</h3>
+        <p style="font-size:11px;color:var(--dim)">Räume: ${escapeHtml(roomSummary)} · Entitäten: ${ents.length}</p>
         <div class="zone-entities">${ents.map(e=>`<span class="ze">${escapeHtml(e)}</span>`).join('')}</div>
         <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
-          <button onclick="saveZoneScene('${escapeHtml(id)}','${escapeHtml(z.name||id)}',${JSON.stringify(ents).replace(/'/g,"\\'")})" class="btn-scene" title="Aktuelle Zustände als Szene speichern">&#x1f3ac; Szene speichern</button>
-          <button onclick="toggleHomeKit('${escapeHtml(id)}','${escapeHtml(z.name||id)}',${JSON.stringify(ents).replace(/'/g,"\\'")})" class="btn-scene" title="Zone zu HomeKit hinzufügen">&#x1f34e; HomeKit</button>
+          <button onclick='saveZoneScene(${zoneIdJson},${zoneNameJson},${entsJson})' class="btn-scene" title="Aktuelle Zustände als Szene speichern">&#x1f3ac; Szene speichern</button>
+          <button onclick='toggleHomeKit(${zoneIdJson},${zoneNameJson},${entsJson})' class="btn-scene" title="Zone zu HomeKit hinzufügen">&#x1f34e; HomeKit</button>
         </div>`);
       zc.appendChild(card);
     });
   }else{
-    zc.innerHTML='<div class="empty">Keine Zonen konfiguriert. Zonen werden in HA Options definiert.</div>';
+    zc.innerHTML='<div class="empty">Hub-Zonen API nicht erreichbar oder keine Zonen vorhanden.</div>';
   }
+
+  await loadZoneRoomOptions();
+
   // Trend from real rule confidence values
   const trendData=rules.map(r=>(r.metadata||r).confidence||0);
   drawTrend('hab-trend-canvas',rules.length,trendData.length>=2?trendData:null);
@@ -1091,19 +1483,68 @@ async function loadHabitus(){
 // -- Add Habitus Zone --
 async function addZone(){
   const name=$('new-zone-name').value.trim();
+  const roomSelect=$('new-zone-rooms');
   const ents=$('new-zone-entities').value.trim();
   if(!name){$('new-zone-name').style.borderColor='var(--red)';return}
+  $('new-zone-name').style.borderColor='var(--border)';
+
+  let roomIds=roomSelect?[...roomSelect.options].filter(o=>o.selected&&o.value).map(o=>o.value):[];
   const entities=ents?ents.split(',').map(e=>e.trim()).filter(Boolean):[];
+  if(!roomIds.length&&!entities.length){
+    const hint=$('new-zone-room-hint');
+    if(hint)hint.textContent='Bitte mindestens einen Raum auswählen oder Entitäten eintragen.';
+    return;
+  }
+
+  const zoneId='zone:'+_slugifyId(name);
+
   try{
-    const r=await fetch(API+'/api/v1/habitus/config',{
-      method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({zones:{[name.toLowerCase().replace(/\s+/g,'_')]:{name,entities,description:'Zone: '+name}}})
-    });
+    // If no rooms are selected, register a synthetic room from explicit entities.
+    if(!roomIds.length&&entities.length){
+      const syntheticRoomId='room:'+_slugifyId(name)+'_'+Date.now().toString(36);
+      const regResp=await fetch(API+'/api/v1/hub/zones/rooms',withAuth({
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          room_id:syntheticRoomId,
+          name:`${name} (manuell)`,
+          entities,
+        }),
+      }));
+      if(!regResp.ok){
+        const body=(await regResp.text()).slice(0,180);
+        addHistory('Room-Fehler: '+regResp.status+' '+body);
+        return;
+      }
+      roomIds=[syntheticRoomId];
+    }
+
+    const existing=await api('/api/v1/hub/zones/'+encodeURIComponent(zoneId));
+    if(existing&&existing.ok){
+      await fetch(API+'/api/v1/hub/zones/'+encodeURIComponent(zoneId),withAuth({method:'DELETE'}));
+    }
+
+    const r=await fetch(API+'/api/v1/hub/zones',withAuth({
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        zone_id:zoneId,
+        name,
+        room_ids:roomIds,
+        icon:'mdi:home-floor-1',
+      }),
+    }));
+
     if(r.ok){
-      $('new-zone-name').value='';$('new-zone-entities').value='';
-      addHistory('Zone erstellt: '+name);
-      loadHabitus();
-    }else{addHistory('Zone-Fehler: '+r.status)}
+      $('new-zone-name').value='';
+      $('new-zone-entities').value='';
+      if(roomSelect)[...roomSelect.options].forEach(o=>{o.selected=false;});
+      addHistory('Zone erstellt: '+name+' ('+zoneId+')');
+      await loadHabitus();
+    }else{
+      const body=(await r.text()).slice(0,180);
+      addHistory('Zone-Fehler: '+r.status+' '+body);
+    }
   }catch(e){addHistory('Zone-Fehler: '+e.message)}
 }
 
@@ -1380,7 +1821,10 @@ async function loadHaushaltData(){
 }
 async function haushaltRemind(type){
   try{
-    const r=await fetch(API+'/api/v1/haushalt/remind/'+type,{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+    const r=await fetch(
+      API+'/api/v1/haushalt/remind/'+type,
+      withAuth({method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})
+    );
     const d=await r.json();
     addHistory((d?.ok?'✅':'⚠️')+' Erinnerung: '+(d?.message||d?.error||type));
   }catch(e){addHistory('⚠️ Fehler: '+e.message)}
@@ -1390,11 +1834,17 @@ async function haushaltRemind(type){
 // MOOD
 // ==================================================
 async function loadMood(){
-  const data=await api('/api/v1/mood/state');
+  const wrapped=await apiTry(['/api/v1/mood','/api/v1/mood/state']);
+  const data=wrapped?.data||null;
   const c=$('mood-zones'),sc=$('mood-stats');
-  if(!data||!data.zones){c.innerHTML='<div class="empty">Noch keine Stimmungsdaten. Mood Engine benoetigt Events aus Zonen.</div>';return}
+  if(!data){c.innerHTML='<div class="empty">Noch keine Stimmungsdaten. Mood Engine benoetigt Events aus Zonen.</div>';return}
+  let zonesData=data.zones||data.moods||null;
+  if(!zonesData&&data.mood){
+    zonesData={global:data.mood};
+  }
+  if(!zonesData||typeof zonesData!=='object'){c.innerHTML='<div class="empty">Keine Stimmungsdaten verfuegbar.</div>';return}
   c.innerHTML='';
-  const zones=Object.entries(data.zones||{});
+  const zones=Object.entries(zonesData||{});
   if(!zones.length){c.innerHTML='<div class="empty">Keine Zonen konfiguriert.</div>';return}
   zones.forEach(([name,z])=>{
     const comfort=z.comfort||0,joy=z.joy||0,frug=z.frugality||0;
@@ -1407,6 +1857,15 @@ async function loadMood(){
       `<div class="card stat"><div class="v">${(data.summary.average_comfort||0).toFixed(1)}</div><div class="l">Avg Comfort</div></div>`+
       `<div class="card stat"><div class="v">${(data.summary.average_joy||0).toFixed(1)}</div><div class="l">Avg Joy</div></div>`+
       `<div class="card stat"><div class="v">${(data.summary.average_frugality||0).toFixed(1)}</div><div class="l">Avg Frugality</div></div>`;
+  }else{
+    const comforts=zones.map(([_,z])=>Number(z.comfort||0));
+    const joys=zones.map(([_,z])=>Number(z.joy||0));
+    const frugs=zones.map(([_,z])=>Number(z.frugality||0));
+    const avg=a=>a.length?a.reduce((x,y)=>x+y,0)/a.length:0;
+    sc.innerHTML=
+      `<div class="card stat"><div class="v">${avg(comforts).toFixed(2)}</div><div class="l">Avg Comfort</div></div>`+
+      `<div class="card stat"><div class="v">${avg(joys).toFixed(2)}</div><div class="l">Avg Joy</div></div>`+
+      `<div class="card stat"><div class="v">${avg(frugs).toFixed(2)}</div><div class="l">Avg Frugality</div></div>`;
   }
   // Mood trend from real comfort values per zone
   const moodTrend=zones.map(([_,z])=>z.comfort||0);
@@ -1420,19 +1879,112 @@ function gaugeHTML(label,val,color){
 // ==================================================
 // MODULES
 // ==================================================
+function initModuleConfigSelect(){
+  const sel=$('module-config-select');
+  if(!sel)return;
+  const opts=Object.entries(MODULE_CONFIG_SPECS).map(([moduleId,spec])=>
+    `<option value="${escapeHtml(moduleId)}">${escapeHtml(spec.label||moduleId)}</option>`);
+  sel.innerHTML=opts.join('');
+  if(!MODULE_CONFIG_SPECS[_selectedModuleConfig]){
+    _selectedModuleConfig=Object.keys(MODULE_CONFIG_SPECS)[0]||'';
+  }
+  sel.value=_selectedModuleConfig||'';
+  sel.onchange=()=>{
+    _selectedModuleConfig=sel.value;
+    loadSelectedModuleConfig(false);
+  };
+}
+async function loadSelectedModuleConfig(force=false){
+  const body=$('module-config-body');
+  if(!body)return;
+  const moduleId=_selectedModuleConfig;
+  const spec=MODULE_CONFIG_SPECS[moduleId];
+  if(!spec){
+    body.innerHTML='<div class="empty">Dieses Modul hat aktuell keine Runtime-Konfiguration.</div>';
+    return;
+  }
+  if(force)body.innerHTML='<div class="loading"><div class="spinner"></div>Lade Konfiguration...</div>';
+  const data=await api(spec.getPath);
+  const cfg=spec.parseGet?spec.parseGet(data):data;
+  if(!cfg||typeof cfg!=='object'){
+    body.innerHTML=
+      '<div class="empty">Konfiguration nicht verfuegbar. Endpoint: <code>'+escapeHtml(spec.getPath)+
+      '</code></div>';
+    return;
+  }
+  const rows=spec.fields.map(field=>{
+    const inputId='cfg_'+moduleId+'_'+field.key;
+    const value=_configInputValue(cfg[field.key],field);
+    let inputHtml='';
+    if(field.type==='boolean'){
+      inputHtml=`<select id="${inputId}" data-key="${field.key}" data-type="${field.type}" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px;color:var(--text);font-size:12px;outline:none">
+        <option value="true"${value==='true'?' selected':''}>true</option>
+        <option value="false"${value==='false'?' selected':''}>false</option>
+      </select>`;
+    }else{
+      const step=field.step!==undefined?` step="${field.step}"`:'';
+      const min=field.min!==undefined?` min="${field.min}"`:'';
+      const max=field.max!==undefined?` max="${field.max}"`:'';
+      const inputType=field.type==='number'?'number':'text';
+      inputHtml=`<input id="${inputId}" data-key="${field.key}" data-type="${field.type}" type="${inputType}" value="${escapeHtml(value)}"${step}${min}${max} style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text);font-size:12px;outline:none">`;
+    }
+    return `<div style="display:grid;grid-template-columns:220px 1fr;gap:8px;align-items:center;margin-bottom:8px">
+      <label for="${inputId}" style="font-size:11px;color:var(--dim)">${escapeHtml(field.label||field.key)}</label>
+      ${inputHtml}
+    </div>`;
+  }).join('');
+  body.innerHTML=
+    `<div style="font-size:11px;color:var(--dim);margin-bottom:8px">Quelle: <code>${escapeHtml(spec.getPath)}</code></div>`+
+    rows+
+    `<div style="display:flex;gap:8px;margin-top:10px">
+      <button id="module-config-save" style="background:var(--accent);color:#fff;border:none;border-radius:6px;padding:7px 12px;cursor:pointer;font-size:11px;font-weight:600">Speichern</button>
+      <button id="module-config-reset" style="background:var(--surface);border:1px solid var(--border);color:var(--dim);border-radius:6px;padding:7px 12px;cursor:pointer;font-size:11px;font-weight:600">Reset</button>
+    </div>`;
+  $('module-config-save')?.addEventListener('click',()=>saveSelectedModuleConfig());
+  $('module-config-reset')?.addEventListener('click',()=>loadSelectedModuleConfig(true));
+}
+async function saveSelectedModuleConfig(){
+  const moduleId=_selectedModuleConfig;
+  const spec=MODULE_CONFIG_SPECS[moduleId];
+  if(!spec)return;
+  const body=$('module-config-body');
+  if(!body)return;
+  const payload={};
+  spec.fields.forEach(field=>{
+    const input=body.querySelector('[data-key="'+field.key+'"]');
+    if(!input)return;
+    const parsed=_parseConfigInput(input,field);
+    if(parsed!==null&&parsed!==undefined&&parsed!=='')payload[field.key]=parsed;
+  });
+  try{
+    const resp=await fetch(API+spec.postPath,withAuth({
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(payload),
+    }));
+    const data=await resp.json().catch(()=>null);
+    if(!resp.ok||(data&&data.ok===false)||data?.status==='error'){
+      throw new Error(data?.error||data?.message||('HTTP '+resp.status));
+    }
+    addHistory('Konfiguration gespeichert: '+escapeHtml(spec.label||moduleId));
+    await loadSelectedModuleConfig(true);
+  }catch(e){
+    addHistory('\u26a0\ufe0f Konfig-Fehler '+escapeHtml(spec.label||moduleId)+': '+escapeHtml(e.message||'unbekannt'));
+  }
+}
 async function loadModules(){
   const c=$('module-list');if(!c)return;
   c.innerHTML='<div class="loading"><div class="spinner"></div>Lade Modul-Status...</div>';
   try{
+    initModuleConfigSelect();
+    await syncModuleStates();
     const health=await fetchModuleHealth();
     c.innerHTML='';
     MODULE_DEFS.forEach(m=>{
       // Detected state from APIs
       const detected=health[m.id]||'unknown';
       const detail=health._details?.[m.id]||'Status unbekannt';
-      // User toggle override stored in localStorage
       const st=moduleStates[m.id]||detected;
-      if(!moduleStates[m.id])moduleStates[m.id]=detected;
       const toggleCls=st==='active'?'on':st==='learning'?'learn':'off';
       const badgeCls=st==='active'?'g':st==='learning'?'y':st==='off'?'r':'b';
       const stTitles={active:'Aktiv: Auto-Apply (wenn beide Module aktiv)',learning:'Learning: Vorschlaege zur manuellen Uebernahme',off:'Deaktiviert'};
@@ -1443,11 +1995,21 @@ async function loadModules(){
         <div class="mod-status">
           <button class="mod-toggle ${toggleCls}" data-mod="${m.id}" title="${stTitles[st]||st}"></button>
           <span class="mod-st-label" style="font-size:9px;color:var(--dim)">${escapeHtml(st)}</span>
-          ${detected!==st?`<span style="font-size:8px;color:var(--yellow)" title="Nutzer-Override aktiv">\u270f</span>`:''}
+          ${detected!==st?`<span style="font-size:8px;color:var(--yellow)" title="Konfigurierter Modulstatus">\u2699</span>`:''}
         </div>`);
       card.querySelector('.mod-toggle').addEventListener('click',function(){toggleModule(this,m.id)});
+      card.addEventListener('click',ev=>{
+        if(ev.target&&ev.target.closest&&ev.target.closest('.mod-toggle'))return;
+        if(MODULE_CONFIG_SPECS[m.id]){
+          _selectedModuleConfig=m.id;
+          const sel=$('module-config-select');
+          if(sel)sel.value=m.id;
+          loadSelectedModuleConfig(false);
+        }
+      });
       c.appendChild(card);
     });
+    loadSelectedModuleConfig(false);
   }catch(e){
     c.innerHTML='<div class="empty">\u26a0\ufe0f Modul-Status konnte nicht geladen werden.<br>'+escapeHtml(e.message)+'</div>';
   }
@@ -1458,6 +2020,7 @@ async function toggleModule(btn,modId){
   const states=['on','learn','off'];
   const labels=['active','learning','off'];
   const current=[...btn.classList].find(c=>states.includes(c))||'off';
+  const previousState=labels[Math.max(0,states.indexOf(current))]||'off';
   let idx=states.indexOf(current);
   idx=(idx+1)%3;
   const newState=labels[idx];
@@ -1465,23 +2028,31 @@ async function toggleModule(btn,modId){
   btn.title=newState;
   const stLabel=btn.parentElement.querySelector('.mod-st-label');
   if(stLabel)stLabel.textContent=newState;
-  moduleStates[modId]=newState;
-  localStorage.setItem('styx_module_states',JSON.stringify(moduleStates));
+
   // Call Module Control API (v1.3.0)
   try{
-    const res=await fetch(API+'/api/v1/modules/'+encodeURIComponent(modId)+'/configure',{
+    const res=await fetch(API+'/api/v1/modules/'+encodeURIComponent(modId)+'/configure',withAuth({
       method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({state:newState})
-    });
-    const data=await res.json();
-    if(data?.ok){
-      addHistory('Modul '+escapeHtml(MODULE_DEFS.find(m=>m.id===modId)?.name||modId)+' \u2192 '+newState+' (Backend sync)');
-    }else{
-      addHistory('\u26a0\ufe0f Modul-API Fehler: '+(data?.error||'unbekannt'));
+    }));
+    const data=await res.json().catch(()=>null);
+    if(!res.ok||!data?.ok){
+      throw new Error(data?.error||('HTTP '+res.status));
     }
+    const persistedState=data?.state||newState;
+    moduleStates[modId]=persistedState;
+    localStorage.setItem('styx_module_states',JSON.stringify(moduleStates));
+    _moduleStatesSyncedAt=Date.now();
+    if(stLabel)stLabel.textContent=persistedState;
+    addHistory('Modul '+escapeHtml(MODULE_DEFS.find(m=>m.id===modId)?.name||modId)+' \u2192 '+persistedState+' (Backend)');
   }catch(e){
-    // API might not be available yet - still works via localStorage
-    addHistory('Modul '+escapeHtml(MODULE_DEFS.find(m=>m.id===modId)?.name||modId)+' \u2192 '+newState+' (lokal)');
+    // Roll back optimistic UI change when backend write failed
+    const rollbackClass=states[labels.indexOf(previousState)]||'off';
+    btn.className='mod-toggle '+rollbackClass;
+    btn.title=previousState;
+    if(stLabel)stLabel.textContent=previousState;
+    addHistory('\u26a0\ufe0f Modul '+escapeHtml(MODULE_DEFS.find(m=>m.id===modId)?.name||modId)+' konnte nicht gespeichert werden: '+escapeHtml(e.message||'API offline'));
+    return;
   }
   // Invalidate health cache so next load re-evaluates
   _moduleHealth=null;_healthTs=0;
@@ -1606,7 +2177,12 @@ async function loadBirthdayPanel(){
 async function loadNewsWarnings(){
   const c=$('news-warnings-panel');if(!c)return;
   try{
-    const [newsRes,warnRes]=await Promise.allSettled([api('/api/v1/capabilities'),fetch(API+'/api/v1/media/proactive/zone-entry',{method:'GET'}).then(r=>r.ok?r.json():null).catch(()=>null)]);
+    const [newsRes,warnRes]=await Promise.allSettled([
+      api('/api/v1/capabilities'),
+      fetch(API+'/api/v1/media/proactive/zone-entry',withAuth({method:'GET'}))
+        .then(r=>r.ok?r.json():null)
+        .catch(()=>null)
+    ]);
     const caps=(newsRes.status==='fulfilled'?newsRes.value:null);
     let html='<div style="font-size:11px;color:var(--dim)">';
     html+='<p><strong>DuckDuckGo-Suche:</strong> Styx kann das Web durchsuchen (kein API-Key noetig)</p>';
@@ -1624,6 +2200,81 @@ async function loadNewsWarnings(){
 // ==================================================
 // SETTINGS
 // ==================================================
+function _routingProviderLabel(provider){
+  const p=String(provider||'').toLowerCase();
+  return p==='cloud'?'Cloud':'Offline';
+}
+function _renderRoutingControls(status){
+  const mount=$('set-routing');
+  if(!mount)return;
+  if(!status){
+    mount.innerHTML='<div class="empty">Routing nicht verfuegbar (API offline)</div>';
+    return;
+  }
+  const offlineModels=status?.model_catalog?.offline?.models||status?.installed_models||[];
+  const cloudModels=status?.model_catalog?.cloud?.models||status?.cloud_models||[];
+  const primary=String(status.primary_provider||'offline');
+  const secondary=String(status.secondary_provider|| (primary==='offline'?'cloud':'offline'));
+  const offlineCurrent=String(status.model_catalog?.offline?.active_model||status.model||'');
+  const cloudCurrent=String(status.model_catalog?.cloud?.active_model||status.cloud_model||'');
+  const cloudConfigured=!!status.cloud_configured;
+  const providerOptions=`<option value="offline"${primary==='offline'?' selected':''}>Offline</option><option value="cloud"${primary==='cloud'?' selected':''}${cloudConfigured?'':' disabled'}>Cloud</option>`;
+  const secondaryOptions=`<option value="offline"${secondary==='offline'?' selected':''}>Offline</option><option value="cloud"${secondary==='cloud'?' selected':''}${cloudConfigured?'':' disabled'}>Cloud</option>`;
+  let html='';
+  html+='<div style="display:grid;gap:8px">';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">';
+  html+='<label style="font-size:11px;color:var(--dim)">Primary Provider<select id="llm-primary-provider" style="width:100%;margin-top:4px;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px;color:var(--text);font-size:12px">'+providerOptions+'</select></label>';
+  html+='<label style="font-size:11px;color:var(--dim)">Secondary Provider<select id="llm-secondary-provider" style="width:100%;margin-top:4px;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px;color:var(--text);font-size:12px">'+secondaryOptions+'</select></label>';
+  html+='</div>';
+  html+='<label style="font-size:11px;color:var(--dim)">Offline Modell<select id="llm-offline-model" style="width:100%;margin-top:4px;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px;color:var(--text);font-size:12px">';
+  if(!offlineModels.length)html+='<option value="">kein Modell</option>';
+  offlineModels.forEach((m)=>{const v=String(m||'').trim();if(!v)return;html+=`<option value="${escapeHtml(v)}"${v===offlineCurrent?' selected':''}>${escapeHtml(v)}</option>`});
+  html+='</select></label>';
+  html+='<label style="font-size:11px;color:var(--dim)">Cloud Modell<select id="llm-cloud-model" style="width:100%;margin-top:4px;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px;color:var(--text);font-size:12px"'+(cloudConfigured?'':' disabled')+'>';
+  if(!cloudModels.length)html+='<option value="">kein Modell</option>';
+  cloudModels.forEach((m)=>{const v=String(m||'').trim();if(!v)return;html+=`<option value="${escapeHtml(v)}"${v===cloudCurrent?' selected':''}>${escapeHtml(v)}</option>`});
+  html+='</select></label>';
+  html+='<div style="display:flex;gap:8px;align-items:center">';
+  html+='<button onclick="saveRoutingConfig()" style="background:var(--accent);color:#fff;border:none;border-radius:6px;padding:6px 10px;cursor:pointer;font-size:11px;font-weight:600">Routing speichern</button>';
+  html+='<span style="font-size:10px;color:var(--dim)">'+(cloudConfigured?'Fallback aktiv bei Ausfall':'Cloud nicht konfiguriert (nur Offline)')+'</span>';
+  html+='</div>';
+  html+='</div>';
+  mount.innerHTML=html;
+}
+async function saveRoutingConfig(){
+  const primaryEl=$('llm-primary-provider');
+  const secondaryEl=$('llm-secondary-provider');
+  const offlineEl=$('llm-offline-model');
+  const cloudEl=$('llm-cloud-model');
+  if(!primaryEl||!secondaryEl||!offlineEl||!cloudEl)return;
+  const primary=String(primaryEl.value||'offline');
+  let secondary=String(secondaryEl.value||'cloud');
+  if(secondary===primary)secondary=(primary==='offline'?'cloud':'offline');
+  const payload={
+    primary_provider:primary,
+    secondary_provider:secondary,
+    offline_model:String(offlineEl.value||''),
+    cloud_model:String(cloudEl.value||''),
+    persist:true,
+  };
+  try{
+    const r=await fetch(API+'/chat/routing',withAuth({
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(payload),
+    }));
+    let data={};
+    try{data=await r.json()}catch(_err){data={}}
+    if(!r.ok||!data?.ok){
+      throw new Error(data?.error||data?.message||('HTTP '+r.status));
+    }
+    addHistory('LLM-Routing aktualisiert: '+_routingProviderLabel(primary)+' -> '+_routingProviderLabel(secondary));
+    await loadStyx();
+    await loadSettings();
+  }catch(e){
+    addHistory('\u26a0\ufe0f Routing-Update fehlgeschlagen: '+(e.message||'unbekannt'));
+  }
+}
 async function loadSettings(){
   // Load all in parallel, resilient
   const settled=await Promise.allSettled([
@@ -1638,22 +2289,38 @@ async function loadSettings(){
   if(status){
     $('set-llm').innerHTML=
       `<tr><td>Provider</td><td>${badge(status.active_provider||'--','p')}</td></tr>`+
-      `<tr><td>Modell</td><td><strong>${escapeHtml(status.model||'--')}</strong></td></tr>`+
+      `<tr><td>Chat Modell</td><td><strong>${escapeHtml(_chatModelLabel(currentModel||'primary'))}</strong></td></tr>`+
       `<tr><td>Assistent</td><td><strong>${escapeHtml(status.assistant_name||'Styx')}</strong></td></tr>`+
       `<tr><td>Ollama</td><td>${status.ollama_available?badge('Online','g'):badge('Offline','r')}</td></tr>`+
       `<tr><td>Cloud API</td><td>${status.cloud_configured?badge('Konfiguriert','b'):badge('Nicht konfiguriert','y')}</td></tr>`+
-      `<tr><td>Lokal bevorzugen</td><td>${status.prefer_local?badge('Ja','g'):badge('Nein','y')}</td></tr>`+
+      `<tr><td>Primary</td><td>${badge(_routingProviderLabel(status.primary_provider||'offline'),'g')} · ${escapeHtml(status.primary_model||'--')}</td></tr>`+
+      `<tr><td>Secondary</td><td>${badge(_routingProviderLabel(status.secondary_provider||'cloud'),'y')} · ${escapeHtml(status.secondary_model||'--')}</td></tr>`+
       `<tr><td>Charakter</td><td>${escapeHtml(status.character||'copilot')}</td></tr>`+
       `<tr><td>Anfragen/h</td><td>${status.calls_this_hour||0} / ${status.max_calls_per_hour||60}</td></tr>`;
+    _renderRoutingControls(status);
     // Models
-    const models=status.installed_models||[];
+    const models=status?.model_catalog?.offline?.models||status.installed_models||[];
+    const cloudModels=status?.model_catalog?.cloud?.models||status.cloud_models||[];
     const mc=$('set-models');
-    if(!models.length){mc.innerHTML='<div class="empty">Keine Modelle installiert</div>'}
-    else{mc.innerHTML='';models.forEach(m=>{mc.appendChild(el('div','pat',`<span>${escapeHtml(m)}</span><span class="meta">${m===status.model?badge('Aktiv','g'):''}</span>`))})}
+    if(!models.length&&!cloudModels.length){mc.innerHTML='<div class="empty">Keine Modelle gefunden</div>'}
+    else{
+      mc.innerHTML='';
+      models.forEach((m)=>{
+        const v=String(m||'');
+        const active=v===String(status.model_catalog?.offline?.active_model||status.model||'');
+        mc.appendChild(el('div','pat',`<span>${escapeHtml(v)}</span><span class="meta">${badge('Offline','b')}${active?(' '+badge('Aktiv','g')):''}</span>`));
+      });
+      cloudModels.forEach((m)=>{
+        const v=String(m||'');
+        const active=v===String(status.model_catalog?.cloud?.active_model||status.cloud_model||'');
+        mc.appendChild(el('div','pat',`<span>${escapeHtml(v)}</span><span class="meta">${badge('Cloud','p')}${active?(' '+badge('Aktiv','g')):''}</span>`));
+      });
+    }
     // System (real MCP status from capabilities)
     const mcpOk=caps?.ok===true;
     $('set-system').innerHTML=
-      `<tr><td>Version</td><td>${badge('v'+(status.version||'1.2.0'),'p')}</td></tr>`+
+      `<tr><td>Version</td><td>${status.version?badge('v'+status.version,'p'):badge('--','y')}</td></tr>`+
+      `<tr><td>API Route</td><td><code>${escapeHtml(API||'(direct)')}</code> ${badge(API_MODE==='ingress'?'Ingress':'Direct','b')}</td></tr>`+
       `<tr><td>Ollama URL</td><td><code>${escapeHtml(status.ollama_url||'localhost:11434')}</code></td></tr>`+
       `<tr><td>Cloud URL</td><td><code>${escapeHtml(status.cloud_api_url||'--')}</code></td></tr>`+
       `<tr><td>Telegram</td><td>${tg?.running?badge('Aktiv','g'):badge('Aus','y')}</td></tr>`+
@@ -1661,6 +2328,7 @@ async function loadSettings(){
       (caps?.capabilities?.length?`<tr><td>Features</td><td style="font-size:10px;color:var(--dim)">${escapeHtml(caps.capabilities.slice(0,5).join(', '))}${caps.capabilities.length>5?'…':''}</td></tr>`:'');
   }else{
     $('set-llm').innerHTML='<tr><td colspan="2" style="color:var(--red)">\u26a0\ufe0f Core API nicht erreichbar</td></tr>';
+    _renderRoutingControls(null);
   }
   // Memory
   const mc2=$('set-memory');
@@ -1669,6 +2337,7 @@ async function loadSettings(){
       <tr><td>Nachrichten</td><td><strong>${mem.stats.total_messages||0}</strong></td></tr>
       <tr><td>Praeferenzen</td><td><strong>${(mem.preferences||[]).length}</strong></td></tr>
       <tr><td>Themen</td><td><strong>${mem.stats.topics_count||0}</strong></td></tr>
+      <tr><td>RAG</td><td>${mem.rag_active?badge('Aktiv','g'):badge('Inaktiv','y')}</td></tr>
       <tr><td>Speicher</td><td>${mem.stats.db_size_mb?mem.stats.db_size_mb.toFixed(1)+' MB':'--'}</td></tr>
     </table>`;
   }else{mc2.innerHTML='<div class="empty">Gedaechtnis nicht initialisiert oder API offline</div>'}
@@ -1680,8 +2349,16 @@ async function loadSettings(){
       const mbadges=[m.installed?badge('Installiert','g'):badge((m.size_mb||'?')+'MB','y')];
       if(m.active)mbadges.push(badge('Aktiv','p'));
       if(m.supports_tools)mbadges.push(badge('Tools','b'));
+      mbadges.push(badge('Offline','b'));
       rc.appendChild(el('div','pat',
         `<div><strong>${escapeHtml(m.name||'')}</strong><br><span style="font-size:10px;color:var(--dim)">${escapeHtml(m.description||'')}</span></div>
+        <div class="meta">${mbadges.join(' ')}</div>`));
+    });
+    (rec.cloud_models||[]).forEach(m=>{
+      const mbadges=[badge('Cloud','p')];
+      if(m.active)mbadges.push(badge('Aktiv','g'));
+      rc.appendChild(el('div','pat',
+        `<div><strong>${escapeHtml(m.name||m.id||'')}</strong><br><span style="font-size:10px;color:var(--dim)">${escapeHtml(m.description||'Cloud fallback Modell')}</span></div>
         <div class="meta">${mbadges.join(' ')}</div>`));
     });
   }else{rc.innerHTML='<div class="empty">Keine Empfehlungen verfuegbar</div>'}
@@ -1782,10 +2459,10 @@ async function loadScenes(){
 async function saveZoneScene(zoneId,zoneName,entityIds){
   const name=prompt('Szenen-Name (optional):','');
   try{
-    const r=await fetch(API+'/api/v1/scenes/create',{
+    const r=await fetch(API+'/api/v1/scenes/create',withAuth({
       method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({zone_id:zoneId,zone_name:zoneName,name:name||undefined,entity_ids:entityIds})
-    });
+    }));
     const d=await r.json();
     if(d.success){
       addHistory('Szene gespeichert: '+(d.scene?.name||zoneId));
@@ -1796,7 +2473,10 @@ async function saveZoneScene(zoneId,zoneName,entityIds){
 
 async function applyScene(sceneId){
   try{
-    const r=await fetch(API+'/api/v1/scenes/'+sceneId+'/apply',{method:'POST',headers:{'Content-Type':'application/json'}});
+    const r=await fetch(
+      API+'/api/v1/scenes/'+sceneId+'/apply',
+      withAuth({method:'POST',headers:{'Content-Type':'application/json'}})
+    );
     const d=await r.json();
     if(d.success){
       addHistory('Szene angewendet: '+(d.scene?.name||sceneId));
@@ -1808,7 +2488,7 @@ async function applyScene(sceneId){
 async function deleteScene(sceneId){
   if(!confirm('Szene wirklich löschen?'))return;
   try{
-    const r=await fetch(API+'/api/v1/scenes/'+sceneId,{method:'DELETE'});
+    const r=await fetch(API+'/api/v1/scenes/'+sceneId,withAuth({method:'DELETE'}));
     const d=await r.json();
     if(d.success){addHistory('Szene gelöscht');loadScenes()}
     else{addHistory('Lösch-Fehler: '+(d.error||'unbekannt'))}
@@ -1821,10 +2501,10 @@ async function deleteScene(sceneId){
 async function toggleHomeKit(zoneId,zoneName,entityIds){
   const action=confirm(`Zone "${zoneName}" zu HomeKit hinzufügen?\n\n${entityIds.length} Entitäten werden exponiert.\nAbbrechen = HomeKit für Zone deaktivieren.`);
   try{
-    const r=await fetch(API+'/api/v1/homekit/toggle',{
+    const r=await fetch(API+'/api/v1/homekit/toggle',withAuth({
       method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({zone_id:zoneId,zone_name:zoneName,entity_ids:entityIds,enabled:action})
-    });
+    }));
     const d=await r.json();
     if(d.success){
       const msg=action?`HomeKit aktiviert: ${zoneName} (${d.entities_exposed} Entitäten)`:`HomeKit deaktiviert: ${zoneName}`;

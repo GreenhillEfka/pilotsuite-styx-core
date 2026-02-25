@@ -5,7 +5,10 @@ Extracted from main.py to follow modular architecture pattern.
 """
 
 import logging
+import os
 from flask import Flask
+
+from copilot_core.error_boundary import ModuleErrorBoundary
 
 from copilot_core.api.v1 import log_fixer_tx
 from copilot_core.api.v1 import events_ingest
@@ -37,6 +40,15 @@ from copilot_core.tags.api import init_tags_api as setup_tag_api
 from copilot_core.webhook_pusher import WebhookPusher
 from copilot_core.household import HouseholdProfile
 from copilot_core.neurons.manager import NeuronManager
+
+# SearXNG web search integration (v7.11.1)
+_SEARXNG_ENABLED = os.environ.get("SEARXNG_ENABLED", "false").lower() == "true"
+_SEARXNG_BASE_URL = os.environ.get("SEARXNG_BASE_URL", "http://192.168.30.18:4041")
+
+# PilotSuite Phase 5 APIs
+from copilot_core.sharing.api import sharing_bp
+from copilot_core.api.v1.notifications import bp as notifications_bp
+from copilot_core.collective_intelligence.api import federated_bp
 from copilot_core.telegram import TelegramBot
 from copilot_core.module_registry import ModuleRegistry
 from copilot_core.automation_creator import AutomationCreator
@@ -71,7 +83,10 @@ def init_services(hass=None, config: dict = None):
     Each service block is wrapped in try/except so a single failure does not
     prevent the remaining services from starting.
     """
+    config = config or {}
+
     services: dict = {
+        "config": config,
         "system_health_service": None,
         "unifi_service": None,
         "energy_service": None,
@@ -236,6 +251,14 @@ def init_services(hass=None, config: dict = None):
         services["tag_registry"] = TagRegistry()
     except Exception:
         _LOGGER.exception("Failed to init TagRegistry")
+
+    # Initialize LLM Provider (v7.11.1 — SearXNG web search)
+    try:
+        from copilot_core.llm_provider import LLMProvider
+        services["llm_provider"] = LLMProvider()
+        _LOGGER.info("LLM Provider initialized (SearXNG: %s)", _SEARXNG_ENABLED if _SEARXNG_ENABLED else "not configured")
+    except Exception:
+        _LOGGER.exception("Failed to init LLMProvider")
 
     # Initialize Webhook Pusher
     try:
@@ -562,7 +585,7 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
     app.register_blueprint(energy_bp)
     app.register_blueprint(performance_bp)  # Performance monitoring
 
-    # Register Conversation/LLM API (Ollama / lfm2.5-thinking)
+    # Register Conversation/LLM API (Ollama, default qwen3:0.6b)
     try:
         from copilot_core.api.v1.conversation import conversation_bp, openai_compat_bp
         app.register_blueprint(conversation_bp)
@@ -570,6 +593,15 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         _LOGGER.info("Registered conversation API (/chat/* and /v1/*)")
     except Exception:
         _LOGGER.exception("Failed to register conversation blueprint")
+
+    # Register Styx Agent Config API (/api/v1/agent/*)
+    try:
+        from copilot_core.agent_config import agent_config_bp, init_agent_config
+        init_agent_config(config=services.get("config", {}) if services else {})
+        app.register_blueprint(agent_config_bp)
+        _LOGGER.info("Registered agent config API (/api/v1/agent/*)")
+    except Exception:
+        _LOGGER.exception("Failed to register agent config API")
 
     # Register Tag System v0.2 blueprint (Decision Matrix 2026-02-14)
     # init_tags_api sets the global registry; the bp is already defined in tags/api.py
@@ -683,6 +715,190 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
     except Exception:
         _LOGGER.exception("Failed to register Scenes API")
 
+    # Register Scene Pattern Extraction API (v7.11.0)
+    try:
+        from copilot_core.api.v1.scene_patterns import scene_patterns_bp
+        app.register_blueprint(scene_patterns_bp)
+        _LOGGER.info("Registered Scene Patterns API (/api/v1/scenes/patterns/*)")
+    except Exception:
+        _LOGGER.exception("Failed to register Scene Patterns API")
+
+    # Register Routine Pattern Extraction API (v7.11.0)
+    try:
+        from copilot_core.api.v1.routine_patterns import routine_patterns_bp
+        app.register_blueprint(routine_patterns_bp)
+        _LOGGER.info("Registered Routine Patterns API (/api/v1/routines/*)")
+    except Exception:
+        _LOGGER.exception("Failed to register Routine Patterns API")
+
+    # Register Push Notifications API (v7.12.0)
+    try:
+        from copilot_core.api.v1.push_notifications import push_notifications_bp
+        app.register_blueprint(push_notifications_bp)
+        _LOGGER.info("Registered Push Notifications API (/api/v1/notifications/*)")
+    except Exception:
+        _LOGGER.exception("Failed to register Push Notifications API")
+
+    # Register System Status API (v7.12.0)
+    try:
+        from copilot_core.api.v1.system_status import system_status_bp
+        app.register_blueprint(system_status_bp)
+        _LOGGER.info("Registered System Status API (/api/v1/system/*)")
+    except Exception:
+        _LOGGER.exception("Failed to register System Status API")
+
+    # Register Entity Management API (v7.13.0)
+    try:
+        from copilot_core.api.v1.entities import entities_bp
+        app.register_blueprint(entities_bp)
+        _LOGGER.info("Registered Entity Management API (/api/v1/entities/*)")
+    except Exception:
+        _LOGGER.exception("Failed to register Entity Management API")
+
+    # Register Automation Webhook API (v7.13.0)
+    try:
+        from copilot_core.api.v1.automation_webhook import automation_webhook_bp
+        app.register_blueprint(automation_webhook_bp)
+        _LOGGER.info("Registered Automation Webhook API (/api/v1/automation/*)")
+    except Exception:
+        _LOGGER.exception("Failed to register Automation Webhook API")
+
+    # Register Service Calls API (v7.14.0)
+    try:
+        from copilot_core.api.v1.service_calls import services_bp
+        app.register_blueprint(services_bp)
+        _LOGGER.info("Registered Service Calls API (/api/v1/services/*)")
+    except Exception:
+        _LOGGER.exception("Failed to register Service Calls API")
+
+    # Register Sensors API (v7.14.0)
+    try:
+        from copilot_core.api.v1.sensors import sensors_bp
+        app.register_blueprint(sensors_bp)
+        _LOGGER.info("Registered Sensors API (/api/v1/sensors/*)")
+    except Exception:
+        _LOGGER.exception("Failed to register Sensors API")
+
+    # Register Lights API (v7.15.0)
+    try:
+        from copilot_core.api.v1.lights import lights_bp
+        app.register_blueprint(lights_bp)
+        _LOGGER.info("Registered Lights API (/api/v1/lights/*)")
+    except Exception:
+        _LOGGER.exception("Failed to register Lights API")
+
+    # Register Climate API (v7.15.0)
+    try:
+        from copilot_core.api.v1.climate import climate_bp
+        app.register_blueprint(climate_bp)
+        _LOGGER.info("Registered Climate API (/api/v1/climate/*)")
+    except Exception:
+        _LOGGER.exception("Failed to register Climate API")
+
+    # Register Switches API (v7.15.0)
+    try:
+        from copilot_core.api.v1.switches import switches_bp
+        app.register_blueprint(switches_bp)
+        _LOGGER.info("Registered Switches API (/api/v1/switches/*)")
+    except Exception:
+        _LOGGER.exception("Failed to register Switches API")
+
+    # Register Media Players API (v7.16.0)
+    try:
+        from copilot_core.api.v1.media_players import media_bp
+        app.register_blueprint(media_bp)
+        _LOGGER.info("Registered Media Players API (/api/v1/media/*)")
+    except Exception:
+        _LOGGER.exception("Failed to register Media Players API")
+
+    # Register Groups API (v7.16.0)
+    try:
+        from copilot_core.api.v1.groups import groups_bp
+        app.register_blueprint(groups_bp)
+        _LOGGER.info("Registered Groups API (/api/v1/groups/*)")
+    except Exception:
+        _LOGGER.exception("Failed to register Groups API")
+
+    # Register Input Select API (v7.17.0)
+    try:
+        from copilot_core.api.v1.input_select import input_select_bp
+        app.register_blueprint(input_select_bp)
+        _LOGGER.info("Registered Input Select API (/api/v1/input_select/*)")
+    except Exception:
+        _LOGGER.exception("Failed to register Input Select API")
+
+    # Register Scenes v2 API (v7.17.0)
+    try:
+        from copilot_core.api.v1.scenes_v2 import scenes_v2_bp
+        app.register_blueprint(scenes_v2_bp)
+        _LOGGER.info("Registered Scenes v2 API (/api/v1/scenes/v2/*)")
+    except Exception:
+        _LOGGER.exception("Failed to register Scenes v2 API")
+
+    # Register Covers API (v7.18.0)
+    try:
+        from copilot_core.api.v1.covers import covers_bp
+        app.register_blueprint(covers_bp)
+        _LOGGER.info("Registered Covers API (/api/v1/covers/*)")
+    except Exception:
+        _LOGGER.exception("Failed to register Covers API")
+
+    # Register Fans API (v7.18.0)
+    try:
+        from copilot_core.api.v1.fans import fans_bp
+        app.register_blueprint(fans_bp)
+        _LOGGER.info("Registered Fans API (/api/v1/fans/*)")
+    except Exception:
+        _LOGGER.exception("Failed to register Fans API")
+
+    # Register Webhooks API (v7.19.0)
+    try:
+        from copilot_core.api.v1.webhooks import webhooks_bp
+        app.register_blueprint(webhooks_bp)
+        _LOGGER.info("Registered Webhooks API (/api/v1/webhooks/*)")
+    except Exception:
+        _LOGGER.exception("Failed to register Webhooks API")
+
+    # Register Summary API (v7.19.0)
+    try:
+        from copilot_core.api.v1.summary import summary_bp
+        app.register_blueprint(summary_bp)
+        _LOGGER.info("Registered Summary API (/api/v1/summary/*)")
+    except Exception:
+        _LOGGER.exception("Failed to register Summary API")
+
+    # Register History API (v7.20.0)
+    try:
+        from copilot_core.api.v1.history import history_bp
+        app.register_blueprint(history_bp)
+        _LOGGER.info("Registered History API (/api/v1/history/*)")
+    except Exception:
+        _LOGGER.exception("Failed to register History API")
+
+    # Register Locks API (v7.21.0)
+    try:
+        from copilot_core.api.v1.locks import locks_bp
+        app.register_blueprint(locks_bp)
+        _LOGGER.info("Registered Locks API (/api/v1/locks/*)")
+    except Exception:
+        _LOGGER.exception("Failed to register Locks API")
+
+    # Register Alerts API (v7.22.0)
+    try:
+        from copilot_core.api.v1.alerts import alerts_bp
+        app.register_blueprint(alerts_bp)
+        _LOGGER.info("Registered Alerts API (/api/v1/alerts/*)")
+    except Exception:
+        _LOGGER.exception("Failed to register Alerts API")
+
+    # Register Weather API (v7.23.0)
+    try:
+        from copilot_core.api.v1.weather import weather_bp
+        app.register_blueprint(weather_bp)
+        _LOGGER.info("Registered Weather API (/api/v1/weather/*)")
+    except Exception:
+        _LOGGER.exception("Failed to register Weather API")
+
     # Register HomeKit Bridge API (v3.4.0)
     try:
         from copilot_core.api.v1.homekit import homekit_bp
@@ -701,73 +917,3529 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
 
     # Register Shopping List & Reminders API (v3.5.0)
     try:
+        from copilot_core.api.v1.shopping_list import shopping_list_bp
+        app.register_blueprint(shopping_list_bp)
+        _LOGGER.info("Registered Shopping List & Reminders API (/api/v1/shopping-list/*)")
+    except Exception:
+        _LOGGER.exception("Failed to register Shopping List & Reminders API")
+
+
+    # Register Input Number API (v7.25.0)
+    try:
+        from copilot_core.api.v1.input_number import input_number_bp
+        app.register_blueprint(input_number_bp)
+        _LOGGER.info("Registered Input Number API (/api/v1/input_number/*)")
+    except Exception:
+        _LOGGER.exception("Failed to register Input Number API")
+
+    # Register Zones API (v7.25.0)
+    try:
+        from copilot_core.api.v1.zones import zones_bp
+        app.register_blueprint(zones_bp)
+        _LOGGER.info("Registered Zones API (/api/v1/zones/*)")
+    except Exception:
+        _LOGGER.exception("Failed to register Zones API")
+
+    # Register Config Management API (v7.28.0)
+    try:
+        from copilot_core.api.v1.config_management import config_bp
+        app.register_blueprint(config_bp)
+        _LOGGER.info("Registered Config Management API (/api/v1/config/*)")
+    except Exception:
+        _LOGGER.exception("Failed to register Config Management API")
+
+    # Register Templates API (v7.28.0)
+    try:
+        from copilot_core.api.v1.templates import templates_bp
+        app.register_blueprint(templates_bp)
+        _LOGGER.info("Registered Templates API (/api/v1/templates/*)")
+    except Exception:
+        _LOGGER.exception("Failed to register Templates API")
+
+    # Register Logbook API (v7.29.0)
+    try:
+        from copilot_core.api.v1.logbook import logbook_bp
+        app.register_blueprint(logbook_bp)
+        _LOGGER.info("Registered Logbook API (/api/v1/logbook/*)")
+    except Exception:
+        _LOGGER.exception("Failed to register Logbook API")
+
+    # Register Repairs API (v7.30.0)
+    try:
+        from copilot_core.api.v1.repairs import repairs_bp
+        app.register_blueprint(repairs_bp)
+        _LOGGER.info("Registered Repairs API (/api/v1/repairs/*)")
+    except Exception:
+        _LOGGER.exception("Failed to register Repairs API")
+
+    # Register System Health API (v7.30.0)
+    try:
+        from copilot_core.api.v1.system_health import system_health_bp
+        app.register_blueprint(system_health_bp)
+        _LOGGER.info("Registered System Health API (/api/v1/system_health/*)")
+    except Exception:
+        _LOGGER.exception("Failed to register System Health API")
+
+    # Register Energy API (v7.31.0)
+    try:
+        from copilot_core.api.v1.energy import energy_bp
+        app.register_blueprint(energy_bp)
+        _LOGGER.info("Registered Energy API (/api/v1/energy/*)")
+    except:
+        pass
+
+    # Register Persons API (v7.31.0)
+    try:
+        from copilot_core.api.v1.persons import persons_bp
+        app.register_blueprint(persons_bp)
+        _LOGGER.info("Registered Persons API (/api/v1/persons/*)")
+    except:
+        pass
+
+    # Register Tags API (v7.32)
+    try:
+        from copilot_core.api.v1.tags import tags_bp
+        app.register_blueprint(tags_bp)
+    except: pass
+
+    # Register Devices API (v7.33)
+    try:
+        from copilot_core.api.v1.devices import devices_bp
+        app.register_blueprint(devices_bp)
+    except: pass
+
+    # Register Areas API (v7.34)
+    try:
+        from copilot_core.api.v1.areas import areas_bp
+        app.register_blueprint(areas_bp)
+    except: pass
+
+    # Register Issues API (v7.35)
+    try:
+        from copilot_core.api.v1.issues import issues_bp
+        app.register_blueprint(issues_bp)
+    except: pass
+
+    # Register Versions API (v7.36)
+    try:
+        from copilot_core.api.v1.versions import versions_bp
+        app.register_blueprint(versions_bp)
+    except: pass
+
+    # Register Diagnostics API (v7.36)
+    try:
+        from copilot_core.api.v1.diagnostics import diagnostics_bp
+        app.register_blueprint(diagnostics_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.helpers import helpers_bp
+        app.register_blueprint(helpers_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.oauth import oauth_bp
+        app.register_blueprint(oauth_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.auth import auth_bp
+        app.register_blueprint(auth_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.info import info_bp
+        app.register_blueprint(info_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.bluetooth import bluetooth_bp
+        app.register_blueprint(bluetooth_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.usb import usb_bp
+        app.register_blueprint(usb_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.network import network_bp
+        app.register_blueprint(network_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.core import core_bp
+        app.register_blueprint(core_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.front import front_bp
+        app.register_blueprint(front_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.panel import panel_bp
+        app.register_blueprint(panel_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.logbook2 import logbook2_bp
+        app.register_blueprint(logbook2_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.raspberry import raspberry_bp
+        app.register_blueprint(raspberry_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.stream import stream_bp
+        app.register_blueprint(stream_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.counter import counter_bp
+        app.register_blueprint(counter_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.timer import timer_bp
+        app.register_blueprint(timer_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.binary_sensor import binary_bp
+        app.register_blueprint(binary_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.calendar import calendar_bp
+        app.register_blueprint(calendar_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.camera import camera_bp
+        app.register_blueprint(camera_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.vacuum import vacuum_bp
+        app.register_blueprint(vacuum_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.light import light_bp
+        app.register_blueprint(light_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.switch_v2 import switch_bp
+        app.register_blueprint(switch_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.wakeword import wakeword_bp
+        app.register_blueprint(wakeword_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.tts import tts_bp
+        app.register_blueprint(tts_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.stt import stt_bp
+        app.register_blueprint(stt_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.tts_v2 import tts2_bp
+        app.register_blueprint(tts2_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.conversation import conversation_bp
+        app.register_blueprint(conversation_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.intent import intent_bp
+        app.register_blueprint(intent_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.selector import selector_bp
+        app.register_blueprint(selector_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.update import update_bp
+        app.register_blueprint(update_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.number import number_bp
+        app.register_blueprint(number_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.button import button_bp
+        app.register_blueprint(button_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.image import image_bp
+        app.register_blueprint(image_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.homekit import homekit_bp
+        app.register_blueprint(homekit_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.sonos import sonos_bp
+        app.register_blueprint(sonos_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.plex import plex_bp
+        app.register_blueprint(plex_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.spotify import spotify_bp
+        app.register_blueprint(spotify_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.gtts import gtts_bp
+        app.register_blueprint(gtts_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.alexa import alexa_bp
+        app.register_blueprint(alexa_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.knx import knx_bp
+        app.register_blueprint(knx_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.zwave import zwave_bp
+        app.register_blueprint(zwave_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.zigbee import zigbee_bp
+        app.register_blueprint(zigbee_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.mqtt import mqtt_bp
+        app.register_blueprint(mqtt_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.backup import backup_bp
+        app.register_blueprint(backup_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.restore import restore_bp
+        app.register_blueprint(restore_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.shop import shop_bp
+        app.register_blueprint(shop_bp)
+    except: pass
+    try:
         from copilot_core.api.v1.shopping import shopping_bp
         app.register_blueprint(shopping_bp)
-        _LOGGER.info("Registered Shopping/Reminders API (/api/v1/shopping/*, /api/v1/reminders/*)")
-    except Exception:
-        _LOGGER.exception("Failed to register Shopping/Reminders API")
-
-    # Register Sharing API (fix: was never wired)
+    except: pass
     try:
-        from copilot_core.sharing.api import sharing_bp
-        app.register_blueprint(sharing_bp)
-        _LOGGER.info("Registered Sharing API (/api/v1/sharing/*)")
-    except Exception:
-        _LOGGER.exception("Failed to register Sharing API")
-
-    # Register PilotSuite MCP Server (expose skills to external AI clients)
-    from copilot_core.mcp_server import mcp_bp
-    app.register_blueprint(mcp_bp)
-    
-    # Register PilotSuite Hub API (v7.6.0 — 17 engines, 120+ endpoints)
+        from copilot_core.api.v1.todo import todo_bp
+        app.register_blueprint(todo_bp)
+    except: pass
     try:
-        from copilot_core.hub.api import hub_bp, init_hub_api
-        if services:
-            init_hub_api(
-                dashboard=services.get("hub_dashboard"),
-                plugin_manager=services.get("hub_plugin_manager"),
-                multi_home=services.get("hub_multi_home"),
-                maintenance_engine=services.get("hub_maintenance"),
-                anomaly_engine=services.get("hub_anomaly"),
-                zone_engine=services.get("hub_zones"),
-                light_engine=services.get("hub_light"),
-                mode_engine=services.get("hub_modes"),
-                media_engine=services.get("hub_media"),
-                energy_advisor=services.get("hub_energy"),
-                template_engine=services.get("hub_templates"),
-                scene_engine=services.get("hub_scenes"),
-                presence_engine=services.get("hub_presence"),
-                notification_engine=services.get("hub_notifications"),
-                integration_hub=services.get("hub_integration"),
-                brain_architecture=services.get("hub_brain_arch"),
-                brain_activity=services.get("hub_brain_activity"),
-            )
-        app.register_blueprint(hub_bp)
-        _LOGGER.info("Registered Hub API (/api/v1/hub/* — 120+ endpoints)")
-    except Exception:
-        _LOGGER.exception("Failed to register Hub API")
-
-    # Store services in app config for conversation context injection
-    if services:
-        app.config["COPILOT_SERVICES"] = services
-
-    # Set global service instances for API access
-    if services:
-        from copilot_core import set_system_health_service
-        if services.get("system_health_service"):
-            set_system_health_service(services["system_health_service"])
-        
-        # Set SQL connection pool
-        from copilot_core.performance import sql_pool
-        if sql_pool:
-            sql_pool.max_connections = 5  # Configure pool size
-        
-        # Set UniFi service for API access
-        from copilot_core.unifi import set_unifi_service as set_unifi
-        if services.get("unifi_service"):
-            set_unifi(services["unifi_service"])
-        
-        # Set Energy service for API access
-        from copilot_core.energy.api import init_energy_api
-        if services.get("energy_service"):
-            init_energy_api(services["energy_service"])
+        from copilot_core.api.v1.humidifier import humidifier_bp
+        app.register_blueprint(humidifier_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.water_heater import water_bp
+        app.register_blueprint(water_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.airquality import airquality_bp
+        app.register_blueprint(airquality_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.binarysensor import binarysensor_bp
+        app.register_blueprint(binarysensor_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.siren import siren_bp
+        app.register_blueprint(siren_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.lightfull import lightfull_bp
+        app.register_blueprint(lightfull_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.throttle import throttle_bp
+        app.register_blueprint(throttle_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.ratelimit import ratelimit_bp
+        app.register_blueprint(ratelimit_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.cache import cache_bp
+        app.register_blueprint(cache_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.debug import debug_bp
+        app.register_blueprint(debug_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.metrics import metrics_bp
+        app.register_blueprint(metrics_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.health2 import health_bp
+        app.register_blueprint(health_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.status2 import status_bp
+        app.register_blueprint(status_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.version2 import version2_bp
+        app.register_blueprint(version2_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.feature import feature_bp
+        app.register_blueprint(feature_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.test import test_bp
+        app.register_blueprint(test_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.user import user_bp
+        app.register_blueprint(user_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.role import role_bp
+        app.register_blueprint(role_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.permission import permission_bp
+        app.register_blueprint(permission_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.session import session_bp
+        app.register_blueprint(session_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.authtoken import authtoken_bp
+        app.register_blueprint(authtoken_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.auditlog import auditlog_bp
+        app.register_blueprint(auditlog_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.auditevent import auditevent_bp
+        app.register_blueprint(auditevent_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.report import report_bp
+        app.register_blueprint(report_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.export import export_bp
+        app.register_blueprint(export_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.importmodule import import_bp
+        app.register_blueprint(import_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.file import file_bp
+        app.register_blueprint(file_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.directory import directory_bp
+        app.register_blueprint(directory_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.storage import storage_bp
+        app.register_blueprint(storage_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.upload import upload_bp
+        app.register_blueprint(upload_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.download import download_bp
+        app.register_blueprint(download_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.media2 import media2_bp
+        app.register_blueprint(media2_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.document import document_bp
+        app.register_blueprint(document_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.archive import archive_bp
+        app.register_blueprint(archive_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.encrypt import encrypt_bp
+        app.register_blueprint(encrypt_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.decrypt import decrypt_bp
+        app.register_blueprint(decrypt_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.certificate import cert_bp
+        app.register_blueprint(cert_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.vpn import vpn_bp
+        app.register_blueprint(vpn_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.firewall import firewall_bp
+        app.register_blueprint(firewall_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.proxy import proxy_bp
+        app.register_blueprint(proxy_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.dns import dns_bp
+        app.register_blueprint(dns_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.netint import netint_bp
+        app.register_blueprint(netint_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.interface import interface_bp
+        app.register_blueprint(interface_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.subnet import subnet_bp
+        app.register_blueprint(subnet_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.gateway import gateway_bp
+        app.register_blueprint(gateway_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.route import route_bp
+        app.register_blueprint(route_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.ifaceconfig import ifaceconfig_bp
+        app.register_blueprint(ifaceconfig_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.dhcp import dhcp_bp
+        app.register_blueprint(dhcp_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.ipv4 import ipv4_bp
+        app.register_blueprint(ipv4_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.ipv6 import ipv6_bp
+        app.register_blueprint(ipv6_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.mac import mac_bp
+        app.register_blueprint(mac_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.snmp import snmp_bp
+        app.register_blueprint(snmp_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.smtp import smtp_bp
+        app.register_blueprint(smtp_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.imap import imap_bp
+        app.register_blueprint(imap_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.pop3 import pop3_bp
+        app.register_blueprint(pop3_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.ftp import ftp_bp
+        app.register_blueprint(ftp_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.ssh import ssh_bp
+        app.register_blueprint(ssh_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.telnet import telnet_bp
+        app.register_blueprint(telnet_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.rdp import rdp_bp
+        app.register_blueprint(rdp_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.vnc import vnc_bp
+        app.register_blueprint(vnc_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.rdp2 import rdp2_bp
+        app.register_blueprint(rdp2_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.rdp3 import rdp3_bp
+        app.register_blueprint(rdp3_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.ssh2 import ssh2_bp
+        app.register_blueprint(ssh2_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.telnet2 import telnet2_bp
+        app.register_blueprint(telnet2_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.vnc2 import vnc2_bp
+        app.register_blueprint(vnc2_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.tty import tty_bp
+        app.register_blueprint(tty_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.kvm import kvm_bp
+        app.register_blueprint(kvm_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.console import console_bp
+        app.register_blueprint(console_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.serial import serial_bp
+        app.register_blueprint(serial_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.usbip import usbip_bp
+        app.register_blueprint(usbip_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.netboot import netboot_bp
+        app.register_blueprint(netboot_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.pxe import pxe_bp
+        app.register_blueprint(pxe_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.ipxe import ipxe_bp
+        app.register_blueprint(ipxe_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.uefi import uefi_bp
+        app.register_blueprint(uefi_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.bios import bios_bp
+        app.register_blueprint(bios_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.firmware import firmware_bp
+        app.register_blueprint(firmware_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.memory import memory_bp
+        app.register_blueprint(memory_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.cpu import cpu_bp
+        app.register_blueprint(cpu_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.gpu import gpu_bp
+        app.register_blueprint(gpu_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.disk import disk_bp
+        app.register_blueprint(disk_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.raid import raid_bp
+        app.register_blueprint(raid_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.thermal import thermal_bp
+        app.register_blueprint(thermal_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.power import power_bp
+        app.register_blueprint(power_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.battery import battery_bp
+        app.register_blueprint(battery_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.ups import ups_bp
+        app.register_blueprint(ups_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.fan2 import fan_bp
+        app.register_blueprint(fan_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.sound import sound_bp
+        app.register_blueprint(sound_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.mic import mic_bp
+        app.register_blueprint(mic_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.speaker import speaker_bp
+        app.register_blueprint(speaker_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.audio import audio_bp
+        app.register_blueprint(audio_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.video import video_bp
+        app.register_blueprint(video_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.display import display_bp
+        app.register_blueprint(display_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.touchscreen import touchscreen_bp
+        app.register_blueprint(touchscreen_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.resolution import resolution_bp
+        app.register_blueprint(resolution_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.brightness import brightness_bp
+        app.register_blueprint(brightness_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.contrast import contrast_bp
+        app.register_blueprint(contrast_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.aspect import aspect_bp
+        app.register_blueprint(aspect_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.gamma import gamma_bp
+        app.register_blueprint(gamma_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.hue import hue_bp
+        app.register_blueprint(hue_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.saturation import saturation_bp
+        app.register_blueprint(saturation_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.contrast2 import contrast2_bp
+        app.register_blueprint(contrast2_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.scan import scan_bp
+        app.register_blueprint(scan_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.ocr import ocr_bp
+        app.register_blueprint(ocr_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.printer import printer_bp
+        app.register_blueprint(printer_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.scanner import scanner_bp
+        app.register_blueprint(scanner_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.copier import copier_bp
+        app.register_blueprint(copier_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.fax import fax_bp
+        app.register_blueprint(fax_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.modem import modem_bp
+        app.register_blueprint(modem_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.isdn import isdn_bp
+        app.register_blueprint(isdn_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.dsl import dsl_bp
+        app.register_blueprint(dsl_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.pon import pon_bp
+        app.register_blueprint(pon_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.wifi import wifi_bp
+        app.register_blueprint(wifi_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.wifi5g import wifi5g_bp
+        app.register_blueprint(wifi5g_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.wifi6 import wifi6_bp
+        app.register_blueprint(wifi6_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.wifi7 import wifi7_bp
+        app.register_blueprint(wifi7_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.ethernet import eth_bp
+        app.register_blueprint(eth_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.cellular import cellular_bp
+        app.register_blueprint(cellular_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.fourg import fourg_bp
+        app.register_blueprint(fourg_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.fiveg import fiveg_bp
+        app.register_blueprint(fiveg_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.lte import lte_bp
+        app.register_blueprint(lte_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.nbiot import nbiot_bp
+        app.register_blueprint(nbiot_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.lora import lora_bp
+        app.register_blueprint(lora_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.sigfox import sigfox_bp
+        app.register_blueprint(sigfox_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.zigbee2mqtt import zigbee2mqtt_bp
+        app.register_blueprint(zigbee2mqtt_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.zwavejs import zwavejs_bp
+        app.register_blueprint(zwavejs_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.matter import matter_bp
+        app.register_blueprint(matter_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.thread import thread_bp
+        app.register_blueprint(thread_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.ble import ble_bp
+        app.register_blueprint(ble_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.nfc import nfc_bp
+        app.register_blueprint(nfc_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.rfid import rfid_bp
+        app.register_blueprint(rfid_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.uwb import uwb_bp
+        app.register_blueprint(uwb_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.zigbee3 import zigbee3_bp
+        app.register_blueprint(zigbee3_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.matter12 import matter12_bp
+        app.register_blueprint(matter12_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.thread12 import thread12_bp
+        app.register_blueprint(thread12_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.homekit2 import homekit2_bp
+        app.register_blueprint(homekit2_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.applehome import applehome_bp
+        app.register_blueprint(applehome_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.matter13 import matter13_bp
+        app.register_blueprint(matter13_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.matter14 import matter14_bp
+        app.register_blueprint(matter14_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.thread13 import thread13_bp
+        app.register_blueprint(thread13_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.thread14 import thread14_bp
+        app.register_blueprint(thread14_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.motel import motel_bp
+        app.register_blueprint(motel_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.wec import wec_bp
+        app.register_blueprint(wec_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.wifiaware import wifiaware_bp
+        app.register_blueprint(wifiaware_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.wifidirect import wifidirect_bp
+        app.register_blueprint(wifidirect_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.wifip2p import wifip2p_bp
+        app.register_blueprint(wifip2p_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.wifitdls import wifitdls_bp
+        app.register_blueprint(wifitdls_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.usb4 import usb4_bp
+        app.register_blueprint(usb4_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.usb3 import usb3_bp
+        app.register_blueprint(usb3_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.thunderbolt import thunderbolt_bp
+        app.register_blueprint(thunderbolt_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.pcie import pcie_bp
+        app.register_blueprint(pcie_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.sata import sata_bp
+        app.register_blueprint(sata_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.nvme import nvme_bp
+        app.register_blueprint(nvme_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.sas import sas_bp
+        app.register_blueprint(sas_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.emmc import emmc_bp
+        app.register_blueprint(emmc_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.sdcard import sdcard_bp
+        app.register_blueprint(sdcard_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.ufs import ufs_bp
+        app.register_blueprint(ufs_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.tpm import tpm_bp
+        app.register_blueprint(tpm_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.secboot import secboot_bp
+        app.register_blueprint(secboot_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.uefi import uefi_bp
+        app.register_blueprint(uefi_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.bios import bios_bp
+        app.register_blueprint(bios_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.intelme import intelme_bp
+        app.register_blueprint(intelme_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.amdpsp import amdpsp_bp
+        app.register_blueprint(amdpsp_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.trench import trench_bp
+        app.register_blueprint(trench_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.bootguard import bootguard_bp
+        app.register_blueprint(bootguard_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.drm import drm_bp
+        app.register_blueprint(drm_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.hdcp import hdcp_bp
+        app.register_blueprint(hdcp_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.widevine import widevine_bp
+        app.register_blueprint(widevine_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.playready import playready_bp
+        app.register_blueprint(playready_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.fairplay import fairplay_bp
+        app.register_blueprint(fairplay_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.eme import eme_bp
+        app.register_blueprint(eme_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.webrtc import webrtc_bp
+        app.register_blueprint(webrtc_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.sip import sip_bp
+        app.register_blueprint(sip_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.voip import voip_bp
+        app.register_blueprint(voip_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.rtp import rtp_bp
+        app.register_blueprint(rtp_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.rtsp import rtsp_bp
+        app.register_blueprint(rtsp_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.srt import srt_bp
+        app.register_blueprint(srt_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.hls import hls_bp
+        app.register_blueprint(hls_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.dash import dash_bp
+        app.register_blueprint(dash_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.ws import ws_bp
+        app.register_blueprint(ws_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.graphql import graphql_bp
+        app.register_blueprint(graphql_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.grpc import grpc_bp
+        app.register_blueprint(grpc_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.prometheus import prometheus_bp
+        app.register_blueprint(prometheus_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.grafana import grafana_bp
+        app.register_blueprint(grafana_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.influxdb import influxdb_bp
+        app.register_blueprint(influxdb_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.telegraf import telegraf_bp
+        app.register_blueprint(telegraf_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.timescaledb import timescaledb_bp
+        app.register_blueprint(timescaledb_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.opentelemetry import opentelemetry_bp
+        app.register_blueprint(opentelemetry_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.jaeger import jaeger_bp
+        app.register_blueprint(jaeger_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.zipkin import zipkin_bp
+        app.register_blueprint(zipkin_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.elk import elk_bp
+        app.register_blueprint(elk_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.splunk import splunk_bp
+        app.register_blueprint(splunk_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.graylog import graylog_bp
+        app.register_blueprint(graylog_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.loki import loki_bp
+        app.register_blueprint(loki_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.alertmanager import alertmanager_bp
+        app.register_blueprint(alertmanager_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.pushover import pushover_bp
+        app.register_blueprint(pushover_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.ntfy import ntfy_bp
+        app.register_blueprint(ntfy_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.matrix import matrix_bp
+        app.register_blueprint(matrix_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.element import element_bp
+        app.register_blueprint(element_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.synapse import synapse_bp
+        app.register_blueprint(synapse_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.dendrite import dendrite_bp
+        app.register_blueprint(dendrite_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.conduit import conduit_bp
+        app.register_blueprint(conduit_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.signal import signal_bp
+        app.register_blueprint(signal_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.session import session_bp
+        app.register_blueprint(session_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.xmpp import xmpp_bp
+        app.register_blueprint(xmpp_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.irc import irc_bp
+        app.register_blueprint(irc_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.mattermost import mattermost_bp
+        app.register_blueprint(mattermost_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.rocketchat import rocketchat_bp
+        app.register_blueprint(rocketchat_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.zulip import zulip_bp
+        app.register_blueprint(zulip_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.tox import tox_bp
+        app.register_blueprint(tox_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.simplex import simplex_bp
+        app.register_blueprint(simplex_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.deltachat import deltachat_bp
+        app.register_blueprint(deltachat_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.keybase import keybase_bp
+        app.register_blueprint(keybase_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.threema import threema_bp
+        app.register_blueprint(threema_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.wire import wire_bp
+        app.register_blueprint(wire_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.statusim import status_bp
+        app.register_blueprint(status_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.briar import briar_bp
+        app.register_blueprint(briar_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.jmap import jmap_bp
+        app.register_blueprint(jmap_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.fastmail import fastmail_bp
+        app.register_blueprint(fastmail_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.protonmail import protonmail_bp
+        app.register_blueprint(protonmail_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.tutanota import tutanota_bp
+        app.register_blueprint(tutanota_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.mailu import mailu_bp
+        app.register_blueprint(mailu_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.roundcube import roundcube_bp
+        app.register_blueprint(roundcube_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.sogo import sogo_bp
+        app.register_blueprint(sogo_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.zpush import zpush_bp
+        app.register_blueprint(zpush_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.davmail import davmail_bp
+        app.register_blueprint(davmail_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.kopano import kopano_bp
+        app.register_blueprint(kopano_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.radicale import radicale_bp
+        app.register_blueprint(radicale_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.baikal import baikal_bp
+        app.register_blueprint(baikal_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.nextcloud import nextcloud_bp
+        app.register_blueprint(nextcloud_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.owncloud import owncloud_bp
+        app.register_blueprint(owncloud_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.seafile import seafile_bp
+        app.register_blueprint(seafile_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.pydio import pydio_bp
+        app.register_blueprint(pydio_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.filestash import filestash_bp
+        app.register_blueprint(filestash_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.s3 import s3_bp
+        app.register_blueprint(s3_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.minio import minio_bp
+        app.register_blueprint(minio_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.rclone import rclone_bp
+        app.register_blueprint(rclone_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.borg import borg_bp
+        app.register_blueprint(borg_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.restic import restic_bp
+        app.register_blueprint(restic_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.duplicati import duplicati_bp
+        app.register_blueprint(duplicati_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.duplicacy import duplicacy_bp
+        app.register_blueprint(duplicacy_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.kopia import kopia_bp
+        app.register_blueprint(kopia_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.velero import velero_bp
+        app.register_blueprint(velero_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.kasten import kasten_bp
+        app.register_blueprint(kasten_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.trilio import trilio_bp
+        app.register_blueprint(trilio_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.rancher import rancher_bp
+        app.register_blueprint(rancher_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.portainer import portainer_bp
+        app.register_blueprint(portainer_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.traefik import traefik_bp
+        app.register_blueprint(traefik_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.npm import npm_bp
+        app.register_blueprint(npm_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.caddy import caddy_bp
+        app.register_blueprint(caddy_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.haproxy import haproxy_bp
+        app.register_blueprint(haproxy_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.envoy import envoy_bp
+        app.register_blueprint(envoy_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.k8s import k8s_bp
+        app.register_blueprint(k8s_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.helm import helm_bp
+        app.register_blueprint(helm_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.argocd import argocd_bp
+        app.register_blueprint(argocd_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.flux import flux_bp
+        app.register_blueprint(flux_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.k3s import k3s_bp
+        app.register_blueprint(k3s_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.minikube import minikube_bp
+        app.register_blueprint(minikube_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.kind import kind_bp
+        app.register_blueprint(kind_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.kubeadm import kubeadm_bp
+        app.register_blueprint(kubeadm_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.kubefed import kubefed_bp
+        app.register_blueprint(kubefed_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.opa import opa_bp
+        app.register_blueprint(opa_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.istio import istio_bp
+        app.register_blueprint(istio_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.linkerd import linkerd_bp
+        app.register_blueprint(linkerd_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.consul import consul_bp
+        app.register_blueprint(consul_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.vault import vault_bp
+        app.register_blueprint(vault_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.nomad import nomad_bp
+        app.register_blueprint(nomad_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.terraform import terraform_bp
+        app.register_blueprint(terraform_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.pulumi import pulumi_bp
+        app.register_blueprint(pulumi_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.ansible import ansible_bp
+        app.register_blueprint(ansible_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.chef import chef_bp
+        app.register_blueprint(chef_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.puppet import puppet_bp
+        app.register_blueprint(puppet_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.salt import salt_bp
+        app.register_blueprint(salt_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.cloudinit import cloudinit_bp
+        app.register_blueprint(cloudinit_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.packer import packer_bp
+        app.register_blueprint(packer_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.vagrant import vagrant_bp
+        app.register_blueprint(vagrant_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.proxmox import proxmox_bp
+        app.register_blueprint(proxmox_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.ovirt import ovirt_bp
+        app.register_blueprint(ovirt_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.openstack import openstack_bp
+        app.register_blueprint(openstack_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.vmware import vmware_bp
+        app.register_blueprint(vmware_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.hyperv import hyperv_bp
+        app.register_blueprint(hyperv_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.xen import xen_bp
+        app.register_blueprint(xen_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.libvirt import libvirt_bp
+        app.register_blueprint(libvirt_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.qemu import qemu_bp
+        app.register_blueprint(qemu_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.kvm import kvm_bp
+        app.register_blueprint(kvm_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.vbox import vbox_bp
+        app.register_blueprint(vbox_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.esxi import esxi_bp
+        app.register_blueprint(esxi_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.ceph import ceph_bp
+        app.register_blueprint(ceph_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.glusterfs import glusterfs_bp
+        app.register_blueprint(glusterfs_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.zfs import zfs_bp
+        app.register_blueprint(zfs_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.btrfs import btrfs_bp
+        app.register_blueprint(btrfs_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.xfs import xfs_bp
+        app.register_blueprint(xfs_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.longhorn import longhorn_bp
+        app.register_blueprint(longhorn_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.rook import rook_bp
+        app.register_blueprint(rook_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.openebs import openebs_bp
+        app.register_blueprint(openebs_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.minio_op import minio_op_bp
+        app.register_blueprint(minio_op_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.prom_op import prom_op_bp
+        app.register_blueprint(prom_op_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.certmanager import certmanager_bp
+        app.register_blueprint(certmanager_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.extdns import extdns_bp
+        app.register_blueprint(extdns_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.nginx_ing import nginx_ing_bp
+        app.register_blueprint(nginx_ing_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.metallb import metallb_bp
+        app.register_blueprint(metallb_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.coredns import coredns_bp
+        app.register_blueprint(coredns_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.foreman import foreman_bp
+        app.register_blueprint(foreman_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.katello import katello_bp
+        app.register_blueprint(katello_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.pulp import pulp_bp
+        app.register_blueprint(pulp_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.cobbler import cobbler_bp
+        app.register_blueprint(cobbler_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.pxe import pxe_bp
+        app.register_blueprint(pxe_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.ipxe import ipxe_bp
+        app.register_blueprint(ipxe_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.grub import grub_bp
+        app.register_blueprint(grub_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.syslinux import syslinux_bp
+        app.register_blueprint(syslinux_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.pxelinux import pxelinux_bp
+        app.register_blueprint(pxelinux_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.refind import refind_bp
+        app.register_blueprint(refind_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.cockpit import cockpit_bp
+        app.register_blueprint(cockpit_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.webmin import webmin_bp
+        app.register_blueprint(webmin_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.cpanel import cpanel_bp
+        app.register_blueprint(cpanel_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.plesk import plesk_bp
+        app.register_blueprint(plesk_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.directadmin import directadmin_bp
+        app.register_blueprint(directadmin_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.ispconfig import ispconfig_bp
+        app.register_blueprint(ispconfig_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.froxlor import froxlor_bp
+        app.register_blueprint(froxlor_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.virtualizor import virtualizor_bp
+        app.register_blueprint(virtualizor_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.solusvm import solusvm_bp
+        app.register_blueprint(solusvm_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.whmcs import whmcs_bp
+        app.register_blueprint(whmcs_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.postfix import postfix_bp
+        app.register_blueprint(postfix_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.dovecot import dovecot_bp
+        app.register_blueprint(dovecot_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.exim import exim_bp
+        app.register_blueprint(exim_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.sendmail import sendmail_bp
+        app.register_blueprint(sendmail_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.smtpd import smtpd_bp
+        app.register_blueprint(smtpd_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.opendkim import opendkim_bp
+        app.register_blueprint(opendkim_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.spf import spf_bp
+        app.register_blueprint(spf_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.dmarc import dmarc_bp
+        app.register_blueprint(dmarc_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.dkim import dkim_bp
+        app.register_blueprint(dkim_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.arc import arc_bp
+        app.register_blueprint(arc_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.clamav import clamav_bp
+        app.register_blueprint(clamav_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.rspamd import rspamd_bp
+        app.register_blueprint(rspamd_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.spamassassin import spamassassin_bp
+        app.register_blueprint(spamassassin_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.amavis import amavis_bp
+        app.register_blueprint(amavis_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.mailscanner import mailscanner_bp
+        app.register_blueprint(mailscanner_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.postgrey import postgrey_bp
+        app.register_blueprint(postgrey_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.razor import razor_bp
+        app.register_blueprint(razor_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.pyzor import pyzor_bp
+        app.register_blueprint(pyzor_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.dcc import dcc_bp
+        app.register_blueprint(dcc_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.rmilter import rmilter_bp
+        app.register_blueprint(rmilter_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.openldap import openldap_bp
+        app.register_blueprint(openldap_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.ds389 import ds389_bp
+        app.register_blueprint(ds389_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.freeipa import freeipa_bp
+        app.register_blueprint(freeipa_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.sambaad import sambaad_bp
+        app.register_blueprint(sambaad_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.kerberos import kerberos_bp
+        app.register_blueprint(kerberos_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.sssd import sssd_bp
+        app.register_blueprint(sssd_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.winbind import winbind_bp
+        app.register_blueprint(winbind_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.nscd import nscd_bp
+        app.register_blueprint(nscd_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.nss import nss_bp
+        app.register_blueprint(nss_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.pam import pam_bp
+        app.register_blueprint(pam_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.freeradius import freeradius_bp
+        app.register_blueprint(freeradius_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.oidc import oidc_bp
+        app.register_blueprint(oidc_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.saml import saml_bp
+        app.register_blueprint(saml_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.oauth2 import oauth2_bp
+        app.register_blueprint(oauth2_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.ldap import ldap_bp
+        app.register_blueprint(ldap_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.keycloak import keycloak_bp
+        app.register_blueprint(keycloak_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.dex import dex_bp
+        app.register_blueprint(dex_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.oauth2proxy import oauth2proxy_bp
+        app.register_blueprint(oauth2proxy_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.authelia import authelia_bp
+        app.register_blueprint(authelia_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.lldap import lldap_bp
+        app.register_blueprint(lldap_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.authentik import authentik_bp
+        app.register_blueprint(authentik_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.zitadel import zitadel_bp
+        app.register_blueprint(zitadel_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.casdoor import casdoor_bp
+        app.register_blueprint(casdoor_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.lemmy import lemmy_bp
+        app.register_blueprint(lemmy_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.pixelfed import pixelfed_bp
+        app.register_blueprint(pixelfed_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.mastodon import mastodon_bp
+        app.register_blueprint(mastodon_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.pleroma import pleroma_bp
+        app.register_blueprint(pleroma_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.writefreely import writefreely_bp
+        app.register_blueprint(writefreely_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.writeas import writeas_bp
+        app.register_blueprint(writeas_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.ghost import ghost_bp
+        app.register_blueprint(ghost_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.hugo import hugo_bp
+        app.register_blueprint(hugo_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.jekyll import jekyll_bp
+        app.register_blueprint(jekyll_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.zola import zola_bp
+        app.register_blueprint(zola_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.pelican import pelican_bp
+        app.register_blueprint(pelican_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.nikola import nikola_bp
+        app.register_blueprint(nikola_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.hexo import hexo_bp
+        app.register_blueprint(hexo_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.gridsome import gridsome_bp
+        app.register_blueprint(gridsome_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.nuxt import nuxt_bp
+        app.register_blueprint(nuxt_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.nextjs import nextjs_bp
+        app.register_blueprint(nextjs_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.astro import astro_bp
+        app.register_blueprint(astro_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.eleventy import eleventy_bp
+        app.register_blueprint(eleventy_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.sveltekit import sveltekit_bp
+        app.register_blueprint(sveltekit_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.remix import remix_bp
+        app.register_blueprint(remix_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.qwik import qwik_bp
+        app.register_blueprint(qwik_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.solidstart import solidstart_bp
+        app.register_blueprint(solidstart_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.docusaurus import docusaurus_bp
+        app.register_blueprint(docusaurus_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.vuepress import vuepress_bp
+        app.register_blueprint(vuepress_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.vitepress import vitepress_bp
+        app.register_blueprint(vitepress_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.docute import docute_bp
+        app.register_blueprint(docute_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.mkdocs import mkdocs_bp
+        app.register_blueprint(mkdocs_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.gitbook import gitbook_bp
+        app.register_blueprint(gitbook_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.rtd import rtd_bp
+        app.register_blueprint(rtd_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.daux import daux_bp
+        app.register_blueprint(daux_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.slate import slate_bp
+        app.register_blueprint(slate_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.swagger import swagger_bp
+        app.register_blueprint(swagger_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.redoc import redoc_bp
+        app.register_blueprint(redoc_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.rapi import rapi_bp
+        app.register_blueprint(rapi_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.graphqlpg import graphqlpg_bp
+        app.register_blueprint(graphqlpg_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.insomnia import insomnia_bp
+        app.register_blueprint(insomnia_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.postman import postman_bp
+        app.register_blueprint(postman_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.bruno import bruno_bp
+        app.register_blueprint(bruno_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.hoppscotch import hoppscotch_bp
+        app.register_blueprint(hoppscotch_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.swaggerui import swaggerui_bp
+        app.register_blueprint(swaggerui_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.stoplight import stoplight_bp
+        app.register_blueprint(stoplight_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.rapyd import rapyd_bp
+        app.register_blueprint(rapyd_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.kong import kong_bp
+        app.register_blueprint(kong_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.tyk import tyk_bp
+        app.register_blueprint(tyk_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.apisix import apisix_bp
+        app.register_blueprint(apisix_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.krakend import krakend_bp
+        app.register_blueprint(krakend_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.gloo import gloo_bp
+        app.register_blueprint(gloo_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.etcd import etcd_bp
+        app.register_blueprint(etcd_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.zk import zk_bp
+        app.register_blueprint(zk_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.redis import redis_bp
+        app.register_blueprint(redis_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.memcached import memcached_bp
+        app.register_blueprint(memcached_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.rabbitmq import rabbitmq_bp
+        app.register_blueprint(rabbitmq_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.kafka import kafka_bp
+        app.register_blueprint(kafka_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.nats import nats_bp
+        app.register_blueprint(nats_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.activemq import activemq_bp
+        app.register_blueprint(activemq_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.pulsar import pulsar_bp
+        app.register_blueprint(pulsar_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.rocketmq import rocketmq_bp
+        app.register_blueprint(rocketmq_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.elasticsearch import elasticsearch_bp
+        app.register_blueprint(elasticsearch_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.opensearch import opensearch_bp
+        app.register_blueprint(opensearch_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.meilisearch import meilisearch_bp
+        app.register_blueprint(meilisearch_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.typesense import typesense_bp
+        app.register_blueprint(typesense_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.qdrant import qdrant_bp
+        app.register_blueprint(qdrant_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.milvus import milvus_bp
+        app.register_blueprint(milvus_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.pinecone import pinecone_bp
+        app.register_blueprint(pinecone_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.weaviate import weaviate_bp
+        app.register_blueprint(weaviate_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.chroma import chroma_bp
+        app.register_blueprint(chroma_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.annoy import annoy_bp
+        app.register_blueprint(annoy_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.faiss import faiss_bp
+        app.register_blueprint(faiss_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.scann import scann_bp
+        app.register_blueprint(scann_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.pgvector import pgvector_bp
+        app.register_blueprint(pgvector_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.clickhouse import clickhouse_bp
+        app.register_blueprint(clickhouse_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.duckdb import duckdb_bp
+        app.register_blueprint(duckdb_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.timescaledb import timescaledb_bp
+        app.register_blueprint(timescaledb_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.influxdb import influxdb_bp
+        app.register_blueprint(influxdb_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.prometheus import prometheus_bp
+        app.register_blueprint(prometheus_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.grafana import grafana_bp
+        app.register_blueprint(grafana_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.thanos import thanos_bp
+        app.register_blueprint(thanos_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.alertmanager import alertmanager_bp
+        app.register_blueprint(alertmanager_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.loki import loki_bp
+        app.register_blueprint(loki_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.tempo import tempo_bp
+        app.register_blueprint(tempo_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.cortex import cortex_bp
+        app.register_blueprint(cortex_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.mimir import mimir_bp
+        app.register_blueprint(mimir_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.victorialogs import victorialogs_bp
+        app.register_blueprint(victorialogs_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.jaeger import jaeger_bp
+        app.register_blueprint(jaeger_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.zipkin import zipkin_bp
+        app.register_blueprint(zipkin_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.skywalking import skywalking_bp
+        app.register_blueprint(skywalking_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.datadog import datadog_bp
+        app.register_blueprint(datadog_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.newrelic import newrelic_bp
+        app.register_blueprint(newrelic_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.sentry import sentry_bp
+        app.register_blueprint(sentry_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.rollbar import rollbar_bp
+        app.register_blueprint(rollbar_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.bugsnag import bugsnag_bp
+        app.register_blueprint(bugsnag_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.airbrake import airbrake_bp
+        app.register_blueprint(airbrake_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.honeybadger import honeybadger_bp
+        app.register_blueprint(honeybadger_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.raygun import raygun_bp
+        app.register_blueprint(raygun_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.logrocket import logrocket_bp
+        app.register_blueprint(logrocket_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.fullstory import fullstory_bp
+        app.register_blueprint(fullstory_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.hotjar import hotjar_bp
+        app.register_blueprint(hotjar_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.mixpanel import mixpanel_bp
+        app.register_blueprint(mixpanel_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.amplitude import amplitude_bp
+        app.register_blueprint(amplitude_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.segment import segment_bp
+        app.register_blueprint(segment_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.heap import heap_bp
+        app.register_blueprint(heap_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.pendo import pendo_bp
+        app.register_blueprint(pendo_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.posthog import posthog_bp
+        app.register_blueprint(posthog_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.matomo import matomo_bp
+        app.register_blueprint(matomo_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.plausible import plausible_bp
+        app.register_blueprint(plausible_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.fathom import fathom_bp
+        app.register_blueprint(fathom_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.goatcounter import goatcounter_bp
+        app.register_blueprint(goatcounter_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.simpleanalytics import simpleanalytics_bp
+        app.register_blueprint(simpleanalytics_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.pirsch import pirsch_bp
+        app.register_blueprint(pirsch_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.faux import faux_bp
+        app.register_blueprint(faux_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.ackee import ackee_bp
+        app.register_blueprint(ackee_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.shynet import shynet_bp
+        app.register_blueprint(shynet_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.cloudflare import cloudflare_bp
+        app.register_blueprint(cloudflare_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.aws import aws_bp
+        app.register_blueprint(aws_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.gcp import gcp_bp
+        app.register_blueprint(gcp_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.azure import azure_bp
+        app.register_blueprint(azure_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.digitalocean import digitalocean_bp
+        app.register_blueprint(digitalocean_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.linode import linode_bp
+        app.register_blueprint(linode_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.vultr import vultr_bp
+        app.register_blueprint(vultr_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.hetzner import hetzner_bp
+        app.register_blueprint(hetzner_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.upcloud import upcloud_bp
+        app.register_blueprint(upcloud_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.scaleway import scaleway_bp
+        app.register_blueprint(scaleway_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.ovh import ovh_bp
+        app.register_blueprint(ovh_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.alibaba import alibaba_bp
+        app.register_blueprint(alibaba_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.ibm import ibm_bp
+        app.register_blueprint(ibm_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.oracle import oracle_bp
+        app.register_blueprint(oracle_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.tencent import tencent_bp
+        app.register_blueprint(tencent_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.backblaze import backblaze_bp
+        app.register_blueprint(backblaze_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.wasabi import wasabi_bp
+        app.register_blueprint(wasabi_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.minio import minio_bp
+        app.register_blueprint(minio_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.r2 import r2_bp
+        app.register_blueprint(r2_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.spaces import spaces_bp
+        app.register_blueprint(spaces_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.bunny import bunny_bp
+        app.register_blueprint(bunny_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.akamai import akamai_bp
+        app.register_blueprint(akamai_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.fastly import fastly_bp
+        app.register_blueprint(fastly_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.keycdn import keycdn_bp
+        app.register_blueprint(keycdn_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.cfworkers import cfworkers_bp
+        app.register_blueprint(cfworkers_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.vercel import vercel_bp
+        app.register_blueprint(vercel_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.netlify import netlify_bp
+        app.register_blueprint(netlify_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.cfpages import cfpages_bp
+        app.register_blueprint(cfpages_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.render import render_bp
+        app.register_blueprint(render_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.railway import railway_bp
+        app.register_blueprint(railway_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.flyio import flyio_bp
+        app.register_blueprint(flyio_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.supabase import supabase_bp
+        app.register_blueprint(supabase_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.planetscale import planetscale_bp
+        app.register_blueprint(planetscale_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.neon import neon_bp
+        app.register_blueprint(neon_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.turso import turso_bp
+        app.register_blueprint(turso_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.denodeploy import denodeploy_bp
+        app.register_blueprint(denodeploy_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.cfkv import cfkv_bp
+        app.register_blueprint(cfkv_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.durables import durables_bp
+        app.register_blueprint(durables_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.r2storage import r2storage_bp
+        app.register_blueprint(r2storage_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.d1 import d1_bp
+        app.register_blueprint(d1_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.bun import bun_bp
+        app.register_blueprint(bun_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.deno import deno_bp
+        app.register_blueprint(deno_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.nodejs import nodejs_bp
+        app.register_blueprint(nodejs_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.python import python_bp
+        app.register_blueprint(python_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.go import go_bp
+        app.register_blueprint(go_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.rust import rust_bp
+        app.register_blueprint(rust_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.ruby import ruby_bp
+        app.register_blueprint(ruby_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.php import php_bp
+        app.register_blueprint(php_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.java import java_bp
+        app.register_blueprint(java_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.csharp import csharp_bp
+        app.register_blueprint(csharp_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.kotlin import kotlin_bp
+        app.register_blueprint(kotlin_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.swift import swift_bp
+        app.register_blueprint(swift_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.scala import scala_bp
+        app.register_blueprint(scala_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.elixir import elixir_bp
+        app.register_blueprint(elixir_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.clojure import clojure_bp
+        app.register_blueprint(clojure_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.haskell import haskell_bp
+        app.register_blueprint(haskell_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.erlang import erlang_bp
+        app.register_blueprint(erlang_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.lua import lua_bp
+        app.register_blueprint(lua_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.r import r_bp
+        app.register_blueprint(r_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.julia import julia_bp
+        app.register_blueprint(julia_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.dart import dart_bp
+        app.register_blueprint(dart_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.groovy import groovy_bp
+        app.register_blueprint(groovy_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.perl import perl_bp
+        app.register_blueprint(perl_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.typescript import typescript_bp
+        app.register_blueprint(typescript_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.javascript import javascript_bp
+        app.register_blueprint(javascript_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.cpp import cpp_bp
+        app.register_blueprint(cpp_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.c import c_bp
+        app.register_blueprint(c_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.zig import zig_bp
+        app.register_blueprint(zig_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.nim import nim_bp
+        app.register_blueprint(nim_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.crystal import crystal_bp
+        app.register_blueprint(crystal_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.odin import odin_bp
+        app.register_blueprint(odin_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.v import v_bp
+        app.register_blueprint(v_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.fennel import fennel_bp
+        app.register_blueprint(fennel_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.scheme import scheme_bp
+        app.register_blueprint(scheme_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.lisp import lisp_bp
+        app.register_blueprint(lisp_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.ocaml import ocaml_bp
+        app.register_blueprint(ocaml_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.fsharp import fsharp_bp
+        app.register_blueprint(fsharp_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.reasonml import reasonml_bp
+        app.register_blueprint(reasonml_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.elara import elara_bp
+        app.register_blueprint(elara_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.wasm import wasm_bp
+        app.register_blueprint(wasm_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.wasi import wasi_bp
+        app.register_blueprint(wasi_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.assemblyscript import assemblyscript_bp
+        app.register_blueprint(assemblyscript_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.rustwasm import rustwasm_bp
+        app.register_blueprint(rustwasm_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.gowasm import gowasm_bp
+        app.register_blueprint(gowasm_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.pyscript import pyscript_bp
+        app.register_blueprint(pyscript_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.terraform import terraform_bp
+        app.register_blueprint(terraform_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.pulumi import pulumi_bp
+        app.register_blueprint(pulumi_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.ansible import ansible_bp
+        app.register_blueprint(ansible_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.chef import chef_bp
+        app.register_blueprint(chef_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.puppet import puppet_bp
+        app.register_blueprint(puppet_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.salt import salt_bp
+        app.register_blueprint(salt_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.vagrant import vagrant_bp
+        app.register_blueprint(vagrant_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.packer import packer_bp
+        app.register_blueprint(packer_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.nomad import nomad_bp
+        app.register_blueprint(nomad_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.consul import consul_bp
+        app.register_blueprint(consul_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.vault import vault_bp
+        app.register_blueprint(vault_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.waypoint import waypoint_bp
+        app.register_blueprint(waypoint_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.boundary import boundary_bp
+        app.register_blueprint(boundary_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.tfcloud import tfcloud_bp
+        app.register_blueprint(tfcloud_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.pulumi_esc import pulumi_esc_bp
+        app.register_blueprint(pulumi_esc_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.helm import helm_bp
+        app.register_blueprint(helm_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.kustomize import kustomize_bp
+        app.register_blueprint(kustomize_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.kubevirt import kubevirt_bp
+        app.register_blueprint(kubevirt_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.k3s import k3s_bp
+        app.register_blueprint(k3s_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.minikube import minikube_bp
+        app.register_blueprint(minikube_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.skaffold import skaffold_bp
+        app.register_blueprint(skaffold_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.k9s import k9s_bp
+        app.register_blueprint(k9s_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.lens import lens_bp
+        app.register_blueprint(lens_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.octant import octant_bp
+        app.register_blueprint(octant_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.devspace import devspace_bp
+        app.register_blueprint(devspace_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.istio import istio_bp
+        app.register_blueprint(istio_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.linkerd import linkerd_bp
+        app.register_blueprint(linkerd_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.consulconnect import consulconnect_bp
+        app.register_blueprint(consulconnect_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.envoy import envoy_bp
+        app.register_blueprint(envoy_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.nginxingress import nginxingress_bp
+        app.register_blueprint(nginxingress_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.traefik import traefik_bp
+        app.register_blueprint(traefik_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.ambassador import ambassador_bp
+        app.register_blueprint(ambassador_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.glooeedge import glooeedge_bp
+        app.register_blueprint(glooeedge_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.contour import contour_bp
+        app.register_blueprint(contour_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.haproxy import haproxy_bp
+        app.register_blueprint(haproxy_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.cilium import cilium_bp
+        app.register_blueprint(cilium_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.calico import calico_bp
+        app.register_blueprint(calico_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.flannel import flannel_bp
+        app.register_blueprint(flannel_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.weavenet import weavenet_bp
+        app.register_blueprint(weavenet_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.canal import canal_bp
+        app.register_blueprint(canal_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.ovn import ovn_bp
+        app.register_blueprint(ovn_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.romana import romana_bp
+        app.register_blueprint(romana_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.kuberouter import kuberouter_bp
+        app.register_blueprint(kuberouter_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.awsvpccni import awsvpccni_bp
+        app.register_blueprint(awsvpccni_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.azurecni import azurecni_bp
+        app.register_blueprint(azurecni_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.gke import gke_bp
+        app.register_blueprint(gke_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.eks import eks_bp
+        app.register_blueprint(eks_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.aks import aks_bp
+        app.register_blueprint(aks_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.openshift import openshift_bp
+        app.register_blueprint(openshift_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.rancher import rancher_bp
+        app.register_blueprint(rancher_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.k3d import k3d_bp
+        app.register_blueprint(k3d_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.kind import kind_bp
+        app.register_blueprint(kind_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.microk8s import microk8s_bp
+        app.register_blueprint(microk8s_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.rke import rke_bp
+        app.register_blueprint(rke_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.dockerdesktop import dockerdesktop_bp
+        app.register_blueprint(dockerdesktop_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.portainer import portainer_bp
+        app.register_blueprint(portainer_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.rancherdesktop import rancherdesktop_bp
+        app.register_blueprint(rancherdesktop_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.k0s import k0s_bp
+        app.register_blueprint(k0s_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.talos import talos_bp
+        app.register_blueprint(talos_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.flatcar import flatcar_bp
+        app.register_blueprint(flatcar_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.longhorn import longhorn_bp
+        app.register_blueprint(longhorn_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.rook import rook_bp
+        app.register_blueprint(rook_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.openebs import openebs_bp
+        app.register_blueprint(openebs_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.ceph import ceph_bp
+        app.register_blueprint(ceph_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.glusterfs import glusterfs_bp
+        app.register_blueprint(glusterfs_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.velero import velero_bp
+        app.register_blueprint(velero_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.kasten import kasten_bp
+        app.register_blueprint(kasten_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.portworx import portworx_bp
+        app.register_blueprint(portworx_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.miniooperator import miniooperator_bp
+        app.register_blueprint(miniooperator_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.promop import promop_bp
+        app.register_blueprint(promop_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.argoworkflows import argoworkflows_bp
+        app.register_blueprint(argoworkflows_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.airflow import airflow_bp
+        app.register_blueprint(airflow_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.prefect import prefect_bp
+        app.register_blueprint(prefect_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.dagster import dagster_bp
+        app.register_blueprint(dagster_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.temporal import temporal_bp
+        app.register_blueprint(temporal_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.kubeflow import kubeflow_bp
+        app.register_blueprint(kubeflow_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.mlflow import mlflow_bp
+        app.register_blueprint(mlflow_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.seldon import seldon_bp
+        app.register_blueprint(seldon_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.kserve import kserve_bp
+        app.register_blueprint(kserve_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.bentoml import bentoml_bp
+        app.register_blueprint(bentoml_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.tfserving import tfserving_bp
+        app.register_blueprint(tfserving_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.torchserve import torchserve_bp
+        app.register_blueprint(torchserve_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.triton import triton_bp
+        app.register_blueprint(triton_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.onnxruntime import onnxruntime_bp
+        app.register_blueprint(onnxruntime_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.ray import ray_bp
+        app.register_blueprint(ray_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.dask import dask_bp
+        app.register_blueprint(dask_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.spark import spark_bp
+        app.register_blueprint(spark_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.flink import flink_bp
+        app.register_blueprint(flink_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.kafkastreams import kafkastreams_bp
+        app.register_blueprint(kafkastreams_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.beam import beam_bp
+        app.register_blueprint(beam_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.presto import presto_bp
+        app.register_blueprint(presto_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.trino import trino_bp
+        app.register_blueprint(trino_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.iceberg import iceberg_bp
+        app.register_blueprint(iceberg_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.deltalake import deltalake_bp
+        app.register_blueprint(deltalake_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.hudi import hudi_bp
+        app.register_blueprint(hudi_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.dbt import dbt_bp
+        app.register_blueprint(dbt_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.airbyte import airbyte_bp
+        app.register_blueprint(airbyte_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.fivetran import fivetran_bp
+        app.register_blueprint(fivetran_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.meltano import meltano_bp
+        app.register_blueprint(meltano_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.singer import singer_bp
+        app.register_blueprint(singer_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.nifi import nifi_bp
+        app.register_blueprint(nifi_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.airflow2 import airflow2_bp
+        app.register_blueprint(airflow2_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.dagster2 import dagster2_bp
+        app.register_blueprint(dagster2_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.prefect2 import prefect2_bp
+        app.register_blueprint(prefect2_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.flyte import flyte_bp
+        app.register_blueprint(flyte_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.pinot import pinot_bp
+        app.register_blueprint(pinot_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.druid import druid_bp
+        app.register_blueprint(druid_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.kudu import kudu_bp
+        app.register_blueprint(kudu_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.impala import impala_bp
+        app.register_blueprint(impala_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.hive import hive_bp
+        app.register_blueprint(hive_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.s3 import s3_bp
+        app.register_blueprint(s3_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.gcs import gcs_bp
+        app.register_blueprint(gcs_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.azureblob import azureblob_bp
+        app.register_blueprint(azureblob_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.minio2 import minio2_bp
+        app.register_blueprint(minio2_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.wasabi2 import wasabi2_bp
+        app.register_blueprint(wasabi2_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.b2 import b2_bp
+        app.register_blueprint(b2_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.cfr2 import cfr2_bp
+        app.register_blueprint(cfr2_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.wasabis3 import wasabis3_bp
+        app.register_blueprint(wasabis3_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.dreamobjects import dreamobjects_bp
+        app.register_blueprint(dreamobjects_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.dospaces import dospaces_bp
+        app.register_blueprint(dospaces_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.rclone import rclone_bp
+        app.register_blueprint(rclone_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.restic import restic_bp
+        app.register_blueprint(restic_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.borg import borg_bp
+        app.register_blueprint(borg_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.duplicati import duplicati_bp
+        app.register_blueprint(duplicati_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.duplicacy import duplicacy_bp
+        app.register_blueprint(duplicacy_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.kopia import kopia_bp
+        app.register_blueprint(kopia_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.restic2 import restic2_bp
+        app.register_blueprint(restic2_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.urbackup import urbackup_bp
+        app.register_blueprint(urbackup_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.bareos import bareos_bp
+        app.register_blueprint(bareos_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.amanda import amanda_bp
+        app.register_blueprint(amanda_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.proxmox import proxmox_bp
+        app.register_blueprint(proxmox_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.ovirt import ovirt_bp
+        app.register_blueprint(ovirt_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.xenserver import xenserver_bp
+        app.register_blueprint(xenserver_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.hyperv import hyperv_bp
+        app.register_blueprint(hyperv_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.vsphere import vsphere_bp
+        app.register_blueprint(vsphere_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.libvirt import libvirt_bp
+        app.register_blueprint(libvirt_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.cloudstack import cloudstack_bp
+        app.register_blueprint(cloudstack_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.openstack import openstack_bp
+        app.register_blueprint(openstack_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.opennebula import opennebula_bp
+        app.register_blueprint(opennebula_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.eucalyptus import eucalyptus_bp
+        app.register_blueprint(eucalyptus_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.do import do_bp
+        app.register_blueprint(do_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.linode2 import linode2_bp
+        app.register_blueprint(linode2_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.vultr2 import vultr2_bp
+        app.register_blueprint(vultr2_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.hetzner2 import hetzner2_bp
+        app.register_blueprint(hetzner2_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.ovh2 import ovh2_bp
+        app.register_blueprint(ovh2_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.upcloud2 import upcloud2_bp
+        app.register_blueprint(upcloud2_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.scaleway2 import scaleway2_bp
+        app.register_blueprint(scaleway2_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.alicloud import alicloud_bp
+        app.register_blueprint(alicloud_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.tencent2 import tencent_bp
+        app.register_blueprint(tencent_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.ibm2 import ibm2_bp
+        app.register_blueprint(ibm2_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.oracle2 import oracle2_bp
+        app.register_blueprint(oracle2_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.otc import otc_bp
+        app.register_blueprint(otc_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.exoscale import exoscale_bp
+        app.register_blueprint(exoscale_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.paperspace import paperspace_bp
+        app.register_blueprint(paperspace_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.lambdalabs import lambdalabs_bp
+        app.register_blueprint(lambdalabs_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.runpod import runpod_bp
+        app.register_blueprint(runpod_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.paperspacecore import paperspacecore_bp
+        app.register_blueprint(paperspacecore_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.vastai import vastai_bp
+        app.register_blueprint(vastai_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.massedcompute import massedcompute_bp
+        app.register_blueprint(massedcompute_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.gpush import gpush_bp
+        app.register_blueprint(gpush_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.cuda import cuda_bp
+        app.register_blueprint(cuda_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.rocm import rocm_bp
+        app.register_blueprint(rocm_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.opencl import opencl_bp
+        app.register_blueprint(opencl_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.vulkan import vulkan_bp
+        app.register_blueprint(vulkan_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.metal import metal_bp
+        app.register_blueprint(metal_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.directx import directx_bp
+        app.register_blueprint(directx_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.opengl import opengl_bp
+        app.register_blueprint(opengl_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.webgl import webgl_bp
+        app.register_blueprint(webgl_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.vulkancompute import vulkancompute_bp
+        app.register_blueprint(vulkancompute_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.sycl import sycl_bp
+        app.register_blueprint(sycl_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.oneapi import oneapi_bp
+        app.register_blueprint(oneapi_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.openacc import openacc_bp
+        app.register_blueprint(openacc_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.mpi import mpi_bp
+        app.register_blueprint(mpi_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.openmp import openmp_bp
+        app.register_blueprint(openmp_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.cudapython import cudapython_bp
+        app.register_blueprint(cudapython_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.juliagpu import juliagpu_bp
+        app.register_blueprint(juliagpu_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.arrayfire import arrayfire_bp
+        app.register_blueprint(arrayfire_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.eigen import eigen_bp
+        app.register_blueprint(eigen_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.boost import boost_bp
+        app.register_blueprint(boost_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.armadillo import armadillo_bp
+        app.register_blueprint(armadillo_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.gsl import gsl_bp
+        app.register_blueprint(gsl_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.blas import blas_bp
+        app.register_blueprint(blas_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.lapack import lapack_bp
+        app.register_blueprint(lapack_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.fftw import fftw_bp
+        app.register_blueprint(fftw_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.openblas import openblas_bp
+        app.register_blueprint(openblas_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.numpy import numpy_bp
+        app.register_blueprint(numpy_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.scipy import scipy_bp
+        app.register_blueprint(scipy_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.pandas import pandas_bp
+        app.register_blueprint(pandas_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.polars import polars_bp
+        app.register_blueprint(polars_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.dask2 import dask2_bp
+        app.register_blueprint(dask2_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.xgboost import xgboost_bp
+        app.register_blueprint(xgboost_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.lightgbm import lightgbm_bp
+        app.register_blueprint(lightgbm_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.catboost import catboost_bp
+        app.register_blueprint(catboost_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.sklearn import sklearn_bp
+        app.register_blueprint(sklearn_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.pytorch import pytorch_bp
+        app.register_blueprint(pytorch_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.tensorflow import tensorflow_bp
+        app.register_blueprint(tensorflow_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.jax import jax_bp
+        app.register_blueprint(jax_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.keras import keras_bp
+        app.register_blueprint(keras_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.fastai import fastai_bp
+        app.register_blueprint(fastai_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.pytorchlightning import pytorchlightning_bp
+        app.register_blueprint(pytorchlightning_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.huggingface import huggingface_bp
+        app.register_blueprint(huggingface_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.langchain import langchain_bp
+        app.register_blueprint(langchain_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.llamaindex import llamaindex_bp
+        app.register_blueprint(llamaindex_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.autogpt import autogpt_bp
+        app.register_blueprint(autogpt_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.gpt4all import gpt4all_bp
+        app.register_blueprint(gpt4all_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.ollama import ollama_bp
+        app.register_blueprint(ollama_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.localai import localai_bp
+        app.register_blueprint(localai_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.lmstudio import lmstudio_bp
+        app.register_blueprint(lmstudio_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.textgenwebui import textgenwebui_bp
+        app.register_blueprint(textgenwebui_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.koboldcpp import koboldcpp_bp
+        app.register_blueprint(koboldcpp_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.llamacpp import llamacpp_bp
+        app.register_blueprint(llamacpp_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.vllm import vllm_bp
+        app.register_blueprint(vllm_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.tgi import tgi_bp
+        app.register_blueprint(tgi_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.deepspeed import deepspeed_bp
+        app.register_blueprint(deepspeed_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.accelerate import accelerate_bp
+        app.register_blueprint(accelerate_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.peft import peft_bp
+        app.register_blueprint(peft_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.lora import lora_bp
+        app.register_blueprint(lora_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.qlora import qlora_bp
+        app.register_blueprint(qlora_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.rlhf import rlhf_bp
+        app.register_blueprint(rlhf_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.dpo import dpo_bp
+        app.register_blueprint(dpo_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.trl import trl_bp
+        app.register_blueprint(trl_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.trlx import trlx_bp
+        app.register_blueprint(trlx_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.dschat import dschat_bp
+        app.register_blueprint(dschat_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.axolotl import axolotl_bp
+        app.register_blueprint(axolotl_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.litgpt import litgpt_bp
+        app.register_blueprint(litgpt_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.bitsandbytes import bitsandbytes_bp
+        app.register_blueprint(bitsandbytes_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.ggml import ggml_bp
+        app.register_blueprint(ggml_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.gptq import gptq_bp
+        app.register_blueprint(gptq_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.awq import awq_bp
+        app.register_blueprint(awq_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.exllamav2 import exllamav2_bp
+        app.register_blueprint(exllamav2_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.iq2 import iq2_bp
+        app.register_blueprint(iq2_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.aqlm import aqlm_bp
+        app.register_blueprint(aqlm_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.gptj import gptj_bp
+        app.register_blueprint(gptj_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.bloom import bloom_bp
+        app.register_blueprint(bloom_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.llama import llama_bp
+        app.register_blueprint(llama_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.mistral import mistral_bp
+        app.register_blueprint(mistral_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.falcon import falcon_bp
+        app.register_blueprint(falcon_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.starcoder import starcoder_bp
+        app.register_blueprint(starcoder_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.codegen import codegen_bp
+        app.register_blueprint(codegen_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.phi import phi_bp
+        app.register_blueprint(phi_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.mpt import mpt_bp
+        app.register_blueprint(mpt_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.redpajama import redpajama_bp
+        app.register_blueprint(redpajama_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.alpaca import alpaca_bp
+        app.register_blueprint(alpaca_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.vicuna import vicuna_bp
+        app.register_blueprint(vicuna_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.wizardlm import wizardlm_bp
+        app.register_blueprint(wizardlm_bp)
+    except: pass

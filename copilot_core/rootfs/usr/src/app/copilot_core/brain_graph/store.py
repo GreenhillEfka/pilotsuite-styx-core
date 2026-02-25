@@ -5,6 +5,8 @@ FIX: Added async support via ThreadPoolExecutor for non-blocking I/O.
 """
 
 import json
+import logging
+import os
 import sqlite3
 import threading
 import time
@@ -17,6 +19,7 @@ from .model import GraphNode, GraphEdge, NodeKind, EdgeType
 
 # Thread pool for async SQLite operations (avoids blocking Flask threads)
 _executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="brain_graph_")
+logger = logging.getLogger(__name__)
 
 
 class BrainGraphStore:
@@ -34,7 +37,7 @@ class BrainGraphStore:
         node_min_score: float = 0.1,
         edge_min_weight: float = 0.1
     ):
-        self.db_path = Path(db_path)
+        self.db_path = self._resolve_db_path(Path(db_path))
         self.max_nodes = max_nodes
         self.max_edges = max_edges
         self.node_min_score = node_min_score
@@ -44,11 +47,24 @@ class BrainGraphStore:
         # Serialize write operations to avoid SQLite "database is locked" errors
         self._write_lock = threading.Lock()
 
-        # Ensure parent directory exists
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
-
         # Initialize database
         self._init_db()
+
+    def _resolve_db_path(self, configured_path: Path) -> Path:
+        """Resolve a writable SQLite path with fallback outside add-on runtime."""
+        try:
+            configured_path.parent.mkdir(parents=True, exist_ok=True)
+            return configured_path
+        except OSError:
+            fallback_dir = Path(os.environ.get("COPILOT_BRAIN_GRAPH_DB_DIR", "/tmp"))
+            fallback_dir.mkdir(parents=True, exist_ok=True)
+            fallback_path = fallback_dir / configured_path.name
+            logger.warning(
+                "BrainGraphStore path %s is not writable, using fallback %s",
+                configured_path,
+                fallback_path,
+            )
+            return fallback_path
     
     def _connect(self) -> sqlite3.Connection:
         """Create a new SQLite connection with proper timeout and pragmas."""

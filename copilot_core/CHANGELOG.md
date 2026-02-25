@@ -3,6 +3,108 @@
 This file exists so Home Assistant can show an add-on changelog.
 For full history, see the repository-level `CHANGELOG.md`.
 
+## 7.8.8
+- LLM-Routing erweitert: Primary/Secondary Provider (`offline`/`cloud`) mit robustem Fallback.
+- Neue API-Endpunkte fuer Routing/Katalog:
+  - `GET /chat/models/catalog`
+  - `GET /chat/routing`
+  - `POST /chat/routing`
+- Dashboard Settings: getrennte Offline/Cloud-Modellauswahl + Routing-Steuerung.
+- Cloud-Defaults aktualisiert: `https://ollama.com/v1` + `gpt-oss:20b`.
+
+## 7.8.7
+- Dashboard ingress detection unterstützt jetzt beide HA-Routen
+  (`/api/hassio_ingress/...` und `/hassio/ingress/...`).
+- Styx-Chat im Dashboard kann jetzt das Modell direkt umschalten (persistente Auswahl).
+- Runtime-Versioning synchronisiert: Add-on-Version und `/usr/src/app/VERSION` sind wieder konsistent.
+
+## 7.8.6
+- Add-on-Info (`DOCS.md`) enthält jetzt eine exakte Produktions-Installationsanleitung
+  inklusive Lovelace-YAML, Cloud-Fallback-Setup und Smoke-Checks.
+- README verweist explizit auf den Add-on-Info-Screen als primäre Setup-Quelle.
+- Dashboard-Template entfernt statische interne UI-Versionsbeschriftung.
+
+## 7.8.5
+- Dashboard zeigt keine feste `v1.0.0` Platzhalter-Version mehr.
+- Versionsanzeige ist jetzt strikt runtime-basiert (aus `/chat/status`) oder `--`.
+- Klarstellung: `X-API-Version` ist die API-Schema-Version, nicht die Add-on-Release-Version.
+
+## 7.8.4
+- Styx Dashboard nutzt jetzt persistente Chat-History via `/api/v1/hub/brain/activity/chat`.
+- Neuer Chat-Clear-Button im Dashboard.
+- Neue Modul-Konfigurationsoberfläche im Module-Tab (Habitus Miner + Brain Activity Timeouts).
+- Dashboard-Health/Mood-Routing robuster für unterschiedliche API-Antwortformate.
+
+## 7.8.3
+- Dashboard erkennt HA-Ingress-Pfade jetzt korrekt und routed API-Calls nicht mehr ins HA-Root.
+- Modul-Toggles synchronisieren mit dem Backend (`/api/v1/modules/`) als Source-of-Truth.
+- Fehlgeschlagene Modul-Konfigurationen rollen den UI-Zustand automatisch zurück.
+- Settings zeigt neue `API Route` Diagnose (Ingress/Direct).
+
+## 7.8.2
+- **Onyx Bridge API**: neue Endpunkte unter `/api/v1/onyx/*` fuer produktive Agenten-Integration.
+- **Deterministische HA-Aktionen**: `POST /api/v1/onyx/ha/service-call` mit optionalem State-Readback.
+- **OpenAPI Actions aktualisiert**: `docs/integrations/onyx_styx_actions.openapi.yaml` erweitert (Onyx Bridge + Habitus-Zonen-Flow).
+- **Onyx Setup Guide**: konkrete Produktionsfelder fuer `192.168.30.18` in `docs/ONYX_INTEGRATION.md`.
+- **E2E Tooling**: `tools/onyx_styx_e2e.sh` fuer schnellen Live-Pipeline-Test.
+
+## 7.8.0
+- **Zero-Config Enhancement**: Verbesserte Auto-Discovery fuer Core-Endpoint
+- **Entity Auto-Discovery**: Media-Player Erkennung (Sonos, Apple TV, Smart TV)
+- **Zone Inference**: Automatische Zonen-Erkennung aus Entity-Namen und HA Areas
+- **Self-Heal**: Erweiterte automatische Wiederherstellung bei Ausfaellen
+- **Vision Update**: Zero-Config und Maximaler-User-Comfort als Ziel
+
+## 7.7.27
+- **Version Sync**: auf v7.7.27 angehoben (Matching mit HA Integration)
+- **aiohttp Session Leak Fix**: HA Integration nutzt jetzt async_get_clientsession() statt direkte ClientSession
+
+## 7.7.26
+- **Version Sync**: auf v7.7.26 angehoben (Matching mit HA Integration)
+- **Module Registry Hardening**: Runtime-Modulregistrierung jetzt robust fuer alle _MODULES-Eintraege
+- **ML Context Lifecycle**: MLContextModule jetzt kompatibel mit CopilotRuntime Lifecycle-Schema
+- **Dashboard Wiring**: Automatische Lovelace-Dashboard-Registrierung inkl. Habitus v2
+- **Device Dedup**: Legacy-Device Cleanup erweitert, verwaiste Devices werden entfernt
+- **Runtime Stability**: Unload-Rueckgaben normalisiert, OptionsFlow stabilisiert
+- **Connection Normalization**: Host/Token-Persistenz ueber Updates stabilisiert
+
+## 7.7.19
+- Habitus-Dashboard nutzt jetzt die korrekten Hub-Zonen-Endpunkte (`/api/v1/hub/zones*`) statt Mining-Config.
+- Zonen lassen sich wieder anlegen (inkl. Mehrfach-Raumauswahl im Dropdown).
+- Falls keine Räume vorhanden sind: optionaler Fallback über manuelle Entitätsliste (synthetischer Raum wird automatisch registriert).
+- Raumliste im Dashboard ist jetzt aktualisierbar (Reload-Button) und kann initial aus Entity-Assignment-Vorschlägen vorbefüllt werden.
+
+## 7.7.18
+- Dashboard nutzt jetzt automatisch den konfigurierten Auth-Token fuer alle API-Calls.
+- Chat/Suggestions/Szenen/HomeKit/Habitus/Module im Dashboard funktionieren damit auch bei aktivierter API-Authentifizierung (`auth_token` gesetzt).
+
+## 7.7.17
+- **Ollama Cloud URL Hardening**: `ollama.com` Eingaben werden robust auf `https://ollama.com/v1` normalisiert.
+- **Cloud Model Mapping**: unpassende OpenAI-Modelnamen (z. B. `gpt-4o-mini`) werden fuer Ollama Cloud automatisch auf `gpt-oss:20b` korrigiert.
+- **Regression-Tests**: neue Tests fuer URL-Normalisierung und Modell-Mapping.
+
+## 7.7.16
+- **LLM Guardrail**: cloud-typische Modellnamen im lokalen `OLLAMA_MODEL` werden automatisch auf `qwen3:0.6b` korrigiert.
+- **Status Diagnose**: neue Felder `ollama_model_configured` und `ollama_model_overridden` fuer einfacheres Troubleshooting.
+
+## 7.7.15
+- **Default LLM**: `qwen3:0.6b` ist jetzt der Standard fuer neue Installationen.
+- **Runtime Fallbacks**: Startup-Skripte, Conversation-API, Agent-Status und LLM-Provider verwenden konsistent `qwen3:0.6b` als Default.
+- **Docs Sync**: README/DOCS/API/Architektur auf die neue Modellstrategie aktualisiert.
+
+## 7.7.14
+- **Self-Heal API**: `POST /api/v1/agent/self-heal` hinzugefuegt (LLM config reload + best-effort model pull).
+- **Zero-Config Hardening**: Agent-Status liest jetzt korrekt auch `conversation_*` Flat-Optionen.
+- **LLM Routing**: Cloud-Modelnamen ohne Cloud-Fallback werden direkt auf lokales Modell gemappt (weniger 404-Noise).
+- **API Wiring**: Vector API `/api/v1/vector/*` explizit registriert.
+
+## 7.7.13
+- **Agent API**: `/api/v1/agent/*` Blueprint registriert (kein 404 mehr bei Agent-Status/Verify).
+- **Model Alias**: `pilotsuite/default/auto/local/ollama` werden auf das konfigurierte Modell aufgeloest.
+- **Versioning**: Runtime-Version nutzt `COPILOT_VERSION/BUILD_VERSION` mit Datei-Fallback.
+
+> Hinweis: Aeltere Eintraege unterhalb dieser Linie stammen aus Legacy-Historie vor der aktuellen `7.7.x` Release-Linie.
+
 ## 3.9.1
 - **HA Conformity** — Version sync with HACS integration
 - **Branding** — Port description updated to PilotSuite

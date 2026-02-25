@@ -236,9 +236,30 @@ def calculate_solar_position(
 
 def detect_country(lat: float, lon: float) -> str:
     """Detect country from coordinates (DACH region)."""
-    for lat_min, lat_max, lon_min, lon_max, country in _LAT_LON_COUNTRY:
-        if lat_min <= lat <= lat_max and lon_min <= lon <= lon_max:
-            return country
+    # First pass: Switzerland is geographically well-separated in this model.
+    ch_box = next((b for b in _LAT_LON_COUNTRY if b[4] == "CH"), None)
+    de_box = next((b for b in _LAT_LON_COUNTRY if b[4] == "DE"), None)
+    at_box = next((b for b in _LAT_LON_COUNTRY if b[4] == "AT"), None)
+
+    if ch_box and ch_box[0] <= lat <= ch_box[1] and ch_box[2] <= lon <= ch_box[3]:
+        return "CH"
+
+    in_de = bool(de_box and de_box[0] <= lat <= de_box[1] and de_box[2] <= lon <= de_box[3])
+    in_at = bool(at_box and at_box[0] <= lat <= at_box[1] and at_box[2] <= lon <= at_box[3])
+
+    if in_de and in_at:
+        # DE/AT overlap handling (rough Alpine border approximation):
+        # - Eastern overlap is mostly AT
+        # - Western overlap split by latitude to keep Munich in DE and Tirol in AT
+        if lon >= 14.0:
+            return "AT"
+        if lon < 12.5:
+            return "DE" if lat >= 47.8 else "AT"
+        return "DE" if lat >= 48.0 else "AT"
+    if in_de:
+        return "DE"
+    if in_at:
+        return "AT"
     return "DE"  # Default
 
 
@@ -249,11 +270,13 @@ def detect_region(lat: float, lon: float, country: str) -> str:
             if lat_min <= lat <= lat_max and lon_min <= lon <= lon_max:
                 return region
     elif country == "AT":
+        if lon >= 15.0:
+            return "Wien/Niederoesterreich"
         if lat > 47.5 and lon < 13:
             return "Tirol/Vorarlberg"
         if lat > 47.5:
             return "Salzburg/Kaernten"
-        return "Wien/Niederoesterreich"
+        return "Steiermark/Burgenland"
     elif country == "CH":
         if lon < 7.5:
             return "Westschweiz"

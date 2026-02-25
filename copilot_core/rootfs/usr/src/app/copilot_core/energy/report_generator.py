@@ -336,7 +336,7 @@ class EnergyReportGenerator:
             ))
 
         # High grid dependency
-        if consumption.autarky_ratio_pct < 30 and consumption.total_production_kwh > 0:
+        if consumption.autarky_ratio_pct < 50 and consumption.total_production_kwh > 0:
             recs.append(Recommendation(
                 category="solar",
                 title_de="Autarkiegrad verbessern",

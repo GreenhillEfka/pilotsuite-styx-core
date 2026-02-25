@@ -21,14 +21,25 @@ class TransactionLog:
     """
     
     def __init__(self, log_path: str = "/data/logs/log_fixer_tx.jsonl"):
-        self.log_path = Path(log_path)
-        self.lock_path = Path(str(log_path) + ".lock")
-        self._ensure_log_dir()
+        self.log_path = self._resolve_writable_log_path(Path(log_path))
+        self.lock_path = Path(str(self.log_path) + ".lock")
         self._lock_fd = None
         
-    def _ensure_log_dir(self):
-        """Create log directory if it doesn't exist."""
-        self.log_path.parent.mkdir(parents=True, exist_ok=True)
+    def _resolve_writable_log_path(self, configured_path: Path) -> Path:
+        """Resolve a writable log path (fallback outside add-on runtime)."""
+        try:
+            configured_path.parent.mkdir(parents=True, exist_ok=True)
+            return configured_path
+        except OSError:
+            fallback_dir = Path(os.environ.get("COPILOT_TX_LOG_DIR", "/tmp"))
+            fallback_dir.mkdir(parents=True, exist_ok=True)
+            fallback_path = fallback_dir / configured_path.name
+            logger.warning(
+                "TransactionLog path %s is not writable, using fallback %s",
+                configured_path,
+                fallback_path,
+            )
+            return fallback_path
         
     def _acquire_lock(self):
         """Acquire exclusive lock on log file (single-writer)."""

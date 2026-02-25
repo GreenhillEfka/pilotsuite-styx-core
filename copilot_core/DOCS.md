@@ -1,44 +1,56 @@
 # PilotSuite Core Add-on
 
-## Overview
+## Exakte Installation
 
-PilotSuite Core is the backend engine for the PilotSuite Home Assistant integration. It provides:
+1. **Add-on installieren**: Add-on Store -> Menu (⋮) -> Repositories ->  
+   `https://github.com/GreenhillEfka/pilotsuite-styx-core`
+2. **PilotSuite Core starten** und auf `running` warten.
+3. **HACS Integration installieren**:  
+   `https://github.com/GreenhillEfka/pilotsuite-styx-ha`
+4. **Integration hinzufügen**: Settings -> Devices & Services -> Add Integration -> **PilotSuite**.
+5. **Dashboard-Wiring prüfen** (optional manuell):
 
-- **Brain Architecture**: 15 brain regions with neural sensors and synaptic connections
-- **Local LLM**: Ollama-powered conversation agent (runs fully offline)
-- **17 Hub Engines**: Scene Intelligence, Presence, Energy Advisor, Anomaly Detection, and more
-- **135+ API Endpoints**: Full REST API at `/api/v1/hub/*`
+```yaml
+lovelace:
+  dashboards:
+    copilot-pilotsuite:
+      mode: yaml
+      title: "PilotSuite - Styx"
+      icon: mdi:robot-outline
+      show_in_sidebar: true
+      filename: "pilotsuite-styx/pilotsuite_dashboard_latest.yaml"
+    copilot-habitus-zones:
+      mode: yaml
+      title: "PilotSuite - Habitus Zones"
+      icon: mdi:layers-outline
+      show_in_sidebar: true
+      filename: "pilotsuite-styx/habitus_zones_dashboard_latest.yaml"
+```
 
-## Setup
+## Konfiguration (wichtig)
 
-1. Install this add-on from the Add-on Store
-2. Start the add-on (first start downloads the Ollama model ~400MB-2.5GB)
-3. Install the [PilotSuite HACS Integration](https://github.com/GreenhillEfka/pilotsuite-styx-ha)
-4. Add the integration via Settings > Devices & Services > Add Integration > PilotSuite
+| Option | Default | Zweck |
+|---|---|---|
+| `auth_token` | _(leer)_ | API-Token fuer Core + Dashboard |
+| `conversation_ollama_url` | `http://localhost:11435` | lokaler Ollama-Endpunkt |
+| `conversation_ollama_model` | `qwen3:0.6b` | Standardmodell (empfohlen) |
+| `conversation_cloud_api_url` | _(leer)_ | externer Fallback (`https://ollama.com/v1`, OpenAI-kompatibel) |
+| `conversation_cloud_api_key` | _(leer)_ | API-Key fuer externen Fallback |
+| `conversation_cloud_model` | `gpt-4o-mini` | Cloud-Modell (wird fuer Ollama Cloud kompatibel gemappt) |
+| `conversation_prefer_local` | `true` | lokal zuerst, dann Cloud-Fallback |
 
-## Configuration
+**Wo trage ich den Cloud API Key ein?**  
+Im Add-on unter **Configuration** in `conversation_cloud_api_key`.
 
-| Option | Default | Description |
-|--------|---------|-------------|
-| Log Level | `info` | Logging verbosity |
-| Auth Token | _(empty)_ | Optional API auth token |
-| Ollama URL | `http://localhost:11434` | Ollama server URL |
-| Ollama Model | `qwen3:4b` | LLM model name |
-| Assistant Name | `Styx` | AI assistant display name |
-| Conversation Enabled | `true` | Enable chat feature |
+## Betriebs-Checks
 
-## API
-
-The Core API runs on port 8909. Key endpoints:
-
-- `GET /api/v1/status` — System status
-- `GET /api/v1/hub/brain` — Brain Architecture overview
-- `GET /api/v1/hub/brain/graph` — Brain graph (nodes + edges)
-- `POST /v1/chat/completions` — OpenAI-compatible chat API
-- `GET /health` — Health check
+- Core API: `GET /health`
+- Chat-Status: `GET /chat/status`
+- OpenAI-kompatibel: `POST /v1/chat/completions`
+- Selbstreparatur: `POST /api/v1/agent/self-heal`
 
 ## Troubleshooting
 
-- **Add-on won't start**: Check Supervisor logs for build errors
-- **LLM not responding**: Ollama needs 60s+ to start, check add-on logs
-- **API returns 503**: Hub engine not initialized, check add-on logs for import errors
+- **LLM nicht erreichbar**: Add-on Logs prüfen, dann `/chat/status` aufrufen.
+- **`model not found`**: lokales Modell (`qwen3:0.6b`) setzen oder Cloud-Fallback korrekt konfigurieren.
+- **Dashboards fehlen**: Integration-Service `ai_home_copilot.show_installation_guide` ausführen und Anleitung übernehmen.

@@ -1,0 +1,1 @@
+*/10 * * * * /config/.openclaw/workspace/ha-copilot-repo/scripts/autopilot_runner.py >> /config/.openclaw/workspace/ha-copilot-repo/autopilot.log 2>&1

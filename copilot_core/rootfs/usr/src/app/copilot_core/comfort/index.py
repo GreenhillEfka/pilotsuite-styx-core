@@ -160,7 +160,7 @@ def _grade_from_score(score: float) -> str:
         return "A"
     elif score >= 75:
         return "B"
-    elif score >= 60:
+    elif score >= 50:
         return "C"
     elif score >= 40:
         return "D"

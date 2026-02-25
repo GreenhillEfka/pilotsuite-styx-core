@@ -1,7 +1,8 @@
 # PilotSuite Core Add-on -- Architektur
 
 > Technisches Architekturdokument fuer das PilotSuite Core Add-on (ehemals PilotSuite Core).
-> Stand: v3.8.1
+> Stand: v7.7.15 (2026-02-22)
+> Hinweis: Dieses Dokument beschreibt die Architekturprinzipien. Fuer den verifizierten Produktionszustand siehe `PROJECT_STATUS.md` und `docs/MODULE_INVENTORY.md`.
 
 ---
 
@@ -16,8 +17,9 @@ Das PilotSuite Core Add-on ist das zentrale Backend der PilotSuite-Plattform. Es
 | Deployment       | Docker-Container, registriert als HA Add-on      |
 | Port             | 8909                                             |
 | LLM-Runtime      | Ollama (im Dockerfile gebundelt)                 |
-| Standard-Modell  | `lfm2.5-thinking` (Liquid AI, 1.2B Parameter, 731 MB) |
-| Tool-Calling     | `qwen3:4b` (lfm2.5-thinking unterstuetzt kein Tool-Calling in Ollama) |
+| Standard-Modell  | `qwen3:0.6b`                                     |
+| Optional-Modell  | `qwen3:4b`                                       |
+| Tool-Calling     | OpenAI-kompatibel ueber `/v1/chat/completions`  |
 | Persistenz       | SQLite (WAL-Modus) unter `/data/`                |
 
 Der Container startet Ollama als Hintergrundprozess und die Flask/Waitress-Anwendung als Hauptprozess. Alle Daten werden unter `/data/` persistiert -- dem Mount-Punkt, den Home Assistant fuer Add-on-Daten bereitstellt.
@@ -415,7 +417,7 @@ CLOSED (normal) --> OPEN (fehlerhaft) --> HALF_OPEN (testet Recovery)
 
 ### Ollama im Dockerfile
 
-Ollama wird direkt im Docker-Container gebundelt und beim Container-Start als Hintergrundprozess gestartet. Das Standard-Modell (`lfm2.5-thinking`, Liquid AI, 1.2B Parameter) wird automatisch heruntergeladen.
+Ollama wird direkt im Docker-Container gebundelt und beim Container-Start als Hintergrundprozess gestartet. Standard ist `qwen3:0.6b`; fuer mehr Qualitaet auf staerkerer Hardware kann `qwen3:4b` verwendet werden.
 
 ### LLM Provider Chain
 

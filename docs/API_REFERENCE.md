@@ -99,7 +99,7 @@ Authorization: Bearer <token>
 Content-Type: application/json
 
 {
-  "model": "qwen3:4b",
+  "model": "qwen3:0.6b",
   "messages": [
     {"role": "system", "content": "Du bist ein hilfreicher Assistent."},
     {"role": "user", "content": "Schalte das Licht im Wohnzimmer ein."}
@@ -129,7 +129,7 @@ Content-Type: application/json
   "id": "chatcmpl-a1b2c3d4e5f6",
   "object": "chat.completion",
   "created": 1700000000,
-  "model": "qwen3:4b",
+  "model": "qwen3:0.6b",
   "choices": [
     {
       "index": 0,
@@ -215,13 +215,13 @@ Listet alle verfuegbaren Modelle auf (von Ollama + konfiguriertes Default-Modell
   "object": "list",
   "data": [
     {
-      "id": "qwen3:4b",
+      "id": "qwen3:0.6b",
       "object": "model",
       "created": 1700000000,
       "owned_by": "ollama"
     },
     {
-      "id": "lfm2.5-thinking",
+      "id": "qwen3:0.6b",
       "object": "model",
       "created": 1700000000,
       "owned_by": "ollama"
@@ -238,7 +238,7 @@ Einzelnes Modell abrufen.
 
 ```json
 {
-  "id": "qwen3:4b",
+  "id": "qwen3:0.6b",
   "object": "model",
   "created": 1700000000,
   "owned_by": "ollama"
@@ -249,9 +249,9 @@ Einzelnes Modell abrufen.
 
 | Modell | Groesse | Tool-Calling | Beschreibung |
 |--------|---------|-------------|--------------|
-| `lfm2.5-thinking` | 731 MB | Nein | Liquid AI 1.2B, Default fuer Konversation |
-| `qwen3:4b` | 2.5 GB | Ja | Empfohlen fuer Tool-Calling (Score 0.88) |
-| `qwen3:0.6b` | 400 MB | Ja | Ultra-leicht mit Tool-Calling |
+| `qwen3:0.6b` | 400 MB | Ja | Default: schnell, low-RAM, Tool-Calling |
+| `qwen3:4b` | 2.5 GB | Ja | Optional fuer hoehere Antwortqualitaet |
+| `lfm2.5-thinking` | 731 MB | Nein | Optionales Legacy-Modell |
 | `llama3.2:3b` | 2 GB | Ja | Meta 3B, 128K Kontext |
 | `mistral:7b` | 4 GB | Ja | Bewaehrtes Function-Calling |
 | `fixt/home-3b-v3` | 2 GB | Ja | HA-optimiert, 97% Genauigkeit |
@@ -290,7 +290,7 @@ Version und Name des Add-ons.
 {
   "name": "Styx",
   "suite": "PilotSuite",
-  "version": "3.9.0",
+  "version": "7.7.13",
   "time": "2025-01-15T10:30:00+00:00"
 }
 ```
@@ -304,7 +304,7 @@ Tiefgehender Health-Check aller Services und externen Abhaengigkeiten.
 ```json
 {
   "healthy": true,
-  "version": "3.9.0",
+  "version": "7.7.13",
   "uptime_s": 7200,
   "checks": {
     "brain_graph_service": true,
@@ -373,6 +373,89 @@ Echo-Endpoint fuer Konnektivitaetstests. Erfordert Authentifizierung.
   "received": {"test": "hello"}
 }
 ```
+
+### Agent-Status und Self-Heal (`/api/v1/agent/*`)
+
+Token-protected Endpoints fuer HA-Zero-Config, Agent-Health und automatische Reparatur.
+
+#### GET /api/v1/agent/status
+
+Liefert den aktuellen Agent-/LLM-Status.
+
+```json
+{
+  "ok": true,
+  "agent_name": "Styx",
+  "agent_version": "7.7.15",
+  "status": "ready",
+  "llm_available": true,
+  "llm_model": "qwen3:0.6b",
+  "llm_backend": "ollama",
+  "features": ["conversation", "openai_compatible_api"]
+}
+```
+
+#### POST /api/v1/agent/verify
+
+Bidirektionaler Handshake fuer HA-Integration.
+
+```json
+{
+  "message": "ha_handshake",
+  "source": "ha_integration"
+}
+```
+
+#### POST /api/v1/agent/self-heal
+
+Best-effort Reparatur nach Setup/Update-Problemen.
+
+Fuehrt u. a. aus:
+- Provider-Konfiguration neu laden.
+- Installierte Ollama-Modelle pruefen.
+- Fehlende lokale Modelle im Hintergrund ziehen.
+
+```json
+{
+  "reason": "auto_setup_connectivity_failed",
+  "source": "ha_integration"
+}
+```
+
+### Onyx Bridge (`/api/v1/onyx/*`)
+
+Token-protected Bruecke fuer Onyx-Agenten: deterministische HA-Service-Calls mit optionalem State-Rueckkanal.
+
+#### GET /api/v1/onyx/status
+
+Liefert den Bridge-Status und die HA-Reachability.
+
+```json
+{
+  "ok": true,
+  "bridge": "onyx",
+  "supervisor_api": "http://supervisor/core/api",
+  "has_supervisor_token": true,
+  "ha_reachable": true,
+  "allowed_domains": ["light", "switch", "scene"]
+}
+```
+
+#### POST /api/v1/onyx/ha/service-call
+
+Fuehrt einen kontrollierten HA-Service-Call aus.
+
+```json
+{
+  "domain": "light",
+  "service": "turn_on",
+  "entity_id": "light.retrolampe",
+  "service_data": {"brightness_pct": 45},
+  "readback": true
+}
+```
+
+Antwort enthaelt `readback_states` fuer den Rueckkanal (falls `readback=true`).
 
 ---
 

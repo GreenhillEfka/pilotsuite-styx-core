@@ -70,7 +70,7 @@ class MoodService:
         self._zone_moods: Dict[str, ZoneMoodSnapshot] = {}
         self._last_update: float = 0
         self._update_interval_seconds = 30
-        self._db_path = db_path or MOOD_DB_PATH
+        self._db_path = self._resolve_db_path(db_path or MOOD_DB_PATH)
         self._lock = threading.Lock()
         self._last_save_ts: Dict[str, float] = {}  # zone_id -> last save timestamp
         self._save_count: int = 0  # Global save counter for periodic prune
@@ -81,6 +81,26 @@ class MoodService:
         logger.info("MoodService initialized (persistent at %s)", self._db_path)
 
     # ── SQLite Persistence ──────────────────────────────────────────────
+
+    def _resolve_db_path(self, configured_path: str) -> str:
+        """Resolve writable DB path with fallback outside add-on runtime."""
+        db_dir = os.path.dirname(configured_path) or "."
+        try:
+            os.makedirs(db_dir, exist_ok=True)
+            return configured_path
+        except OSError:
+            fallback_dir = os.environ.get("COPILOT_MOOD_DB_DIR", "/tmp")
+            os.makedirs(fallback_dir, exist_ok=True)
+            fallback_path = os.path.join(
+                fallback_dir,
+                os.path.basename(configured_path) or "mood_history.db",
+            )
+            logger.warning(
+                "Mood DB path %s not writable, using fallback %s",
+                configured_path,
+                fallback_path,
+            )
+            return fallback_path
 
     def _init_db(self):
         """Create mood_snapshots table if it doesn't exist."""

@@ -177,6 +177,19 @@ class TestDevSurfaceService(unittest.TestCase):
             entry_data = json.loads(line)
             self.assertEqual(entry_data["message"], "Persistent message")
     
+    def test_init_falls_back_when_log_dir_unwritable(self):
+        """Test fallback path when configured log directory is not writable."""
+        fallback_dir = tempfile.mkdtemp()
+        try:
+            with patch("copilot_core.dev_surface.service.os.makedirs") as mock_makedirs:
+                mock_makedirs.side_effect = [PermissionError("denied"), None]
+                with patch.dict(os.environ, {"COPILOT_DEV_LOG_DIR": fallback_dir}):
+                    service = DevSurfaceService()
+            self.assertTrue(service.log_file_path.startswith(fallback_dir))
+            self.assertEqual(mock_makedirs.call_count, 2)
+        finally:
+            os.rmdir(fallback_dir)
+    
     def test_system_health(self):
         """Test system health reporting."""
         # Mock brain graph service

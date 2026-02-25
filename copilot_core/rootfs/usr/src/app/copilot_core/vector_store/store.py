@@ -99,12 +99,27 @@ class VectorStore:
         
         if self.config.persist:
             self._init_db()
+
+    def _resolve_writable_db_path(self, configured_path: Path) -> Path:
+        """Resolve writable DB path with fallback outside add-on runtime."""
+        try:
+            configured_path.parent.mkdir(parents=True, exist_ok=True)
+            return configured_path
+        except OSError:
+            fallback_dir = Path(os.environ.get("COPILOT_VECTOR_DB_DIR", "/tmp"))
+            fallback_dir.mkdir(parents=True, exist_ok=True)
+            fallback_path = fallback_dir / configured_path.name
+            _LOGGER.warning(
+                "Vector DB path %s is not writable, using fallback %s",
+                configured_path,
+                fallback_path,
+            )
+            return fallback_path
             
     def _init_db(self) -> None:
         """Initialize SQLite database."""
-        # Ensure directory exists
-        db_path = Path(self.config.db_path)
-        db_path.parent.mkdir(parents=True, exist_ok=True)
+        db_path = self._resolve_writable_db_path(Path(self.config.db_path))
+        self.config.db_path = str(db_path)
         
         self._db = sqlite3.connect(str(db_path), check_same_thread=False)
         self._db.row_factory = sqlite3.Row

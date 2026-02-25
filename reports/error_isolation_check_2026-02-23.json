@@ -1,0 +1,10 @@
+{
+  "task": "error_isolation_check",
+  "success": true,
+  "duration_s": 0.0,
+  "timestamp": "2026-02-23T11:17:33.168795",
+  "details": {
+    "error_isolation": false,
+    "status": "no_runtime_file"
+  }
+}

@@ -1,20 +1,41 @@
-# CLAUDE.md -- PilotSuite Core Add-on
+# CLAUDE.md
 
-> Kontextdatei fuer KI-Assistenten. Beschreibt Projekt, Architektur, Konventionen und Status.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ---
 
 ## Projektueberblick
 
-**PilotSuite Core Add-on** (ehemals PilotSuite Core) ist das Backend fuer die PilotSuite-Plattform. Es laeuft als Home Assistant Add-on auf Port **8909** und stellt eine Flask/Waitress REST-API bereit.
+**PilotSuite Core Add-on** ist das Backend fuer die PilotSuite-Plattform. Es laeuft als Home Assistant Add-on auf Port **8909** und stellt eine Flask/Waitress REST-API bereit.
 
-Das Core Add-on implementiert die gesamte Intelligenz: Neural Pipeline, Brain Graph, Habitus Mining, Mood Engine, Candidate Management und mehr.
+**Gegenstueck:** [pilotsuite-styx-ha](../pilotsuite-styx-ha) -- HACS Integration (Sensoren, Module, Dashboard)
 
 - **Framework:** Flask (Web), Waitress (WSGI Server)
 - **Sprache:** Python 3.11+
 - **Deployment:** Home Assistant Add-on (Docker Container)
 - **Port:** 8909
 - **Lizenz:** Privat, alle Rechte vorbehalten
+
+---
+
+## Entwicklungskommandos
+
+```bash
+# Syntax-Check
+python -m py_compile $(find copilot_core/rootfs/usr/src/app -name '*.py')
+
+# Tests ausfuehren
+PYTHONPATH=copilot_core/rootfs/usr/src/app python -m pytest copilot_core/rootfs/usr/src/app/tests -v --tb=short -x
+
+# Tests mit Coverage
+PYTHONPATH=copilot_core/rootfs/usr/src/app python -m pytest copilot_core/rootfs/usr/src/app/tests -v --tb=short --cov=copilot_core/rootfs/usr/src/app/copilot_core --cov-report=term-missing -x
+
+# Security Scan
+bandit -r copilot_core/rootfs/usr/src/app/copilot_core -ll --skip B101,B404,B603
+
+# App erstellen (Smoke Test)
+PYTHONPATH=copilot_core/rootfs/usr/src/app python -c "from copilot_core.app import create_app; app = create_app(); print('ok')"
+```
 
 ---
 
@@ -144,42 +165,25 @@ copilot_core/
 
 ---
 
-## Wo kommen wir her
+## Aktueller Stand
 
-### Version v4.0.0 -- Official Release
+### Version v7.7.19
 
-- Repository umbenannt: `Home-Assistant-Copilot` → `pilotsuite-styx-core`
-- 28 Backend-Module implementiert und registriert
+- **Tests:** 1962 passed, 1 skipped
+- 28+ Backend-Module implementiert und registriert
 - 40+ API Endpoints (30 Flask Blueprints)
-- 566 Tests, 1 skipped, alle gruen
-- Security: Token-Validierung mit `hmac.compare_digest` (bestaetigt korrekt)
+- Security: Token-Validierung mit `hmac.compare_digest`
 - Brain Graph mit Persistenz, Pruning, SVG-Snapshots
 - Habitus Miner mit Zone Mining und Association Rules
 - Mood Engine mit 3D-Scoring (Comfort/Joy/Frugality)
 - Event Ingest mit Deduplication und Idempotency
 - Candidate Management mit State Machine
 - Knowledge Graph, Vector Store, Search
-- Cross-Home Sync und Collective Intelligence (Phase 5)
+- Cross-Home Sync und Collective Intelligence
 - System Health Checks (Zigbee, Z-Wave, Recorder, etc.)
-- Performance: GZIP Compression, Connection Pooling, Caching
-- Ollama LLM Integration (Styx Chat-Assistent mit 26 Tools, Standard: qwen3:4b)
-
----
-
-## Naechste Schritte
-
-### ML Training
-
-- Association Rules zu echtem ML erweitern
-- TFLite/ONNX On-Device Inference
-- Anomaly Detection mit Isolation Forest
-- Zeitreihen-Prognosen (LSTM/Transformer)
-
-### Performance
-
-- Connection Pooling optimieren
-- Cache TTL abstimmen
-- Rate Limiting pro Endpoint konfigurierbar machen
+- Ollama LLM Integration (Default: qwen3:0.6b, Optional: qwen3:4b)
+- Dashboard Auth Bridge fuer Token-geschuetzte API
+- Ollama Cloud Endpoint Hardening
 
 ---
 
@@ -193,3 +197,48 @@ copilot_core/
 - Persistenz unter `/data/` (HA Add-on Mount)
 - Tests mit pytest, Dateien in Repository-Root oder `/tests/`
 - Dokumentation in Deutsch bevorzugt
+
+### Thread-Sicherheit
+
+Flask/Waitress bedient Requests in mehreren Threads:
+- Double-Checked Locking fuer Singletons verwenden (siehe `LLMProvider`, `ModuleRegistry`)
+- Das `services`-Dict ist read-only nach Initialisierung
+- SQLite WAL-Modus mit `busy_timeout=5000` verwenden
+
+### Circuit Breaker
+
+Zwei konfigurierte Instanzen schuetzen vor kaskadierenden Fehlern:
+- `ha_supervisor`: 5 Fehler / 30s Recovery (HA Supervisor API)
+- `ollama`: 3 Fehler / 60s Recovery (Ollama LLM API)
+
+### Projektprinzipien
+
+| Prinzip | Bedeutung |
+|---------|-----------|
+| **Local-first** | Alles lokal, kein Cloud-API-Call |
+| **Privacy-first** | PII-Redaktion, bounded Storage, opt-in |
+| **Governance-first** | Vorschlaege vor Aktionen, Human-in-the-Loop |
+| **Safe Defaults** | Max 500 Nodes, 1500 Edges, Persistenz opt-in |
+
+### PR-Checkliste
+
+- [ ] Changelog updated (if user-visible)
+- [ ] Docs updated (if applicable)
+- [ ] Privacy-first (no secrets, no personal defaults)
+- [ ] Safe defaults (caps/limits; persistence off by default)
+- [ ] Governance-first (no silent actions)
+
+---
+
+## Wichtige Dateien
+
+| Datei | Beschreibung |
+|-------|-------------|
+| `copilot_core/rootfs/usr/src/app/main.py` | Entry Point |
+| `copilot_core/rootfs/usr/src/app/copilot_core/app.py` | Flask App Factory |
+| `copilot_core/rootfs/usr/src/app/copilot_core/core_setup.py` | Service-Initialisierung |
+| `copilot_core/rootfs/usr/src/app/copilot_core/api/v1/blueprint.py` | Blueprint-Registry |
+| `copilot_core/rootfs/usr/src/app/copilot_core/api/security.py` | Token-Validierung |
+| `copilot_core/config.yaml` | HA Add-on Manifest |
+| `docs/ARCHITECTURE.md` | Vollstaendige Architektur-Dokumentation |
+| `docs/API_REFERENCE.md` | API-Endpunkte Dokumentation |

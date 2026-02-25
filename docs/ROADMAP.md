@@ -61,43 +61,46 @@ Der Schritt zur offiziellen Veroeffentlichung:
 
 ---
 
-## Phase 5 -- Cross-Home Sharing (in Entwicklung)
+## Phase 5 -- Cross-Home Sharing (COMPLETE ✅)
 
-> Status: Konzeptphase / fruehe Implementierung
+> Status: **Vollständig implementiert** (v7.26.0)
 
-### Vision
+### Implemented Features
 
-Haushalte sollen voneinander lernen koennen, ohne private Daten preiszugeben. Wenn hundert Haushalte aehnliche Energiemuster haben, sollte jeder einzelne davon profitieren.
-
-### Geplante Funktionen
-
-**Federated Learning**
+**Federated Learning & Collective Intelligence**
 - Anonymisierte Muster zwischen Haushalten teilen
 - Kein zentraler Server -- dezentraler Ansatz
 - Lokale Modelle werden mit aggregierten Erkenntnissen verbessert, ohne Rohdaten zu versenden
+- 15 API-Endpoints unter `/api/v1/federated/*`
 
-**Collective Intelligence**
-- Community-getriebene Verbesserungen fuer Automatisierungsvorschlaege
-- Gemeinsame Optimierung von Energieprofilen und Tagesrhythmen
-- Bewertungssystem fuer geteilte Muster (hilfreich / nicht hilfreich)
+**Sharing & Discovery**
+- 7 API-Endpoints unter `/api/v1/sharing/*`
+- Peer Discovery, Entity Management, Sync Management
+- Konfliktlösung und Status-Abfragen
 
-**Privacy-Garantien**
-- Strikt opt-in -- nichts wird ohne explizite Zustimmung geteilt
-- Vollstaendige Anonymisierung: keine Geraete-IDs, keine Standorte, keine Rohdaten
-- Differential Privacy als mathematische Garantie gegen Re-Identifikation
-- Transparenz-Dashboard: was wurde wann mit wem geteilt
+**Push Notifications**
+- 9 API-Endpoints unter `/api/v1/notifications/*`
+- Device-Registrierung, Push-Versand, Mark-as-Read, Clear
+- Telegram-Integration für Mobile-Push
 
-**Architektur**
+**API Integration Status**
+- `Phase 5 API Integration` Tag: `v5.1.0-phase5-2026-02-23`
+- Commits: `4fc8aef`, `531af5b`
+
+### Architecture
 - Neues `sharing/`-Modul im Core Add-on
-- Peer Discovery ueber mDNS oder optionalen Rendezvous-Server
+- Peer Discovery über mDNS oder optionalen Rendezvous-Server
 - Ende-zu-Ende-verschluesselter Transport zwischen Peers
 - Lokaler Aggregator fasst eingehende Muster zusammen, bevor sie ins Modell fliessen
 
-### Offene Fragen
+### Testing
+- Integrationstests für alle 31 Endpoints verfügbar
+- Full-flow: `GET /api/v1/sharing/status` → `POST /api/v1/notifications/send` → `POST /api/v1/federated/register`
 
-- Minimale Teilnehmerzahl fuer sinnvolles Federated Learning bei Smart-Home-Daten?
-- Wie verhindert man Poisoning-Angriffe bei dezentraler Aggregation?
-- Welche Muster lassen sich sinnvoll teilen, ohne Kontext zu verlieren?
+### Notes
+- Phase 5 ist stabil und produktionsreif
+- Optional: Cross-Home Sharing muss in der Konfiguration explizit aktiviert werden
+- `SEARXNG_ENABLED` (optional für Web-Search)
 
 ---
 
@@ -193,7 +196,7 @@ Diese Prinzipien gelten fuer alle zukuenftigen Entwicklungen und werden nicht ve
 
 ### Local-First bleibt
 
-PilotSuite laeuft vollstaendig lokal. Keine Cloud-Abhaengigkeit, kein externer Server fuer Kernfunktionen. Das LLM (aktuell lfm2.5-thinking via Ollama) laeuft auf dem gleichen Geraet. Optionale Netzwerkfunktionen (Cross-Home Sharing, Web Search) sind immer opt-in und nie fuer den Basisbetrieb erforderlich.
+PilotSuite laeuft vollstaendig lokal. Keine Cloud-Abhaengigkeit, kein externer Server fuer Kernfunktionen. Das LLM (standardmaessig `qwen3:0.6b`, optional `qwen3:4b` via Ollama) laeuft auf dem gleichen Geraet. Optionale Netzwerkfunktionen (Cross-Home Sharing, Web Search) sind immer opt-in und nie fuer den Basisbetrieb erforderlich.
 
 ### Privacy bleibt
 

@@ -255,13 +255,17 @@ class SchedulePlanner:
 
     def _score_slots(self, slots: list[ScheduleSlot]) -> None:
         """Compute composite score for each slot."""
-        # Normalize price: invert so cheaper = higher score
-        prices = [s.price_eur_kwh for s in slots]
-        p_min, p_max = min(prices), max(prices)
+        # Normalize effective price (price discounted by PV coverage):
+        # strong PV availability should outweigh a merely cheap grid hour.
+        effective_prices = [
+            s.price_eur_kwh * (1.0 - max(0.0, min(1.0, s.pv_factor)))
+            for s in slots
+        ]
+        p_min, p_max = min(effective_prices), max(effective_prices)
         p_range = p_max - p_min if p_max > p_min else 1.0
 
-        for s in slots:
-            price_factor = 1.0 - (s.price_eur_kwh - p_min) / p_range
+        for s, effective_price in zip(slots, effective_prices):
+            price_factor = 1.0 - (effective_price - p_min) / p_range
             peak_factor = 1.0 - min(1.0, s.allocated_watts / self._max_watts)
             s.score = (
                 self._w_pv * s.pv_factor
@@ -273,13 +277,13 @@ class SchedulePlanner:
         self, device_list: list[str] | None
     ) -> list[DeviceProfile]:
         """Select device profiles to schedule."""
-        if device_list:
-            return [
-                self._profiles[d]
-                for d in device_list
-                if d in self._profiles
-            ]
-        return list(self._profiles.values())
+        if device_list is None:
+            return list(self._profiles.values())
+        return [
+            self._profiles[d]
+            for d in device_list
+            if d in self._profiles
+        ]
 
     def _assign_device(
         self, device: DeviceProfile, slots: list[ScheduleSlot]
@@ -287,6 +291,7 @@ class SchedulePlanner:
         """Find best contiguous window for a device and allocate it."""
         duration_slots = max(1, int(device.duration_hours))
         best_score = -1.0
+        best_pv = -1.0
         best_start = -1
 
         for i in range(24 - duration_slots + 1):
@@ -306,8 +311,16 @@ class SchedulePlanner:
                     continue
 
             avg_score = sum(s.score for s in window) / len(window)
-            if avg_score > best_score:
+            avg_pv = sum(s.pv_factor for s in window) / len(window)
+            if (
+                avg_score > best_score
+                or (
+                    abs(avg_score - best_score) < 1e-9
+                    and avg_pv > best_pv
+                )
+            ):
                 best_score = avg_score
+                best_pv = avg_pv
                 best_start = i
 
         if best_start < 0:

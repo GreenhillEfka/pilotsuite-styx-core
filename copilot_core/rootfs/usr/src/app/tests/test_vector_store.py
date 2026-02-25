@@ -180,6 +180,28 @@ class TestVectorStore(unittest.TestCase):
         if os.path.exists(self.temp_path):
             os.remove(self.temp_path)
         reset_vector_store()
+
+    def test_init_falls_back_when_data_dir_unwritable(self):
+        """Vector store should fallback when /data is not writable."""
+        fallback_tmp = tempfile.TemporaryDirectory()
+        store = None
+        try:
+            with patch("copilot_core.vector_store.store.Path.mkdir") as mock_mkdir:
+                mock_mkdir.side_effect = [PermissionError("denied"), None]
+                with patch.dict(os.environ, {"COPILOT_VECTOR_DB_DIR": fallback_tmp.name}):
+                    store = VectorStore(
+                        VectorStoreConfig(
+                            db_path="/data/vector_store.db",
+                            persist=True,
+                            cache_size=10,
+                        )
+                    )
+            self.assertTrue(store.config.db_path.startswith(fallback_tmp.name))
+            self.assertEqual(mock_mkdir.call_count, 2)
+        finally:
+            if store:
+                store.close()
+            fallback_tmp.cleanup()
         
     def test_cosine_similarity(self):
         """Test cosine similarity calculation."""

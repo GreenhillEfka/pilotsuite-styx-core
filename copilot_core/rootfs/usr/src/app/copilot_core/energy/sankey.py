@@ -433,16 +433,18 @@ def build_sankey_from_energy(
                     value=round(production * share, 2),
                 ))
 
-    # If no sources but have consumption, add grid as sole source
-    if not nodes and consumption > 0:
-        nodes.append(SankeyNode(
-            id="grid", label="Netz", value=consumption,
-            color=CATEGORY_COLORS["source"]["grid"], category="source",
-        ))
-        nodes.append(SankeyNode(
-            id="total", label="Verbrauch", value=consumption,
-            color=CATEGORY_COLORS["device"]["default"], category="device",
-        ))
+    # If no detailed targets were created, add a simple total consumption sink.
+    if consumption > 0 and not flows:
+        if not any(n.id == "grid" for n in nodes):
+            nodes.append(SankeyNode(
+                id="grid", label="Netz", value=consumption,
+                color=CATEGORY_COLORS["source"]["grid"], category="source",
+            ))
+        if not any(n.id == "total" for n in nodes):
+            nodes.append(SankeyNode(
+                id="total", label="Verbrauch", value=consumption,
+                color=CATEGORY_COLORS["device"]["default"], category="device",
+            ))
         flows.append(SankeyFlow(source="grid", target="total", value=consumption))
 
     return SankeyData(

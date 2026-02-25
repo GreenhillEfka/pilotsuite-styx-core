@@ -5,6 +5,7 @@ import unittest
 import os
 import json
 import time
+from unittest.mock import patch
 
 try:
     from copilot_core.brain_graph.store import BrainGraphStore
@@ -206,6 +207,22 @@ class TestBrainGraphStore(unittest.TestCase):
         )
         self.assertEqual(store.max_nodes, 10)
         self.assertEqual(store.max_edges, 20)
+
+    def test_store_init_falls_back_when_data_dir_unwritable(self):
+        """Use fallback DB path when /data is not writable."""
+        if BrainGraphStore is None:
+            self.skipTest("BrainGraphStore not available")
+
+        fallback_tmp = tempfile.TemporaryDirectory()
+        try:
+            with patch("copilot_core.brain_graph.store.Path.mkdir") as mock_mkdir:
+                mock_mkdir.side_effect = [PermissionError("denied"), None]
+                with patch.dict(os.environ, {"COPILOT_BRAIN_GRAPH_DB_DIR": fallback_tmp.name}):
+                    store = BrainGraphStore(db_path="/data/brain_graph.db")
+            self.assertTrue(str(store.db_path).startswith(fallback_tmp.name))
+            self.assertEqual(mock_mkdir.call_count, 2)
+        finally:
+            fallback_tmp.cleanup()
 
 
 class TestBrainGraphStoreIntegration(unittest.TestCase):

@@ -1,0 +1,39 @@
+name: Production Guard
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions: {}
+
+jobs:
+  production-ready:
+    runs-on: "ubuntu-latest"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify version tag exists
+        run: |
+          VERSION=$(cat copilot_core/rootfs/usr/src/app/VERSION 2>/dev/null || echo "unknown")
+          echo "VERSION=$VERSION"
+          TAG="v$VERSION"
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "✅ Tag $TAG exists"
+          else
+            echo "❌ Tag $TAG does NOT exist"
+            exit 1
+          fi
+
+      - name: HACS Validation
+        uses: "hacs/action@main"
+        with:
+          category: "plugin"
+
+      - name: Success marker
+        run: echo "✅ Production Guard passed"

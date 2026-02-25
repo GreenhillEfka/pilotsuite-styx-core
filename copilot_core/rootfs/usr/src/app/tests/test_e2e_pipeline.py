@@ -85,7 +85,7 @@ for _m in ["psutil", "flask", "waitress"]:
 
 from copilot_core.brain_graph.service import BrainGraphService
 from copilot_core.ingest.event_processor import EventProcessor
-from copilot_core.candidates.store import CandidateStore, Candidate
+from copilot_core.candidates.store import CandidateStore
 from copilot_core.habitus.service import HabitusService
 from copilot_core.habitus.miner import HabitusMiner
 
@@ -125,8 +125,8 @@ import pytest
 
 @pytest.fixture
 def result():
-    """Provide a TestResult instance for pipeline tests."""
-    return _TestResult()
+    """Provide a PipelineResult instance for pipeline tests."""
+    return PipelineResult()
 
 
 @pytest.fixture
@@ -135,7 +135,7 @@ def bg():
     return BrainGraphService()
 
 
-class _TestResult:
+class PipelineResult:
     def __init__(self):
         self.passed = 0
         self.failed = 0
@@ -167,13 +167,9 @@ class _TestResult:
         )
 
 
-# Keep alias for type annotations and standalone runner
-TestResult = _TestResult
-
-
 # ── Test 1: Event Processor → Brain Graph ────────────────────────────
 
-def test_event_processor_to_brain_graph(result: TestResult):
+def _run_event_processor_to_brain_graph(result: PipelineResult) -> BrainGraphService:
     """Verify events are processed and appear in Brain Graph."""
     logger.info("Test 1: Event Processor → Brain Graph")
 
@@ -214,9 +210,13 @@ def test_event_processor_to_brain_graph(result: TestResult):
     return bg
 
 
+def test_event_processor_to_brain_graph(result: PipelineResult):
+    _run_event_processor_to_brain_graph(result)
+
+
 # ── Test 2: Brain Graph → Habitus Miner ──────────────────────────────
 
-def test_habitus_miner(result: TestResult, bg: BrainGraphService):
+def _run_habitus_miner(result: PipelineResult, bg: BrainGraphService) -> dict:
     """Verify the miner discovers patterns from brain graph."""
     logger.info("Test 2: Brain Graph → Habitus Miner")
 
@@ -241,9 +241,13 @@ def test_habitus_miner(result: TestResult, bg: BrainGraphService):
     return patterns
 
 
+def test_habitus_miner(result: PipelineResult, bg: BrainGraphService):
+    _run_habitus_miner(result, bg)
+
+
 # ── Test 3: Full Pipeline → Candidates ───────────────────────────────
 
-def test_full_pipeline_candidates(result: TestResult):
+def test_full_pipeline_candidates(result: PipelineResult):
     """Full pipeline: events → brain graph → habitus → candidates."""
     logger.info("Test 3: Full Pipeline → Candidate Creation")
 
@@ -326,7 +330,7 @@ def test_full_pipeline_candidates(result: TestResult):
 
 # ── Test 4: Candidate Store CRUD ──────────────────────────────────────
 
-def test_candidate_store_crud(result: TestResult):
+def test_candidate_store_crud(result: PipelineResult):
     """Test candidate store persistence and CRUD operations."""
     logger.info("Test 4: Candidate Store CRUD")
 
@@ -381,7 +385,7 @@ def test_candidate_store_crud(result: TestResult):
 
 # ── Test 5: Flask API Smoke Test (only when flask is real) ────────────
 
-def test_flask_api_smoke(result: TestResult):
+def test_flask_api_smoke(result: PipelineResult):
     """Test Core Flask app responds correctly to key endpoints."""
     try:
         import flask
@@ -450,11 +454,11 @@ def main():
     print("PilotSuite Core — End-to-End Pipeline Test")
     print("=" * 60)
 
-    result = TestResult()
+    result = PipelineResult()
 
     try:
-        bg = test_event_processor_to_brain_graph(result)
-        test_habitus_miner(result, bg)
+        bg = _run_event_processor_to_brain_graph(result)
+        _run_habitus_miner(result, bg)
         test_full_pipeline_candidates(result)
         test_candidate_store_crud(result)
         test_flask_api_smoke(result)

@@ -28,6 +28,13 @@ from copilot_core.api.v1.conversation import conversation_bp
 from copilot_core.sharing.api import sharing_bp
 from copilot_core.collective_intelligence.api import federated_bp
 
+# New v7.25.0 APIs
+from copilot_core.api.v1.input_number import input_number_bp
+from copilot_core.api.v1.zones import zones_bp
+from copilot_core.api.v1.scene_patterns import scene_patterns_bp
+from copilot_core.api.v1.routine_patterns import routine_patterns_bp
+from copilot_core.api.v1.push_notifications import push_notifications_bp
+
 api_v1 = Blueprint("api_v1", __name__, url_prefix="/api/v1")
 
 # Register sub-blueprints with relative url_prefix (e.g. /neurons, /kg)
@@ -60,6 +67,13 @@ api_v1.register_blueprint(conversation_bp)
 # Register Phase 5 APIs
 api_v1.register_blueprint(sharing_bp)
 api_v1.register_blueprint(federated_bp)
+
+# Register v7.25.0 APIs
+api_v1.register_blueprint(input_number_bp)
+api_v1.register_blueprint(zones_bp)
+api_v1.register_blueprint(scene_patterns_bp)
+api_v1.register_blueprint(routine_patterns_bp)
+api_v1.register_blueprint(push_notifications_bp)
 
 # Note: Standalone blueprints with absolute prefixes (/api/v1/...)
 # are registered directly on the app via core_setup.register_blueprints():

@@ -186,6 +186,17 @@ def test_transaction_manager_full_flow():
         assert not Path(new_file).exists()
 
 
+def test_transaction_log_fallback_path_when_unwritable():
+    """Falls back to a writable temp path if /data is unavailable."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        with patch("copilot_core.log_fixer_tx.transaction_log.Path.mkdir") as mock_mkdir:
+            mock_mkdir.side_effect = [PermissionError("denied"), None]
+            with patch.dict(os.environ, {"COPILOT_TX_LOG_DIR": tmpdir}):
+                log = TransactionLog("/data/logs/log_fixer_tx.jsonl")
+        assert str(log.log_path).startswith(tmpdir)
+        assert mock_mkdir.call_count == 2
+
+
 def test_recovery_in_flight():
     """Test recovery of in-flight transactions."""
     with tempfile.TemporaryDirectory() as tmpdir:

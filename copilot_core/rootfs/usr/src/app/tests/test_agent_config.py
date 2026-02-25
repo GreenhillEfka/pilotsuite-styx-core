@@ -80,7 +80,9 @@ class TestInit:
         init_agent_config(config=config_default)
         assert _get_agent_version() == "5.21.0"
 
-    def test_init_none(self):
+    def test_init_none(self, monkeypatch):
+        monkeypatch.delenv("COPILOT_VERSION", raising=False)
+        monkeypatch.delenv("BUILD_VERSION", raising=False)
         init_agent_config(config=None)
         assert _get_agent_version() == "5.21.0"  # default
 
@@ -118,6 +120,17 @@ class TestLLMAvailability:
         available, model, backend = _check_llm_available()
         assert available is False
         assert backend == "none"
+
+    def test_flat_options_keys_are_supported(self):
+        init_agent_config(config={
+            "conversation_prefer_local": True,
+            "conversation_ollama_model": "qwen3:4b",
+            "conversation_assistant_name": "Styx",
+        })
+        available, model, backend = _check_llm_available()
+        assert available is True
+        assert model == "qwen3:4b"
+        assert backend == "ollama"
 
 
 # ── Test features ────────────────────────────────────────────────────────

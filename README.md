@@ -16,7 +16,7 @@ Home Assistant
 |     HTTP REST API (Token-Auth)
 |     v
 +-- Core Add-on (copilot_core) Port 8909    <-- Brain Graph, Habitus, Mood, LLM
-      + Ollama (bundled, qwen3:4b)
+      + Ollama (bundled, qwen3:0.6b default)
 ```
 
 ## Installation
@@ -30,6 +30,7 @@ Home Assistant
    ```
 3. **PilotSuite Core** installieren und starten
 4. Das Add-on laeuft auf Port **8909** mit bundled Ollama
+5. Im Add-on-Info-Screen findest du die exakte Schritt-fuer-Schritt-Anleitung (`DOCS.md`)
 
 ### HACS Integration
 
@@ -39,10 +40,34 @@ Siehe: [pilotsuite-styx-ha Installation](https://github.com/GreenhillEfka/pilots
 
 ### LLM (Ollama bundled)
 
-- Standard-Modell: `qwen3:4b` (Qwen 3, 4B Parameter, Tool-Calling)
-- Fallback-Modell: `qwen3:0.6b` (fuer schwache Hardware)
+- Standard-Modell: `qwen3:0.6b` (schnell, low-RAM, Tool-Calling)
+- Optionales Qualitaets-Modell: `qwen3:4b` (staerkere Hardware)
 - OpenAI-kompatible API (`/v1/chat/completions`, `/v1/models`)
 - Telegram Bot Integration mit Server-side Tool Loop
+
+#### Optional Cloud Fallback (Self-Repair / High-Performance)
+
+Im Add-on unter **Configuration**:
+- `conversation_cloud_api_url` (z. B. `https://ollama.com/v1` oder `https://api.openai.com/v1`)
+- `conversation_cloud_api_key`
+- `conversation_cloud_model` (z. B. `gpt-oss:20b` fuer Ollama Cloud, `gpt-4o-mini` fuer OpenAI-kompatible APIs)
+- `conversation_prefer_local` (`true` = Ollama zuerst, dann Cloud-Fallback)
+
+Hinweis:
+- Wenn ein Client ein nicht lokal installiertes Modell anfragt (z. B. `gpt-4o-mini`), versucht Styx zuerst den konfigurierten lokalen Ollama-Standard und faellt danach optional auf Cloud zurueck.
+- Der externe API-Key wird ausschliesslich im Add-on Feld `conversation_cloud_api_key` gesetzt (nicht in der HACS-Integration).
+
+### Optional: Onyx als Chat- und RAG-Frontend
+
+Onyx laesst sich als zusaetzliche Chat-/RAG-Oberflaeche andocken.
+Empfohlenes Setup: Onyx fuer Connector-RAG, Styx fuer Home-Actions (OpenAPI/MCP).
+Details: `docs/ONYX_INTEGRATION.md`
+
+Produktive Action-Definition:
+- `docs/integrations/onyx_styx_actions.openapi.yaml`
+
+Schneller E2E-Check (Onyx -> Styx -> HA -> Rueckkanal):
+- `TOKEN=<styx_token> ./tools/onyx_styx_e2e.sh`
 
 ### Neural Pipeline
 
@@ -136,6 +161,8 @@ Authorization: Bearer <token>
 |----------|--------|
 | [API_REFERENCE](docs/API_REFERENCE.md) | Alle Endpoints, Auth, Request/Response |
 | [ARCHITECTURE](docs/ARCHITECTURE.md) | Services, Datenfluss, Persistenz |
+| [ONYX_INTEGRATION](docs/ONYX_INTEGRATION.md) | Onyx + Styx Zielarchitektur, Security, Setup |
+| [onyx_styx_actions.openapi](docs/integrations/onyx_styx_actions.openapi.yaml) | OpenAPI Actions fuer Onyx |
 | [ROADMAP](docs/ROADMAP.md) | Phase 5-6, Zukunftsplaene |
 | [CHANGELOG](CHANGELOG.md) | Release-Historie |
 | [HACS Integration](https://github.com/GreenhillEfka/pilotsuite-styx-ha) | Sensoren, Module, Dashboard |
