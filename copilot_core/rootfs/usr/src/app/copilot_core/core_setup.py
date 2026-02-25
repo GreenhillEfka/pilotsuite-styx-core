@@ -3543,3 +3543,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.api.v1.minikube import minikube_bp
         app.register_blueprint(minikube_bp)
     except: pass
+    try:
+        from copilot_core.api.v1.skaffold import skaffold_bp
+        app.register_blueprint(skaffold_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.k9s import k9s_bp
+        app.register_blueprint(k9s_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.lens import lens_bp
+        app.register_blueprint(lens_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.octant import octant_bp
+        app.register_blueprint(octant_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.devspace import devspace_bp
+        app.register_blueprint(devspace_bp)
+    except: pass
