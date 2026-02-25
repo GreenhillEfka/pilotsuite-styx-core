@@ -141,6 +141,7 @@ def create_app() -> Flask:
 
     # Attach config to app (simple, explicit)
     app.config["COPILOT_CFG"] = cfg
+    app.config.setdefault("COPILOT_SERVICES", {})
 
     # Register API modules
     app.register_blueprint(api_v1)

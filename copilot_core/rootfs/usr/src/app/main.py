@@ -177,6 +177,9 @@ except Exception:
     _main_logger.exception("CRITICAL: init_services failed — starting with empty services")
     _services = {}
 
+# Shared service container for all API modules.
+app.config["COPILOT_SERVICES"] = _services
+
 try:
     register_blueprints(app, _services)
 except Exception:
@@ -444,6 +447,7 @@ def api_capabilities():
                 "habitus": {"enabled": services.get("habitus_service") is not None},
                 "mood": {"enabled": services.get("mood_service") is not None},
                 "vector_store": {"enabled": services.get("vector_store") is not None},
+                "rag": {"enabled": services.get("rag_service") is not None},
                 "module_control": {"enabled": services.get("module_registry") is not None},
                 "hub": {"enabled": services.get("hub_zones") is not None},
                 "conversation": {"enabled": services.get("llm_provider") is not None},

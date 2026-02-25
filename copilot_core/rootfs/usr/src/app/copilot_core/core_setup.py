@@ -111,6 +111,7 @@ def init_services(hass=None, config: dict = None):
         "birthday_service": None,
         "vector_store": None,
         "embedding_engine": None,
+        "rag_service": None,
         # PilotSuite Hub engines (v7.6.0)
         "hub_dashboard": None,
         "hub_plugin_manager": None,
@@ -313,6 +314,19 @@ def init_services(hass=None, config: dict = None):
         _LOGGER.info("VectorStore + EmbeddingEngine initialized (RAG pipeline active)")
     except Exception:
         _LOGGER.exception("Failed to init VectorStore / EmbeddingEngine")
+
+    # Initialize RAG document service (v8.7.0)
+    try:
+        if services.get("vector_store") and services.get("embedding_engine"):
+            from copilot_core.rag.service import RagService
+
+            services["rag_service"] = RagService(
+                vector_store=services["vector_store"],
+                embedding_engine=services["embedding_engine"],
+            )
+            _LOGGER.info("RagService initialized")
+    except Exception:
+        _LOGGER.exception("Failed to init RagService")
 
     # Set conversation env vars from config (used by conversation.py + llm_provider.py)
     try:
@@ -648,6 +662,17 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
     if services and services.get("module_registry"):
         init_module_control_api(services["module_registry"])
     app.register_blueprint(module_control_bp)
+
+    # Register RAG API (v8.7.0)
+    try:
+        from copilot_core.api.v1.rag import rag_bp, init_rag_api
+
+        if services and services.get("rag_service"):
+            init_rag_api(services["rag_service"])
+        app.register_blueprint(rag_bp)
+        _LOGGER.info("Registered RAG API (/api/v1/rag/*)")
+    except Exception:
+        _LOGGER.exception("Failed to register RAG API")
 
     # Register User Hints API (/api/v1/hints/*)
     try:

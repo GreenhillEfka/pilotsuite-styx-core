@@ -551,6 +551,7 @@ def _get_user_context() -> str:
         _services = _ca.config.get("COPILOT_SERVICES", {})
         _vs = _services.get("vector_store")
         _ee = _services.get("embedding_engine")
+        _rag = _services.get("rag_service")
         if _vs and _ee:
             # We need the current user message — it's passed through the caller
             _current_msg = getattr(_get_user_context, "_current_query", "")
@@ -574,6 +575,19 @@ def _get_user_context() -> str:
                     context_parts.append(
                         "Relevante Erinnerungen (semantisch):\n  " + "\n  ".join(mem_lines)
                     )
+                if _rag:
+                    rag_result = _rag.search(query=_current_msg, limit=3, threshold=0.32)
+                    rag_hits = rag_result.get("results", []) if isinstance(rag_result, dict) else []
+                    if rag_hits:
+                        rag_lines = []
+                        for hit in rag_hits:
+                            source = str(hit.get("source") or hit.get("doc_id") or "wissensbasis")
+                            text = str(hit.get("snippet") or hit.get("text") or "").strip()
+                            score = float(hit.get("score") or 0.0)
+                            rag_lines.append(f"[{score:.2f}] {source}: {text[:150]}")
+                        context_parts.append(
+                            "Relevante Wissensbasis (RAG):\n  " + "\n  ".join(rag_lines)
+                        )
     except Exception:
         logger.debug("RAG retrieval failed (non-critical)", exc_info=True)
 
@@ -814,6 +828,22 @@ def llm_status():
     catalog = provider.model_catalog()
     installed_models = catalog.get("offline", {}).get("models", [])
     cloud_models = catalog.get("cloud", {}).get("models", [])
+    rag_active = False
+    rag_documents = 0
+    rag_chunks = 0
+
+    try:
+        from flask import current_app
+
+        services = current_app.config.get("COPILOT_SERVICES", {}) if current_app else {}
+        rag_service = services.get("rag_service")
+        if rag_service:
+            rag_stats = rag_service.stats()
+            rag_active = True
+            rag_documents = int(rag_stats.get("document_count", 0))
+            rag_chunks = int(rag_stats.get("chunk_count", 0))
+    except Exception:
+        logger.debug("Could not resolve rag status", exc_info=True)
 
     now = time.monotonic()
     with _rate_limit_lock:
@@ -839,6 +869,9 @@ def llm_status():
         "calls_this_hour": calls_this_hour,
         "max_calls_per_hour": MAX_CALLS_PER_HOUR,
         "assistant_name": ASSISTANT_NAME,
+        "rag_active": rag_active,
+        "rag_documents": rag_documents,
+        "rag_chunks": rag_chunks,
         "version": os.environ.get("COPILOT_VERSION")
         or os.environ.get("BUILD_VERSION")
         or get_runtime_version(),
@@ -929,6 +962,15 @@ def memory_stats():
                 result["rag_active"] = False
         else:
             result["rag_active"] = False
+
+        rag_service = services.get("rag_service")
+        if rag_service:
+            try:
+                result["rag_documents"] = int(rag_service.stats().get("document_count", 0))
+                result["rag_chunks"] = int(rag_service.stats().get("chunk_count", 0))
+                result["rag_active"] = True
+            except Exception:
+                pass
 
         return jsonify(result)
     except Exception as exc:

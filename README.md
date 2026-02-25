@@ -140,6 +140,8 @@ Authorization: Bearer <token>
 | **Search** | `/api/v1/search/*` | Entity Search, Index |
 | **Knowledge Graph** | `/api/v1/kg/*` | Nodes, Edges, Query |
 | **Vector Store** | `/api/v1/vector/*` | Store, Search, Stats |
+| **RAG** | `/api/v1/rag/*` | Dokument-Index, Semantik-Suche, Status |
+| **Module Control** | `/api/v1/modules/*` | Modulzustand, Settings, Presets, Katalog |
 | **Weather** | `/api/v1/weather/*` | Wetterdaten |
 | **Energy** | `/api/v1/energy/*` | Energiemonitoring |
 | **Notifications** | `/api/v1/notifications/*` | Push System |

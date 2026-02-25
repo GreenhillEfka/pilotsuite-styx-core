@@ -70,6 +70,66 @@ def test_module_settings_roundtrip(monkeypatch):
         assert payload["settings"]["notes"] == "test"
 
 
+def test_module_catalog_and_presets(monkeypatch):
+    monkeypatch.setenv("COPILOT_AUTH_REQUIRED", "false")
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        _reset_module_registry(f"{tmpdir}/module_states.db")
+        app = _create_api_app()
+        client = app.test_client()
+
+        catalog = client.get("/api/v1/modules/catalog")
+        assert catalog.status_code == 200
+        catalog_data = catalog.get_json()
+        assert catalog_data["ok"] is True
+        assert isinstance(catalog_data["modules"], list)
+        assert any(m["id"] == "habitus_miner" for m in catalog_data["modules"])
+
+        presets = client.get("/api/v1/modules/presets")
+        assert presets.status_code == 200
+        presets_data = presets.get_json()
+        assert presets_data["ok"] is True
+        assert presets_data["count"] >= 1
+        assert any(p["id"] == "balanced_home" for p in presets_data["presets"])
+
+        dry_run = client.post(
+            "/api/v1/modules/presets/apply",
+            json={"preset_id": "balanced_home", "dry_run": True},
+        )
+        assert dry_run.status_code == 200
+        dry_data = dry_run.get_json()
+        assert dry_data["ok"] is True
+        assert dry_data["dry_run"] is True
+        assert "brain_graph" in dry_data["state_changes"]
+
+
+def test_module_preset_apply_updates_states(monkeypatch):
+    monkeypatch.setenv("COPILOT_AUTH_REQUIRED", "false")
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        _reset_module_registry(f"{tmpdir}/module_states.db")
+        app = _create_api_app()
+        client = app.test_client()
+
+        applied = client.post(
+            "/api/v1/modules/presets/apply",
+            json={"preset_id": "balanced_home"},
+        )
+        assert applied.status_code in (200, 207)
+        payload = applied.get_json()
+        assert payload["ok"] is True
+        assert payload["applied_states"]["brain_graph"] == "active"
+        assert payload["applied_states"]["habitus_miner"] in {"learning", "active"}
+
+        brain_state = client.get("/api/v1/modules/brain_graph")
+        assert brain_state.status_code == 200
+        assert brain_state.get_json()["state"] == "active"
+
+        habitus_state = client.get("/api/v1/modules/habitus_miner")
+        assert habitus_state.status_code == 200
+        assert habitus_state.get_json()["state"] in {"learning", "active"}
+
+
 def test_shopping_and_reminder_flow(monkeypatch):
     monkeypatch.setenv("COPILOT_AUTH_REQUIRED", "false")
 

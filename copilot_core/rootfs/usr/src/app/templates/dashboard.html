@@ -518,6 +518,10 @@ a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
     <div id="set-routing"><div class="loading"><div class="spinner"></div>Lade...</div></div>
   </div>
   <div class="card">
+    <h2><span class="ic">&#x2699;</span> Modul Presets</h2>
+    <div id="set-module-presets"><div class="loading"><div class="spinner"></div>Lade...</div></div>
+  </div>
+  <div class="card">
     <h2><span class="ic">&#x1f4e6;</span> Verfuegbare Modelle</h2>
     <div id="set-models"><div class="loading"><div class="spinner"></div>Lade...</div></div>
   </div>
@@ -539,6 +543,7 @@ a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
       <tr><td>Neuronen</td><td><code>/api/v1/neurons</code></td></tr>
       <tr><td>Telegram</td><td><code>/telegram/status</code></td></tr>
       <tr><td>Module Control</td><td><code>/api/v1/modules</code></td></tr>
+      <tr><td>RAG</td><td><code>/api/v1/rag/*</code></td></tr>
       <tr><td>Automationen</td><td><code>/api/v1/automations</code></td></tr>
       <tr><td>Media Zonen</td><td><code>/api/v1/media/zones</code></td></tr>
       <tr><td>Musikwolke</td><td><code>/api/v1/media/musikwolke</code></td></tr>
@@ -550,6 +555,10 @@ a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
   <div class="card">
     <h2><span class="ic">&#x1f4da;</span> Gedaechtnis</h2>
     <div id="set-memory"><div class="loading"><div class="spinner"></div>Lade...</div></div>
+  </div>
+  <div class="card">
+    <h2><span class="ic">&#x1f4c1;</span> RAG Wissensbasis</h2>
+    <div id="set-rag"><div class="loading"><div class="spinner"></div>Lade...</div></div>
   </div>
   <div class="card">
     <h2><span class="ic">&#x1f916;</span> Empfohlene Modelle</h2>
@@ -612,6 +621,7 @@ const MODULE_DEFS=[
   {id:'waste_reminder',name:'Müllabfuhr',desc:'Abfuhr-Erinnerungen + TTS',icon:'&#x267b;',color:'var(--green)'},
   {id:'birthday_reminder',name:'Geburtstage',desc:'Kalender-Erinnerungen + TTS',icon:'&#x1f382;',color:'var(--pink)'},
 ];
+let MODULE_DEFS_RUNTIME=[...MODULE_DEFS];
 const MODULE_CONFIG_SPECS={
   habitus_miner:{
     label:'Habitus Miner',
@@ -705,7 +715,7 @@ const _NEURON_MODULE_HINTS=[
 ];
 
 function _moduleColor(moduleId){
-  const mod=(MODULE_DEFS||[]).find((m)=>m.id===moduleId);
+  const mod=(MODULE_DEFS_RUNTIME||[]).find((m)=>m.id===moduleId);
   if(mod&&mod.color&&String(mod.color).startsWith('var(')){
     const key=String(mod.color).slice(4,-1).trim();
     const val=getComputedStyle(document.documentElement).getPropertyValue(key).trim();
@@ -1119,7 +1129,7 @@ async function loadPipelines(){
     await syncModuleStates();
     const health=await fetchModuleHealth();
     c.innerHTML='';
-    MODULE_DEFS.forEach(m=>{
+    MODULE_DEFS_RUNTIME.forEach(m=>{
       const detected=health[m.id]||'unknown';
       const st=moduleStates[m.id]||detected;
       const detail=health._details?.[m.id]||'';
@@ -2524,12 +2534,12 @@ function gaugeHTML(label,val,color){
 function initModuleConfigSelect(){
   const sel=$('module-config-select');
   if(!sel)return;
-  const ids=new Set(MODULE_DEFS.map((m)=>m.id));
+  const ids=new Set(MODULE_DEFS_RUNTIME.map((m)=>m.id));
   Object.keys(MODULE_CONFIG_SPECS).forEach((id)=>ids.add(id));
   const moduleIds=[...ids];
   const opts=moduleIds.map((moduleId)=>{
     const spec=MODULE_CONFIG_SPECS[moduleId];
-    const def=MODULE_DEFS.find((m)=>m.id===moduleId);
+    const def=MODULE_DEFS_RUNTIME.find((m)=>m.id===moduleId);
     const label=(def&&def.name)?def.name:(spec?.label||moduleId);
     const suffix=spec?'':' (Basis)';
     return `<option value="${escapeHtml(moduleId)}">${escapeHtml(label+suffix)}</option>`;
@@ -2709,11 +2719,35 @@ async function loadModules(){
   const c=$('module-list');if(!c)return;
   c.innerHTML='<div class="loading"><div class="spinner"></div>Lade Modul-Status...</div>';
   try{
-    initModuleConfigSelect();
     await syncModuleStates();
     const health=await fetchModuleHealth();
+    // Enrich module list from backend catalog so unknown/new modules are visible.
+    const catalog=await api('/api/v1/modules/catalog');
+    const merged=new Map((MODULE_DEFS_RUNTIME||MODULE_DEFS).map((m)=>[m.id,{...m}]));
+    (catalog?.modules||[]).forEach((m)=>{
+      const id=String(m.id||'').trim();
+      if(!id)return;
+      if(!merged.has(id)){
+        merged.set(id,{
+          id,
+          name:String(m.label||id),
+          desc:String(m.description||'PilotSuite Modul'),
+          icon:'&#x2699;',
+          color:'var(--dim)',
+        });
+      }else{
+        const cur=merged.get(id)||{};
+        merged.set(id,{
+          ...cur,
+          name:String(m.label||cur.name||id),
+          desc:String(m.description||cur.desc||'PilotSuite Modul'),
+        });
+      }
+    });
+    MODULE_DEFS_RUNTIME=[...merged.values()].sort((a,b)=>String(a.name||a.id).localeCompare(String(b.name||b.id),'de',{sensitivity:'base'}));
+    initModuleConfigSelect();
     c.innerHTML='';
-    MODULE_DEFS.forEach(m=>{
+    MODULE_DEFS_RUNTIME.forEach(m=>{
       // Detected state from APIs
       const detected=health[m.id]||'unknown';
       const detail=health._details?.[m.id]||'Status unbekannt';
@@ -2775,14 +2809,14 @@ async function toggleModule(btn,modId){
     localStorage.setItem('styx_module_states',JSON.stringify(moduleStates));
     _moduleStatesSyncedAt=Date.now();
     if(stLabel)stLabel.textContent=persistedState;
-    addHistory('Modul '+escapeHtml(MODULE_DEFS.find(m=>m.id===modId)?.name||modId)+' \u2192 '+persistedState+' (Backend)');
+    addHistory('Modul '+escapeHtml(MODULE_DEFS_RUNTIME.find(m=>m.id===modId)?.name||modId)+' \u2192 '+persistedState+' (Backend)');
   }catch(e){
     // Roll back optimistic UI change when backend write failed
     const rollbackClass=states[labels.indexOf(previousState)]||'off';
     btn.className='mod-toggle '+rollbackClass;
     btn.title=previousState;
     if(stLabel)stLabel.textContent=previousState;
-    addHistory('\u26a0\ufe0f Modul '+escapeHtml(MODULE_DEFS.find(m=>m.id===modId)?.name||modId)+' konnte nicht gespeichert werden: '+escapeHtml(e.message||'API offline'));
+    addHistory('\u26a0\ufe0f Modul '+escapeHtml(MODULE_DEFS_RUNTIME.find(m=>m.id===modId)?.name||modId)+' konnte nicht gespeichert werden: '+escapeHtml(e.message||'API offline'));
     return;
   }
   // Invalidate health cache so next load re-evaluates
@@ -2791,7 +2825,7 @@ async function toggleModule(btn,modId){
   const pipes=document.querySelectorAll('#pipelines .pipe');
   pipes.forEach(p=>{
     const span=p.querySelector('span:last-child');
-    const def=MODULE_DEFS.find(m=>m.name===span?.textContent);
+    const def=MODULE_DEFS_RUNTIME.find(m=>m.name===span?.textContent);
     if(def&&def.id===modId)p.className='pipe pipe-'+newState;
   });
 }
@@ -3102,6 +3136,27 @@ async function saveRoutingConfig(){
     addHistory('\u26a0\ufe0f Routing-Update fehlgeschlagen: '+(e.message||'unbekannt'));
   }
 }
+async function applyModulePreset(presetId){
+  const pid=String(presetId||'').trim();
+  if(!pid)return;
+  try{
+    const r=await fetch(API+'/api/v1/modules/presets/apply',withAuth({
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({preset_id:pid,merge_settings:true}),
+    }));
+    let data={};
+    try{data=await r.json()}catch(_err){data={}}
+    if(!r.ok||data?.ok===false){
+      throw new Error(data?.error||data?.message||('HTTP '+r.status));
+    }
+    addHistory('Modul-Preset angewendet: '+escapeHtml(pid));
+    await loadModules();
+    await loadSettings();
+  }catch(e){
+    addHistory('\u26a0\ufe0f Modul-Preset fehlgeschlagen: '+escapeHtml(e.message||'unbekannt'));
+  }
+}
 async function loadSettings(){
   // Load all in parallel, resilient
   const settled=await Promise.allSettled([
@@ -3111,9 +3166,12 @@ async function loadSettings(){
     api('/chat/models/recommended'),
     api('/api/v1/capabilities'),
     api('/api/v1/onyx/status'),
+    api('/api/v1/modules/presets'),
+    api('/api/v1/rag/status'),
+    api('/api/v1/rag/documents?limit=8'),
   ]);
-  const [statusRes,tgRes,memRes,recRes,capsRes,onyxRes]=settled.map(r=>r.status==='fulfilled'?r.value:null);
-  const status=statusRes,tg=tgRes,mem=memRes,rec=recRes,caps=capsRes,onyx=onyxRes;
+  const [statusRes,tgRes,memRes,recRes,capsRes,onyxRes,presetsRes,ragStatusRes,ragDocsRes]=settled.map(r=>r.status==='fulfilled'?r.value:null);
+  const status=statusRes,tg=tgRes,mem=memRes,rec=recRes,caps=capsRes,onyx=onyxRes,presets=presetsRes,ragStatus=ragStatusRes,ragDocs=ragDocsRes;
   if(status){
     $('set-llm').innerHTML=
       `<tr><td>Provider</td><td>${badge(status.active_provider||'--','p')}</td></tr>`+
@@ -3169,9 +3227,48 @@ async function loadSettings(){
       <tr><td>Praeferenzen</td><td><strong>${(mem.preferences||[]).length}</strong></td></tr>
       <tr><td>Themen</td><td><strong>${mem.stats.topics_count||0}</strong></td></tr>
       <tr><td>RAG</td><td>${mem.rag_active?badge('Aktiv','g'):badge('Inaktiv','y')}</td></tr>
+      <tr><td>RAG Dokumente</td><td>${mem.rag_documents||0}</td></tr>
+      <tr><td>RAG Chunks</td><td>${mem.rag_chunks||0}</td></tr>
       <tr><td>Speicher</td><td>${mem.stats.db_size_mb?mem.stats.db_size_mb.toFixed(1)+' MB':'--'}</td></tr>
     </table>`;
   }else{mc2.innerHTML='<div class="empty">Gedaechtnis nicht initialisiert oder API offline</div>'}
+  // Module presets
+  const mp=$('set-module-presets');
+  if(presets&&Array.isArray(presets.presets)&&presets.presets.length){
+    mp.innerHTML='';
+    presets.presets.forEach((preset)=>{
+      const id=String(preset.id||'');
+      const row=el('div','pat',
+        `<div><strong>${escapeHtml(preset.label||id)}</strong><br><span style="font-size:10px;color:var(--dim)">${escapeHtml(preset.description||'')}</span></div>
+         <div class="meta">${badge((preset.modules||0)+' Module','b')} ${badge((preset.settings_overrides||0)+' Settings','p')} <button onclick="applyModulePreset('${escapeHtml(id)}')" style="margin-left:6px;background:var(--accent);border:none;color:#fff;border-radius:6px;padding:4px 8px;font-size:10px;cursor:pointer">Anwenden</button></div>`);
+      mp.appendChild(row);
+    });
+  }else{
+    mp.innerHTML='<div class="empty">Keine Presets verfuegbar</div>';
+  }
+  // RAG knowledge base
+  const rag=$('set-rag');
+  const ragStats=(ragStatus&&ragStatus.rag)||null;
+  if(ragStats){
+    const docs=(ragDocs&&Array.isArray(ragDocs.documents))?ragDocs.documents:[];
+    let html='<table class="tbl">';
+    html+=`<tr><td>Status</td><td>${ragStats.ok!==false?badge('Aktiv','g'):badge('Fehler','r')}</td></tr>`;
+    html+=`<tr><td>Dokumente</td><td><strong>${ragStats.document_count||0}</strong></td></tr>`;
+    html+=`<tr><td>Chunks</td><td><strong>${ragStats.chunk_count||0}</strong></td></tr>`;
+    html+=`<tr><td>Chunk Size</td><td>${ragStats.default_chunk_size||'--'}</td></tr>`;
+    html+=`<tr><td>Threshold</td><td>${Number(ragStats.default_threshold||0).toFixed(2)}</td></tr>`;
+    html+='</table>';
+    if(docs.length){
+      html+='<div style="margin-top:8px">';
+      docs.slice(0,6).forEach((d)=>{
+        html+=`<div class="pat"><span>${escapeHtml(d.source||d.doc_id||'?')}</span><span class="meta">${badge((d.chunk_count||0)+' Chunks','b')}</span></div>`;
+      });
+      html+='</div>';
+    }
+    rag.innerHTML=html;
+  }else{
+    rag.innerHTML='<div class="empty">RAG API nicht erreichbar</div>';
+  }
   // Recommended
   const rc=$('set-rec');
   if(rec&&rec.models){

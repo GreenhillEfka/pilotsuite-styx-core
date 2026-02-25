@@ -1,5 +1,40 @@
 # Changelog - PilotSuite Core Add-on
 
+## [8.7.0] - 2026-02-25 — RAG API + MODULE PRESETS + FULL MODULE CATALOG
+
+### Added
+- New RAG service + endpoints:
+  - `GET /api/v1/rag/status`
+  - `GET /api/v1/rag/stats`
+  - `GET /api/v1/rag/documents`
+  - `POST /api/v1/rag/documents`
+  - `POST /api/v1/rag/documents/bulk`
+  - `DELETE /api/v1/rag/documents/<doc_id>`
+  - `POST /api/v1/rag/query`
+- New module control endpoints:
+  - `GET /api/v1/modules/catalog`
+  - `GET /api/v1/modules/presets`
+  - `POST /api/v1/modules/presets/apply`
+- New module preset library (`balanced_home`, `privacy_local_first`, `autonomous_plus`) with state + settings rollout.
+
+### Changed
+- Module control schemas expanded for the full module surface (brain, habitus, mood, neurons, knowledge, RAG, media, light, scenes, context, reminders, integrations).
+- Dashboard settings page:
+  - Modul-Presets are now selectable and applyable directly.
+  - RAG status/docs are visible in a dedicated settings card.
+  - Module list/config now auto-extends from backend catalog (new modules appear without hardcoded UI edits).
+- Conversation context now enriches responses with both:
+  - semantic conversation memory hits
+  - RAG document hits from indexed knowledge base.
+
+### Fixed
+- `COPILOT_SERVICES` is now explicitly wired into Flask app startup (`main.py`), so context-dependent APIs consistently see initialized services.
+- `/chat/status` and `/chat/memory` now expose RAG counters (`rag_documents`, `rag_chunks`) for UI/diagnostics.
+
+### Validation
+- `python3 -m py_compile` on changed Core modules/tests passed.
+- Targeted pytest files were prepared (`test_module_and_shopping_api.py`, `test_rag_api.py`); full pytest run requires environment with `pytest` installed.
+
 ## [8.6.0] - 2026-02-25 — HABITUS AUTOMATION + NEURON BRAIN UX
 
 ### Added

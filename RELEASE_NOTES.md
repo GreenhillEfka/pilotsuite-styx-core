@@ -1,5 +1,26 @@
 # Release Notes - PilotSuite Core
 
+## [8.7.0] - 2026-02-25 — RAG + MODULE PRESETS + MODULE KATALOG
+
+### Added
+- Vollstaendiges RAG-API fuer Wissensbasis-Upload, Suche, Status und Loeschen (`/api/v1/rag/*`).
+- Modul-Preset-API (`/api/v1/modules/presets*`) fuer schnelle Betriebsprofile.
+- Modul-Katalog-API (`/api/v1/modules/catalog`) fuer dynamische UI/Backend-Konsistenz.
+
+### Improved
+- Dashboard-Settings erweitert um:
+  - Modul-Preset-Anwendung per Klick
+  - RAG-Status + Dokumentuebersicht
+  - Dynamische Modul-Renderlogik aus Backend-Katalog
+- Chatkontext nutzt jetzt sowohl semantische Conversation-Memory-Treffer als auch RAG-Dokumenttreffer.
+
+### Fixed
+- Service-Wiring in `main.py`: `COPILOT_SERVICES` wird jetzt garantiert gesetzt.
+- RAG-Zaehler (`rag_documents`, `rag_chunks`) in `/chat/status` und `/chat/memory` integriert.
+
+### Validation
+- Syntax/Import-Validierung via `python3 -m py_compile` fuer alle geaenderten Core-Dateien erfolgreich.
+
 ## [8.6.0] - 2026-02-25 — HABITUS MANAGEMENT + NEURON BRAIN
 
 ### Added
