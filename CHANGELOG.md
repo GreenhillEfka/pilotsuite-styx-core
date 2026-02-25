@@ -1,5 +1,34 @@
 # Changelog - PilotSuite Core Add-on
 
+## [8.11.0] - 2026-02-25 — SYSTEM OVERVIEW + SENSOR/NEURON LAYER UX
+
+### Added
+- New observability APIs under `/api/v1/system/*`:
+  - `GET /api/v1/system/overview`
+  - `GET /api/v1/system/sensors`
+  - `GET /api/v1/system/zones/summary`
+  - `POST /api/v1/system/cache/clear`
+- Overview payload now includes:
+  - host resource snapshot (CPU/RAM/Disk + process RSS)
+  - service connectivity status
+  - module connectivity/dependency overview
+  - neuron-layer summary
+  - managed sensor inventory with module/neuron mapping
+  - habitus zone relevance summary.
+
+### Changed
+- Dashboard navigation extended with dedicated **System** page.
+- Added frontend hard-reload button (`UI Reload`) for immediate frontend refresh without service restart.
+- Settings page now shows system health score and CPU/RAM/Disk snapshot from backend overview API.
+- Habitus page now includes **Habitus-Zonen Statusuebersicht** with availability, metrics and module hints.
+
+### Fixed
+- `/api/v1/system/modules` now returns module data from registry/catalog instead of calling a non-existent `list_modules()` method.
+
+### Validation
+- `pytest -q tests/test_system_overview_api.py tests/test_dashboard_template_habitus.py` passed.
+- Full regression set passed (66 tests) for dashboard/homekit/bootstrap/dev-surface/main waitres config.
+
 ## [8.10.0] - 2026-02-25 — HOMEKIT ZONE SERVERS + RESIZABLE MODULE WINDOWS
 
 ### Added

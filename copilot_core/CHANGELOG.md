@@ -3,6 +3,13 @@
 This file exists so Home Assistant can show an add-on changelog.
 For full history, see the repository-level `CHANGELOG.md`.
 
+## 8.11.0
+- Neue `/api/v1/system/*` Observability-APIs fuer Gesamtzustand, Sensor-Layer und Zonen-Summary.
+- Dashboard erweitert um dedizierte **System**-Seite (CPU/RAM/Disk, Dienste, Module, Neuronen, Sensoren).
+- Habitus-Seite zeigt neue Statusuebersicht pro Zone (Verfuegbarkeit, Metriken, Modulabhaengigkeiten).
+- Header erhaelt `UI Reload` fuer Frontend-Hard-Reload ohne Add-on-Neustart.
+- `/api/v1/system/modules` Bugfix: nutzt jetzt Registry/Katalog statt nicht vorhandener `list_modules()`.
+
 ## 8.10.0
 - HomeKit-Zonenserver API erweitert (Status/Toggle/Config/Sync + QR-Endpunkte).
 - HomeKit-Server werden automatisch aus Habitus-Zonen erzeugt (Name + kompatible Entitaeten).

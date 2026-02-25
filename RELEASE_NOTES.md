@@ -1,5 +1,32 @@
 # Release Notes - PilotSuite Core
 
+## [8.11.0] - 2026-02-25 — SYSTEM OVERVIEW + SENSOR/NEURON LAYER UX
+
+### Added
+- New observability endpoints:
+  - `GET /api/v1/system/overview`
+  - `GET /api/v1/system/sensors`
+  - `GET /api/v1/system/zones/summary`
+  - `POST /api/v1/system/cache/clear`
+- New System page in dashboard with:
+  - host resources (CPU/RAM/Disk)
+  - service/module connectivity
+  - neuron layer + sensor layer summary
+  - habitus zone status table.
+- New Habitus page card: `Habitus-Zonen Statusuebersicht`.
+
+### Changed
+- Settings now includes global health score and resource snapshot from system overview API.
+- Header now exposes `UI Reload` for forced frontend refresh without add-on restart.
+- System status endpoint now aggregates module dependencies and neuron hints per module.
+
+### Fixed
+- `/api/v1/system/modules` now uses registry/catalog data (no invalid `list_modules()` call).
+
+### Validation
+- `pytest -q tests/test_system_overview_api.py tests/test_dashboard_template_habitus.py` passed.
+- Full regression pass: `66 passed` (dashboard/homekit/bootstrap/dev/main-waitress suites).
+
 ## [8.10.0] - 2026-02-25 — HOMEKIT SERVERS + DASHBOARD UX
 
 ### Added

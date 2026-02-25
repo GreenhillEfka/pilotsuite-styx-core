@@ -1,6 +1,6 @@
 # PilotSuite Quick Start
 
-Stand: **v8.10.0**
+Stand: **v8.11.0**
 
 ## Zielbild
 

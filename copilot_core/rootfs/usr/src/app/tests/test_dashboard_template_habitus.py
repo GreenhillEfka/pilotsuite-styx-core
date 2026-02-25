@@ -108,3 +108,17 @@ def test_dashboard_template_has_resizable_module_config_windows() -> None:
     assert "openModuleConfigWindow(" in text
     assert "_bindModuleWindowDrag(" in text
     assert "resize:both" in text
+
+
+def test_dashboard_template_exposes_system_overview_page() -> None:
+    text = _dashboard_template()
+    assert 'data-page="system"' in text
+    assert 'id="page-system"' in text
+    assert "loadSystemOverview(" in text
+    assert "/api/v1/system/overview" in text
+
+
+def test_dashboard_template_exposes_habitus_zone_status_summary() -> None:
+    text = _dashboard_template()
+    assert 'id="hab-zone-status-summary"' in text
+    assert "loadHabitusZoneStatusSummary(" in text

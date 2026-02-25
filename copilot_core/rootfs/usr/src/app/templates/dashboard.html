@@ -20,6 +20,8 @@ a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
 .dot-green{background:var(--green)}.dot-yellow{background:var(--yellow)}.dot-red{background:var(--red)}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 .header .ver{font-size:11px;color:var(--dim);padding:3px 8px;border-radius:12px;border:1px solid var(--border)}
+.header .btn-reload{background:var(--surface);border:1px solid var(--border);color:var(--dim);border-radius:8px;padding:5px 10px;font-size:10px;cursor:pointer;text-transform:uppercase;letter-spacing:.5px}
+.header .btn-reload:hover{border-color:var(--accent);color:var(--text)}
 
 /* Nav */
 .nav{background:var(--surface);border-bottom:1px solid var(--border);display:flex;overflow-x:auto;padding:0 12px;gap:2px}
@@ -205,6 +207,20 @@ a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
 .scene-item .scene-actions button{background:none;border:1px solid var(--border);color:var(--dim);font-size:10px;padding:3px 8px;border-radius:4px;cursor:pointer}.scene-item .scene-actions button:hover{color:var(--accent2);border-color:var(--accent)}
 .preset-chip{background:var(--card);border:1px solid var(--border);color:var(--text);font-size:11px;padding:5px 12px;border-radius:16px;cursor:pointer;transition:all .2s;display:inline-flex;align-items:center;gap:4px}.preset-chip:hover{background:var(--accent);color:#fff;border-color:var(--accent)}
 
+/* ============== SYSTEM PAGE ============== */
+.sys-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.sys-kpi{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px}
+.sys-kpi .kl{font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.6px}
+.sys-kpi .kv{font-size:20px;font-weight:700;margin-top:4px}
+.meter{margin-top:7px}
+.meter .mbar{height:7px;background:rgba(30,42,58,.9);border-radius:4px;overflow:hidden}
+.meter .mfill{height:100%;border-radius:4px;transition:width .35s ease}
+.system-scroll{max-height:320px;overflow:auto;border:1px solid rgba(30,42,58,.55);border-radius:8px}
+.sys-mod-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:8px}
+.sys-mod-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:9px}
+.sys-mod-card .name{font-size:12px;font-weight:700}
+.sys-mod-card .meta{font-size:10px;color:var(--dim);margin-top:5px;line-height:1.5}
+
 /* ============== TREND CHART ============== */
 .trend-chart{width:100%;height:120px;position:relative}
 .trend-chart canvas{width:100%;height:100%}
@@ -264,6 +280,7 @@ a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
 <h1 id="app-title">Styx — PilotSuite</h1>
 <span class="status-pill" id="provider-status"><span class="dot dot-yellow" id="status-dot"></span><span id="status-text">Verbinde...</span></span>
 <span class="ver" id="ver-badge">--</span>
+<button class="btn-reload" onclick="reloadDashboardFrontend()" title="Frontend hart neu laden">&#x21bb; UI Reload</button>
 </div>
 
 <!-- Navigation -->
@@ -272,6 +289,7 @@ a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
 <button data-page="habitus">Habitus</button>
 <button data-page="mood">Stimmung</button>
 <button data-page="modules">Module</button>
+<button data-page="system">System</button>
 <button data-page="haushalt">&#x1f3e0; Haushalt</button>
 <button data-page="settings">Einstellungen</button>
 </div>
@@ -406,6 +424,11 @@ a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
   <div id="hab-dependencies"><div class="loading"><div class="spinner"></div>Analysiere...</div></div>
 </div>
 <div class="card" style="margin-top:14px">
+  <h2><span class="ic">&#x1f4ca;</span> Habitus-Zonen Statusuebersicht</h2>
+  <p style="font-size:11px;color:var(--dim);margin-bottom:10px">Verfuegbarkeit, relevante Metriken und Modulabhaengigkeiten pro Zone.</p>
+  <div id="hab-zone-status-summary"><div class="loading"><div class="spinner"></div>Lade Zonensummary...</div></div>
+</div>
+<div class="card" style="margin-top:14px">
   <h2><span class="ic">&#x1f34e;</span> HomeKit Server pro Habitus-Zone</h2>
   <p style="font-size:11px;color:var(--dim);margin-bottom:10px">Automatisch aus Habitus-Zonen generiert. Pro Zone: Serverstatus, Setup-Code, QR zum Pairing und Konfiguration.</p>
   <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
@@ -475,6 +498,46 @@ a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
   <h2><span class="ic">&#x1f916;</span> Erstellte Automationen</h2>
   <p style="font-size:11px;color:var(--dim);margin-bottom:10px">Aus akzeptierten Vorschlaegen erstellte HA-Automationen</p>
   <div id="automation-list"><div class="loading"><div class="spinner"></div>Lade Automationen...</div></div>
+</div>
+</div>
+
+<!-- ========== SYSTEM PAGE ========== -->
+<div class="page" id="page-system">
+<div class="card" style="margin-bottom:14px">
+  <h2><span class="ic">&#x1f6e0;</span> PilotSuite Gesamtzustand</h2>
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+    <button class="btn-sm" onclick="loadSystemOverview(true)">&#x21bb; Backend sync</button>
+    <button class="btn-sm" onclick="reloadDashboardFrontend()">Frontend reload</button>
+    <span id="system-last-update" style="font-size:11px;color:var(--dim)">--</span>
+  </div>
+  <div id="system-overall"><div class="loading"><div class="spinner"></div>Lade Systemstatus...</div></div>
+</div>
+<div class="grid g2">
+  <div class="card">
+    <h2><span class="ic">&#x1f4bb;</span> Host Ressourcen</h2>
+    <div id="system-resources"><div class="loading"><div class="spinner"></div>Lade Ressourcen...</div></div>
+  </div>
+  <div class="card">
+    <h2><span class="ic">&#x1f4e1;</span> Dienste &amp; Konnektivitaet</h2>
+    <div id="system-services"><div class="loading"><div class="spinner"></div>Lade Dienste...</div></div>
+  </div>
+  <div class="card">
+    <h2><span class="ic">&#x2699;</span> Modul-Abhaengigkeiten</h2>
+    <div id="system-modules"><div class="loading"><div class="spinner"></div>Lade Module...</div></div>
+  </div>
+  <div class="card">
+    <h2><span class="ic">&#x1f9e0;</span> Neuronen-Layer</h2>
+    <div id="system-neurons"><div class="loading"><div class="spinner"></div>Lade Neuronen...</div></div>
+  </div>
+</div>
+<div class="card" style="margin-top:14px">
+  <h2><span class="ic">&#x1f4ca;</span> Sensoren-Layer (PilotSuite)</h2>
+  <p style="font-size:11px;color:var(--dim);margin-bottom:10px">Status, Funktion, Modulzuordnung und neuronale Hinweise fuer alle PilotSuite-Sensoren.</p>
+  <div id="system-sensors"><div class="loading"><div class="spinner"></div>Lade Sensoren...</div></div>
+</div>
+<div class="card" style="margin-top:14px">
+  <h2><span class="ic">&#x1f3e0;</span> Habitus-Zonen Status-Summary</h2>
+  <div id="system-zones"><div class="loading"><div class="spinner"></div>Lade Zonenstatus...</div></div>
 </div>
 </div>
 
@@ -827,6 +890,8 @@ let _musikwolkeSessions=[];
 let _homekitServersCache=new Map();
 let _moduleConfigWindows={};
 let _moduleWinZ=2400;
+let _systemOverviewCache=null;
+let _systemOverviewTs=0;
 const CHAT_MODEL_STORAGE_KEY='styx_chat_model';
 
 // -- Helpers --
@@ -907,6 +972,37 @@ function _chatModelLabel(model){
   if(value.startsWith('offline:'))return value.slice('offline:'.length);
   if(value.startsWith('cloud:'))return value.slice('cloud:'.length)+' (cloud)';
   return value;
+}
+function reloadDashboardFrontend(){
+  try{
+    const u=new URL(window.location.href);
+    u.searchParams.set('ui_reload',String(Date.now()));
+    window.location.assign(u.toString());
+  }catch(_err){
+    window.location.reload();
+  }
+}
+function _num(v,def=0){
+  const n=Number(v);
+  return Number.isFinite(n)?n:def;
+}
+function _percentColor(v){
+  const p=_num(v,-1);
+  if(p<0)return 'var(--dim)';
+  if(p>=90)return 'var(--red)';
+  if(p>=75)return 'var(--yellow)';
+  return 'var(--green)';
+}
+function _meter(v){
+  const p=Math.max(0,Math.min(100,_num(v,0)));
+  return `<div class="meter"><div class="mbar"><div class="mfill" style="width:${p}%;background:${_percentColor(p)}"></div></div></div>`;
+}
+function _systemHealthBadge(status){
+  const s=String(status||'unknown');
+  if(s==='healthy')return badge('Healthy','g');
+  if(s==='degraded')return badge('Degraded','y');
+  if(s==='critical')return badge('Critical','r');
+  return badge('Unknown','b');
 }
 function _chatModelOptionsFromStatus(status){
   const out=[{value:'primary',label:'Auto (Primary Routing)'}];
@@ -2329,6 +2425,7 @@ async function loadHabitus(){
   await loadHabitusAutomationSuggestions();
   await loadHabitusDependencyOverview(depData);
   await loadHomeKitServers();
+  await loadHabitusZoneStatusSummary(false);
 
   // Trend from real rule confidence values
   const trendData=rules.map(r=>(r.metadata||r).confidence||0);
@@ -3623,6 +3720,237 @@ async function loadNewsWarnings(){
 }
 
 // ==================================================
+// SYSTEM OVERVIEW
+// ==================================================
+async function getSystemOverview(force=false,sensorLimit=220){
+  const now=Date.now();
+  if(!force&&_systemOverviewCache&&(now-_systemOverviewTs)<12000){
+    return _systemOverviewCache;
+  }
+  const q='?sensor_limit='+encodeURIComponent(String(sensorLimit))+(force?'&force=true':'');
+  const data=await api('/api/v1/system/overview'+q);
+  if(data&&data.ok){
+    _systemOverviewCache=data;
+    _systemOverviewTs=Date.now();
+  }
+  return data;
+}
+function _fmtMetric(v,suffix=''){
+  if(v===null||v===undefined||v==='')return '--';
+  const n=Number(v);
+  if(Number.isFinite(n))return n.toFixed(Math.abs(n)>=100?0:1)+suffix;
+  return String(v)+suffix;
+}
+function renderHabitusZoneStatusSummary(data){
+  const c=$('hab-zone-status-summary');if(!c)return;
+  const zones=Array.isArray(data?.zones)?data.zones:[];
+  if(!zones.length){
+    c.innerHTML='<div class="empty">Keine Zonen-Statusdaten verfuegbar.</div>';
+    return;
+  }
+  let html='<div class="system-scroll"><table class="tbl"><tr><th>Zone</th><th>Verf.</th><th>Bewegung</th><th>Metriken</th><th>Module</th></tr>';
+  zones.forEach((z)=>{
+    const ratio=Math.round((_num(z.availability_ratio,0))*100);
+    const avail=badge(ratio>=95?(ratio+'%'):(ratio+'%'),ratio>=95?'g':ratio>=80?'y':'r');
+    const motion=_num(z.motion_active,0);
+    const metrics=[
+      z.temperature_avg!==null&&z.temperature_avg!==undefined?('T '+_fmtMetric(z.temperature_avg,'\u00b0C')):'',
+      z.humidity_avg!==null&&z.humidity_avg!==undefined?('H '+_fmtMetric(z.humidity_avg,'%')):'',
+      z.co2_avg!==null&&z.co2_avg!==undefined?('CO2 '+_fmtMetric(z.co2_avg,'')):'',
+      z.brightness_avg!==null&&z.brightness_avg!==undefined?('Lux '+_fmtMetric(z.brightness_avg,'')):'',
+      z.noise_avg!==null&&z.noise_avg!==undefined?('Noise '+_fmtMetric(z.noise_avg,'')):'',
+    ].filter(Boolean).join(' · ')||'--';
+    const mods=(z.module_dependencies||[]).slice(0,3).map((m)=>badge(m,'b')).join(' ');
+    html+=`<tr><td><strong>${escapeHtml(z.zone_name||z.zone_id||'?')}</strong><br><span style="font-size:10px;color:var(--dim)">${escapeHtml(z.zone_id||'')}</span></td><td>${avail}<br><span style="font-size:10px;color:var(--dim)">${_num(z.available_entities,0)}/${_num(z.entity_count,0)}</span></td><td>${motion>0?badge(String(motion),'g'):badge('0','y')}</td><td style="font-size:10px;color:var(--dim)">${escapeHtml(metrics)}</td><td>${mods||'--'}</td></tr>`;
+  });
+  html+='</table></div>';
+  c.innerHTML=html;
+}
+async function loadHabitusZoneStatusSummary(force=false,preloaded=null){
+  try{
+    const data=preloaded&&preloaded.ok?preloaded:await getSystemOverview(force,160);
+    if(!data||!data.ok){
+      const c=$('hab-zone-status-summary');if(c)c.innerHTML='<div class="empty">System-API nicht erreichbar.</div>';
+      return;
+    }
+    renderHabitusZoneStatusSummary(data);
+  }catch(e){
+    const c=$('hab-zone-status-summary');if(c)c.innerHTML='<div class="empty">Zone-Status konnte nicht geladen werden.</div>';
+  }
+}
+async function loadSystemOverview(force=false){
+  const overallEl=$('system-overall');
+  const resourcesEl=$('system-resources');
+  const servicesEl=$('system-services');
+  const modulesEl=$('system-modules');
+  const neuronsEl=$('system-neurons');
+  const sensorsEl=$('system-sensors');
+  const zonesEl=$('system-zones');
+  if(!overallEl)return;
+  if(force){
+    overallEl.innerHTML='<div class="loading"><div class="spinner"></div>Lade Systemstatus...</div>';
+  }
+  try{
+    const data=await getSystemOverview(force,260);
+    if(!data||!data.ok){
+      overallEl.innerHTML='<div class="empty">System-API nicht erreichbar.</div>';
+      if(resourcesEl)resourcesEl.innerHTML='<div class="empty">--</div>';
+      if(servicesEl)servicesEl.innerHTML='<div class="empty">--</div>';
+      if(modulesEl)modulesEl.innerHTML='<div class="empty">--</div>';
+      if(neuronsEl)neuronsEl.innerHTML='<div class="empty">--</div>';
+      if(sensorsEl)sensorsEl.innerHTML='<div class="empty">--</div>';
+      if(zonesEl)zonesEl.innerHTML='<div class="empty">--</div>';
+      return;
+    }
+
+    const overall=data.overall||{};
+    const sensors=data.sensors||{};
+    const modules=data.modules||{};
+    const services=data.services||{};
+    const resources=data.resources||{};
+    const neurons=data.neurons||{};
+    const zones=Array.isArray(data.zones)?data.zones:[];
+
+    const updated=$('system-last-update');
+    if(updated){
+      const src=data.cache?.served_from_cache?'Cache':'Live';
+      updated.textContent=`${src} · ${new Date().toLocaleTimeString('de-DE')}`;
+    }
+
+    const sensorCount=_num(sensors.sensor_count,0);
+    const moduleCount=_num(modules.count,0);
+    const zoneCount=zones.length;
+    const score=_num(overall.score,0);
+    overallEl.innerHTML=
+      `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px">${_systemHealthBadge(overall.status)} ${badge('Score '+score,'p')} ${badge(sensorCount+' Sensoren',sensorCount>=94?'g':'y')} ${badge(moduleCount+' Module','b')} ${badge(zoneCount+' Zonen','c')}</div>`+
+      `<div class="sys-kpis">
+        <div class="sys-kpi"><div class="kl">Sensoren (Target 94+)</div><div class="kv">${sensorCount}</div>${_meter((_num(sensors.availability_ratio,0))*100)}</div>
+        <div class="sys-kpi"><div class="kl">Module service-ready</div><div class="kv">${_num(modules.service_ready_count,0)}/${moduleCount}</div>${_meter(moduleCount?(_num(modules.service_ready_count,0)/moduleCount)*100:0)}</div>
+        <div class="sys-kpi"><div class="kl">Dienste verfuegbar</div><div class="kv">${_num(services.available_count,0)}/${_num(services.count,0)}</div>${_meter(_num(services.count,0)?(_num(services.available_count,0)/_num(services.count,1))*100:0)}</div>
+        <div class="sys-kpi"><div class="kl">Aktive Neuronen</div><div class="kv">${_num(neurons.active_neurons,0)}/${_num(neurons.total_neurons,0)}</div>${_meter(_num(neurons.total_neurons,0)?(_num(neurons.active_neurons,0)/_num(neurons.total_neurons,1))*100:0)}</div>
+      </div>`;
+
+    if(resourcesEl){
+      const cpu=_num(resources.cpu?.percent,-1);
+      const mem=_num(resources.memory?.percent,-1);
+      const disk=_num(resources.storage?.['/']?.usage_percent,-1);
+      const dataDisk=_num(resources.storage?.['/data']?.usage_percent,-1);
+      resourcesEl.innerHTML=
+        `<div class="sys-kpis">
+          <div class="sys-kpi"><div class="kl">CPU</div><div class="kv">${cpu>=0?cpu.toFixed(1)+'%':'--'}</div>${_meter(cpu)}</div>
+          <div class="sys-kpi"><div class="kl">RAM</div><div class="kv">${mem>=0?mem.toFixed(1)+'%':'--'}</div>${_meter(mem)}</div>
+          <div class="sys-kpi"><div class="kl">Disk /</div><div class="kv">${disk>=0?disk.toFixed(1)+'%':'--'}</div>${_meter(disk)}</div>
+          <div class="sys-kpi"><div class="kl">Disk /data</div><div class="kv">${dataDisk>=0?dataDisk.toFixed(1)+'%':'--'}</div>${_meter(dataDisk)}</div>
+        </div>
+        <div style="margin-top:10px;font-size:11px;color:var(--dim)">
+          Host: ${escapeHtml(resources.host?.hostname||'--')} · ${escapeHtml(resources.host?.system||'--')} ${escapeHtml(resources.host?.release||'')}
+          <br>Load: ${escapeHtml(String(resources.cpu?.load_avg?.['1m']??'--'))} / ${escapeHtml(String(resources.cpu?.load_avg?.['5m']??'--'))} / ${escapeHtml(String(resources.cpu?.load_avg?.['15m']??'--'))}
+          <br>Process RSS: ${_fmtMetric(resources.memory?.process_rss_mb,' MB')}
+        </div>`;
+    }
+
+    if(servicesEl){
+      const rows=Array.isArray(services.services)?services.services:[];
+      if(!rows.length){
+        servicesEl.innerHTML='<div class="empty">Keine Serviceinfos.</div>';
+      }else{
+        let html='<div class="system-scroll"><table class="tbl"><tr><th>Dienst</th><th>Status</th><th>Klasse</th></tr>';
+        rows.forEach((r)=>{
+          html+=`<tr><td>${escapeHtml(r.service||'?')}</td><td>${r.available?badge('online','g'):badge('offline','r')}</td><td>${r.critical?badge('critical','y'):badge('optional','b')}</td></tr>`;
+        });
+        html+='</table></div>';
+        if(Array.isArray(services.missing_critical)&&services.missing_critical.length){
+          html+=`<div style="margin-top:8px;font-size:11px;color:var(--red)">Fehlende kritische Dienste: ${escapeHtml(services.missing_critical.join(', '))}</div>`;
+        }
+        servicesEl.innerHTML=html;
+      }
+    }
+
+    if(modulesEl){
+      const rows=Array.isArray(modules.modules)?modules.modules:[];
+      if(!rows.length){
+        modulesEl.innerHTML='<div class="empty">Keine Modulinfos.</div>';
+      }else{
+        let html='<div class="sys-mod-grid">';
+        rows.forEach((m)=>{
+          const deps=(m.dependencies||[]).slice(0,3).join(', ');
+          html+=`<div class="sys-mod-card"><div class="name">${escapeHtml(m.label||m.id||'?')}</div><div style="margin-top:4px">${badge(m.state||'unknown',m.state==='active'?'g':m.state==='learning'?'y':'r')} ${m.service_ready?badge('service ok','b'):badge('service missing','r')}</div><div class="meta">ID: ${escapeHtml(m.id||'')}<br>Neuronen: ${escapeHtml((m.neuron_hints||[]).slice(0,3).join(', ')||'--')}<br>Deps: ${escapeHtml(deps||'--')}</div></div>`;
+        });
+        html+='</div>';
+        modulesEl.innerHTML=html;
+      }
+    }
+
+    if(neuronsEl){
+      const nodes=Array.isArray(neurons.nodes)?neurons.nodes:[];
+      let html=`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">${badge('Total '+_num(neurons.total_neurons,0),'b')} ${badge('Aktiv '+_num(neurons.active_neurons,0),'g')} ${neurons.dominant_mood?badge('Mood '+neurons.dominant_mood,'p'):''}</div>`;
+      if(!nodes.length){
+        html+='<div class="empty">Keine Neuronenwerte verfuegbar.</div>';
+      }else{
+        html+='<div class="system-scroll"><table class="tbl"><tr><th>Neuron</th><th>Wert</th><th>Modul</th><th>Status</th></tr>';
+        nodes.slice(0,40).forEach((n)=>{
+          const value=_num(n.value,0);
+          html+=`<tr><td>${escapeHtml(n.id||'?')}</td><td>${value.toFixed(3)}</td><td>${escapeHtml(n.module_hint||'neurons')}</td><td>${n.active?badge('active','g'):badge('idle','y')}</td></tr>`;
+        });
+        html+='</table></div>';
+      }
+      neuronsEl.innerHTML=html;
+    }
+
+    if(sensorsEl){
+      const byModule=Array.isArray(sensors.by_module)?sensors.by_module:[];
+      const items=Array.isArray(sensors.items)?sensors.items:[];
+      let html='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">'+
+        badge((_num(sensors.sensor_count,0))+' Sensoren',_num(sensors.sensor_count,0)>=94?'g':'y')+' '+
+        badge((_num(sensors.available_entities,0))+' online','b')+' '+
+        badge((_num(sensors.unavailable_entities,0))+' offline',_num(sensors.unavailable_entities,0)>0?'r':'g')+
+        '</div>';
+      if(byModule.length){
+        html+='<div class="sys-mod-grid" style="margin-bottom:10px">';
+        byModule.slice(0,24).forEach((m)=>{
+          html+=`<div class="sys-mod-card"><div class="name">${escapeHtml(m.module_id||'?')}</div><div style="margin-top:4px">${badge(String(_num(m.total,0)),'b')} ${badge(String(_num(m.available,0)),'g')} ${_num(m.unavailable,0)?badge(String(_num(m.unavailable,0)),'r'):''}</div><div class="meta">${escapeHtml(m.function||'--')}<br>Neuronen: ${escapeHtml((m.neuron_hints||[]).slice(0,3).join(', ')||'--')}</div></div>`;
+        });
+        html+='</div>';
+      }
+      if(items.length){
+        html+='<div class="system-scroll"><table class="tbl"><tr><th>Entity</th><th>Status</th><th>Modul</th><th>Rolle</th><th>Neuron</th></tr>';
+        items.slice(0,180).forEach((s)=>{
+          html+=`<tr><td><strong>${escapeHtml(s.friendly_name||s.entity_id||'?')}</strong><br><span style="font-size:10px;color:var(--dim)">${escapeHtml(s.entity_id||'')}</span></td><td>${s.available?badge(escapeHtml(String(s.state||'--')),'g'):badge(escapeHtml(String(s.state||'--')),'r')}</td><td>${escapeHtml(s.module_id||'neurons')}</td><td>${escapeHtml(s.role||'generic')}</td><td style="font-size:10px;color:var(--dim)">${escapeHtml((s.neuron_hints||[]).slice(0,2).join(', ')||'--')}</td></tr>`;
+        });
+        html+='</table></div>';
+      }else{
+        html+='<div class="empty">Keine PilotSuite-Sensoren gefunden.</div>';
+      }
+      sensorsEl.innerHTML=html;
+    }
+
+    if(zonesEl){
+      if(!zones.length){
+        zonesEl.innerHTML='<div class="empty">Keine Habitus-Zonen vorhanden.</div>';
+      }else{
+        let html='<div class="system-scroll"><table class="tbl"><tr><th>Zone</th><th>Entitaeten</th><th>Verf.</th><th>Metriken</th><th>Module</th></tr>';
+        zones.forEach((z)=>{
+          const ratio=Math.round(_num(z.availability_ratio,0)*100);
+          const metrics=[
+            z.temperature_avg!==null&&z.temperature_avg!==undefined?('T '+_fmtMetric(z.temperature_avg,'\u00b0C')):'',
+            z.humidity_avg!==null&&z.humidity_avg!==undefined?('H '+_fmtMetric(z.humidity_avg,'%')):'',
+            z.co2_avg!==null&&z.co2_avg!==undefined?('CO2 '+_fmtMetric(z.co2_avg,'')):'',
+            z.brightness_avg!==null&&z.brightness_avg!==undefined?('Lux '+_fmtMetric(z.brightness_avg,'')):'',
+          ].filter(Boolean).join(' · ')||'--';
+          html+=`<tr><td><strong>${escapeHtml(z.zone_name||z.zone_id||'?')}</strong><br><span style="font-size:10px;color:var(--dim)">${escapeHtml(z.zone_id||'')}</span></td><td>${_num(z.entity_count,0)}<br><span style="font-size:10px;color:var(--dim)">Sensoren ${_num(z.sensor_count,0)}</span></td><td>${badge(ratio+'%',ratio>=95?'g':ratio>=80?'y':'r')}<br><span style="font-size:10px;color:var(--dim)">Motion ${_num(z.motion_active,0)}</span></td><td style="font-size:10px;color:var(--dim)">${escapeHtml(metrics)}</td><td style="font-size:10px;color:var(--dim)">${escapeHtml((z.module_dependencies||[]).slice(0,4).join(', ')||'--')}</td></tr>`;
+        });
+        html+='</table></div>';
+        zonesEl.innerHTML=html;
+      }
+    }
+
+    renderHabitusZoneStatusSummary(data);
+  }catch(e){
+    overallEl.innerHTML='<div class="empty">\u26a0\ufe0f Systemstatus konnte nicht geladen werden.</div>';
+  }
+}
+
+// ==================================================
 // SETTINGS
 // ==================================================
 function _routingProviderLabel(provider){
@@ -3790,9 +4118,10 @@ async function loadSettings(){
     api('/api/v1/modules/presets'),
     api('/api/v1/rag/status'),
     api('/api/v1/rag/documents?limit=8'),
+    api('/api/v1/system/overview?sensor_limit=80'),
   ]);
-  const [statusRes,tgRes,memRes,recRes,capsRes,onyxRes,presetsRes,ragStatusRes,ragDocsRes]=settled.map(r=>r.status==='fulfilled'?r.value:null);
-  const status=statusRes,tg=tgRes,mem=memRes,rec=recRes,caps=capsRes,onyx=onyxRes,presets=presetsRes,ragStatus=ragStatusRes,ragDocs=ragDocsRes;
+  const [statusRes,tgRes,memRes,recRes,capsRes,onyxRes,presetsRes,ragStatusRes,ragDocsRes,sysRes]=settled.map(r=>r.status==='fulfilled'?r.value:null);
+  const status=statusRes,tg=tgRes,mem=memRes,rec=recRes,caps=capsRes,onyx=onyxRes,presets=presetsRes,ragStatus=ragStatusRes,ragDocs=ragDocsRes,sys=sysRes;
   if(status){
     $('set-llm').innerHTML=
       `<tr><td>Provider</td><td>${badge(status.active_provider||'--','p')}</td></tr>`+
@@ -3833,10 +4162,16 @@ async function loadSettings(){
     }
     // System (real MCP status from capabilities)
     const mcpOk=caps?.ok===true;
+    const cpuPct=_num(sys?.resources?.cpu?.percent,-1);
+    const memPct=_num(sys?.resources?.memory?.percent,-1);
+    const diskPct=_num(sys?.resources?.storage?.['/']?.usage_percent,-1);
+    const healthBadge=sys?.overall?`${_systemHealthBadge(sys.overall.status)} ${badge('Score '+_num(sys.overall.score,0),'p')}`:badge('N/A','y');
     $('set-system').innerHTML=
       `<tr><td>Version</td><td>${status.version?badge('v'+status.version,'p'):badge('--','y')}</td></tr>`+
       `<tr><td>Dashboard Build</td><td>${badge(String(DASHBOARD_BUILD||'--'),'b')}</td></tr>`+
       `<tr><td>API Route</td><td><code>${escapeHtml(API||'(direct)')}</code> ${badge(API_MODE==='ingress'?'Ingress':'Direct','b')}</td></tr>`+
+      `<tr><td>System Health</td><td>${healthBadge}</td></tr>`+
+      `<tr><td>CPU / RAM / Disk</td><td>${cpuPct>=0?cpuPct.toFixed(1)+'%':'--'} / ${memPct>=0?memPct.toFixed(1)+'%':'--'} / ${diskPct>=0?diskPct.toFixed(1)+'%':'--'}</td></tr>`+
       `<tr><td>Ollama URL</td><td><code>${escapeHtml(status.ollama_url||'localhost:11434')}</code></td></tr>`+
       `<tr><td>Cloud URL</td><td><code>${escapeHtml(status.cloud_api_url||'--')}</code></td></tr>`+
       `<tr><td>Telegram</td><td>${tg?.running?badge('Aktiv','g'):badge('Aus','y')}</td></tr>`+
@@ -4223,7 +4558,7 @@ async function toggleHomeKit(zoneId,zoneName,entityIds){
 // ==================================================
 // PAGE LOADER — Resilient wrapper
 // ==================================================
-const _loaders={styx:loadStyx,habitus:async()=>{await loadHabitus();loadEntitySuggestions('hab-entity-suggestions');loadScenes();},mood:loadMood,modules:async()=>{await loadModules();loadAutomations();loadMediaZones();loadNewsWarnings();loadWastePanel();loadBirthdayPanel()},haushalt:loadHaushalt,settings:loadSettings};
+const _loaders={styx:loadStyx,habitus:async()=>{await loadHabitus();loadEntitySuggestions('hab-entity-suggestions');loadScenes();},mood:loadMood,modules:async()=>{await loadModules();loadAutomations();loadMediaZones();loadNewsWarnings();loadWastePanel();loadBirthdayPanel()},system:async()=>{await loadSystemOverview(false);},haushalt:loadHaushalt,settings:loadSettings};
 function loadPage(p){
   const fn=_loaders[p];
   if(!fn)return;
