@@ -2423,3 +2423,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.api.v1.coredns import coredns_bp
         app.register_blueprint(coredns_bp)
     except: pass
+    try:
+        from copilot_core.api.v1.foreman import foreman_bp
+        app.register_blueprint(foreman_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.katello import katello_bp
+        app.register_blueprint(katello_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.pulp import pulp_bp
+        app.register_blueprint(pulp_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.cobbler import cobbler_bp
+        app.register_blueprint(cobbler_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.pxe import pxe_bp
+        app.register_blueprint(pxe_bp)
+    except: pass
