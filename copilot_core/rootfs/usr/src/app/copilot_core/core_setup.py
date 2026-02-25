@@ -2163,3 +2163,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.api.v1.rclone import rclone_bp
         app.register_blueprint(rclone_bp)
     except: pass
+    try:
+        from copilot_core.api.v1.borg import borg_bp
+        app.register_blueprint(borg_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.restic import restic_bp
+        app.register_blueprint(restic_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.duplicati import duplicati_bp
+        app.register_blueprint(duplicati_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.duplicacy import duplicacy_bp
+        app.register_blueprint(duplicacy_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.kopia import kopia_bp
+        app.register_blueprint(kopia_bp)
+    except: pass
