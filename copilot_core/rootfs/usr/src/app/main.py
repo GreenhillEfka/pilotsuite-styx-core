@@ -185,6 +185,7 @@ except Exception:
 _STARTUP_TIME = time.time()
 app.config["STARTUP_TIME"] = _STARTUP_TIME
 app.config["PREFLIGHT"] = _preflight_results
+app.config["COPILOT_SERVICES"] = _services
 
 # In-memory ring buffer of recent dev logs (thread-safe).
 _DEV_LOG_CACHE: list[dict] = []
