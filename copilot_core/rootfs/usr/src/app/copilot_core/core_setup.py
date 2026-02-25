@@ -2983,3 +2983,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.api.v1.thanos import thanos_bp
         app.register_blueprint(thanos_bp)
     except: pass
+    try:
+        from copilot_core.api.v1.alertmanager import alertmanager_bp
+        app.register_blueprint(alertmanager_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.loki import loki_bp
+        app.register_blueprint(loki_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.tempo import tempo_bp
+        app.register_blueprint(tempo_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.cortex import cortex_bp
+        app.register_blueprint(cortex_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.mimir import mimir_bp
+        app.register_blueprint(mimir_bp)
+    except: pass
