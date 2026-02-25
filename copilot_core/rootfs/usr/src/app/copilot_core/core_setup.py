@@ -4043,3 +4043,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.api.v1.ovh2 import ovh2_bp
         app.register_blueprint(ovh2_bp)
     except: pass
+    try:
+        from copilot_core.api.v1.upcloud2 import upcloud2_bp
+        app.register_blueprint(upcloud2_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.scaleway2 import scaleway2_bp
+        app.register_blueprint(scaleway2_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.alicloud import alicloud_bp
+        app.register_blueprint(alicloud_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.tencent2 import tencent_bp
+        app.register_blueprint(tencent_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.ibm2 import ibm2_bp
+        app.register_blueprint(ibm2_bp)
+    except: pass
