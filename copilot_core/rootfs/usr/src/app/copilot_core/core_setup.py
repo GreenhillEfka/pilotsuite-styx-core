@@ -4123,3 +4123,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.api.v1.metal import metal_bp
         app.register_blueprint(metal_bp)
     except: pass
+    try:
+        from copilot_core.api.v1.directx import directx_bp
+        app.register_blueprint(directx_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.opengl import opengl_bp
+        app.register_blueprint(opengl_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.webgl import webgl_bp
+        app.register_blueprint(webgl_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.vulkancompute import vulkancompute_bp
+        app.register_blueprint(vulkancompute_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.sycl import sycl_bp
+        app.register_blueprint(sycl_bp)
+    except: pass
