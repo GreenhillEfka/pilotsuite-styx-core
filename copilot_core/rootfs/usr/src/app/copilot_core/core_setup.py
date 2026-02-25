@@ -4063,3 +4063,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.api.v1.ibm2 import ibm2_bp
         app.register_blueprint(ibm2_bp)
     except: pass
+    try:
+        from copilot_core.api.v1.oracle2 import oracle2_bp
+        app.register_blueprint(oracle2_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.otc import otc_bp
+        app.register_blueprint(otc_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.exoscale import exoscale_bp
+        app.register_blueprint(exoscale_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.paperspace import paperspace_bp
+        app.register_blueprint(paperspace_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.lambdalabs import lambdalabs_bp
+        app.register_blueprint(lambdalabs_bp)
+    except: pass
