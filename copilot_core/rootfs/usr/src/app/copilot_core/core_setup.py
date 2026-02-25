@@ -1963,3 +1963,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.api.v1.timescaledb import timescaledb_bp
         app.register_blueprint(timescaledb_bp)
     except: pass
+    try:
+        from copilot_core.api.v1.opentelemetry import opentelemetry_bp
+        app.register_blueprint(opentelemetry_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.jaeger import jaeger_bp
+        app.register_blueprint(jaeger_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.zipkin import zipkin_bp
+        app.register_blueprint(zipkin_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.elk import elk_bp
+        app.register_blueprint(elk_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.splunk import splunk_bp
+        app.register_blueprint(splunk_bp)
+    except: pass
