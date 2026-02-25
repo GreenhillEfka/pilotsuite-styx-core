@@ -2503,3 +2503,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.api.v1.whmcs import whmcs_bp
         app.register_blueprint(whmcs_bp)
     except: pass
+    try:
+        from copilot_core.api.v1.postfix import postfix_bp
+        app.register_blueprint(postfix_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.dovecot import dovecot_bp
+        app.register_blueprint(dovecot_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.exim import exim_bp
+        app.register_blueprint(exim_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.sendmail import sendmail_bp
+        app.register_blueprint(sendmail_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.smtpd import smtpd_bp
+        app.register_blueprint(smtpd_bp)
+    except: pass
