@@ -3623,3 +3623,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.api.v1.canal import canal_bp
         app.register_blueprint(canal_bp)
     except: pass
+    try:
+        from copilot_core.api.v1.ovn import ovn_bp
+        app.register_blueprint(ovn_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.romana import romana_bp
+        app.register_blueprint(romana_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.kuberouter import kuberouter_bp
+        app.register_blueprint(kuberouter_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.awsvpccni import awsvpccni_bp
+        app.register_blueprint(awsvpccni_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.azurecni import azurecni_bp
+        app.register_blueprint(azurecni_bp)
+    except: pass
