@@ -2463,3 +2463,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.api.v1.refind import refind_bp
         app.register_blueprint(refind_bp)
     except: pass
+    try:
+        from copilot_core.api.v1.cockpit import cockpit_bp
+        app.register_blueprint(cockpit_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.webmin import webmin_bp
+        app.register_blueprint(webmin_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.cpanel import cpanel_bp
+        app.register_blueprint(cpanel_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.plesk import plesk_bp
+        app.register_blueprint(plesk_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.directadmin import directadmin_bp
+        app.register_blueprint(directadmin_bp)
+    except: pass
