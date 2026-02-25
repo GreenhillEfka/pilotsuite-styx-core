@@ -3723,3 +3723,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.api.v1.glusterfs import glusterfs_bp
         app.register_blueprint(glusterfs_bp)
     except: pass
+    try:
+        from copilot_core.api.v1.velero import velero_bp
+        app.register_blueprint(velero_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.kasten import kasten_bp
+        app.register_blueprint(kasten_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.portworx import portworx_bp
+        app.register_blueprint(portworx_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.miniooperator import miniooperator_bp
+        app.register_blueprint(miniooperator_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.promop import promop_bp
+        app.register_blueprint(promop_bp)
+    except: pass
