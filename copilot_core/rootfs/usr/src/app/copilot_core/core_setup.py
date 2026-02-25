@@ -2123,3 +2123,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.api.v1.kopano import kopano_bp
         app.register_blueprint(kopano_bp)
     except: pass
+    try:
+        from copilot_core.api.v1.radicale import radicale_bp
+        app.register_blueprint(radicale_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.baikal import baikal_bp
+        app.register_blueprint(baikal_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.nextcloud import nextcloud_bp
+        app.register_blueprint(nextcloud_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.owncloud import owncloud_bp
+        app.register_blueprint(owncloud_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.seafile import seafile_bp
+        app.register_blueprint(seafile_bp)
+    except: pass
