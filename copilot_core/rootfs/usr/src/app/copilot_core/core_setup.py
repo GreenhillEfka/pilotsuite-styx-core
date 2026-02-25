@@ -3643,3 +3643,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.api.v1.azurecni import azurecni_bp
         app.register_blueprint(azurecni_bp)
     except: pass
+    try:
+        from copilot_core.api.v1.gke import gke_bp
+        app.register_blueprint(gke_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.eks import eks_bp
+        app.register_blueprint(eks_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.aks import aks_bp
+        app.register_blueprint(aks_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.openshift import openshift_bp
+        app.register_blueprint(openshift_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.rancher import rancher_bp
+        app.register_blueprint(rancher_bp)
+    except: pass
