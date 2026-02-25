@@ -2143,3 +2143,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.api.v1.seafile import seafile_bp
         app.register_blueprint(seafile_bp)
     except: pass
+    try:
+        from copilot_core.api.v1.pydio import pydio_bp
+        app.register_blueprint(pydio_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.filestash import filestash_bp
+        app.register_blueprint(filestash_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.s3 import s3_bp
+        app.register_blueprint(s3_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.minio import minio_bp
+        app.register_blueprint(minio_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.rclone import rclone_bp
+        app.register_blueprint(rclone_bp)
+    except: pass
