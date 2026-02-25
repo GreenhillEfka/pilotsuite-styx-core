@@ -3183,3 +3183,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.api.v1.tencent import tencent_bp
         app.register_blueprint(tencent_bp)
     except: pass
+    try:
+        from copilot_core.api.v1.backblaze import backblaze_bp
+        app.register_blueprint(backblaze_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.wasabi import wasabi_bp
+        app.register_blueprint(wasabi_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.minio import minio_bp
+        app.register_blueprint(minio_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.r2 import r2_bp
+        app.register_blueprint(r2_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.spaces import spaces_bp
+        app.register_blueprint(spaces_bp)
+    except: pass
