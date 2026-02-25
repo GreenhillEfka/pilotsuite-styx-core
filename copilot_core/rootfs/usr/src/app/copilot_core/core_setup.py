@@ -1943,3 +1943,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.api.v1.cmaf import cmaf_bp
         app.register_blueprint(cmaf_bp)
     except: pass
+    try:
+        from copilot_core.api.v1.kubevirt import kubevirt_bp
+        app.register_blueprint(kubevirt_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.virtink import virtink_bp
+        app.register_blueprint(virtink_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.k3ai import k3ai_bp
+        app.register_blueprint(k3ai_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.susemgr import susemgr_bp
+        app.register_blueprint(susemgr_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.spacewalk import spacewalk_bp
+        app.register_blueprint(spacewalk_bp)
+    except: pass
