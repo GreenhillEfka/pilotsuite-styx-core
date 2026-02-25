@@ -2683,3 +2683,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.api.v1.pixelfed import pixelfed_bp
         app.register_blueprint(pixelfed_bp)
     except: pass
+    try:
+        from copilot_core.api.v1.mastodon import mastodon_bp
+        app.register_blueprint(mastodon_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.pleroma import pleroma_bp
+        app.register_blueprint(pleroma_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.writefreely import writefreely_bp
+        app.register_blueprint(writefreely_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.writeas import writeas_bp
+        app.register_blueprint(writeas_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.ghost import ghost_bp
+        app.register_blueprint(ghost_bp)
+    except: pass
