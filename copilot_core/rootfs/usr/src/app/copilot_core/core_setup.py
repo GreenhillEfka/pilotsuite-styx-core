@@ -2803,3 +2803,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.api.v1.swagger import swagger_bp
         app.register_blueprint(swagger_bp)
     except: pass
+    try:
+        from copilot_core.api.v1.redoc import redoc_bp
+        app.register_blueprint(redoc_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.rapi import rapi_bp
+        app.register_blueprint(rapi_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.graphqlpg import graphqlpg_bp
+        app.register_blueprint(graphqlpg_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.insomnia import insomnia_bp
+        app.register_blueprint(insomnia_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.postman import postman_bp
+        app.register_blueprint(postman_bp)
+    except: pass
