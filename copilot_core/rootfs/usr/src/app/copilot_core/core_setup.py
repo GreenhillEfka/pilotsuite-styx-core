@@ -3163,3 +3163,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.api.v1.scaleway import scaleway_bp
         app.register_blueprint(scaleway_bp)
     except: pass
+    try:
+        from copilot_core.api.v1.ovh import ovh_bp
+        app.register_blueprint(ovh_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.alibaba import alibaba_bp
+        app.register_blueprint(alibaba_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.ibm import ibm_bp
+        app.register_blueprint(ibm_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.oracle import oracle_bp
+        app.register_blueprint(oracle_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.tencent import tencent_bp
+        app.register_blueprint(tencent_bp)
+    except: pass
