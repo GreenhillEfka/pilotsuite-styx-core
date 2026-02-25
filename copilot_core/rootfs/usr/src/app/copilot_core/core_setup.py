@@ -3443,3 +3443,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.api.v1.wasm import wasm_bp
         app.register_blueprint(wasm_bp)
     except: pass
+    try:
+        from copilot_core.api.v1.wasi import wasi_bp
+        app.register_blueprint(wasi_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.assemblyscript import assemblyscript_bp
+        app.register_blueprint(assemblyscript_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.rustwasm import rustwasm_bp
+        app.register_blueprint(rustwasm_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.gowasm import gowasm_bp
+        app.register_blueprint(gowasm_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.pyscript import pyscript_bp
+        app.register_blueprint(pyscript_bp)
+    except: pass
