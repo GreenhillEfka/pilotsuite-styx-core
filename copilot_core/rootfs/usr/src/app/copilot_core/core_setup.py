@@ -2903,3 +2903,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.api.v1.rocketmq import rocketmq_bp
         app.register_blueprint(rocketmq_bp)
     except: pass
+    try:
+        from copilot_core.api.v1.elasticsearch import elasticsearch_bp
+        app.register_blueprint(elasticsearch_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.opensearch import opensearch_bp
+        app.register_blueprint(opensearch_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.meilisearch import meilisearch_bp
+        app.register_blueprint(meilisearch_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.typesense import typesense_bp
+        app.register_blueprint(typesense_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.qdrant import qdrant_bp
+        app.register_blueprint(qdrant_bp)
+    except: pass
