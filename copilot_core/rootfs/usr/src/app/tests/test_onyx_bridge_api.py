@@ -145,3 +145,21 @@ def test_onyx_service_call_requires_supervisor_token(monkeypatch):
         payload = resp.get_json()
         assert payload["ok"] is False
         assert "SUPERVISOR_TOKEN" in payload["error"]
+
+
+def test_onyx_openapi_endpoint(monkeypatch):
+    monkeypatch.setenv("COPILOT_AUTH_REQUIRED", "false")
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        app = _create_test_app(tmpdir)
+        client = app.test_client()
+        resp = client.get(
+            "/api/v1/onyx/openapi",
+            base_url="http://192.168.30.18:8909",
+        )
+        assert resp.status_code == 200
+        payload = resp.get_json()
+        assert payload["openapi"] == "3.1.0"
+        assert payload["servers"][0]["url"] == "http://192.168.30.18:8909"
+        assert "/api/v1/onyx/ha/service-call" in payload["paths"]
+        assert "/api/v1/hub/zones" in payload["paths"]

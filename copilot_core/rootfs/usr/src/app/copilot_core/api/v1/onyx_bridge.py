@@ -78,6 +78,167 @@ def _normalize_entity_ids(value: Any) -> list[str]:
     return result
 
 
+def _openapi_spec(server_url: str) -> dict[str, Any]:
+    """Return a compact OpenAPI contract for Onyx action import."""
+    return {
+        "openapi": "3.1.0",
+        "info": {
+            "title": "PilotSuite Styx Actions (Onyx Bridge)",
+            "version": "1.2.0",
+            "description": "Deterministic Home Assistant actions via Styx bridge.",
+        },
+        "servers": [{"url": server_url}],
+        "security": [{"bearerAuth": []}],
+        "paths": {
+            "/api/v1/onyx/status": {
+                "get": {
+                    "operationId": "getOnyxBridgeStatus",
+                    "summary": "Check bridge and HA reachability",
+                    "responses": {
+                        "200": {
+                            "description": "Bridge status",
+                            "content": {
+                                "application/json": {
+                                    "schema": {"type": "object", "additionalProperties": True}
+                                }
+                            },
+                        }
+                    },
+                }
+            },
+            "/api/v1/onyx/ha/service-call": {
+                "post": {
+                    "operationId": "callHaServiceViaOnyxBridge",
+                    "summary": "Execute a controlled HA service call with optional readback",
+                    "requestBody": {
+                        "required": True,
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": ["domain", "service"],
+                                    "properties": {
+                                        "domain": {"type": "string", "example": "light"},
+                                        "service": {"type": "string", "example": "turn_on"},
+                                        "entity_id": {
+                                            "oneOf": [
+                                                {"type": "string"},
+                                                {"type": "array", "items": {"type": "string"}},
+                                            ]
+                                        },
+                                        "service_data": {"type": "object", "additionalProperties": True},
+                                        "target": {"type": "object", "additionalProperties": True},
+                                        "readback": {"type": "boolean", "default": True},
+                                        "readback_entity_ids": {
+                                            "type": "array",
+                                            "items": {"type": "string"},
+                                        },
+                                    },
+                                }
+                            }
+                        },
+                    },
+                    "responses": {
+                        "200": {
+                            "description": "Action result",
+                            "content": {
+                                "application/json": {
+                                    "schema": {"type": "object", "additionalProperties": True}
+                                }
+                            },
+                        }
+                    },
+                }
+            },
+            "/api/v1/hub/zones": {
+                "get": {
+                    "operationId": "getZonesOverview",
+                    "summary": "List Habitus zones",
+                    "responses": {
+                        "200": {
+                            "description": "Zones overview",
+                            "content": {
+                                "application/json": {
+                                    "schema": {"type": "object", "additionalProperties": True}
+                                }
+                            },
+                        }
+                    },
+                },
+                "post": {
+                    "operationId": "createZone",
+                    "summary": "Create a Habitus zone",
+                    "requestBody": {
+                        "required": True,
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "zone_id": {"type": "string"},
+                                        "name": {"type": "string"},
+                                        "room_ids": {"type": "array", "items": {"type": "string"}},
+                                        "icon": {"type": "string"},
+                                        "priority": {"type": "integer"},
+                                    },
+                                }
+                            }
+                        },
+                    },
+                    "responses": {
+                        "200": {
+                            "description": "Zone created",
+                            "content": {
+                                "application/json": {
+                                    "schema": {"type": "object", "additionalProperties": True}
+                                }
+                            },
+                        }
+                    },
+                },
+            },
+            "/api/v1/hub/zones/rooms": {
+                "get": {
+                    "operationId": "getZoneRooms",
+                    "summary": "List available rooms for zone assignment",
+                    "responses": {
+                        "200": {
+                            "description": "Rooms list",
+                            "content": {
+                                "application/json": {
+                                    "schema": {"type": "object", "additionalProperties": True}
+                                }
+                            },
+                        }
+                    },
+                }
+            },
+        },
+        "components": {
+            "securitySchemes": {
+                "bearerAuth": {
+                    "type": "http",
+                    "scheme": "bearer",
+                    "bearerFormat": "JWT",
+                }
+            }
+        },
+    }
+
+
+@onyx_bridge_bp.route("/openapi", methods=["GET"])
+def onyx_openapi():
+    """Expose OpenAPI JSON so Onyx can import actions directly via URL."""
+    server_url = (request.host_url or "http://127.0.0.1:8909").rstrip("/")
+    return jsonify(_openapi_spec(server_url))
+
+
+@onyx_bridge_bp.route("/openapi.json", methods=["GET"])
+def onyx_openapi_json():
+    """Alias for Onyx/OpenAPI import clients that expect *.json."""
+    return onyx_openapi()
+
+
 @onyx_bridge_bp.route("/status", methods=["GET"])
 @require_token
 def onyx_status():

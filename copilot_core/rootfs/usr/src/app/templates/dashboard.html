@@ -631,9 +631,14 @@ function withAuth(init={}){
   }
   return {...init,headers};
 }
-async function api(path){
+async function api(path,method='GET',body=null){
   try{
-    const r=await fetch(API+path,withAuth());
+    const init={method:String(method||'GET').toUpperCase()};
+    if(body!==null&&body!==undefined){
+      init.headers={'Content-Type':'application/json'};
+      init.body=JSON.stringify(body);
+    }
+    const r=await fetch(API+path,withAuth(init));
     if(!r.ok)return null;
     return await r.json();
   }catch(e){
@@ -1069,6 +1074,39 @@ async function clearChatHistory(){
   addHistory('Chatverlauf geloescht');
 }
 
+async function _postChatWithFallback(payload){
+  const endpoints=['/v1/chat/completions','/chat/completions'];
+  let lastError='';
+  for(const endpoint of endpoints){
+    try{
+      const response=await fetch(API+endpoint,withAuth({
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(payload),
+      }));
+      let data={};
+      try{data=await response.json()}catch(_parseErr){data={}}
+      if(response.ok){
+        return {endpoint,data};
+      }
+      const errMsg=data?.error?.message||data?.message||('HTTP '+response.status);
+      lastError=endpoint+': '+errMsg;
+      // For non-routing errors, stop immediately and surface the backend message.
+      if(response.status!==404&&response.status!==405){
+        throw new Error(lastError);
+      }
+    }catch(err){
+      const msg=String(err?.message||err||'request_failed');
+      lastError=endpoint+': '+msg;
+      // Continue to legacy endpoint for URL/pattern problems and 404-like issues.
+      if(!msg.toLowerCase().includes('pattern')&&!msg.toLowerCase().includes('not found')){
+        // Keep trying next endpoint only if one remains.
+      }
+    }
+  }
+  throw new Error(lastError||'Kein Chat-Endpoint erreichbar');
+}
+
 async function sendChat(){
   const input=$('chat-input'),msg=input.value.trim();
   if(!msg)return;
@@ -1082,21 +1120,14 @@ async function sendChat(){
   msgs.appendChild(typing);msgs.scrollTop=msgs.scrollHeight;
   persistChatMessage('user',msg);
   try{
-    const r=await fetch(API+'/v1/chat/completions',withAuth({
-      method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({model:currentModel||'primary',messages:chatHistory.slice(-10),stream:false})
-    }));
-    let data={};
-    try{data=await r.json()}catch(_parseErr){data={error:{message:'Antwort konnte nicht gelesen werden'}}}
-    if(!r.ok){
-      const errMsg=data?.error?.message||('HTTP '+r.status);
-      throw new Error(errMsg);
-    }
+    const payload={model:currentModel||'primary',messages:chatHistory.slice(-10),stream:false};
+    const {endpoint,data}=await _postChatWithFallback(payload);
     const reply=data?.choices?.[0]?.message?.content||data?.error?.message||'Keine Antwort.';
     // XSS-safe: escape first, then convert newlines to <br>
     typing.innerHTML=escapeHtml(reply).replace(/\n/g,'<br>');
     chatHistory.push({role:'assistant',content:reply});
     persistChatMessage('assistant',reply);
+    addHistory('Chat-Endpoint: '+endpoint);
     addHistory('Styx: '+reply.slice(0,40)+(reply.length>40?'...':''));
   }catch(e){typing.textContent='Fehler: '+e.message}
   btn.disabled=false;msgs.scrollTop=msgs.scrollHeight;
@@ -1339,6 +1370,41 @@ function _slugifyId(value){
   return cleaned||'zone';
 }
 
+function _detectZoneRole(entityId){
+  const eid=String(entityId||'').toLowerCase();
+  const domain=eid.includes('.')?eid.split('.')[0]:'';
+  if(domain==='light')return 'lights';
+  if(domain==='climate')return 'heating';
+  if(domain==='media_player')return 'media';
+  if(domain==='cover')return 'cover';
+  if(domain==='lock')return 'lock';
+  if(domain==='binary_sensor'){
+    if(/door|tuer|fenster|window/.test(eid))return 'door';
+    if(/motion|presence|occupancy|bewegung|praesenz|anwesen/.test(eid))return 'motion';
+    return 'other';
+  }
+  if(domain==='sensor'){
+    if(/co2|carbon/.test(eid))return 'co2';
+    if(/humidity|feucht/.test(eid))return 'humidity';
+    if(/noise|sound|larm|laerm/.test(eid))return 'noise';
+    if(/lux|illuminance|brightness|hellig/.test(eid))return 'brightness';
+    if(/temp/.test(eid))return 'temperature';
+    if(/power|watt/.test(eid))return 'power';
+    if(/energy|kwh/.test(eid))return 'energy';
+  }
+  return 'other';
+}
+
+function _buildZoneRoleMap(entityIds){
+  const roleMap={};
+  (entityIds||[]).forEach((eid)=>{
+    const role=_detectZoneRole(eid);
+    if(!roleMap[role])roleMap[role]=[];
+    if(!roleMap[role].includes(eid))roleMap[role].push(eid);
+  });
+  return roleMap;
+}
+
 async function _autoImportRoomsFromSuggestions(){
   const suggestions=await api('/api/v1/entity-assignment/suggestions');
   if(!suggestions?.ok||!Array.isArray(suggestions.suggestions)||!suggestions.suggestions.length)return 0;
@@ -1407,7 +1473,7 @@ async function loadZoneRoomOptions(forceImport=false){
       sel.appendChild(opt);
     });
 
-  if(hint)hint.textContent=`${rooms.length} Räume verfügbar. Mehrfachauswahl mit Ctrl/Cmd möglich.`;
+  if(hint)hint.textContent=`${rooms.length} Räume verfügbar. Mehrfachauswahl mit Ctrl/Cmd möglich. Standard-Rollen (Bewegung/Helligkeit/CO2/Lärm/Heizung) werden automatisch vorbelegt.`;
 }
 
 async function reloadZoneRoomOptions(){
@@ -1453,15 +1519,33 @@ async function loadHabitus(){
       const detail=detailMap.get(zid)||{};
       const zoneName=String(z.name||detail.name||zid||'Zone');
       const ents=Array.isArray(detail.entities)?detail.entities:[];
+      const state=detail.state||{};
+      const settings=detail.settings||{};
+      const roleMap=(settings&&typeof settings==='object'&&settings.entity_roles&&typeof settings.entity_roles==='object')
+        ?settings.entity_roles
+        :_buildZoneRoleMap(ents);
       const rooms=Array.isArray(detail.rooms)?detail.rooms:[];
       const roomNames=rooms.map(r=>String(r?.name||r?.room_id||'')).filter(Boolean);
       const roomSummary=roomNames.length>3?roomNames.slice(0,3).join(', ')+` +${roomNames.length-3}`:(roomNames.join(', ')||'keine Räume');
+      const roleChips=Object.entries(roleMap)
+        .filter(([,items])=>Array.isArray(items)&&items.length)
+        .slice(0,8)
+        .map(([role,items])=>`<span class="b b-c" style="font-size:9px">${escapeHtml(role)}: ${items.length}</span>`)
+        .join(' ');
+      const metrics=[
+        state.avg_temperature!==null&&state.avg_temperature!==undefined?`Temp Ø ${state.avg_temperature}`:'',
+        state.avg_humidity!==null&&state.avg_humidity!==undefined?`Feuchte Ø ${state.avg_humidity}`:'',
+        state.occupancy?'Belegt':'',
+        state.active_devices?`${state.active_devices} aktiv`:'',
+      ].filter(Boolean).join(' · ');
       const zoneIdJson=JSON.stringify(zid);
       const zoneNameJson=JSON.stringify(zoneName);
       const entsJson=JSON.stringify(ents);
       const card=el('div','zone-card',
         `<h3><span style="color:var(--cyan)">&#x1f3e0;</span> ${escapeHtml(zoneName)}</h3>
         <p style="font-size:11px;color:var(--dim)">Räume: ${escapeHtml(roomSummary)} · Entitäten: ${ents.length}</p>
+        ${metrics?`<p style="font-size:10px;color:var(--dim);margin-top:-2px">${escapeHtml(metrics)}</p>`:''}
+        ${roleChips?`<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:6px">${roleChips}</div>`:''}
         <div class="zone-entities">${ents.map(e=>`<span class="ze">${escapeHtml(e)}</span>`).join('')}</div>
         <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
           <button onclick='saveZoneScene(${zoneIdJson},${zoneNameJson},${entsJson})' class="btn-scene" title="Aktuelle Zustände als Szene speichern">&#x1f3ac; Szene speichern</button>
@@ -1536,6 +1620,29 @@ async function addZone(){
     }));
 
     if(r.ok){
+      const mergedEntities=[...entities];
+      // Include room entities for role defaults when rooms were selected.
+      roomIds.forEach((rid)=>{
+        const room=(_hubRoomsCache||[]).find((item)=>String(item?.room_id||'')===String(rid));
+        const roomEntities=Array.isArray(room?.entities)?room.entities:[];
+        roomEntities.forEach((eid)=>{if(eid&&!mergedEntities.includes(eid))mergedEntities.push(eid);});
+      });
+      const roleMap=_buildZoneRoleMap(mergedEntities);
+      try{
+        await fetch(API+'/api/v1/hub/zones/'+encodeURIComponent(zoneId)+'/settings',withAuth({
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({
+            settings:{
+              entity_roles:roleMap,
+              ux_defaults:{
+                standard_metrics:['motion','brightness','noise','humidity','heating','co2'],
+              },
+            },
+          }),
+        }));
+      }catch(_settingsErr){}
+
       $('new-zone-name').value='';
       $('new-zone-entities').value='';
       if(roomSelect)[...roomSelect.options].forEach(o=>{o.selected=false;});
@@ -1709,16 +1816,41 @@ async function completeShoppingItem(id){
 async function loadReminders(){
   const c=$('haushalt-reminders');if(!c)return;
   try{
-    const d=await api('/api/v1/reminders?completed=0');
+    const d=await api('/api/v1/reminders?completed=0&include_events=1');
     if(!d||!d.reminders||d.reminders.length===0){c.innerHTML='<div class="empty">Keine aktiven Erinnerungen</div>';return}
     let h='';
     for(const r of d.reminders){
       const due=r.due_at?new Date(r.due_at*1000).toLocaleString('de',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'';
       const overdue=r.due_at&&r.due_at<Date.now()/1000?' style="color:var(--red)"':'';
-      h+=`<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--border)"><div><span${overdue}>${escapeHtml(r.title)}</span>${due?` <span style="font-size:11px;color:var(--dim)">${due}</span>`:''}</div><div style="display:flex;gap:4px"><button class="btn-sm" onclick="completeReminder('${r.id}')" style="font-size:11px;padding:2px 8px">&#x2714;</button><button class="btn-sm" onclick="snoozeReminder('${r.id}')" style="font-size:11px;padding:2px 8px">&#x1f4a4;</button></div></div>`;
+      const status=escapeHtml(String(r.status_reason||'open'));
+      const reason=escapeHtml(String(r.trigger_reason||r.source||'manuell'));
+      const source=escapeHtml(String(r.source||'dashboard'));
+      const events=Array.isArray(r.events)?r.events:[];
+      const latest=events.length?events[0]:null;
+      const eventTxt=latest?` · ${escapeHtml(String(latest.event_type||''))}${latest.detail?(': '+escapeHtml(String(latest.detail))):''}`:'';
+      h+=`<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border)">
+        <div>
+          <span${overdue}>${escapeHtml(r.title)}</span>${due?` <span style="font-size:11px;color:var(--dim)">${due}</span>`:''}
+          <div style="font-size:10px;color:var(--dim)">Status: ${status} · Quelle: ${source} · Grund: ${reason}${eventTxt}</div>
+        </div>
+        <div style="display:flex;gap:4px">
+          <button class="btn-sm" onclick="completeReminder('${r.id}')" style="font-size:11px;padding:2px 8px">&#x2714;</button>
+          <button class="btn-sm" onclick="snoozeReminder('${r.id}')" style="font-size:11px;padding:2px 8px">&#x1f4a4;</button>
+        </div>
+      </div>`;
     }
+    h+=`<div style="margin-top:8px"><button class="btn-sm" onclick="showReminderExplain()" style="font-size:11px">Warum diese Erinnerungen?</button></div>`;
     c.innerHTML=h;
   }catch(e){c.innerHTML='<div class="empty">Erinnerungen nicht verfuegbar</div>'}
+}
+async function showReminderExplain(){
+  const ex=await api('/api/v1/reminders/explain?limit=12');
+  if(!ex||!ex.ok||!Array.isArray(ex.items)||!ex.items.length){
+    addHistory('Keine Reminder-Erklaerungen verfuegbar');
+    return;
+  }
+  const summary=ex.items.slice(0,6).map((item)=>item.explanation||item.title||'?').join(' | ');
+  addHistory('Reminder-Transparenz: '+summary.slice(0,220));
 }
 async function addReminderFromInput(){
   const inp=$('rem-input');if(!inp||!inp.value.trim())return;
@@ -1882,11 +2014,19 @@ function gaugeHTML(label,val,color){
 function initModuleConfigSelect(){
   const sel=$('module-config-select');
   if(!sel)return;
-  const opts=Object.entries(MODULE_CONFIG_SPECS).map(([moduleId,spec])=>
-    `<option value="${escapeHtml(moduleId)}">${escapeHtml(spec.label||moduleId)}</option>`);
+  const ids=new Set(MODULE_DEFS.map((m)=>m.id));
+  Object.keys(MODULE_CONFIG_SPECS).forEach((id)=>ids.add(id));
+  const moduleIds=[...ids];
+  const opts=moduleIds.map((moduleId)=>{
+    const spec=MODULE_CONFIG_SPECS[moduleId];
+    const def=MODULE_DEFS.find((m)=>m.id===moduleId);
+    const label=(def&&def.name)?def.name:(spec?.label||moduleId);
+    const suffix=spec?'':' (Basis)';
+    return `<option value="${escapeHtml(moduleId)}">${escapeHtml(label+suffix)}</option>`;
+  });
   sel.innerHTML=opts.join('');
-  if(!MODULE_CONFIG_SPECS[_selectedModuleConfig]){
-    _selectedModuleConfig=Object.keys(MODULE_CONFIG_SPECS)[0]||'';
+  if(!moduleIds.includes(_selectedModuleConfig)){
+    _selectedModuleConfig=moduleIds[0]||'';
   }
   sel.value=_selectedModuleConfig||'';
   sel.onchange=()=>{
@@ -1894,47 +2034,43 @@ function initModuleConfigSelect(){
     loadSelectedModuleConfig(false);
   };
 }
-async function loadSelectedModuleConfig(force=false){
+function _moduleFieldHtml(moduleId,field,value){
+  const inputId='cfg_'+moduleId+'_'+field.key;
+  if(field.type==='boolean'){
+    return `<select id="${inputId}" data-key="${field.key}" data-type="${field.type}" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px;color:var(--text);font-size:12px;outline:none">
+      <option value="true"${String(value)==='true'?' selected':''}>true</option>
+      <option value="false"${String(value)==='false'?' selected':''}>false</option>
+    </select>`;
+  }
+  if(field.type==='state'){
+    const current=String(value||'active');
+    return `<select id="${inputId}" data-key="${field.key}" data-type="${field.type}" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px;color:var(--text);font-size:12px;outline:none">
+      <option value="active"${current==='active'?' selected':''}>active</option>
+      <option value="learning"${current==='learning'?' selected':''}>learning</option>
+      <option value="off"${current==='off'?' selected':''}>off</option>
+    </select>`;
+  }
+  const step=field.step!==undefined?` step="${field.step}"`:'';
+  const min=field.min!==undefined?` min="${field.min}"`:'';
+  const max=field.max!==undefined?` max="${field.max}"`:'';
+  const inputType=field.type==='number'?'number':'text';
+  return `<input id="${inputId}" data-key="${field.key}" data-type="${field.type}" type="${inputType}" value="${escapeHtml(value)}"${step}${min}${max} style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text);font-size:12px;outline:none">`;
+}
+function _renderModuleConfigForm(moduleId,label,source,fields,cfg,mode){
   const body=$('module-config-body');
   if(!body)return;
-  const moduleId=_selectedModuleConfig;
-  const spec=MODULE_CONFIG_SPECS[moduleId];
-  if(!spec){
-    body.innerHTML='<div class="empty">Dieses Modul hat aktuell keine Runtime-Konfiguration.</div>';
-    return;
-  }
-  if(force)body.innerHTML='<div class="loading"><div class="spinner"></div>Lade Konfiguration...</div>';
-  const data=await api(spec.getPath);
-  const cfg=spec.parseGet?spec.parseGet(data):data;
-  if(!cfg||typeof cfg!=='object'){
-    body.innerHTML=
-      '<div class="empty">Konfiguration nicht verfuegbar. Endpoint: <code>'+escapeHtml(spec.getPath)+
-      '</code></div>';
-    return;
-  }
-  const rows=spec.fields.map(field=>{
-    const inputId='cfg_'+moduleId+'_'+field.key;
+  const rows=fields.map((field)=>{
     const value=_configInputValue(cfg[field.key],field);
-    let inputHtml='';
-    if(field.type==='boolean'){
-      inputHtml=`<select id="${inputId}" data-key="${field.key}" data-type="${field.type}" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px;color:var(--text);font-size:12px;outline:none">
-        <option value="true"${value==='true'?' selected':''}>true</option>
-        <option value="false"${value==='false'?' selected':''}>false</option>
-      </select>`;
-    }else{
-      const step=field.step!==undefined?` step="${field.step}"`:'';
-      const min=field.min!==undefined?` min="${field.min}"`:'';
-      const max=field.max!==undefined?` max="${field.max}"`:'';
-      const inputType=field.type==='number'?'number':'text';
-      inputHtml=`<input id="${inputId}" data-key="${field.key}" data-type="${field.type}" type="${inputType}" value="${escapeHtml(value)}"${step}${min}${max} style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text);font-size:12px;outline:none">`;
-    }
+    const inputHtml=_moduleFieldHtml(moduleId,field,value);
+    const inputId='cfg_'+moduleId+'_'+field.key;
     return `<div style="display:grid;grid-template-columns:220px 1fr;gap:8px;align-items:center;margin-bottom:8px">
       <label for="${inputId}" style="font-size:11px;color:var(--dim)">${escapeHtml(field.label||field.key)}</label>
       ${inputHtml}
     </div>`;
   }).join('');
+  body.dataset.mode=mode;
   body.innerHTML=
-    `<div style="font-size:11px;color:var(--dim);margin-bottom:8px">Quelle: <code>${escapeHtml(spec.getPath)}</code></div>`+
+    `<div style="font-size:11px;color:var(--dim);margin-bottom:8px">${escapeHtml(label)} · Quelle: <code>${escapeHtml(source)}</code></div>`+
     rows+
     `<div style="display:flex;gap:8px;margin-top:10px">
       <button id="module-config-save" style="background:var(--accent);color:#fff;border:none;border-radius:6px;padding:7px 12px;cursor:pointer;font-size:11px;font-weight:600">Speichern</button>
@@ -1943,33 +2079,112 @@ async function loadSelectedModuleConfig(force=false){
   $('module-config-save')?.addEventListener('click',()=>saveSelectedModuleConfig());
   $('module-config-reset')?.addEventListener('click',()=>loadSelectedModuleConfig(true));
 }
+async function loadSelectedModuleConfig(force=false){
+  const body=$('module-config-body');
+  if(!body)return;
+  const moduleId=_selectedModuleConfig;
+  const spec=MODULE_CONFIG_SPECS[moduleId];
+  if(force)body.innerHTML='<div class="loading"><div class="spinner"></div>Lade Konfiguration...</div>';
+  if(spec){
+    const data=await api(spec.getPath);
+    const cfg=spec.parseGet?spec.parseGet(data):data;
+    if(!cfg||typeof cfg!=='object'){
+      body.innerHTML=
+        '<div class="empty">Konfiguration nicht verfuegbar. Endpoint: <code>'+escapeHtml(spec.getPath)+
+        '</code></div>';
+      return;
+    }
+    _renderModuleConfigForm(moduleId,spec.label||moduleId,spec.getPath,spec.fields,cfg,'specific');
+    return;
+  }
+  const generic=await api('/api/v1/modules/'+encodeURIComponent(moduleId)+'/settings');
+  if(!generic||generic.ok===false){
+    body.innerHTML='<div class="empty">Konfiguration nicht verfuegbar.</div>';
+    return;
+  }
+  const schemaFields=Array.isArray(generic?.schema?.fields)?generic.schema.fields:[];
+  const inferred=(generic&&generic.settings&&typeof generic.settings==='object')
+    ?Object.keys(generic.settings).map((key)=>({key,label:key,type:(typeof generic.settings[key]==='number'?'number':typeof generic.settings[key]==='boolean'?'boolean':'text')}))
+    :[];
+  const fields=[{key:'state',label:'Modulstatus',type:'state'}].concat(schemaFields.length?schemaFields:inferred.length?inferred:[{key:'enabled',label:'Enabled',type:'boolean'},{key:'notes',label:'Notizen',type:'text'}]);
+  const cfg={...(generic.settings||{}),state:(generic.state||moduleStates[moduleId]||'active')};
+  _renderModuleConfigForm(moduleId,generic?.schema?.label||moduleId,'/api/v1/modules/'+moduleId+'/settings',fields,cfg,'generic');
+}
 async function saveSelectedModuleConfig(){
   const moduleId=_selectedModuleConfig;
   const spec=MODULE_CONFIG_SPECS[moduleId];
-  if(!spec)return;
   const body=$('module-config-body');
   if(!body)return;
+  const mode=body.dataset.mode||'specific';
+  if(spec&&mode==='specific'){
+    const payload={};
+    spec.fields.forEach(field=>{
+      const input=body.querySelector('[data-key="'+field.key+'"]');
+      if(!input)return;
+      const parsed=_parseConfigInput(input,field);
+      if(parsed!==null&&parsed!==undefined&&parsed!=='')payload[field.key]=parsed;
+    });
+    try{
+      const resp=await fetch(API+spec.postPath,withAuth({
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(payload),
+      }));
+      const data=await resp.json().catch(()=>null);
+      if(!resp.ok||(data&&data.ok===false)||data?.status==='error'){
+        throw new Error(data?.error||data?.message||('HTTP '+resp.status));
+      }
+      addHistory('Konfiguration gespeichert: '+escapeHtml(spec.label||moduleId));
+      await loadSelectedModuleConfig(true);
+    }catch(e){
+      addHistory('\u26a0\ufe0f Konfig-Fehler '+escapeHtml(spec.label||moduleId)+': '+escapeHtml(e.message||'unbekannt'));
+    }
+    return;
+  }
+
   const payload={};
-  spec.fields.forEach(field=>{
-    const input=body.querySelector('[data-key="'+field.key+'"]');
-    if(!input)return;
+  let desiredState=null;
+  body.querySelectorAll('[data-key]').forEach((input)=>{
+    const key=input.getAttribute('data-key');
+    const type=input.getAttribute('data-type')||'text';
+    if(!key)return;
+    const field={key,type};
     const parsed=_parseConfigInput(input,field);
-    if(parsed!==null&&parsed!==undefined&&parsed!=='')payload[field.key]=parsed;
+    if(key==='state'){desiredState=String(parsed||'active');return;}
+    if(parsed!==null&&parsed!==undefined&&parsed!=='')payload[key]=parsed;
   });
+
   try{
-    const resp=await fetch(API+spec.postPath,withAuth({
+    if(desiredState){
+      const stateResp=await fetch(API+'/api/v1/modules/'+encodeURIComponent(moduleId)+'/configure',withAuth({
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({state:desiredState}),
+      }));
+      const stateData=await stateResp.json().catch(()=>null);
+      if(!stateResp.ok||stateData?.ok===false){
+        throw new Error(stateData?.error||('State HTTP '+stateResp.status));
+      }
+      moduleStates[moduleId]=stateData?.state||desiredState;
+      localStorage.setItem('styx_module_states',JSON.stringify(moduleStates));
+      _moduleStatesSyncedAt=Date.now();
+    }
+
+    const resp=await fetch(API+'/api/v1/modules/'+encodeURIComponent(moduleId)+'/settings',withAuth({
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify(payload),
+      body:JSON.stringify({settings:payload}),
     }));
     const data=await resp.json().catch(()=>null);
-    if(!resp.ok||(data&&data.ok===false)||data?.status==='error'){
+    if(!resp.ok||data?.ok===false){
       throw new Error(data?.error||data?.message||('HTTP '+resp.status));
     }
-    addHistory('Konfiguration gespeichert: '+escapeHtml(spec.label||moduleId));
+    addHistory('Konfiguration gespeichert: '+escapeHtml(moduleId));
+    _moduleHealth=null;_healthTs=0;
     await loadSelectedModuleConfig(true);
+    await loadModules();
   }catch(e){
-    addHistory('\u26a0\ufe0f Konfig-Fehler '+escapeHtml(spec.label||moduleId)+': '+escapeHtml(e.message||'unbekannt'));
+    addHistory('\u26a0\ufe0f Konfig-Fehler '+escapeHtml(moduleId)+': '+escapeHtml(e.message||'unbekannt'));
   }
 }
 async function loadModules(){
@@ -2000,12 +2215,10 @@ async function loadModules(){
       card.querySelector('.mod-toggle').addEventListener('click',function(){toggleModule(this,m.id)});
       card.addEventListener('click',ev=>{
         if(ev.target&&ev.target.closest&&ev.target.closest('.mod-toggle'))return;
-        if(MODULE_CONFIG_SPECS[m.id]){
-          _selectedModuleConfig=m.id;
-          const sel=$('module-config-select');
-          if(sel)sel.value=m.id;
-          loadSelectedModuleConfig(false);
-        }
+        _selectedModuleConfig=m.id;
+        const sel=$('module-config-select');
+        if(sel)sel.value=m.id;
+        loadSelectedModuleConfig(false);
       });
       c.appendChild(card);
     });
@@ -2283,9 +2496,10 @@ async function loadSettings(){
     api('/chat/memory'),
     api('/chat/models/recommended'),
     api('/api/v1/capabilities'),
+    api('/api/v1/onyx/status'),
   ]);
-  const [statusRes,tgRes,memRes,recRes,capsRes]=settled.map(r=>r.status==='fulfilled'?r.value:null);
-  const status=statusRes,tg=tgRes,mem=memRes,rec=recRes,caps=capsRes;
+  const [statusRes,tgRes,memRes,recRes,capsRes,onyxRes]=settled.map(r=>r.status==='fulfilled'?r.value:null);
+  const status=statusRes,tg=tgRes,mem=memRes,rec=recRes,caps=capsRes,onyx=onyxRes;
   if(status){
     $('set-llm').innerHTML=
       `<tr><td>Provider</td><td>${badge(status.active_provider||'--','p')}</td></tr>`+
@@ -2325,6 +2539,8 @@ async function loadSettings(){
       `<tr><td>Cloud URL</td><td><code>${escapeHtml(status.cloud_api_url||'--')}</code></td></tr>`+
       `<tr><td>Telegram</td><td>${tg?.running?badge('Aktiv','g'):badge('Aus','y')}</td></tr>`+
       `<tr><td>MCP Server</td><td>${mcpOk?badge('Aktiv','g'):badge('Offline','r')}</td></tr>`+
+      `<tr><td>Onyx Bridge</td><td>${onyx?.ok?badge('Aktiv','g'):badge('Offline','r')} ${onyx?.ha_reachable?badge('HA erreichbar','b'):''}</td></tr>`+
+      `<tr><td>Onyx OpenAPI</td><td><code>/api/v1/onyx/openapi</code></td></tr>`+
       (caps?.capabilities?.length?`<tr><td>Features</td><td style="font-size:10px;color:var(--dim)">${escapeHtml(caps.capabilities.slice(0,5).join(', '))}${caps.capabilities.length>5?'…':''}</td></tr>`:'');
   }else{
     $('set-llm').innerHTML='<tr><td colspan="2" style="color:var(--red)">\u26a0\ufe0f Core API nicht erreichbar</td></tr>';

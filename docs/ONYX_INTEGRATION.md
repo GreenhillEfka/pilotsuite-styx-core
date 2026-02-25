@@ -24,10 +24,11 @@ Hinweis: `pilotsuite` mappt intern auf das konfigurierte Styx/Ollama-Modell und 
 ### 2) OpenAPI Action in Onyx
 
 - Action Name: `Styx Home Actions`
-- Schema: `docs/integrations/onyx_styx_actions.openapi.yaml`
+- Schema URL (empfohlen): `http://192.168.30.18:8909/api/v1/onyx/openapi`
+- Fallback-Datei: `docs/integrations/onyx_styx_actions.openapi.yaml`
 - Auth Type: `Bearer`
 - Bearer Token: derselbe Styx `auth_token`
-- Server URL im Schema: `http://192.168.30.18:8909`
+- Server URL im Schema: kommt automatisch aus der aufgerufenen Styx-URL
 
 Wichtige Actions:
 - `callHaServiceViaOnyxBridge` (`POST /api/v1/onyx/ha/service-call`) mit Rueckkanal (`readback_states`)

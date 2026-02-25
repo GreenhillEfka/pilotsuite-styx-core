@@ -12,7 +12,7 @@ All endpoints require a valid auth token (Bearer or X-Auth-Token).
 from __future__ import annotations
 
 import logging
-from typing import Optional
+from typing import Any, Optional
 
 from flask import Blueprint, jsonify, request
 
@@ -28,6 +28,48 @@ module_control_bp = Blueprint(
 
 # Global registry reference, set by init_module_control_api()
 _registry: Optional[ModuleRegistry] = None
+
+
+_MODULE_SETTINGS_SCHEMAS: dict[str, dict[str, Any]] = {
+    "brain_graph": {
+        "label": "Brain Graph",
+        "fields": [
+            {"key": "refresh_interval_seconds", "type": "number", "min": 1, "max": 3600, "label": "Refresh-Intervall (s)"},
+            {"key": "max_nodes", "type": "number", "min": 50, "max": 5000, "label": "Max Nodes"},
+            {"key": "max_edges", "type": "number", "min": 50, "max": 20000, "label": "Max Edges"},
+            {"key": "notes", "type": "text", "label": "Notizen"},
+        ],
+    },
+    "habitus_miner": {
+        "label": "Habitus Miner",
+        "fields": [
+            {"key": "auto_apply_threshold", "type": "number", "min": 0, "max": 1, "step": 0.01, "label": "Auto-Apply Schwellwert"},
+            {"key": "min_confidence", "type": "number", "min": 0, "max": 1, "step": 0.01, "label": "Min Confidence"},
+            {"key": "notes", "type": "text", "label": "Notizen"},
+        ],
+    },
+    "event_forwarder": {
+        "label": "Event Bridge",
+        "fields": [
+            {"key": "flush_interval_seconds", "type": "number", "min": 1, "max": 300, "label": "Flush-Intervall (s)"},
+            {"key": "max_batch", "type": "number", "min": 1, "max": 5000, "label": "Max Batch"},
+            {"key": "include_service_calls", "type": "boolean", "label": "Service-Calls weiterleiten"},
+            {"key": "notes", "type": "text", "label": "Notizen"},
+        ],
+    },
+}
+
+
+def _schema_for_module(module_id: str) -> dict[str, Any]:
+    if module_id in _MODULE_SETTINGS_SCHEMAS:
+        return _MODULE_SETTINGS_SCHEMAS[module_id]
+    return {
+        "label": module_id,
+        "fields": [
+            {"key": "enabled", "type": "boolean", "label": "Enabled"},
+            {"key": "notes", "type": "text", "label": "Notizen"},
+        ],
+    }
 
 
 def init_module_control_api(registry: ModuleRegistry) -> None:
@@ -138,3 +180,41 @@ def configure_module(module_id: str):
         "state": new_state,
         "previous": previous,
     })
+
+
+@module_control_bp.route("/<module_id>/settings", methods=["GET"])
+@require_token
+def get_module_settings(module_id: str):
+    """Get persisted module settings + schema for dashboard rendering."""
+    registry = _get_registry()
+    return jsonify(
+        {
+            "ok": True,
+            "module_id": module_id,
+            "schema": _schema_for_module(module_id),
+            "settings": registry.get_settings(module_id),
+            "state": registry.get_state(module_id),
+        }
+    )
+
+
+@module_control_bp.route("/<module_id>/settings", methods=["POST"])
+@require_token
+def set_module_settings(module_id: str):
+    """Store module settings."""
+    registry = _get_registry()
+    data = request.get_json(silent=True) or {}
+    settings = data.get("settings", data)
+    if not isinstance(settings, dict):
+        return jsonify({"ok": False, "error": "settings_must_be_object"}), 400
+    success = registry.set_settings(module_id, settings)
+    if not success:
+        return jsonify({"ok": False, "error": "persist_failed"}), 500
+    return jsonify(
+        {
+            "ok": True,
+            "module_id": module_id,
+            "settings": registry.get_settings(module_id),
+            "schema": _schema_for_module(module_id),
+        }
+    )

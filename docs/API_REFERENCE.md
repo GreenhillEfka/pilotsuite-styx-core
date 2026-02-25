@@ -457,6 +457,11 @@ Fuehrt einen kontrollierten HA-Service-Call aus.
 
 Antwort enthaelt `readback_states` fuer den Rueckkanal (falls `readback=true`).
 
+#### GET /api/v1/onyx/openapi
+
+Liefert einen OpenAPI-JSON-Contract fuer direkten Import in Onyx Actions.
+Die `servers[0].url` wird aus der aufgerufenen Styx-URL abgeleitet.
+
 ---
 
 ## 4. Brain Graph

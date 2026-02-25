@@ -532,6 +532,35 @@ def delete_zone_endpoint(zone_id):
     return jsonify({"ok": result})
 
 
+@hub_bp.route("/zones/<zone_id>/settings", methods=["GET"])
+@require_token
+def get_zone_settings_endpoint(zone_id):
+    """Get persisted settings for a zone."""
+    if not _zone_engine:
+        return jsonify({"error": "Zone engine not initialized"}), 503
+    zone = _zone_engine.get_zone(zone_id)
+    if not zone:
+        return jsonify({"ok": False, "error": "zone_not_found"}), 404
+    return jsonify({"ok": True, "zone_id": zone_id, "settings": zone.get("settings", {}) or {}})
+
+
+@hub_bp.route("/zones/<zone_id>/settings", methods=["POST"])
+@require_token
+def set_zone_settings_endpoint(zone_id):
+    """Update zone settings (partial merge)."""
+    if not _zone_engine:
+        return jsonify({"error": "Zone engine not initialized"}), 503
+    body = request.get_json(silent=True) or {}
+    settings = body.get("settings", body)
+    if not isinstance(settings, dict):
+        return jsonify({"ok": False, "error": "invalid_settings"}), 400
+    result = _zone_engine.set_zone_settings(zone_id, settings)
+    if not result:
+        return jsonify({"ok": False, "error": "zone_not_found"}), 404
+    zone = _zone_engine.get_zone(zone_id)
+    return jsonify({"ok": True, "zone_id": zone_id, "settings": (zone or {}).get("settings", {})})
+
+
 @hub_bp.route("/zones/<zone_id>/mode", methods=["POST"])
 @require_token
 def set_zone_mode_endpoint(zone_id):

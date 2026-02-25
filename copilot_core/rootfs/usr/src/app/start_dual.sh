@@ -12,6 +12,10 @@ set -e
 # Ensure HOME exists for Ollama runtime; some base images do not define it.
 export HOME="${HOME:-/tmp}"
 mkdir -p "$HOME" 2>/dev/null || true
+# Harden runtime env for Ollama in minimal add-on containers.
+export OLLAMA_HOME="${OLLAMA_HOME:-$HOME/.ollama}"
+export XDG_CACHE_HOME="${XDG_CACHE_HOME:-$HOME/.cache}"
+mkdir -p "$OLLAMA_HOME" "$XDG_CACHE_HOME" 2>/dev/null || true
 
 CORE_VERSION="${COPILOT_VERSION:-${BUILD_VERSION:-$(cat /usr/src/app/VERSION 2>/dev/null || echo 0.0.0)}}"
 export COPILOT_VERSION="$CORE_VERSION"

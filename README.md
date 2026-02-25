@@ -64,7 +64,8 @@ Empfohlenes Setup: Onyx fuer Connector-RAG, Styx fuer Home-Actions (OpenAPI/MCP)
 Details: `docs/ONYX_INTEGRATION.md`
 
 Produktive Action-Definition:
-- `docs/integrations/onyx_styx_actions.openapi.yaml`
+- `http://<styx-host>:8909/api/v1/onyx/openapi` (direkter Import in Onyx)
+- `docs/integrations/onyx_styx_actions.openapi.yaml` (Fallback-Datei)
 
 Schneller E2E-Check (Onyx -> Styx -> HA -> Rueckkanal):
 - `TOKEN=<styx_token> ./tools/onyx_styx_e2e.sh`
