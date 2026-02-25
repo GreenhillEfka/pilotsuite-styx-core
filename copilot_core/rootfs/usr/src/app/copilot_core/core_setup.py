@@ -3463,3 +3463,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.api.v1.pyscript import pyscript_bp
         app.register_blueprint(pyscript_bp)
     except: pass
+    try:
+        from copilot_core.api.v1.terraform import terraform_bp
+        app.register_blueprint(terraform_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.pulumi import pulumi_bp
+        app.register_blueprint(pulumi_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.ansible import ansible_bp
+        app.register_blueprint(ansible_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.chef import chef_bp
+        app.register_blueprint(chef_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.puppet import puppet_bp
+        app.register_blueprint(puppet_bp)
+    except: pass
