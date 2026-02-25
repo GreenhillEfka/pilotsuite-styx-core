@@ -1078,9 +1078,12 @@ function navigateTo(p){
 // ==================================================
 // STYX PAGE (Brain + Chat + History)
 // ==================================================
-async function loadStyx(){
+async function loadStyx(opts={}){
+  const background=!!opts.background;
   try{
-    setHistoryTab(historyTab);
+    if(!background){
+      setHistoryTab(historyTab);
+    }
     // Load status
     const status=await api('/chat/status');
     _chatStatus=status;
@@ -1099,21 +1102,27 @@ async function loadStyx(){
       $('assistant-name').textContent=escapeHtml(name);
       $('app-title').textContent=escapeHtml(name)+' \u2014 PilotSuite';
       document.title='PilotSuite \u2014 '+escapeHtml(name);
-      addHistory('API-Modus: '+API_MODE+(API?(' ('+API+')'):''));
-      await loadChatHistory();
-      await Promise.allSettled([loadEventHistory(),loadLogHistory()]);
+      if(!background){
+        addHistory('API-Modus: '+API_MODE+(API?(' ('+API+')'):''));
+        await loadChatHistory();
+        await Promise.allSettled([loadEventHistory(),loadLogHistory()]);
+      }
     }else{
       dot.className='dot dot-red';txt.textContent='API offline';
-      addHistory('\u26a0\ufe0f Core API nicht erreichbar');
-      renderChatMessages(chatHistory);
+      if(!background){
+        addHistory('\u26a0\ufe0f Core API nicht erreichbar');
+        renderChatMessages(chatHistory);
+      }
     }
     // Load pipelines (real health)
     loadPipelines();
-    // Load brain
-    setBrainMode(brainMode);
-    // Load suggestion inbox
-    loadSuggestionInbox();
-    addHistory('Dashboard geladen');
+    if(!background){
+      // Load brain
+      setBrainMode(brainMode);
+      // Load suggestion inbox
+      loadSuggestionInbox();
+      addHistory('Dashboard geladen');
+    }
   }catch(e){
     console.error('loadStyx error:',e);
     const dot=$('status-dot'),txt=$('status-text');
@@ -3464,9 +3473,15 @@ function loadPage(p){
 // Boot — resilient startup
 loadStyx().catch(e=>console.error('Boot error:',e));
 // Auto-refresh Styx every 30s
+let _styxAutoRefreshInFlight=false;
 setInterval(()=>{
   try{
-    if(document.querySelector('.nav button.active')?.dataset.page==='styx')loadStyx().catch(()=>{});
+    if(document.querySelector('.nav button.active')?.dataset.page!=='styx')return;
+    if(_styxAutoRefreshInFlight)return;
+    _styxAutoRefreshInFlight=true;
+    loadStyx({background:true})
+      .catch(()=>{})
+      .finally(()=>{_styxAutoRefreshInFlight=false;});
   }catch(e){}
 },30000);
 </script>

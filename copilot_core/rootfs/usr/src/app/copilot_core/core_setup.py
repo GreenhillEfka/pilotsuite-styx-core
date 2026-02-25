@@ -1039,13 +1039,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
     except Exception:
         _LOGGER.exception("Failed to register Repairs API")
 
-    # Register System Health API (v7.30.0)
+    # Register legacy System Health API only if not already present.
+    # The primary SystemHealth blueprint is registered above and already
+    # exposes /api/v1/system_health*. This guard prevents duplicate
+    # blueprint-name collisions ("system_health").
     try:
         from copilot_core.api.v1.system_health import (
             system_health_bp as system_health_v1_bp,
         )
-        app.register_blueprint(system_health_v1_bp)
-        _LOGGER.info("Registered System Health API (/api/v1/system_health/*)")
+        existing_bp = app.blueprints.get(system_health_v1_bp.name)
+        if existing_bp is None:
+            app.register_blueprint(system_health_v1_bp)
+            _LOGGER.info("Registered System Health API (/api/v1/system_health/*)")
+        else:
+            _LOGGER.debug(
+                "Skipping legacy System Health API registration (blueprint '%s' already present)",
+                system_health_v1_bp.name,
+            )
     except Exception:
         _LOGGER.exception("Failed to register System Health API")
 

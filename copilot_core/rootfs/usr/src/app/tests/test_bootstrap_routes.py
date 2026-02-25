@@ -30,6 +30,15 @@ def test_register_blueprints_keeps_core_and_hub_routes_available():
     assert "/api/v1/hub/habitus/management/bootstrap_zones" in routes
     assert "/api/v1/hub/habitus/automation/suggestions" in routes
     assert "/api/v1/hub/habitus/automation/apply" in routes
+    assert "/api/v1/system_health/suppress" in routes
+
+
+def test_register_blueprints_no_system_health_duplicate_error(caplog):
+    """Regression: duplicate system_health blueprint must not log registration failure."""
+    app = Flask(__name__)
+    caplog.set_level("ERROR")
+    register_blueprints(app, {"config": {}})
+    assert "Failed to register System Health API" not in caplog.text
 
 
 def test_main_exposes_status_and_capabilities_compat_endpoints():

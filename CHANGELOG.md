@@ -1,5 +1,29 @@
 # Changelog - PilotSuite Core Add-on
 
+## [8.7.1] - 2026-02-25 — STABILITY HOTFIX (SYSTEM HEALTH + WAITRESS)
+
+### Fixed
+- Prevented duplicate System Health blueprint registration in startup wiring:
+  - avoids `ValueError: The name 'system_health' is already registered for a different blueprint`
+  - legacy `/api/v1/system_health/*` registration is now skipped when already present.
+
+### Improved
+- Waitress runtime tuning now supports bounded env-based worker config:
+  - `WAITRESS_THREADS` (default `12`)
+  - `WAITRESS_CONNECTION_LIMIT` (default `300`)
+  - `WAITRESS_BACKLOG` (default `1024`)
+  - `WAITRESS_CHANNEL_TIMEOUT` (default `120`)
+  - `WAITRESS_CLEANUP_INTERVAL` (default `30`)
+- Styx dashboard auto-refresh reduced backend pressure:
+  - background refresh no longer reloads heavy history/brain/suggestion data
+  - overlapping refreshes are now prevented with in-flight guard.
+
+### Validation
+- `python3 -m py_compile` on changed runtime modules/tests passed.
+- Added regression tests:
+  - `tests/test_bootstrap_routes.py` (system health duplicate registration log regression)
+  - `tests/test_main_waitress_config.py` (waitress config defaults/bounds).
+
 ## [8.7.0] - 2026-02-25 — RAG API + MODULE PRESETS + FULL MODULE CATALOG
 
 ### Added

@@ -35,6 +35,31 @@ def _load_options_json(path: str = "/data/options.json") -> dict:
         return {}
 
 
+def _waitress_int_env(name: str, default: int, minimum: int, maximum: int) -> int:
+    """Read bounded integer values for waitress runtime tuning."""
+    try:
+        value = int(os.environ.get(name, str(default)))
+    except (TypeError, ValueError):
+        return default
+    if value < minimum:
+        return minimum
+    if value > maximum:
+        return maximum
+    return value
+
+
+def _build_waitress_server_config() -> dict[str, int]:
+    """Resolve waitress server parameters with production-safe defaults."""
+    return {
+        # Default waitress threads=4 can overload quickly under dashboard fan-out.
+        "threads": _waitress_int_env("WAITRESS_THREADS", 12, 4, 128),
+        "connection_limit": _waitress_int_env("WAITRESS_CONNECTION_LIMIT", 300, 50, 5000),
+        "backlog": _waitress_int_env("WAITRESS_BACKLOG", 1024, 128, 65535),
+        "channel_timeout": _waitress_int_env("WAITRESS_CHANNEL_TIMEOUT", 120, 30, 3600),
+        "cleanup_interval": _waitress_int_env("WAITRESS_CLEANUP_INTERVAL", 30, 5, 300),
+    }
+
+
 # ---------------------------------------------------------------------------
 # Startup pre-flight validation (v3.6.0)
 # ---------------------------------------------------------------------------
@@ -692,8 +717,22 @@ def hub_widget_types():
 if __name__ == "__main__":
     host = "0.0.0.0"
     port = int(os.environ.get("PORT", "8909"))
+    waitress_cfg = _build_waitress_server_config()
     _main_logger.info(
-        "Starting PilotSuite v%s on %s:%d (pre-flight: %s)",
-        APP_VERSION, host, port, json.dumps(_preflight_results),
+        "Starting PilotSuite v%s on %s:%d with waitress=%s (pre-flight: %s)",
+        APP_VERSION,
+        host,
+        port,
+        json.dumps(waitress_cfg, sort_keys=True),
+        json.dumps(_preflight_results),
     )
-    serve(app, host=host, port=port)
+    serve(
+        app,
+        host=host,
+        port=port,
+        threads=waitress_cfg["threads"],
+        connection_limit=waitress_cfg["connection_limit"],
+        backlog=waitress_cfg["backlog"],
+        channel_timeout=waitress_cfg["channel_timeout"],
+        cleanup_interval=waitress_cfg["cleanup_interval"],
+    )

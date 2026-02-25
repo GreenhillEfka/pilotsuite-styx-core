@@ -1,5 +1,19 @@
 # Release Notes - PilotSuite Core
 
+## [8.7.1] - 2026-02-25 — STABILITY HOTFIX
+
+### Fixed
+- Startup no longer throws duplicate blueprint-name errors for System Health (`system_health`).
+- Removed noisy failure path for legacy System Health registration when primary blueprint is already active.
+
+### Improved
+- Waitress server now runs with tunable, bounded production defaults to reduce queue-pressure spikes.
+- Dashboard Styx auto-refresh now uses lightweight background mode and in-flight locking to prevent request pileups.
+
+### Validation
+- Syntax checks passed (`python3 -m py_compile` on changed files).
+- New regression tests added for blueprint collision guard and waitress env-config bounds.
+
 ## [8.7.0] - 2026-02-25 — RAG + MODULE PRESETS + MODULE KATALOG
 
 ### Added
