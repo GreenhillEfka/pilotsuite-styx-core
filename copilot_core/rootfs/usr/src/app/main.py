@@ -410,6 +410,42 @@ def version():
     })
 
 
+@app.get("/api/v1/status")
+def api_status():
+    """Compatibility status endpoint used by HA integration and dashboard."""
+    return jsonify(
+        {
+            "ok": True,
+            "time": _now_iso(),
+            "version": APP_VERSION,
+            "port": int(os.environ.get("PORT", "8909")),
+        }
+    )
+
+
+@app.get("/api/v1/capabilities")
+def api_capabilities():
+    """Compatibility capabilities endpoint (minimal, stable schema)."""
+    services = app.config.get("COPILOT_SERVICES", {}) or {}
+    return jsonify(
+        {
+            "ok": True,
+            "time": _now_iso(),
+            "version": APP_VERSION,
+            "modules": {
+                "events": {"enabled": True},
+                "brain_graph": {"enabled": services.get("brain_graph_service") is not None},
+                "habitus": {"enabled": services.get("habitus_service") is not None},
+                "mood": {"enabled": services.get("mood_service") is not None},
+                "vector_store": {"enabled": services.get("vector_store") is not None},
+                "module_control": {"enabled": services.get("module_registry") is not None},
+                "hub": {"enabled": services.get("hub_zones") is not None},
+                "conversation": {"enabled": services.get("llm_provider") is not None},
+            },
+        }
+    )
+
+
 @app.post("/api/v1/echo")
 @require_token
 def echo():

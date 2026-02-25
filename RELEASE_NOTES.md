@@ -1,5 +1,25 @@
 # Release Notes - PilotSuite Core
 
+## [8.4.2] - 2026-02-25 — STARTUP ROUTE RECOVERY
+
+### Changed
+- Registered Hub API blueprint (`/api/v1/hub/*`) in main startup flow.
+- Added compatibility endpoints in main app:
+  - `GET /api/v1/status`
+  - `GET /api/v1/capabilities`
+
+### Fixed
+- `register_blueprints()` could abort with `UnboundLocalError` due local import shadowing of `system_health_bp` / `energy_bp`.
+- Restored downstream routes that were missing because startup registration stopped early:
+  - `/api/v1/modules/*`
+  - `/api/v1/agent/*`
+  - `/chat/status`, `/v1/models`, `/v1/chat/completions`
+  - `/api/v1/hub/zones` and related Hub endpoints
+
+### Testing
+- `pytest -q tests/test_bootstrap_routes.py` → 2 passed
+- `pytest -q tests/test_onyx_bridge_api.py tests/test_module_and_shopping_api.py tests/test_dashboard_template_habitus.py tests/test_core_endpoints.py tests/test_tag_api.py tests/test_mcp_server.py` → 40 passed
+
 ## [8.4.1] - 2026-02-25 — STABILITY RECOVERY FOR v8.4 LINE
 
 ### Changed

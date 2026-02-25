@@ -26,6 +26,7 @@ import logging
 import os
 import sqlite3
 import threading
+from pathlib import Path
 from datetime import datetime, timezone
 from typing import Dict, Optional
 
@@ -84,8 +85,28 @@ class ModuleRegistry:
 
     def _init_db(self) -> None:
         """Create the module_states table if it does not exist."""
+        def _connect(path: str) -> sqlite3.Connection:
+            return sqlite3.connect(path)
+
+        target_path = self._db_path
+        fallback_tried = False
+
         with self._lock:
-            conn = sqlite3.connect(self._db_path)
+            try:
+                conn = _connect(target_path)
+            except sqlite3.OperationalError:
+                fallback_dir = Path(os.environ.get("COPILOT_MODULE_DB_DIR", "/tmp"))
+                fallback_dir.mkdir(parents=True, exist_ok=True)
+                fallback_path = fallback_dir / Path(target_path).name
+                _LOGGER.warning(
+                    "ModuleRegistry DB path %s not writable, using fallback %s",
+                    target_path,
+                    fallback_path,
+                )
+                target_path = str(fallback_path)
+                self._db_path = target_path
+                conn = _connect(target_path)
+                fallback_tried = True
             try:
                 conn.execute("""
                     CREATE TABLE IF NOT EXISTS module_states (
@@ -94,7 +115,16 @@ class ModuleRegistry:
                         updated_at  TEXT NOT NULL
                     )
                 """)
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS module_settings (
+                        module_id      TEXT PRIMARY KEY,
+                        settings_json  TEXT NOT NULL DEFAULT '{}',
+                        updated_at     TEXT NOT NULL
+                    )
+                """)
                 conn.commit()
+                if fallback_tried:
+                    _LOGGER.info("ModuleRegistry fallback DB initialized at %s", target_path)
             finally:
                 conn.close()
 
@@ -185,6 +215,66 @@ class ModuleRegistry:
                     "SELECT module_id, state FROM module_states ORDER BY module_id"
                 ).fetchall()
                 return {module_id: state for module_id, state in rows}
+            finally:
+                conn.close()
+
+    def get_settings(self, module_id: str) -> Dict[str, object]:
+        """Return JSON settings object for *module_id*.
+
+        If no settings were stored yet, an empty dict is returned.
+        """
+        import json
+
+        with self._lock:
+            conn = self._get_connection()
+            try:
+                row = conn.execute(
+                    "SELECT settings_json FROM module_settings WHERE module_id = ?",
+                    (module_id,),
+                ).fetchone()
+                if not row:
+                    return {}
+                raw = row[0] if row[0] else "{}"
+                data = json.loads(raw)
+                return data if isinstance(data, dict) else {}
+            except Exception:
+                _LOGGER.exception("Failed to read settings for %s", module_id)
+                return {}
+            finally:
+                conn.close()
+
+    def set_settings(self, module_id: str, settings: Dict[str, object]) -> bool:
+        """Persist module-specific settings as JSON."""
+        import json
+
+        if not isinstance(settings, dict):
+            return False
+
+        now = self._now_iso()
+        try:
+            payload = json.dumps(settings, ensure_ascii=False, sort_keys=True)
+        except Exception:
+            _LOGGER.warning("Rejected non-serializable settings for module %s", module_id)
+            return False
+
+        with self._lock:
+            conn = self._get_connection()
+            try:
+                conn.execute(
+                    """
+                    INSERT INTO module_settings (module_id, settings_json, updated_at)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT(module_id) DO UPDATE
+                        SET settings_json = excluded.settings_json,
+                            updated_at = excluded.updated_at
+                    """,
+                    (module_id, payload, now),
+                )
+                conn.commit()
+                return True
+            except sqlite3.Error:
+                _LOGGER.exception("Failed to persist settings for %s", module_id)
+                return False
             finally:
                 conn.close()
 

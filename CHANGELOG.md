@@ -1,5 +1,22 @@
 # Changelog - PilotSuite Core Add-on
 
+## [8.4.2] - 2026-02-25 — BOOTSTRAP + API COMPATIBILITY RECOVERY
+
+### Fixed
+- Critical Flask bootstrap bug in `register_blueprints()` where local import shadowing (`system_health_bp`, `energy_bp`) caused `UnboundLocalError` and aborted route registration.
+- Added missing Hub API registration (`/api/v1/hub/*`) and service wiring in startup path.
+- Restored HA/Core compatibility endpoints in `main.py`:
+  - `GET /api/v1/status`
+  - `GET /api/v1/capabilities`
+
+### Improved
+- Added regression tests for startup route wiring and compatibility endpoints:
+  - `tests/test_bootstrap_routes.py`
+
+### Validation
+- `pytest -q tests/test_bootstrap_routes.py` → **2 passed**
+- `pytest -q tests/test_onyx_bridge_api.py tests/test_module_and_shopping_api.py tests/test_dashboard_template_habitus.py tests/test_core_endpoints.py tests/test_tag_api.py tests/test_mcp_server.py` → **40 passed**
+
 ## [8.4.1] - 2026-02-25 — API RECOVERY + COMPATIBILITY HARDENING
 
 ### Changed

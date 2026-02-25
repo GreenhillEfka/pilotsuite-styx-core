@@ -585,6 +585,33 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
     app.register_blueprint(energy_bp)
     app.register_blueprint(performance_bp)  # Performance monitoring
 
+    # Register Hub API (zone management, dashboard widgets, brain activity chat)
+    try:
+        from copilot_core.hub.api import hub_bp, init_hub_api
+        init_hub_api(
+            dashboard=services.get("hub_dashboard") if services else None,
+            plugin_manager=services.get("hub_plugin_manager") if services else None,
+            multi_home=services.get("hub_multi_home") if services else None,
+            maintenance_engine=services.get("hub_maintenance") if services else None,
+            anomaly_engine=services.get("hub_anomaly") if services else None,
+            zone_engine=services.get("hub_zones") if services else None,
+            light_engine=services.get("hub_light") if services else None,
+            mode_engine=services.get("hub_modes") if services else None,
+            media_engine=services.get("hub_media") if services else None,
+            energy_advisor=services.get("hub_energy") if services else None,
+            template_engine=services.get("hub_templates") if services else None,
+            scene_engine=services.get("hub_scenes") if services else None,
+            presence_engine=services.get("hub_presence") if services else None,
+            notification_engine=services.get("hub_notifications") if services else None,
+            integration_hub=services.get("hub_integration") if services else None,
+            brain_architecture=services.get("hub_brain_arch") if services else None,
+            brain_activity=services.get("hub_brain_activity") if services else None,
+        )
+        app.register_blueprint(hub_bp)
+        _LOGGER.info("Registered Hub API (/api/v1/hub/*)")
+    except Exception:
+        _LOGGER.exception("Failed to register Hub API")
+
     # Register Conversation/LLM API (Ollama, default qwen3:0.6b)
     try:
         from copilot_core.api.v1.conversation import conversation_bp, openai_compat_bp
@@ -915,13 +942,13 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
     except Exception:
         _LOGGER.exception("Failed to register Calendar API")
 
-    # Register Shopping List & Reminders API (v3.5.0)
+    # Register Shopping List & Reminders API (v8.4.x)
     try:
-        from copilot_core.api.v1.shopping_list import shopping_list_bp
-        app.register_blueprint(shopping_list_bp)
-        _LOGGER.info("Registered Shopping List & Reminders API (/api/v1/shopping-list/*)")
+        from copilot_core.api.v1.shopping import shopping_bp
+        app.register_blueprint(shopping_bp)
+        _LOGGER.info("Registered Shopping + Reminders API (/api/v1/shopping/*, /api/v1/reminders/*)")
     except Exception:
-        _LOGGER.exception("Failed to register Shopping List & Reminders API")
+        _LOGGER.exception("Failed to register Shopping + Reminders API")
 
 
     # Register Input Number API (v7.25.0)
@@ -974,16 +1001,18 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
 
     # Register System Health API (v7.30.0)
     try:
-        from copilot_core.api.v1.system_health import system_health_bp
-        app.register_blueprint(system_health_bp)
+        from copilot_core.api.v1.system_health import (
+            system_health_bp as system_health_v1_bp,
+        )
+        app.register_blueprint(system_health_v1_bp)
         _LOGGER.info("Registered System Health API (/api/v1/system_health/*)")
     except Exception:
         _LOGGER.exception("Failed to register System Health API")
 
     # Register Energy API (v7.31.0)
     try:
-        from copilot_core.api.v1.energy import energy_bp
-        app.register_blueprint(energy_bp)
+        from copilot_core.api.v1.energy import energy_bp as energy_v1_bp
+        app.register_blueprint(energy_v1_bp)
         _LOGGER.info("Registered Energy API (/api/v1/energy/*)")
     except:
         pass
@@ -1210,10 +1239,6 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
     try:
         from copilot_core.api.v1.shop import shop_bp
         app.register_blueprint(shop_bp)
-    except: pass
-    try:
-        from copilot_core.api.v1.shopping import shopping_bp
-        app.register_blueprint(shopping_bp)
     except: pass
     try:
         from copilot_core.api.v1.todo import todo_bp
