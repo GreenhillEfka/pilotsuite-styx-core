@@ -1320,7 +1320,7 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         app.register_blueprint(export_bp)
     except: pass
     try:
-        from copilot_core.api.v1.import import import_bp
+        from copilot_core.api.v1.importmodule import import_bp
         app.register_blueprint(import_bp)
     except: pass
     try:
