@@ -1923,3 +1923,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.api.v1.srt import srt_bp
         app.register_blueprint(srt_bp)
     except: pass
+    try:
+        from copilot_core.api.v1.hls import hls_bp
+        app.register_blueprint(hls_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.dash import dash_bp
+        app.register_blueprint(dash_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.ws import ws_bp
+        app.register_blueprint(ws_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.graphql import graphql_bp
+        app.register_blueprint(graphql_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.grpc import grpc_bp
+        app.register_blueprint(grpc_bp)
+    except: pass

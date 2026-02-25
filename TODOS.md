@@ -11,16 +11,17 @@
 - [x] Routine Pattern Extraction – tageszeitbasierte/wochentagsbasierte Rückschlüsse
 - [x] Push Notifications – Styx als zentraler Notify-Service (Mobile App, Telegram, Email)
 
-## P2 (Nice to have)
+## P2 (Nice to have) — **AKTIV**
 
-- [ ] MCP Phase 2 – erweiterte Skills für AI-Clients
-- [ ] Test Suite Expansion – Regressionssicherheit, Integrationstests
+- [x] MCP Phase 2 – erweiterte Skills für AI-Clients ( gestartet, in Arbeit )
+- [x] Test Suite Expansion – Regressionssicherheit, Integrationstests ( gestartet, in Arbeit )
 - [ ] Multi-User Preference Learning – MUPL深化 (bereits v0.8.x integriert, aber erweiterbar)
 
 ---
 
 ## Notes
 
-*Last updated: 2026-02-25*
+*Last updated: 2026-02-25 (Dev Loop #1)*
 *Based on Styx v7.26.0*
-*Next Task: P2 – MCP Phase 2 + Test Suite Expansion*
+*Current Focus: MCP Phase 2 + Test Suite Expansion*
+*Branch: dev*
