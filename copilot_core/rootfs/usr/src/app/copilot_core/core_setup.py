@@ -2263,3 +2263,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.api.v1.opa import opa_bp
         app.register_blueprint(opa_bp)
     except: pass
+    try:
+        from copilot_core.api.v1.istio import istio_bp
+        app.register_blueprint(istio_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.linkerd import linkerd_bp
+        app.register_blueprint(linkerd_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.consul import consul_bp
+        app.register_blueprint(consul_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.vault import vault_bp
+        app.register_blueprint(vault_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.nomad import nomad_bp
+        app.register_blueprint(nomad_bp)
+    except: pass
