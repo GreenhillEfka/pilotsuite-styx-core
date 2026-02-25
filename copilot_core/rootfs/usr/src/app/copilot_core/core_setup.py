@@ -2363,3 +2363,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.api.v1.esxi import esxi_bp
         app.register_blueprint(esxi_bp)
     except: pass
+    try:
+        from copilot_core.api.v1.ceph import ceph_bp
+        app.register_blueprint(ceph_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.glusterfs import glusterfs_bp
+        app.register_blueprint(glusterfs_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.zfs import zfs_bp
+        app.register_blueprint(zfs_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.btrfs import btrfs_bp
+        app.register_blueprint(btrfs_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.xfs import xfs_bp
+        app.register_blueprint(xfs_bp)
+    except: pass
