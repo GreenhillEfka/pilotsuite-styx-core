@@ -4263,3 +4263,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.api.v1.pytorchlightning import pytorchlightning_bp
         app.register_blueprint(pytorchlightning_bp)
     except: pass
+    try:
+        from copilot_core.api.v1.huggingface import huggingface_bp
+        app.register_blueprint(huggingface_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.langchain import langchain_bp
+        app.register_blueprint(langchain_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.llamaindex import llamaindex_bp
+        app.register_blueprint(llamaindex_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.autogpt import autogpt_bp
+        app.register_blueprint(autogpt_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.gpt4all import gpt4all_bp
+        app.register_blueprint(gpt4all_bp)
+    except: pass
