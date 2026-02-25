@@ -1,5 +1,25 @@
 # Release Notes - PilotSuite Core
 
+## [8.8.0] - 2026-02-25 — REACT-FIRST HABITUS & MODEL CONTROL
+
+### Added
+- `GET /api/v1/hub/habitus/dependencies` for zone→module/neuron dependency mapping.
+- `POST /api/v1/agent/models/pull` for one-click offline Ollama model download requests.
+- `/api/v1/haushalt/overview` enriched with weather/news/warnings/house status payloads.
+
+### Improved
+- Habitus dashboard flow upgraded to selector UX:
+  - create/edit/delete zones directly in dashboard
+  - no CSV entity text input; room/entity multi-select with auto-prefill
+  - dependency panel for module + neuron transparency.
+- LLM model control UI:
+  - cloud `:cloud` models selectable
+  - offline model install status + download/select actions.
+
+### Compatibility
+- Ollama cloud model handling now treats `:cloud` IDs as cloud-native.
+- Ollama-hosted cloud default model changed to `qwen3.5:cloud`.
+
 ## [8.7.1] - 2026-02-25 — STABILITY HOTFIX
 
 ### Fixed

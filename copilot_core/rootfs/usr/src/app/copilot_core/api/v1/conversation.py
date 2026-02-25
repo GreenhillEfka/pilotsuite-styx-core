@@ -780,11 +780,13 @@ def list_recommended_models():
     provider_status = provider.status()
     catalog = provider.model_catalog()
 
+    offline_catalog = catalog.get("offline", {})
+    installed_models = offline_catalog.get("installed_models") or offline_catalog.get("models", [])
     installed = {
         str(model).split(":")[0]
-        for model in catalog.get("offline", {}).get("models", [])
+        for model in installed_models
     }
-    installed_full = {str(model) for model in catalog.get("offline", {}).get("models", [])}
+    installed_full = {str(model) for model in installed_models}
 
     models = []
     for m in RECOMMENDED_MODELS:
@@ -810,7 +812,8 @@ def list_recommended_models():
     return jsonify({
         "models": models,
         "cloud_models": cloud_models,
-        "offline_models": catalog.get("offline", {}).get("models", []),
+        "offline_models": offline_catalog.get("models", []),
+        "offline_installed_models": installed_models,
         "current_model": provider_status.get("ollama_model", DEFAULT_MODEL),
         "cloud_current_model": provider_status.get("cloud_model"),
         "primary_provider": provider_status.get("primary_provider", "offline"),
@@ -826,7 +829,10 @@ def llm_status():
     provider = _get_llm_provider()
     provider_status = provider.status()
     catalog = provider.model_catalog()
-    installed_models = catalog.get("offline", {}).get("models", [])
+    installed_models = (
+        catalog.get("offline", {}).get("installed_models")
+        or catalog.get("offline", {}).get("models", [])
+    )
     cloud_models = catalog.get("cloud", {}).get("models", [])
     rag_active = False
     rag_documents = 0

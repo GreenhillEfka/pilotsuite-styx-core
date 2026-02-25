@@ -177,6 +177,72 @@ def _infer_neuron_tags(antecedent: str, consequent: str) -> list[str]:
     return out
 
 
+_ROLE_MODULE_HINTS: dict[str, str] = {
+    "lights": "light_intelligence",
+    "motion": "proactive",
+    "brightness": "light_intelligence",
+    "noise": "mood_engine",
+    "humidity": "weather_context",
+    "heating": "energy_context",
+    "co2": "energy_context",
+    "camera": "camera_context",
+    "door": "camera_context",
+    "lock": "camera_context",
+    "cover": "light_intelligence",
+    "media": "media_zones",
+    "temperature": "weather_context",
+    "power": "energy_context",
+    "energy": "energy_context",
+    "other": "neurons",
+}
+
+_MODULE_NEURON_HINTS: dict[str, list[str]] = {
+    "light_intelligence": ["context.light_level", "context.activity"],
+    "proactive": ["context.presence", "context.activity"],
+    "mood_engine": ["state.comfort_level", "state.stress_level"],
+    "weather_context": ["context.weather", "state.comfort_level"],
+    "energy_context": ["state.energy_level", "state.fatigue_level"],
+    "camera_context": ["context.security", "context.presence"],
+    "media_zones": ["context.activity", "state.stimulus_level"],
+    "neurons": ["context.activity"],
+}
+
+
+def _module_from_entity_id(entity_id: str) -> str:
+    role = _zone_role(entity_id)
+    return _ROLE_MODULE_HINTS.get(role, "neurons")
+
+
+def _derive_zone_dependencies(entity_ids: list[str], role_map: dict[str, list[str]]) -> dict[str, list[str]]:
+    modules: list[str] = []
+    neurons: list[str] = []
+    seen_modules: set[str] = set()
+    seen_neurons: set[str] = set()
+
+    # Role-driven module hints first (stable and deterministic).
+    for role in sorted(role_map.keys()):
+        mod = _ROLE_MODULE_HINTS.get(role)
+        if mod and mod not in seen_modules:
+            modules.append(mod)
+            seen_modules.add(mod)
+
+    # Entity-level module hints fill remaining gaps.
+    for eid in entity_ids:
+        mod = _module_from_entity_id(eid)
+        if mod not in seen_modules:
+            modules.append(mod)
+            seen_modules.add(mod)
+
+    for mod in modules:
+        for neuron in _MODULE_NEURON_HINTS.get(mod, []):
+            if neuron in seen_neurons:
+                continue
+            seen_neurons.add(neuron)
+            neurons.append(neuron)
+
+    return {"modules": modules, "neurons": neurons}
+
+
 def _role_map(entity_ids: list[str]) -> dict[str, list[str]]:
     roles: dict[str, list[str]] = defaultdict(list)
     seen: set[str] = set()
@@ -984,6 +1050,43 @@ def bootstrap_habitus_zones():
             "zones": zone_results,
         }
     )
+
+
+@hub_bp.route("/habitus/dependencies", methods=["GET"])
+@require_token
+def get_habitus_dependencies():
+    """Return module/neuron dependency map per habitus zone."""
+    if not _zone_engine:
+        return jsonify({"ok": False, "error": "zone_engine_not_initialized"}), 503
+
+    overview = _zone_engine.get_overview()
+    zones = overview.zones if hasattr(overview, "zones") else []
+    out: list[dict] = []
+
+    for z in zones:
+        zone_id = str(z.get("zone_id", "")).strip()
+        if not zone_id:
+            continue
+        detail = _zone_engine.get_zone(zone_id) or {}
+        entities = [str(e) for e in detail.get("entities", []) if str(e)]
+        settings = detail.get("settings", {}) if isinstance(detail.get("settings", {}), dict) else {}
+        role_map = settings.get("entity_roles", {})
+        if not isinstance(role_map, dict) or not role_map:
+            role_map = _role_map(entities)
+
+        deps = _derive_zone_dependencies(entities, role_map)
+        out.append(
+            {
+                "zone_id": zone_id,
+                "name": detail.get("name") or z.get("name") or zone_id,
+                "entity_count": len(entities),
+                "role_counts": {key: len(val) for key, val in role_map.items()},
+                "module_dependencies": deps["modules"],
+                "neuron_hints": deps["neurons"],
+            }
+        )
+
+    return jsonify({"ok": True, "zones": out, "zone_count": len(out)})
 
 
 @hub_bp.route("/habitus/automation/suggestions", methods=["GET"])

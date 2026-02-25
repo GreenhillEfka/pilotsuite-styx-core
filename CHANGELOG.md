@@ -1,5 +1,33 @@
 # Changelog - PilotSuite Core Add-on
 
+## [8.8.0] - 2026-02-25 — REACT-FIRST HABITUS MGMT + CLOUD MODEL UX
+
+### Added
+- New zone dependency endpoint:
+  - `GET /api/v1/hub/habitus/dependencies`
+  - exposes per-zone module dependencies + neuron hints from entity-role mappings.
+- New offline model pull endpoint:
+  - `POST /api/v1/agent/models/pull`
+  - triggers non-blocking local `ollama pull` for selectable offline models.
+- Haushalt overview API now includes:
+  - `weather`, `news`, `warnings`, and `house_status` in `/api/v1/haushalt/overview`.
+
+### Changed
+- Dashboard Habitus UX:
+  - zone create/edit flow now selector-based (no CSV text input for entities)
+  - in-place zone edit/cancel/delete actions
+  - dependency visualization card (modules + neuron hints).
+- Dashboard settings model UX:
+  - cloud `:cloud` models are surfaced and selectable
+  - offline models show install state with one-click download/select actions.
+- LLM provider cloud detection now supports `:cloud` model IDs explicitly.
+- Ollama Cloud default model set to `qwen3.5:cloud` for Ollama-hosted cloud URL.
+
+### Integration
+- HA integration switched to React-first dashboard concept:
+  - legacy YAML dashboard auto-generation is now opt-in
+  - `habitus_zones` options menu now shows dashboard mode info (legacy YAML remains available manually).
+
 ## [8.7.1] - 2026-02-25 — STABILITY HOTFIX (SYSTEM HEALTH + WAITRESS)
 
 ### Fixed

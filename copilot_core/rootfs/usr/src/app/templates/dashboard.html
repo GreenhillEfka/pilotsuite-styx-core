@@ -336,15 +336,17 @@ a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
     <h2><span class="ic">&#x1f3e0;</span> Habitus-Zonen</h2>
     <div id="hab-zones"><div class="loading"><div class="spinner"></div>Lade Zonen...</div></div>
     <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
-      <div style="font-size:11px;color:var(--dim);margin-bottom:6px">Zone hinzufuegen</div>
+      <div style="font-size:11px;color:var(--dim);margin-bottom:6px" id="zone-form-title">Zone hinzufuegen</div>
       <div style="display:flex;gap:6px;flex-wrap:wrap">
         <input type="text" id="new-zone-name" placeholder="Zonen-Name" style="flex:1 1 180px;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text);font-size:12px;outline:none">
         <select id="new-zone-rooms" multiple size="4" style="flex:2 1 260px;min-height:94px;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px;color:var(--text);font-size:11px;outline:none"></select>
-        <input type="text" id="new-zone-entities" placeholder="Optional: entity_id, entity_id, ..." style="flex:2 1 260px;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text);font-size:12px;outline:none">
+        <select id="new-zone-entities" multiple size="8" style="flex:2 1 320px;min-height:124px;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px;color:var(--text);font-size:11px;outline:none"></select>
         <button onclick="reloadZoneRoomOptions()" style="background:var(--surface);border:1px solid var(--border);color:var(--dim);border-radius:6px;padding:6px 10px;cursor:pointer;font-size:11px;font-weight:600;white-space:nowrap">&#x21bb; Raeume</button>
-        <button onclick="addZone()" style="background:var(--accent);color:#fff;border:none;border-radius:6px;padding:6px 14px;cursor:pointer;font-size:11px;font-weight:600;white-space:nowrap">+ Zone</button>
+        <button onclick="addZone()" id="zone-submit-btn" style="background:var(--accent);color:#fff;border:none;border-radius:6px;padding:6px 14px;cursor:pointer;font-size:11px;font-weight:600;white-space:nowrap">+ Zone</button>
+        <button onclick="resetZoneForm()" id="zone-cancel-btn" style="display:none;background:var(--surface);border:1px solid var(--border);color:var(--dim);border-radius:6px;padding:6px 10px;cursor:pointer;font-size:11px;font-weight:600;white-space:nowrap">Abbrechen</button>
       </div>
       <div id="new-zone-room-hint" style="margin-top:6px;font-size:10px;color:var(--dim)">Lade Raumliste...</div>
+      <div id="new-zone-entity-hint" style="margin-top:4px;font-size:10px;color:var(--dim)">Entitaeten werden aus gewaehlten Raeumen vorgeschlagen (Mehrfachauswahl moeglich).</div>
     </div>
   </div>
 </div>
@@ -374,6 +376,11 @@ a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
   <h2><span class="ic">&#x2699;&#xfe0f;</span> Habitus-Automationsvorschläge</h2>
   <p style="font-size:11px;color:var(--dim);margin-bottom:10px">Aus Habitus-Regeln abgeleitet, inkl. Neuronen-Mapping. Vorschlag per Klick als HA-Automation anlegen.</p>
   <div id="hab-auto-suggestions"><div class="loading"><div class="spinner"></div>Analysiere Regeln...</div></div>
+</div>
+<div class="card" style="margin-top:14px">
+  <h2><span class="ic">&#x1f9e0;</span> Zonen-Abhaengigkeiten (Module &amp; Neuronen)</h2>
+  <p style="font-size:11px;color:var(--dim);margin-bottom:10px">Abgeleitet aus Entitaetsrollen pro Zone und als Endpunkt unter <code>/api/v1/hub/habitus/dependencies</code> verfuegbar.</p>
+  <div id="hab-dependencies"><div class="loading"><div class="spinner"></div>Analysiere...</div></div>
 </div>
 </div>
 
@@ -461,6 +468,20 @@ a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
     </div>
   </div>
 </div>
+<div class="grid g2" style="margin-bottom:14px">
+  <div class="card">
+    <h2><span class="ic">&#x1f4df;</span> Hauszustand</h2>
+    <div id="haushalt-house-status"><div class="loading"><div class="spinner"></div>Lade Hauszustand...</div></div>
+  </div>
+  <div class="card">
+    <h2><span class="ic">&#x26c5;</span> Regionales Wetter</h2>
+    <div id="haushalt-weather"><div class="loading"><div class="spinner"></div>Lade Wetter...</div></div>
+  </div>
+</div>
+<div class="card" style="margin-bottom:14px">
+  <h2><span class="ic">&#x1f4f0;</span> Nachrichten &amp; Warnungen</h2>
+  <div id="haushalt-news"><div class="loading"><div class="spinner"></div>Lade Nachrichten...</div></div>
+</div>
 <!-- Entity Suggestions Card -->
 <div class="card" style="margin-bottom:14px">
   <h2><span class="ic">&#x1f4a1;</span> Entitäts-Zuordnungsvorschläge</h2>
@@ -537,6 +558,7 @@ a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
       <tr><td>MCP Server</td><td><code>/mcp</code></td></tr>
       <tr><td>Brain Graph</td><td><code>/api/v1/graph/state</code></td></tr>
       <tr><td>Habitus</td><td><code>/api/v1/habitus/rules</code></td></tr>
+      <tr><td>Habitus Dependencies</td><td><code>/api/v1/hub/habitus/dependencies</code></td></tr>
       <tr><td>Vorschlaege</td><td><code>/api/v1/hints</code></td></tr>
       <tr><td>Kandidaten</td><td><code>/api/v1/candidates</code></td></tr>
       <tr><td>Mood</td><td><code>/api/v1/mood</code></td></tr>
@@ -756,8 +778,12 @@ let _moduleHealth=null;
 let _healthTs=0;
 let _hubRoomsCache=[];
 let _roomsAutofilled=false;
+let _entityPoolCache=[];
+let _entityPoolTs=0;
 let _moduleStatesSyncedAt=0;
 let _selectedModuleConfig='habitus_miner';
+let _routingStatusCache=null;
+let _editingZoneId='';
 let _chatStatus=null;
 let brainMode=localStorage.getItem('styx_brain_mode')||'neuron';
 let _zoneActivityByModule={};
@@ -1887,7 +1913,8 @@ async function loadZoneRoomOptions(forceImport=false){
     opt.textContent='Keine Räume verfügbar';
     opt.disabled=true;
     sel.appendChild(opt);
-    if(hint)hint.textContent='Keine Räume registriert. Optional Entitäten unten eintragen.';
+    if(hint)hint.textContent='Keine Räume registriert. Entitäten können direkt gewählt werden.';
+    await refreshZoneEntityOptions({roomIds:[],selectedEntities:[]});
     return;
   }
 
@@ -1902,10 +1929,145 @@ async function loadZoneRoomOptions(forceImport=false){
     });
 
   if(hint)hint.textContent=`${rooms.length} Räume verfügbar. Mehrfachauswahl mit Ctrl/Cmd möglich. Standard-Rollen (Bewegung/Helligkeit/CO2/Lärm/Heizung/Kamera) werden automatisch vorbelegt.`;
+  sel.onchange=()=>{onZoneRoomsChanged().catch(()=>{});};
+  await onZoneRoomsChanged();
 }
 
 async function reloadZoneRoomOptions(){
   await loadZoneRoomOptions(true);
+}
+
+async function _loadEntityPool(force=false){
+  const now=Date.now();
+  if(!force&&_entityPoolCache.length&&(now-_entityPoolTs)<60000){
+    return _entityPoolCache;
+  }
+  const resp=await api('/api/v1/entities?limit=2000');
+  const entities=Array.isArray(resp?.entities)?resp.entities:[];
+  _entityPoolCache=entities
+    .filter((e)=>!String(e?.entity_id||'').startsWith('update.'))
+    .map((e)=>({
+      entity_id:String(e.entity_id||''),
+      state:String(e.state||''),
+      friendly_name:String(e.attributes?.friendly_name||e.entity_id||''),
+      domain:String(e.domain||String(e.entity_id||'').split('.')[0]||''),
+    }));
+  _entityPoolTs=now;
+  return _entityPoolCache;
+}
+
+function _selectedValues(selectEl){
+  if(!selectEl)return [];
+  return [...selectEl.options].filter((o)=>o.selected&&o.value).map((o)=>o.value);
+}
+
+async function refreshZoneEntityOptions({roomIds=[],selectedEntities=[]}={}){
+  const sel=$('new-zone-entities');
+  const hint=$('new-zone-entity-hint');
+  if(!sel)return;
+  const selectedSet=new Set((selectedEntities||[]).map((e)=>String(e||'')));
+  const roomSet=new Set((roomIds||[]).map((r)=>String(r||'')));
+  const roomEntities=[];
+  (_hubRoomsCache||[]).forEach((room)=>{
+    if(!roomSet.has(String(room?.room_id||'')))return;
+    (room?.entities||[]).forEach((eid)=>{if(eid&&!roomEntities.includes(eid))roomEntities.push(eid);});
+  });
+  const pool=await _loadEntityPool(false);
+  const seen=new Set();
+  const ordered=[];
+  roomEntities.forEach((eid)=>{
+    const fromPool=pool.find((item)=>item.entity_id===eid);
+    const item=fromPool||{entity_id:eid,friendly_name:eid,state:'',domain:eid.split('.')[0]||''};
+    if(!seen.has(item.entity_id)){
+      seen.add(item.entity_id);
+      ordered.push(item);
+    }
+  });
+  pool.forEach((item)=>{
+    if(seen.has(item.entity_id))return;
+    seen.add(item.entity_id);
+    ordered.push(item);
+  });
+  sel.innerHTML='';
+  ordered.forEach((item)=>{
+    const opt=document.createElement('option');
+    const eid=String(item.entity_id||'');
+    opt.value=eid;
+    const label=String(item.friendly_name||eid);
+    const state=String(item.state||'');
+    opt.textContent=`${label} (${eid})${state?` · ${state}`:''}`;
+    if(selectedSet.has(eid))opt.selected=true;
+    else if(roomEntities.includes(eid))opt.selected=true;
+    sel.appendChild(opt);
+  });
+  if(hint){
+    hint.textContent=`${ordered.length} Entitaeten geladen. ${roomEntities.length} aus gewaehlten Raeumen vorselektiert.`;
+  }
+}
+
+async function onZoneRoomsChanged(){
+  const roomIds=_selectedValues($('new-zone-rooms'));
+  const selectedEntities=_selectedValues($('new-zone-entities'));
+  await refreshZoneEntityOptions({roomIds,selectedEntities});
+}
+
+function resetZoneForm(){
+  _editingZoneId='';
+  const name=$('new-zone-name');
+  const roomSel=$('new-zone-rooms');
+  const entitySel=$('new-zone-entities');
+  if(name)name.value='';
+  if(roomSel)[...roomSel.options].forEach((o)=>{o.selected=false;});
+  if(entitySel)[...entitySel.options].forEach((o)=>{o.selected=false;});
+  $('zone-form-title').textContent='Zone hinzufuegen';
+  $('zone-submit-btn').textContent='+ Zone';
+  $('zone-cancel-btn').style.display='none';
+}
+
+async function startEditZone(zoneId){
+  const zid=String(zoneId||'').trim();
+  if(!zid)return;
+  try{
+    const detail=await api('/api/v1/hub/zones/'+encodeURIComponent(zid));
+    if(!detail||!detail.ok){
+      addHistory('\u26a0\ufe0f Zone konnte nicht geladen werden: '+zid);
+      return;
+    }
+    _editingZoneId=zid;
+    $('zone-form-title').textContent='Zone bearbeiten';
+    $('zone-submit-btn').textContent='Zone speichern';
+    $('zone-cancel-btn').style.display='inline-block';
+    $('new-zone-name').value=String(detail.name||'');
+    const roomIds=(detail.rooms||[]).map((r)=>String(r.room_id||'')).filter(Boolean);
+    const entities=(detail.entities||[]).map((e)=>String(e||'')).filter(Boolean);
+    const roomSel=$('new-zone-rooms');
+    if(roomSel){
+      [...roomSel.options].forEach((opt)=>{opt.selected=roomIds.includes(String(opt.value||''));});
+    }
+    await refreshZoneEntityOptions({roomIds,selectedEntities:entities});
+    navigateTo('habitus');
+    addHistory('Zone editieren: '+escapeHtml(String(detail.name||zid)));
+  }catch(e){
+    addHistory('\u26a0\ufe0f Zone-Edit Fehler: '+escapeHtml(e.message||'unbekannt'));
+  }
+}
+
+async function deleteZone(zoneId,zoneName){
+  const zid=String(zoneId||'').trim();
+  if(!zid)return;
+  if(!confirm(`Zone wirklich loeschen?\n${zoneName||zid}`))return;
+  try{
+    const r=await fetch(API+'/api/v1/hub/zones/'+encodeURIComponent(zid),withAuth({method:'DELETE'}));
+    const data=await r.json().catch(()=>null);
+    if(!r.ok||data?.ok===false){
+      throw new Error(data?.error||('HTTP '+r.status));
+    }
+    if(_editingZoneId===zid)resetZoneForm();
+    addHistory('Zone geloescht: '+escapeHtml(zoneName||zid));
+    await loadHabitus();
+  }catch(e){
+    addHistory('\u26a0\ufe0f Zone-Loeschen fehlgeschlagen: '+escapeHtml(e.message||'unbekannt'));
+  }
 }
 
 async function bootstrapHabitusZones(){
@@ -1984,14 +2146,42 @@ async function applyHabitusAutomationSuggestion(suggestionId){
   }
 }
 
+async function loadHabitusDependencyOverview(preloaded){
+  const c=$('hab-dependencies');if(!c)return;
+  try{
+    const data=(preloaded&&preloaded.ok!==undefined)?preloaded:await api('/api/v1/hub/habitus/dependencies');
+    const zones=Array.isArray(data?.zones)?data.zones:[];
+    if(!zones.length){
+      c.innerHTML='<div class="empty">Noch keine Abhaengigkeiten verfuegbar.</div>';
+      return;
+    }
+    let html='<table class="tbl"><tr><th>Zone</th><th>Module</th><th>Neuron-Hints</th></tr>';
+    zones.forEach((z)=>{
+      const modules=(z.module_dependencies||[]).slice(0,6).map((m)=>`<span class="b b-p" style="font-size:9px">${escapeHtml(m)}</span>`).join(' ');
+      const neurons=(z.neuron_hints||[]).slice(0,6).map((n)=>`<span class="b b-b" style="font-size:9px">${escapeHtml(n)}</span>`).join(' ');
+      html+=`<tr><td>${escapeHtml(z.name||z.zone_id||'?')}</td><td>${modules||'--'}</td><td>${neurons||'--'}</td></tr>`;
+    });
+    html+='</table>';
+    c.innerHTML=html;
+  }catch(e){
+    c.innerHTML='<div class="empty">Dependency API nicht erreichbar</div>';
+  }
+}
+
 async function loadHabitus(){
   const data=await api('/api/v1/habitus/rules?limit=50');
   const rules=data?.rules||data?.data||[];
   const recData=await api('/api/v1/hub/habitus/management/recommendations');
+  const depData=await api('/api/v1/hub/habitus/dependencies');
   const recMap=new Map();
   (recData?.zones||[]).forEach((z)=>{
     const zid=String(z?.zone_id||'');
     if(zid)recMap.set(zid,z);
+  });
+  const depMap=new Map();
+  (depData?.zones||[]).forEach((z)=>{
+    const zid=String(z?.zone_id||'');
+    if(zid)depMap.set(zid,z);
   });
   $('hab-count').textContent=rules.length+' Regeln';
   const c=$('hab-rules');
@@ -2029,6 +2219,7 @@ async function loadHabitus(){
       const detail=detailMap.get(zid)||{};
       const zoneName=String(z.name||detail.name||zid||'Zone');
       const rec=recMap.get(zid)||null;
+      const dep=depMap.get(zid)||null;
       const ents=Array.isArray(detail.entities)?detail.entities:[];
       const state=detail.state||{};
       const settings=detail.settings||{};
@@ -2058,6 +2249,8 @@ async function loadHabitus(){
         .slice(0,8)
         .map(([role,items])=>`<span class="b b-c" style="font-size:9px">${escapeHtml(role)}: ${items.length}</span>`)
         .join(' ');
+      const depModules=(dep?.module_dependencies||[]).slice(0,8).map((m)=>`<span class="b b-p" style="font-size:9px">${escapeHtml(m)}</span>`).join(' ');
+      const depNeurons=(dep?.neuron_hints||[]).slice(0,8).map((n)=>`<span class="b b-b" style="font-size:9px">${escapeHtml(n)}</span>`).join(' ');
       const metrics=[
         state.avg_temperature!==null&&state.avg_temperature!==undefined?`Temp Ø ${state.avg_temperature}`:'',
         state.avg_humidity!==null&&state.avg_humidity!==undefined?`Feuchte Ø ${state.avg_humidity}`:'',
@@ -2074,8 +2267,12 @@ async function loadHabitus(){
         ${metrics?`<p style="font-size:10px;color:var(--dim);margin-top:-2px">${escapeHtml(metrics)}</p>`:''}
         <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px">${metricChips}</div>
         ${roleChips?`<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:6px">${roleChips}</div>`:''}
+        ${depModules?`<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:6px">${depModules}</div>`:''}
+        ${depNeurons?`<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px">${depNeurons}</div>`:''}
         <div class="zone-entities">${ents.map(e=>`<span class="ze">${escapeHtml(e)}</span>`).join('')}</div>
         <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
+          <button onclick='startEditZone(${zoneIdJson})' class="btn-scene" title="Zone bearbeiten">&#x270f;&#xfe0f; Bearbeiten</button>
+          <button onclick='deleteZone(${zoneIdJson},${zoneNameJson})' class="btn-scene" title="Zone loeschen" style="border-color:rgba(248,113,113,.5);color:var(--red)">&#x1f5d1; Loeschen</button>
           <button onclick='saveZoneScene(${zoneIdJson},${zoneNameJson},${entsJson})' class="btn-scene" title="Aktuelle Zustände als Szene speichern">&#x1f3ac; Szene speichern</button>
           <button onclick='toggleHomeKit(${zoneIdJson},${zoneNameJson},${entsJson})' class="btn-scene" title="Zone zu HomeKit hinzufügen">&#x1f34e; HomeKit</button>
         </div>`);
@@ -2087,6 +2284,7 @@ async function loadHabitus(){
 
   await loadZoneRoomOptions();
   await loadHabitusAutomationSuggestions();
+  await loadHabitusDependencyOverview(depData);
 
   // Trend from real rule confidence values
   const trendData=rules.map(r=>(r.metadata||r).confidence||0);
@@ -2097,19 +2295,19 @@ async function loadHabitus(){
 async function addZone(){
   const name=$('new-zone-name').value.trim();
   const roomSelect=$('new-zone-rooms');
-  const ents=$('new-zone-entities').value.trim();
+  const entitySelect=$('new-zone-entities');
   if(!name){$('new-zone-name').style.borderColor='var(--red)';return}
   $('new-zone-name').style.borderColor='var(--border)';
 
   let roomIds=roomSelect?[...roomSelect.options].filter(o=>o.selected&&o.value).map(o=>o.value):[];
-  const entities=ents?ents.split(',').map(e=>e.trim()).filter(Boolean):[];
+  const entities=entitySelect?[...entitySelect.options].filter(o=>o.selected&&o.value).map(o=>o.value):[];
   if(!roomIds.length&&!entities.length){
     const hint=$('new-zone-room-hint');
-    if(hint)hint.textContent='Bitte mindestens einen Raum auswählen oder Entitäten eintragen.';
+    if(hint)hint.textContent='Bitte mindestens einen Raum auswählen oder Entitäten markieren.';
     return;
   }
 
-  const zoneId='zone:'+_slugifyId(name);
+  const zoneId=_editingZoneId||('zone:'+_slugifyId(name));
 
   try{
     // If no rooms are selected, register a synthetic room from explicit entities.
@@ -2172,10 +2370,9 @@ async function addZone(){
         }));
       }catch(_settingsErr){}
 
-      $('new-zone-name').value='';
-      $('new-zone-entities').value='';
-      if(roomSelect)[...roomSelect.options].forEach(o=>{o.selected=false;});
-      addHistory('Zone erstellt: '+name+' ('+zoneId+')');
+      const wasEdit=!!_editingZoneId;
+      resetZoneForm();
+      addHistory((wasEdit?'Zone aktualisiert: ':'Zone erstellt: ')+name+' ('+zoneId+')');
       await loadHabitus();
     }else{
       const body=(await r.text()).slice(0,180);
@@ -2475,9 +2672,83 @@ async function loadHaushaltData(){
       bHtml='<div class="empty">Keine Geburtstage in den nächsten 14 Tagen. Konfiguriere Kalender-Entities in den Einstellungen.</div>';
     }
     $('haushalt-birthdays').innerHTML=bHtml;
+
+    // -- House status --
+    const hs=r.house_status||{};
+    const sys=hs.system_health||{};
+    const zones=hs.zones||{};
+    const subs=sys.subsystems||{};
+    const subsystemBadges=Object.entries(subs).slice(0,6).map(([k,v])=>{
+      const st=String(v?.status||'unknown');
+      const color=st==='healthy'?'g':(st==='degraded'?'y':'r');
+      return `${badge(k,color)} ${badge(st,color)}`;
+    }).join(' ');
+    $('haushalt-house-status').innerHTML=
+      `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+        ${badge('System '+String(sys.status||'unknown'),sys.status==='healthy'?'g':(sys.status==='degraded'?'y':'r'))}
+        ${badge(`${zones.active_zones||0}/${zones.total_zones||0} Zonen aktiv`,'b')}
+        ${badge(`${zones.total_rooms||0} Räume`,'p')}
+        ${badge(`${zones.total_entities||0} Entitäten`,'b')}
+      </div>`+
+      (subsystemBadges?`<div style="display:flex;gap:6px;flex-wrap:wrap">${subsystemBadges}</div>`:'<div class="empty">Keine Subsystem-Details</div>');
+
+    // -- Weather --
+    const weather=r.weather||{};
+    if(weather&&weather.entity_id){
+      const fc=Array.isArray(weather.forecast)?weather.forecast:[];
+      let wHtml=`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+        ${badge(String(weather.state||'--'),'b')}
+        ${weather.temperature!==undefined&&weather.temperature!==null?badge(`${weather.temperature}°C`,'g'):''}
+        ${weather.humidity!==undefined&&weather.humidity!==null?badge(`${weather.humidity}% RH`,'p'):''}
+        ${weather.wind_speed!==undefined&&weather.wind_speed!==null?badge(`${weather.wind_speed} Wind`,'y'):''}
+      </div>`;
+      if(fc.length){
+        wHtml+='<table class="tbl"><tr><th>Tag</th><th>Zustand</th><th>Temp</th></tr>';
+        fc.slice(0,5).forEach((item)=>{
+          const day=String(item.datetime||item.date||'').slice(0,10);
+          wHtml+=`<tr><td>${escapeHtml(day||'--')}</td><td>${escapeHtml(String(item.condition||item.state||'--'))}</td><td>${escapeHtml(String(item.temperature??'--'))}</td></tr>`;
+        });
+        wHtml+='</table>';
+      }
+      $('haushalt-weather').innerHTML=wHtml;
+    }else{
+      $('haushalt-weather').innerHTML='<div class="empty">Keine Wetter-Entität gefunden.</div>';
+    }
+
+    // -- News + warnings --
+    const newsItems=Array.isArray(r.news?.items)?r.news.items:[];
+    const ninaWarns=Array.isArray(r.warnings?.nina_warnings)?r.warnings.nina_warnings:[];
+    const dwdWarns=Array.isArray(r.warnings?.dwd_warnings)?r.warnings.dwd_warnings:[];
+    const warns=[...ninaWarns,...dwdWarns];
+    let nHtml='';
+    if(warns.length){
+      nHtml+='<div style="margin-bottom:8px;display:flex;gap:6px;flex-wrap:wrap">';
+      warns.slice(0,4).forEach((w)=>{
+        const title=String(w.title||w.headline||w.event||'Warnung');
+        nHtml+=badge(title.slice(0,52), 'r')+' ';
+      });
+      nHtml+='</div>';
+    }
+    if(newsItems.length){
+      nHtml+='<table class="tbl"><tr><th>Quelle</th><th>Titel</th></tr>';
+      newsItems.slice(0,6).forEach((item)=>{
+        const link=String(item.link||'').trim();
+        const title=escapeHtml(String(item.title||'?'));
+        const source=escapeHtml(String(item.source||'?'));
+        const linked=link?`<a href="${escapeHtml(link)}" target="_blank" rel="noopener noreferrer" style="color:var(--cyan);text-decoration:none">${title}</a>`:title;
+        nHtml+=`<tr><td>${source}</td><td>${linked}</td></tr>`;
+      });
+      nHtml+='</table>';
+    }else{
+      nHtml+='<div class="empty">Keine Nachrichten verfügbar.</div>';
+    }
+    $('haushalt-news').innerHTML=nHtml;
   }catch(e){
     $('haushalt-waste').innerHTML='<div class="empty">Haushalt-Daten nicht ladbar</div>';
     $('haushalt-birthdays').innerHTML='<div class="empty">Haushalt-Daten nicht ladbar</div>';
+    $('haushalt-house-status').innerHTML='<div class="empty">Hauszustand nicht ladbar</div>';
+    $('haushalt-weather').innerHTML='<div class="empty">Wetter nicht ladbar</div>';
+    $('haushalt-news').innerHTML='<div class="empty">Nachrichten nicht ladbar</div>';
   }
 }
 async function haushaltRemind(type){
@@ -3077,6 +3348,7 @@ function _routingProviderLabel(provider){
 function _renderRoutingControls(status){
   const mount=$('set-routing');
   if(!mount)return;
+  _routingStatusCache=status||null;
   if(!status){
     mount.innerHTML='<div class="empty">Routing nicht verfuegbar (API offline)</div>';
     return;
@@ -3145,6 +3417,62 @@ async function saveRoutingConfig(){
     addHistory('\u26a0\ufe0f Routing-Update fehlgeschlagen: '+(e.message||'unbekannt'));
   }
 }
+async function quickApplyRoutingModel(provider,model){
+  const status=_routingStatusCache||_chatStatus||{};
+  const targetProvider=String(provider||'offline');
+  const targetModel=String(model||'').trim();
+  if(!targetModel)return;
+  const payload={
+    primary_provider:String(status.primary_provider||'offline'),
+    secondary_provider:String(status.secondary_provider||'cloud'),
+    offline_model:String(status.model_catalog?.offline?.active_model||status.model||''),
+    cloud_model:String(status.model_catalog?.cloud?.active_model||status.cloud_model||''),
+    persist:true,
+  };
+  if(targetProvider==='offline'){
+    payload.offline_model=targetModel;
+  }else{
+    payload.cloud_model=targetModel;
+  }
+  try{
+    const r=await fetch(API+'/chat/routing',withAuth({
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(payload),
+    }));
+    let data={};
+    try{data=await r.json()}catch(_err){data={}}
+    if(!r.ok||!data?.ok){
+      throw new Error(data?.error||data?.message||('HTTP '+r.status));
+    }
+    addHistory(`Modell gesetzt (${targetProvider}): ${targetModel}`);
+    await loadStyx({background:true});
+    await loadSettings();
+  }catch(e){
+    addHistory('\u26a0\ufe0f Modellwahl fehlgeschlagen: '+(e.message||'unbekannt'));
+  }
+}
+async function pullOfflineModel(model){
+  const selected=String(model||'').trim();
+  if(!selected)return;
+  try{
+    const r=await fetch(API+'/api/v1/agent/models/pull',withAuth({
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({model:selected}),
+    }));
+    let data={};
+    try{data=await r.json()}catch(_err){data={}}
+    if(!r.ok||data?.ok===false){
+      throw new Error(data?.error||data?.message||('HTTP '+r.status));
+    }
+    const status=String(data?.pull?.status||'started');
+    addHistory(`Offline Modell ${selected}: ${status}`);
+    setTimeout(()=>{loadSettings().catch(()=>{});},1200);
+  }catch(e){
+    addHistory('\u26a0\ufe0f Modell-Download fehlgeschlagen: '+(e.message||'unbekannt'));
+  }
+}
 async function applyModulePreset(presetId){
   const pid=String(presetId||'').trim();
   if(!pid)return;
@@ -3195,6 +3523,8 @@ async function loadSettings(){
     _renderRoutingControls(status);
     // Models
     const models=status?.model_catalog?.offline?.models||status.installed_models||[];
+    const installedOffline=status?.model_catalog?.offline?.installed_models||status.installed_models||[];
+    const installedSet=new Set((installedOffline||[]).map((m)=>String(m||'')));
     const cloudModels=status?.model_catalog?.cloud?.models||status.cloud_models||[];
     const mc=$('set-models');
     if(!models.length&&!cloudModels.length){mc.innerHTML='<div class="empty">Keine Modelle gefunden</div>'}
@@ -3202,13 +3532,19 @@ async function loadSettings(){
       mc.innerHTML='';
       models.forEach((m)=>{
         const v=String(m||'');
+        const ev=encodeURIComponent(v);
+        const installed=installedSet.has(v);
         const active=v===String(status.model_catalog?.offline?.active_model||status.model||'');
-        mc.appendChild(el('div','pat',`<span>${escapeHtml(v)}</span><span class="meta">${badge('Offline','b')}${active?(' '+badge('Aktiv','g')):''}</span>`));
+        const buttons=installed
+          ?`<button onclick="quickApplyRoutingModel('offline',decodeURIComponent('${ev}'))" style="margin-left:6px;background:var(--surface);border:1px solid var(--border);color:var(--dim);border-radius:6px;padding:3px 7px;font-size:10px;cursor:pointer">Auswaehlen</button>`
+          :`<button onclick="pullOfflineModel(decodeURIComponent('${ev}'))" style="margin-left:6px;background:var(--accent);border:none;color:#fff;border-radius:6px;padding:3px 7px;font-size:10px;cursor:pointer">Download</button>`;
+        mc.appendChild(el('div','pat',`<span>${escapeHtml(v)}</span><span class="meta">${badge('Offline','b')} ${installed?badge('Installiert','g'):badge('Nicht installiert','y')}${active?(' '+badge('Aktiv','g')):''}${buttons}</span>`));
       });
       cloudModels.forEach((m)=>{
         const v=String(m||'');
+        const ev=encodeURIComponent(v);
         const active=v===String(status.model_catalog?.cloud?.active_model||status.cloud_model||'');
-        mc.appendChild(el('div','pat',`<span>${escapeHtml(v)}</span><span class="meta">${badge('Cloud','p')}${active?(' '+badge('Aktiv','g')):''}</span>`));
+        mc.appendChild(el('div','pat',`<span>${escapeHtml(v)}</span><span class="meta">${badge('Cloud','p')}${String(v).toLowerCase().includes(':cloud')?(' '+badge(':cloud','b')):''}${active?(' '+badge('Aktiv','g')):''}<button onclick="quickApplyRoutingModel('cloud',decodeURIComponent('${ev}'))" style="margin-left:6px;background:var(--surface);border:1px solid var(--border);color:var(--dim);border-radius:6px;padding:3px 7px;font-size:10px;cursor:pointer">Auswaehlen</button></span>`));
       });
     }
     // System (real MCP status from capabilities)

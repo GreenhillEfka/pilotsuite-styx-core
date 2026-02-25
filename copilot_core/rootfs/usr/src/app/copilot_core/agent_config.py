@@ -217,6 +217,15 @@ def _spawn_model_pull(model: str) -> dict[str, str]:
     return {"status": "started", "model": normalized}
 
 
+def _looks_cloud_model(model: str) -> bool:
+    value = str(model or "").strip().lower()
+    if not value:
+        return False
+    if ":cloud" in value or value.startswith("cloud:"):
+        return True
+    return value.startswith(("gpt-", "o1", "o3", "claude", "gemini", "deepseek"))
+
+
 def _get_agent_version() -> str:
     """Get current agent version from config."""
     version = str(_config.get("version", "") or "").strip()
@@ -517,6 +526,52 @@ def self_heal_agent():
             "provider_status": provider_status,
             "installed_models": installed_models,
             "steps": steps,
+            "timestamp": datetime.now().isoformat(),
+        }
+    )
+
+
+@agent_config_bp.route("/models/pull", methods=["POST"])
+@require_token
+def pull_offline_model():
+    """Trigger non-blocking ollama model pull for an offline model."""
+    body = request.get_json(silent=True) or {}
+    requested = str(body.get("model", "")).strip()
+    if not requested:
+        return jsonify({"ok": False, "error": "model_required"}), 400
+    if _looks_cloud_model(requested):
+        return jsonify(
+            {
+                "ok": False,
+                "error": "cloud_model_not_pullable",
+                "message": "Cloud model identifiers cannot be pulled via local Ollama.",
+            }
+        ), 400
+
+    conv_config = _conversation_config()
+    provider_status = {}
+    provider = _get_llm_provider_instance()
+    if provider is not None:
+        try:
+            provider_status = provider.status()
+        except Exception:
+            provider_status = {}
+
+    pull = _spawn_model_pull(requested)
+    ollama_url = str(
+        provider_status.get("ollama_url")
+        or conv_config.get("ollama_url")
+        or "http://localhost:11434"
+    )
+    installed_models = _ollama_installed_models(ollama_url)
+
+    return jsonify(
+        {
+            "ok": True,
+            "requested_model": requested,
+            "pull": pull,
+            "installed_models": installed_models,
+            "ollama_url": ollama_url,
             "timestamp": datetime.now().isoformat(),
         }
     )

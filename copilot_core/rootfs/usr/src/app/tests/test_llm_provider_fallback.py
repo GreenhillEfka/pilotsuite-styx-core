@@ -123,7 +123,7 @@ def test_ollama_cloud_url_is_normalized_to_v1(monkeypatch: pytest.MonkeyPatch) -
     assert result["provider"] == "cloud"
     assert result["content"] == "ok from cloud"
     assert cloud_urls == ["https://ollama.com/v1/chat/completions"]
-    assert cloud_models == ["gpt-oss:20b"]
+    assert cloud_models == ["qwen3.5:cloud"]
 
 
 def test_ollama_cloud_coerces_openai_model_name(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -146,7 +146,32 @@ def test_ollama_cloud_coerces_openai_model_name(monkeypatch: pytest.MonkeyPatch)
 
     assert result["provider"] == "cloud"
     assert result["content"] == "ok from cloud"
-    assert cloud_models == ["gpt-oss:20b"]
+    assert cloud_models == ["qwen3.5:cloud"]
+
+
+def test_cloud_suffix_model_is_treated_as_cloud(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OLLAMA_URL", "http://127.0.0.1:11435")
+    monkeypatch.setenv("OLLAMA_MODEL", "qwen3:0.6b")
+    monkeypatch.setenv("CLOUD_API_URL", "https://api.example.com/v1")
+    monkeypatch.setenv("CLOUD_API_KEY", "sk-test")
+    monkeypatch.setenv("PREFER_LOCAL", "true")
+
+    cloud_models: list[str] = []
+
+    def _fake_post(url: str, json: dict[str, Any], timeout: int, headers=None):  # noqa: A002
+        if url.endswith("/api/chat"):
+            return _Resp(404, '{"error":"model \\"qwen3.5:cloud\\" not found"}')
+        cloud_models.append(str(json.get("model", "")))
+        return _Resp(200, "", {"choices": [{"message": {"content": "ok from cloud"}}]})
+
+    monkeypatch.setattr("copilot_core.llm_provider.http_requests.post", _fake_post)
+
+    provider = LLMProvider()
+    result = provider.chat(messages=[{"role": "user", "content": "hi"}], model="qwen3.5:cloud")
+
+    assert result["provider"] == "cloud"
+    assert result["content"] == "ok from cloud"
+    assert cloud_models == ["qwen3.5:cloud"]
 
 
 def test_non_ollama_cloud_keeps_generic_default_model(monkeypatch: pytest.MonkeyPatch) -> None:

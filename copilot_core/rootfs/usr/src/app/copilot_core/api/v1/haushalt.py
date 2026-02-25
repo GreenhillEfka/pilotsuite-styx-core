@@ -20,6 +20,32 @@ _LOGGER = logging.getLogger(__name__)
 haushalt_bp = Blueprint("haushalt", __name__, url_prefix="/api/v1/haushalt")
 
 
+def _first_weather_snapshot() -> dict:
+    """Return best-effort weather snapshot from HA weather entities."""
+    try:
+        from homeassistant.core import HomeAssistant
+
+        hass = HomeAssistant.get()
+        if not hass:
+            return {}
+        weather_entities = [st for st in hass.states.async_all() if st.domain == "weather"]
+        if not weather_entities:
+            return {}
+        state = weather_entities[0]
+        forecast = state.attributes.get("forecast") or []
+        return {
+            "entity_id": state.entity_id,
+            "friendly_name": state.attributes.get("friendly_name"),
+            "state": state.state,
+            "temperature": state.attributes.get("temperature"),
+            "humidity": state.attributes.get("humidity"),
+            "wind_speed": state.attributes.get("wind_speed"),
+            "forecast": forecast[:5] if isinstance(forecast, list) else [],
+        }
+    except Exception:
+        return {}
+
+
 @haushalt_bp.route("/overview", methods=["GET"])
 @require_token
 def haushalt_overview():
@@ -31,9 +57,51 @@ def haushalt_overview():
 
     waste_service = services.get("waste_service")
     birthday_service = services.get("birthday_service")
+    web_search_service = services.get("web_search_service")
+    system_health_service = services.get("system_health_service")
+    zone_engine = services.get("hub_zones")
 
     waste_data = waste_service.get_status() if waste_service else {"ok": False, "error": "not initialized"}
     birthday_data = birthday_service.get_status() if birthday_service else {"ok": False, "error": "not initialized"}
+    weather_data = _first_weather_snapshot()
+    news_data = {"items": [], "error": "not_initialized"}
+    warnings_data = {"warnings": [], "error": "not_initialized"}
+    if web_search_service:
+        try:
+            news_data = web_search_service.get_news(max_items=8)
+        except Exception as exc:
+            _LOGGER.debug("Could not load household news: %s", exc)
+            news_data = {"items": [], "error": str(exc)}
+        try:
+            warnings_data = web_search_service.get_regional_warnings()
+        except Exception as exc:
+            _LOGGER.debug("Could not load household warnings: %s", exc)
+            warnings_data = {"warnings": [], "error": str(exc)}
+
+    system_health = {"status": "unknown"}
+    if system_health_service:
+        try:
+            health_raw = system_health_service.get_full_health(force_refresh=False)
+            if isinstance(health_raw, dict):
+                system_health = {
+                    "status": health_raw.get("status", "unknown"),
+                    "subsystems": health_raw.get("subsystems", {}),
+                }
+        except Exception as exc:
+            _LOGGER.debug("Could not load system health: %s", exc)
+
+    zone_summary = {"total_zones": 0, "active_zones": 0, "total_rooms": 0, "total_entities": 0}
+    if zone_engine:
+        try:
+            overview = zone_engine.get_overview()
+            zone_summary = {
+                "total_zones": int(getattr(overview, "total_zones", 0)),
+                "active_zones": int(getattr(overview, "active_zones", 0)),
+                "total_rooms": int(getattr(overview, "total_rooms", 0)),
+                "total_entities": int(getattr(overview, "total_entities", 0)),
+            }
+        except Exception as exc:
+            _LOGGER.debug("Could not load zone summary: %s", exc)
 
     # Derive urgency flags
     waste_today = waste_data.get("today", []) if isinstance(waste_data, dict) else []
@@ -55,6 +123,13 @@ def haushalt_overview():
         },
         "waste": waste_data,
         "birthdays": birthday_data,
+        "weather": weather_data,
+        "news": news_data,
+        "warnings": warnings_data,
+        "house_status": {
+            "system_health": system_health,
+            "zones": zone_summary,
+        },
     })
 
 

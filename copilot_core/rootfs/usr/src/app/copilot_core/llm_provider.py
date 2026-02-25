@@ -49,8 +49,12 @@ _PROVIDER_CLOUD = "cloud"
 
 _DEFAULT_OLLAMA_MODEL = "qwen3:0.6b"
 _DEFAULT_CLOUD_MODEL = "gpt-4o-mini"
-_DEFAULT_OLLAMA_CLOUD_MODEL = "gpt-oss:20b"
-_DEFAULT_OLLAMA_CLOUD_MODELS = ("gpt-oss:120b", "gpt-oss:20b")
+_DEFAULT_OLLAMA_CLOUD_MODEL = "qwen3.5:cloud"
+_DEFAULT_OLLAMA_CLOUD_MODELS = (
+    "qwen3.5:cloud",
+    "qwen3:cloud",
+    "gpt-oss:20b",
+)
 _DEFAULT_OFFLINE_MODELS = ("qwen3:0.6b", "qwen3:4b", "llama3.2:3b", "mistral:7b")
 _RUNTIME_SETTINGS_PATH = "/data/llm_runtime_settings.json"
 _CATALOG_CACHE_TTL_S = 45.0
@@ -72,7 +76,7 @@ class LLMProvider:
     def __init__(self):
         self._settings_path = os.environ.get("LLM_RUNTIME_SETTINGS_PATH", _RUNTIME_SETTINGS_PATH)
         self._catalog_cache: dict[str, dict] = {
-            _PROVIDER_OFFLINE: {"models": [], "ts": 0.0},
+            _PROVIDER_OFFLINE: {"models": [], "installed": [], "ts": 0.0},
             _PROVIDER_CLOUD: {"models": [], "ts": 0.0},
         }
         self._load_config()
@@ -181,7 +185,7 @@ class LLMProvider:
     def reload_config(self):
         """Explicitly reload config from environment/runtime storage."""
         self._load_config()
-        self._catalog_cache[_PROVIDER_OFFLINE] = {"models": [], "ts": 0.0}
+        self._catalog_cache[_PROVIDER_OFFLINE] = {"models": [], "installed": [], "ts": 0.0}
         self._catalog_cache[_PROVIDER_CLOUD] = {"models": [], "ts": 0.0}
         logger.info("LLM provider config reloaded (SearXNG: %s)", self.searxng_enabled)
 
@@ -284,10 +288,12 @@ class LLMProvider:
     def model_catalog(self, *, force_refresh: bool = False) -> dict:
         """Return offline/cloud model lists for dashboard selectors."""
         offline_models = self._get_offline_models(force_refresh=force_refresh)
+        offline_installed = self._get_installed_offline_models(force_refresh=force_refresh)
         cloud_models = self._get_cloud_models(force_refresh=force_refresh)
         return {
             "offline": {
                 "models": offline_models,
+                "installed_models": offline_installed,
                 "active_model": self.ollama_model,
                 "recommended": list(_DEFAULT_OFFLINE_MODELS),
             },
@@ -422,6 +428,20 @@ class LLMProvider:
         if not force_refresh and cache["models"] and (now - cache["ts"]) < _CATALOG_CACHE_TTL_S:
             return list(cache["models"])
 
+        installed_models = self._fetch_installed_offline_models()
+        models: list[str] = list(installed_models)
+
+        for model in (self.ollama_model, *list(_DEFAULT_OFFLINE_MODELS)):
+            model_name = str(model or "").strip()
+            if model_name and model_name not in models:
+                models.append(model_name)
+
+        cache["models"] = list(models)
+        cache["installed"] = list(installed_models)
+        cache["ts"] = now
+        return models
+
+    def _fetch_installed_offline_models(self) -> list[str]:
         models: list[str] = []
         try:
             resp = self._http_get(f"{self.ollama_url}/api/tags", timeout=5)
@@ -431,23 +451,28 @@ class LLMProvider:
                     if name and name not in models:
                         models.append(name)
         except Exception:
-            logger.debug("Could not list Ollama models", exc_info=True)
-
-        for model in (self.ollama_model, *list(_DEFAULT_OFFLINE_MODELS)):
-            model_name = str(model or "").strip()
-            if model_name and model_name not in models:
-                models.append(model_name)
-
-        cache["models"] = list(models)
-        cache["ts"] = now
+            logger.debug("Could not list installed Ollama models", exc_info=True)
         return models
+
+    def _get_installed_offline_models(self, *, force_refresh: bool = False) -> list[str]:
+        now = time.monotonic()
+        cache = self._catalog_cache[_PROVIDER_OFFLINE]
+        if (
+            not force_refresh
+            and cache.get("installed")
+            and (now - cache["ts"]) < _CATALOG_CACHE_TTL_S
+        ):
+            return list(cache.get("installed", []))
+        # refresh cache via _get_offline_models to keep both lists in sync
+        self._get_offline_models(force_refresh=True)
+        return list(self._catalog_cache[_PROVIDER_OFFLINE].get("installed", []))
 
     def _recommended_cloud_models(self) -> list[str]:
         base_url = self._normalize_cloud_base_url(self.cloud_api_url)
         if self._is_ollama_cloud_host(base_url):
             models = list(_DEFAULT_OLLAMA_CLOUD_MODELS)
             if self.cloud_model and self.cloud_model not in models:
-                models.append(self.cloud_model)
+                models.insert(0, self.cloud_model)
             return models
         models = []
         if self.cloud_model:
@@ -484,6 +509,10 @@ class LLMProvider:
                         model = str(item).strip()
                     if model and model not in models:
                         models.append(model)
+            if self._is_ollama_cloud_host(base_url):
+                suffix_models = [m for m in models if ":cloud" in m.lower()]
+                if suffix_models:
+                    models = suffix_models + [m for m in models if m not in suffix_models]
             return models
         except Exception:
             logger.debug("Could not list cloud models", exc_info=True)
@@ -623,6 +652,10 @@ class LLMProvider:
         value = str(model or "").strip().lower()
         if not value:
             return False
+        if ":cloud" in value:
+            return True
+        if value.startswith("cloud:"):
+            return True
         return value.startswith(_CLOUD_MODEL_PREFIXES)
 
     @staticmethod
