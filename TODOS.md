@@ -22,6 +22,6 @@
 ## Notes
 
 *Last updated: 2026-02-25 (Dev Loop #1)*
-*Based on Styx v7.26.0*
+*Based on Styx v8.1.1*
 *Current Focus: MCP Phase 2 + Test Suite Expansion*
-*Branch: dev*
+*Branch: main*
