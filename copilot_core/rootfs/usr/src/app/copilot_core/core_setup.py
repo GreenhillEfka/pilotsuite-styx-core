@@ -2403,3 +2403,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.api.v1.prom_op import prom_op_bp
         app.register_blueprint(prom_op_bp)
     except: pass
+    try:
+        from copilot_core.api.v1.certmanager import certmanager_bp
+        app.register_blueprint(certmanager_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.extdns import extdns_bp
+        app.register_blueprint(extdns_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.nginx_ing import nginx_ing_bp
+        app.register_blueprint(nginx_ing_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.metallb import metallb_bp
+        app.register_blueprint(metallb_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.coredns import coredns_bp
+        app.register_blueprint(coredns_bp)
+    except: pass
