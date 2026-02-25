@@ -531,10 +531,9 @@ def init_services(hass=None, config: dict = None):
                 )
             else:
                 from copilot_core.api.v1.conversation import process_with_tool_execution
-    from copilot_core.api.v1 import models as models_bp
-    from copilot_core.api.v2 import router as v2_router
-    app.register_blueprint(v2_router, url_prefix="")
-    from copilot_core.api.v2 import router as v2_router
+                from copilot_core.api.v1 import models as models_bp
+                from copilot_core.api.v2 import router as v2_router
+                app.register_blueprint(v2_router, url_prefix="")
                 bot = TelegramBot(
                     token=tg_token,
                     allowed_chat_ids=tg_config.get("allowed_chat_ids", []),
@@ -1324,7 +1323,7 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         app.register_blueprint(export_bp)
     except: pass
     try:
-        from copilot_core.api.v1.import import import_bp
+        from copilot_core.api.v1.import_api import import_bp
         app.register_blueprint(import_bp)
     except: pass
     try:
