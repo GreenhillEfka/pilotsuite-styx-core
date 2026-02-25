@@ -649,6 +649,21 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         init_module_control_api(services["module_registry"])
     app.register_blueprint(module_control_bp)
 
+    # Register User Hints API (/api/v1/hints/*)
+    try:
+        from copilot_core.api.v1.user_hints import bp as hints_bp, init_hints_service
+        from copilot_core.api.v1.service import UserHintsService
+
+        init_hints_service(
+            UserHintsService(
+                automation_creator=services.get("automation_creator") if services else None
+            )
+        )
+        app.register_blueprint(hints_bp, url_prefix="/api/v1/hints")
+        _LOGGER.info("Registered User Hints API (/api/v1/hints/*)")
+    except Exception:
+        _LOGGER.exception("Failed to register User Hints API")
+
     # Register Automation API (v1.3.0)
     from copilot_core.api.v1.automation_api import automation_bp, init_automation_api
     if services and services.get("automation_creator"):

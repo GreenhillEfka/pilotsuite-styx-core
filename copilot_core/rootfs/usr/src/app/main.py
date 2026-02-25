@@ -446,6 +446,23 @@ def api_capabilities():
     )
 
 
+@app.get("/api/v1/chat/status")
+def api_chat_status():
+    """Compatibility alias for legacy clients expecting /api/v1/chat/status."""
+    try:
+        from copilot_core.api.v1.conversation import llm_status
+
+        return llm_status()
+    except Exception as exc:
+        return jsonify(
+            {
+                "available": False,
+                "error": str(exc),
+                "active_provider": "none",
+            }
+        ), 503
+
+
 @app.post("/api/v1/echo")
 @require_token
 def echo():

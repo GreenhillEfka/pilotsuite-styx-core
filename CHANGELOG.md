@@ -1,5 +1,24 @@
 # Changelog - PilotSuite Core Add-on
 
+## [8.4.3] - 2026-02-25 — CORE FUNCTIONALITY COMPATIBILITY PASS
+
+### Added
+- Habitus compatibility endpoints on `/api/v1/habitus/*` for HA + dashboard consumers:
+  - `GET /api/v1/habitus/status`
+  - `GET /api/v1/habitus/rules`
+  - `GET /api/v1/habitus/rules/summary`
+  - `GET /api/v1/habitus/dashboard_cards/rules`
+- Compatibility alias: `GET /api/v1/chat/status`
+- User hints API registration on `/api/v1/hints/*`
+
+### Fixed
+- Dashboard suggestion pipeline no longer depends on missing endpoints (`/api/v1/habitus/rules`, `/api/v1/hints`).
+- HA Habitus Miner entities receive expected summary/status schema again (`total_rules`, `top_rules`, statistics payload).
+- Route registration test coverage expanded for core compatibility surface.
+
+### Validation
+- `pytest -q tests/test_bootstrap_routes.py tests/test_onyx_bridge_api.py tests/test_module_and_shopping_api.py tests/test_dashboard_template_habitus.py tests/test_core_endpoints.py tests/test_tag_api.py tests/test_mcp_server.py` → **43 passed**
+
 ## [8.4.2] - 2026-02-25 — BOOTSTRAP + API COMPATIBILITY RECOVERY
 
 ### Fixed

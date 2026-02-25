@@ -1,5 +1,22 @@
 # Release Notes - PilotSuite Core
 
+## [8.4.3] - 2026-02-25 — HABITUS + HINTS COMPATIBILITY ROUND
+
+### Added
+- `/api/v1/habitus/status`
+- `/api/v1/habitus/rules`
+- `/api/v1/habitus/rules/summary`
+- `/api/v1/habitus/dashboard_cards/rules`
+- `/api/v1/chat/status` alias
+- `/api/v1/hints/*` registration
+
+### Fixed
+- Suggestion inbox in dashboard no longer receives 404 for rules/hints compatibility paths.
+- HA Habitus Miner entity expectations (`status`, `rules/summary`) now align with Core responses.
+
+### Testing
+- 43 targeted tests passed (bootstrap, dashboard, module/shopping, core endpoints, tags, MCP)
+
 ## [8.4.2] - 2026-02-25 — STARTUP ROUTE RECOVERY
 
 ### Changed
