@@ -2963,3 +2963,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.api.v1.duckdb import duckdb_bp
         app.register_blueprint(duckdb_bp)
     except: pass
+    try:
+        from copilot_core.api.v1.timescaledb import timescaledb_bp
+        app.register_blueprint(timescaledb_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.influxdb import influxdb_bp
+        app.register_blueprint(influxdb_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.prometheus import prometheus_bp
+        app.register_blueprint(prometheus_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.grafana import grafana_bp
+        app.register_blueprint(grafana_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.thanos import thanos_bp
+        app.register_blueprint(thanos_bp)
+    except: pass
