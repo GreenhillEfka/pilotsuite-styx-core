@@ -2063,3 +2063,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.api.v1.deltachat import deltachat_bp
         app.register_blueprint(deltachat_bp)
     except: pass
+    try:
+        from copilot_core.api.v1.keybase import keybase_bp
+        app.register_blueprint(keybase_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.threema import threema_bp
+        app.register_blueprint(threema_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.wire import wire_bp
+        app.register_blueprint(wire_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.statusim import status_bp
+        app.register_blueprint(status_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.briar import briar_bp
+        app.register_blueprint(briar_bp)
+    except: pass
