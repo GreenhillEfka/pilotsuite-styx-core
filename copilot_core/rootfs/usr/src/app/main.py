@@ -12,7 +12,7 @@ import time
 import threading as _threading
 import uuid
 
-from flask import Flask, request, jsonify, send_from_directory, g, render_template
+from flask import Flask, request, jsonify, send_from_directory, g, render_template, make_response
 from flask_compress import Compress
 from waitress import serve
 
@@ -235,10 +235,16 @@ STATIC_DIR = os.path.join(os.path.dirname(__file__), 'static')
 @app.get("/")
 def index():
     """Serve PilotSuite Dashboard (ingress panel)."""
-    return render_template(
+    response = make_response(render_template(
         "dashboard.html",
         dashboard_auth_token=get_auth_token() or "",
-    )
+        dashboard_build=APP_VERSION,
+    ))
+    # Avoid stale dashboard JS in browsers/ingress proxies after updates.
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
 
 
 @app.get("/api/v1/cards/<path:filename>")
@@ -602,7 +608,7 @@ def dashboard_health():
         "ok": True,
         "time": _now_iso(),
         "module": "dashboard",
-        "version": "7.11.0",
+        "version": APP_VERSION,
         "features": [
             "brain_graph_summary",
             "node_statistics",

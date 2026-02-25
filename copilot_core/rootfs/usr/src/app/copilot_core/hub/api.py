@@ -31,6 +31,37 @@ _brain_architecture: object | None = None
 _brain_activity: object | None = None
 
 
+def _get_module_registry():
+    """Best-effort access to persistent module settings storage."""
+    try:
+        from copilot_core.module_registry import ModuleRegistry
+
+        return ModuleRegistry.get_instance()
+    except Exception:
+        return None
+
+
+def _load_saved_module_settings(module_id: str) -> dict:
+    reg = _get_module_registry()
+    if not reg:
+        return {}
+    try:
+        data = reg.get_settings(module_id)
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def _save_module_settings(module_id: str, settings: dict) -> None:
+    reg = _get_module_registry()
+    if not reg:
+        return
+    try:
+        reg.set_settings(module_id, settings)
+    except Exception:
+        return
+
+
 def init_hub_api(dashboard=None, plugin_manager=None, multi_home=None,
                  maintenance_engine=None, anomaly_engine=None,
                  zone_engine=None, light_engine=None,
@@ -673,6 +704,34 @@ def get_light_dashboard():
     return jsonify({"ok": True, **asdict(dashboard)})
 
 
+@hub_bp.route("/light/config", methods=["GET"])
+@require_token
+def get_light_config():
+    """Get adaptive lighting policy."""
+    if not _light_engine:
+        return jsonify({"error": "Light engine not initialized"}), 503
+    if hasattr(_light_engine, "get_automation_config"):
+        saved = _load_saved_module_settings("light_intelligence")
+        if saved and hasattr(_light_engine, "configure_automation"):
+            _light_engine.configure_automation(**saved)
+        return jsonify({"ok": True, "config": _light_engine.get_automation_config()})
+    return jsonify({"ok": False, "error": "not_supported"}), 501
+
+
+@hub_bp.route("/light/config", methods=["POST"])
+@require_token
+def set_light_config():
+    """Update adaptive lighting policy."""
+    if not _light_engine:
+        return jsonify({"error": "Light engine not initialized"}), 503
+    if not hasattr(_light_engine, "configure_automation"):
+        return jsonify({"ok": False, "error": "not_supported"}), 501
+    body = request.get_json(silent=True) or {}
+    config = _light_engine.configure_automation(**body)
+    _save_module_settings("light_intelligence", config)
+    return jsonify({"ok": True, "config": config})
+
+
 @hub_bp.route("/light/sun", methods=["POST"])
 @require_token
 def update_sun():
@@ -702,6 +761,26 @@ def update_light_brightness():
     body = request.get_json(silent=True) or {}
     count = _light_engine.update_brightness_batch(body.get("readings", []))
     return jsonify({"ok": True, "updated": count})
+
+
+@hub_bp.route("/light/context", methods=["POST"])
+@require_token
+def update_light_context():
+    """Update per-zone context for adaptive lighting.
+
+    JSON body: {"zone_id":"...", "present"?:true, "zone_mode"?: "active"}
+    """
+    if not _light_engine:
+        return jsonify({"error": "Light engine not initialized"}), 503
+    if not hasattr(_light_engine, "update_zone_context"):
+        return jsonify({"ok": False, "error": "not_supported"}), 501
+    body = request.get_json(silent=True) or {}
+    result = _light_engine.update_zone_context(
+        body.get("zone_id", ""),
+        present=body.get("present"),
+        zone_mode=body.get("zone_mode"),
+    )
+    return jsonify(result)
 
 
 @hub_bp.route("/light/zone/<zone_id>", methods=["GET"])
@@ -758,6 +837,17 @@ def suggest_light_scene():
             "color_temp_k": scene.color_temp_k,
         },
     })
+
+
+@hub_bp.route("/light/recommendations", methods=["GET"])
+@require_token
+def get_light_recommendations():
+    """Get adaptive recommendations for all known zones."""
+    if not _light_engine:
+        return jsonify({"error": "Light engine not initialized"}), 503
+    if not hasattr(_light_engine, "evaluate_all_zones"):
+        return jsonify({"ok": False, "error": "not_supported"}), 501
+    return jsonify({"ok": True, "recommendations": _light_engine.evaluate_all_zones()})
 
 
 # ── Zone Modes endpoints (v6.6.0) ──────────────────────────────────────────
@@ -866,6 +956,34 @@ def get_media_dashboard():
         return jsonify({"error": "Media engine not initialized"}), 503
     dashboard = _media_engine.get_dashboard()
     return jsonify({"ok": True, **asdict(dashboard)})
+
+
+@hub_bp.route("/media/config", methods=["GET"])
+@require_token
+def get_media_config():
+    """Get Musikwolke runtime policy."""
+    if not _media_engine:
+        return jsonify({"error": "Media engine not initialized"}), 503
+    if hasattr(_media_engine, "get_policy"):
+        saved = _load_saved_module_settings("media_zones")
+        if saved and hasattr(_media_engine, "configure_policy"):
+            _media_engine.configure_policy(**saved)
+        return jsonify({"ok": True, "config": _media_engine.get_policy()})
+    return jsonify({"ok": False, "error": "not_supported"}), 501
+
+
+@hub_bp.route("/media/config", methods=["POST"])
+@require_token
+def set_media_config():
+    """Update Musikwolke runtime policy."""
+    if not _media_engine:
+        return jsonify({"error": "Media engine not initialized"}), 503
+    if not hasattr(_media_engine, "configure_policy"):
+        return jsonify({"ok": False, "error": "not_supported"}), 501
+    body = request.get_json(silent=True) or {}
+    config = _media_engine.configure_policy(**body)
+    _save_module_settings("media_zones", config)
+    return jsonify({"ok": True, "config": config})
 
 
 @hub_bp.route("/media/sources", methods=["GET"])
@@ -992,12 +1110,15 @@ def transfer_media():
 def on_zone_enter_media():
     """Handle user entering a zone — trigger media follow.
 
-    JSON body: {"zone_id": "..."}
+    JSON body: {"zone_id": "...", "person_id"?: "..."}
     """
     if not _media_engine:
         return jsonify({"error": "Media engine not initialized"}), 503
     body = request.get_json(silent=True) or {}
-    transfers = _media_engine.on_zone_enter(body.get("zone_id", ""))
+    transfers = _media_engine.on_zone_enter(
+        body.get("zone_id", ""),
+        person_id=body.get("person_id", ""),
+    )
     return jsonify({
         "ok": True,
         "transfers": len(transfers),
@@ -1249,6 +1370,34 @@ def get_scene_dashboard():
     return jsonify({"ok": True, **asdict(dashboard)})
 
 
+@hub_bp.route("/scenes/config", methods=["GET"])
+@require_token
+def get_scene_config():
+    """Get scene automation policy."""
+    if not _scene_engine:
+        return jsonify({"error": "Scene engine not initialized"}), 503
+    if hasattr(_scene_engine, "get_policy"):
+        saved = _load_saved_module_settings("scene_intelligence")
+        if saved and hasattr(_scene_engine, "configure_policy"):
+            _scene_engine.configure_policy(**saved)
+        return jsonify({"ok": True, "config": _scene_engine.get_policy()})
+    return jsonify({"ok": False, "error": "not_supported"}), 501
+
+
+@hub_bp.route("/scenes/config", methods=["POST"])
+@require_token
+def set_scene_config():
+    """Update scene automation policy."""
+    if not _scene_engine:
+        return jsonify({"error": "Scene engine not initialized"}), 503
+    if not hasattr(_scene_engine, "configure_policy"):
+        return jsonify({"ok": False, "error": "not_supported"}), 501
+    body = request.get_json(silent=True) or {}
+    config = _scene_engine.configure_policy(**body)
+    _save_module_settings("scene_intelligence", config)
+    return jsonify({"ok": True, "config": config})
+
+
 @hub_bp.route("/scenes/list", methods=["GET"])
 @require_token
 def get_scenes_list():
@@ -1331,6 +1480,34 @@ def suggest_scenes():
         "ok": True,
         "suggestions": [asdict(s) for s in suggestions],
     })
+
+
+@hub_bp.route("/scenes/auto", methods=["POST"])
+@require_token
+def suggest_and_auto_activate_scene():
+    """Suggest and optionally auto-activate a scene based on policy."""
+    if not _scene_engine:
+        return jsonify({"error": "Scene engine not initialized"}), 503
+    if not hasattr(_scene_engine, "suggest_and_maybe_activate"):
+        return jsonify({"ok": False, "error": "not_supported"}), 501
+
+    body = request.get_json(silent=True) or {}
+    from copilot_core.hub.scene_intelligence import SceneContext
+
+    ctx = SceneContext(
+        hour=int(body.get("hour", 12)),
+        is_home=bool(body.get("is_home", True)),
+        occupancy_count=int(body.get("occupancy_count", 1)),
+        outdoor_lux=float(body.get("outdoor_lux", 500.0)),
+        indoor_temp_c=float(body.get("indoor_temp_c", 21.0)),
+        is_weekend=bool(body.get("is_weekend", False)),
+        active_zone=body.get("active_zone", ""),
+    )
+    result = _scene_engine.suggest_and_maybe_activate(
+        context=ctx,
+        zone_id=body.get("zone_id", ""),
+    )
+    return jsonify(result)
 
 
 @hub_bp.route("/scenes/learn", methods=["POST"])

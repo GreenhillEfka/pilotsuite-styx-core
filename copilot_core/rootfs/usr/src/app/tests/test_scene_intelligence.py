@@ -259,6 +259,37 @@ class TestCustomScenes:
     def test_register_duplicate_fails(self, engine):
         assert engine.register_scene("morning_routine", "Duplicate") is False
 
+
+class TestSceneAutomationPolicy:
+    def test_configure_policy(self, engine):
+        policy = engine.configure_policy(
+            enabled=True,
+            min_confidence_auto=0.4,
+            require_home_presence=False,
+            allow_night_automation=True,
+            quiet_hours_start=23,
+            quiet_hours_end=5,
+        )
+        assert policy["enabled"] is True
+        assert policy["min_confidence_auto"] == pytest.approx(0.4, abs=0.001)
+        assert policy["require_home_presence"] is False
+        assert policy["allow_night_automation"] is True
+
+    def test_auto_activate_scene_when_policy_allows(self, engine):
+        engine.configure_policy(min_confidence_auto=0.1, require_home_presence=False, allow_night_automation=True)
+        ctx = SceneContext(hour=7, is_home=True)
+        result = engine.suggest_and_maybe_activate(ctx, zone_id="zone:wohnzimmer")
+        assert result["ok"] is True
+        assert result["auto_activated"] is True
+        assert result["activated_scene_id"] is not None
+
+    def test_auto_activation_blocked_without_home_presence(self, engine):
+        engine.configure_policy(min_confidence_auto=0.1, require_home_presence=True, allow_night_automation=True)
+        ctx = SceneContext(hour=12, is_home=False)
+        result = engine.suggest_and_maybe_activate(ctx, zone_id="zone:wohnzimmer")
+        assert result["ok"] is True
+        assert result["auto_activated"] is False
+
     def test_custom_scene_with_kwargs(self, engine):
         engine.register_scene(
             "yoga", "Yoga", "Yoga",

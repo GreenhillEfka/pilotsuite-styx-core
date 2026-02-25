@@ -14,7 +14,7 @@ from __future__ import annotations
 import logging
 import math
 from collections import defaultdict, deque
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
@@ -90,6 +90,19 @@ class LightDashboard:
     suggested_scene_name: str | None = None
     cloud_filter_active: bool = False
     scenes: list[dict[str, Any]] = field(default_factory=list)
+    automation: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class LightAutomationPolicy:
+    """Runtime policy for adaptive lighting decisions."""
+
+    enabled: bool = True
+    trigger_mode: str = "time_or_presence"  # time_only | presence_only | time_or_presence
+    use_indoor_outdoor_ratio: bool = True
+    ratio_threshold: float = 0.22
+    absence_grace_minutes: int = 12
+    dark_outdoor_lux_threshold: float = 1000.0
 
 
 # ── Predefined Mood Scenes ─────────────────────────────────────────────────
@@ -170,6 +183,12 @@ class LightIntelligenceEngine:
         # Scene management
         self._active_scene: str | None = None
         self._zone_scenes: dict[str, str] = {}  # zone_id -> scene_id
+
+        # Adaptive lighting context
+        self._zone_presence: dict[str, bool] = {}
+        self._zone_last_presence_ts: dict[str, datetime] = {}
+        self._zone_modes: dict[str, str] = {}
+        self._automation = LightAutomationPolicy()
 
         # Cloud filter state
         self._last_outdoor_avg: float = 0.0
@@ -390,6 +409,156 @@ class LightIntelligenceEngine:
             self._active_scene = scene_id
         return True
 
+    # ── Adaptive Policy ────────────────────────────────────────────────
+
+    def configure_automation(self, **kwargs: Any) -> dict[str, Any]:
+        """Update adaptive lighting policy."""
+        if "enabled" in kwargs:
+            self._automation.enabled = bool(kwargs.get("enabled"))
+        if "trigger_mode" in kwargs:
+            mode = str(kwargs.get("trigger_mode") or "").strip().lower()
+            if mode in {"time_only", "presence_only", "time_or_presence"}:
+                self._automation.trigger_mode = mode
+        if "use_indoor_outdoor_ratio" in kwargs:
+            self._automation.use_indoor_outdoor_ratio = bool(
+                kwargs.get("use_indoor_outdoor_ratio")
+            )
+        if "ratio_threshold" in kwargs:
+            try:
+                self._automation.ratio_threshold = max(
+                    0.01, min(1.0, float(kwargs.get("ratio_threshold")))
+                )
+            except (TypeError, ValueError):
+                pass
+        if "absence_grace_minutes" in kwargs:
+            try:
+                self._automation.absence_grace_minutes = max(
+                    0, min(240, int(kwargs.get("absence_grace_minutes")))
+                )
+            except (TypeError, ValueError):
+                pass
+        if "dark_outdoor_lux_threshold" in kwargs:
+            try:
+                self._automation.dark_outdoor_lux_threshold = max(
+                    0.0, min(20000.0, float(kwargs.get("dark_outdoor_lux_threshold")))
+                )
+            except (TypeError, ValueError):
+                pass
+        return self.get_automation_config()
+
+    def get_automation_config(self) -> dict[str, Any]:
+        """Get current adaptive lighting policy."""
+        return asdict(self._automation)
+
+    def update_zone_context(
+        self,
+        zone_id: str,
+        *,
+        present: bool | None = None,
+        zone_mode: str | None = None,
+    ) -> dict[str, Any]:
+        """Update zone presence/mode context used by adaptive lighting."""
+        zid = str(zone_id or "").strip()
+        if not zid:
+            return {"ok": False, "error": "zone_id_required"}
+
+        if present is not None:
+            self._zone_presence[zid] = bool(present)
+            if present:
+                self._zone_last_presence_ts[zid] = datetime.now(tz=timezone.utc)
+
+        if zone_mode is not None:
+            self._zone_modes[zid] = str(zone_mode).strip().lower() or "active"
+
+        return {
+            "ok": True,
+            "zone_id": zid,
+            "present": self._zone_presence.get(zid, False),
+            "zone_mode": self._zone_modes.get(zid, "active"),
+        }
+
+    def _presence_active(self, zone_id: str) -> bool:
+        """Check if zone presence is active with grace window."""
+        zid = str(zone_id or "")
+        if self._zone_presence.get(zid, False):
+            return True
+
+        last = self._zone_last_presence_ts.get(zid)
+        if not last:
+            return False
+        delta_min = (datetime.now(tz=timezone.utc) - last).total_seconds() / 60
+        return delta_min <= max(0, self._automation.absence_grace_minutes)
+
+    def evaluate_zone_lighting(self, zone_id: str, hour: int | None = None) -> dict[str, Any]:
+        """Return adaptive lighting recommendation for one zone."""
+        zid = str(zone_id or "").strip()
+        if not zid:
+            return {"ok": False, "error": "zone_id_required"}
+
+        zb = self.get_zone_brightness(zid)
+        now_hour = datetime.now(tz=timezone.utc).hour if hour is None else int(hour)
+        zone_mode = self._zone_modes.get(zid, "active")
+        presence = self._presence_active(zid)
+
+        recommendation = {
+            "ok": True,
+            "zone_id": zid,
+            "zone_name": zb.zone_name,
+            "zone_mode": zone_mode,
+            "presence": presence,
+            "needs_light": zb.needs_light,
+            "illumination_ratio": zb.illumination_ratio,
+            "suggested_dimming_pct": zb.suggested_dimming_pct,
+            "should_turn_on": False,
+            "reason": "manual",
+            "suggested_scene": None,
+            "target_brightness_pct": 0,
+        }
+
+        if not self._automation.enabled:
+            recommendation["reason"] = "automation_disabled"
+            return recommendation
+
+        if zone_mode in {"away", "sleeping"}:
+            recommendation["reason"] = f"zone_mode_{zone_mode}"
+            return recommendation
+
+        mode = self._automation.trigger_mode
+        if mode == "presence_only" and not presence:
+            recommendation["reason"] = "no_presence"
+            return recommendation
+        if mode == "time_or_presence" and not presence and not (6 <= now_hour <= 23):
+            recommendation["reason"] = "no_presence_outside_time_window"
+            return recommendation
+
+        is_bright_relative = False
+        if self._automation.use_indoor_outdoor_ratio:
+            is_bright_relative = (
+                zb.avg_outdoor_lux > self._automation.dark_outdoor_lux_threshold
+                and zb.illumination_ratio >= self._automation.ratio_threshold
+            )
+
+        if is_bright_relative and not zb.needs_light:
+            recommendation["reason"] = "enough_daylight"
+            return recommendation
+
+        scene = self.suggest_scene(hour=now_hour)
+        if scene is not None and scene.scene_id != "off":
+            recommendation["suggested_scene"] = scene.scene_id
+            recommendation["target_brightness_pct"] = int(scene.brightness_pct)
+        else:
+            recommendation["target_brightness_pct"] = max(0, int(zb.suggested_dimming_pct))
+
+        recommendation["should_turn_on"] = recommendation["target_brightness_pct"] > 0
+        recommendation["reason"] = "low_indoor_lux" if zb.needs_light else "ratio_below_threshold"
+        return recommendation
+
+    def evaluate_all_zones(self) -> list[dict[str, Any]]:
+        """Return recommendations for all known zones."""
+        zone_ids = set(self._zone_targets.keys()) | set(self._sensor_zones.values()) | set(self._zone_presence.keys())
+        zone_ids.discard("")
+        return [self.evaluate_zone_lighting(zid) for zid in sorted(zone_ids)]
+
     # ── Dashboard ───────────────────────────────────────────────────────
 
     def get_dashboard(self) -> LightDashboard:
@@ -413,6 +582,9 @@ class LightIntelligenceEngine:
                 "needs_light": zb.needs_light,
                 "suggested_dimming_pct": zb.suggested_dimming_pct,
                 "active_scene": self._zone_scenes.get(zid, self._active_scene),
+                "presence": self._presence_active(zid),
+                "zone_mode": self._zone_modes.get(zid, "active"),
+                "recommendation": self.evaluate_zone_lighting(zid),
             })
 
         suggested = self.suggest_scene()
@@ -426,4 +598,5 @@ class LightIntelligenceEngine:
             suggested_scene_name=suggested.name_de if suggested else None,
             cloud_filter_active=not self._light_state_stable,
             scenes=self.get_scenes(),
+            automation=self.get_automation_config(),
         )

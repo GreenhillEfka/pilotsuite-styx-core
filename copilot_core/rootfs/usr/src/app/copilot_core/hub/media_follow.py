@@ -12,7 +12,7 @@ Features:
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
@@ -56,6 +56,7 @@ class PlaybackSession:
     volume_pct: int = 50
     follow_enabled: bool = False
     priority: int = 0
+    hop_count: int = 0
 
 
 @dataclass
@@ -94,6 +95,17 @@ class MediaDashboard:
     sessions: list[dict[str, Any]] = field(default_factory=list)
     zone_states: list[dict[str, Any]] = field(default_factory=list)
     recent_transfers: list[dict[str, Any]] = field(default_factory=list)
+    policy: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class MediaFollowPolicy:
+    """Runtime policy for Musikwolke behavior."""
+
+    auto_follow_on_presence: bool = True
+    require_active_playback: bool = True
+    transfer_cooldown_sec: int = 20
+    max_zone_hops: int = 8
 
 
 # ── Engine ──────────────────────────────────────────────────────────────────
@@ -109,6 +121,8 @@ class MediaFollowEngine:
         self._global_follow: bool = False
         self._transfers: list[MediaTransfer] = []
         self._session_counter: int = 0
+        self._policy = MediaFollowPolicy()
+        self._last_transfer_ts: dict[str, float] = {}
 
     # ── Source management ────────────────────────────────────────────────
 
@@ -237,8 +251,20 @@ class MediaFollowEngine:
         if not session:
             return None
 
+        if not to_zone_id:
+            return None
+
         if session.zone_id == to_zone_id:
             return None  # Already in target zone
+
+        now_ts = datetime.now(tz=timezone.utc).timestamp()
+        last_ts = self._last_transfer_ts.get(session_id, 0.0)
+        if (now_ts - last_ts) < max(0, int(self._policy.transfer_cooldown_sec)):
+            return None
+
+        max_hops = max(0, int(self._policy.max_zone_hops))
+        if max_hops and session.hop_count >= max_hops:
+            return None
 
         from_zone = session.zone_id
         transfer = MediaTransfer(
@@ -252,24 +278,57 @@ class MediaFollowEngine:
         self._transfers.append(transfer)
 
         session.zone_id = to_zone_id
+        session.hop_count += 1
+        self._last_transfer_ts[session_id] = now_ts
         logger.info(
             "Media transferred: '%s' from '%s' → '%s' (trigger: %s)",
             session.title, from_zone, to_zone_id, trigger,
         )
         return transfer
 
-    def on_zone_enter(self, zone_id: str) -> list[MediaTransfer]:
+    def on_zone_enter(self, zone_id: str, person_id: str = "") -> list[MediaTransfer]:
         """Handle user entering a zone — transfer follow-enabled sessions.
 
         Returns list of transfers that occurred.
         """
+        if not self._policy.auto_follow_on_presence or not zone_id:
+            return []
+
         transfers = []
         for session in list(self._sessions.values()):
-            if session.follow_enabled and session.zone_id != zone_id:
-                t = self.transfer_playback(session.session_id, zone_id, "presence")
-                if t:
-                    transfers.append(t)
+            if not session.follow_enabled or session.zone_id == zone_id:
+                continue
+            if self._policy.require_active_playback and session.state not in ("playing", "buffering"):
+                continue
+            trigger = f"presence:{person_id}" if person_id else "presence"
+            t = self.transfer_playback(session.session_id, zone_id, trigger)
+            if t:
+                transfers.append(t)
         return transfers
+
+    # ── Policy ────────────────────────────────────────────────────────────
+
+    def configure_policy(self, **kwargs: Any) -> dict[str, Any]:
+        """Update Musikwolke policy at runtime."""
+        if "auto_follow_on_presence" in kwargs:
+            self._policy.auto_follow_on_presence = bool(kwargs.get("auto_follow_on_presence"))
+        if "require_active_playback" in kwargs:
+            self._policy.require_active_playback = bool(kwargs.get("require_active_playback"))
+        if "transfer_cooldown_sec" in kwargs:
+            try:
+                self._policy.transfer_cooldown_sec = max(0, min(3600, int(kwargs.get("transfer_cooldown_sec"))))
+            except (TypeError, ValueError):
+                pass
+        if "max_zone_hops" in kwargs:
+            try:
+                self._policy.max_zone_hops = max(0, min(100, int(kwargs.get("max_zone_hops"))))
+            except (TypeError, ValueError):
+                pass
+        return self.get_policy()
+
+    def get_policy(self) -> dict[str, Any]:
+        """Return current Musikwolke policy."""
+        return asdict(self._policy)
 
     # ── Query ────────────────────────────────────────────────────────────
 
@@ -384,6 +443,7 @@ class MediaFollowEngine:
             sessions=sessions,
             zone_states=zone_states,
             recent_transfers=list(reversed(recent)),
+            policy=self.get_policy(),
         )
 
     def get_sources(self) -> list[dict[str, Any]]:

@@ -134,6 +134,18 @@ class TestFollowMode:
         session = engine.update_playback("media_player.wohnzimmer_speaker", "playing", "Song")
         assert session.follow_enabled is False
 
+    def test_configure_policy(self, engine):
+        cfg = engine.configure_policy(
+            auto_follow_on_presence=False,
+            require_active_playback=False,
+            transfer_cooldown_sec=3,
+            max_zone_hops=4,
+        )
+        assert cfg["auto_follow_on_presence"] is False
+        assert cfg["require_active_playback"] is False
+        assert cfg["transfer_cooldown_sec"] == 3
+        assert cfg["max_zone_hops"] == 4
+
 
 # ── Transfer ───────────────────────────────────────────────────────────────
 
@@ -178,6 +190,22 @@ class TestTransfer:
         engine.update_playback("media_player.wohnzimmer_speaker", "playing", "Song")
         transfers = engine.on_zone_enter("küche")
         assert len(transfers) == 1
+
+    def test_on_zone_enter_includes_person_in_trigger(self, engine):
+        engine.set_global_follow(True)
+        engine.update_playback("media_player.wohnzimmer_speaker", "playing", "Song")
+        transfers = engine.on_zone_enter("schlafzimmer", person_id="person.andreas")
+        assert len(transfers) == 1
+        assert "person.andreas" in transfers[0].trigger
+
+    def test_transfer_respects_max_zone_hops(self, engine):
+        engine.configure_policy(max_zone_hops=1, transfer_cooldown_sec=0)
+        session = engine.update_playback("media_player.wohnzimmer_speaker", "playing", "Song")
+        assert session is not None
+        first = engine.transfer_playback(session.session_id, "schlafzimmer")
+        assert first is not None
+        second = engine.transfer_playback(session.session_id, "küche")
+        assert second is None
 
 
 # ── Zone media state ──────────────────────────────────────────────────────

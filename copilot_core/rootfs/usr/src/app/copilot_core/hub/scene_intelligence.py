@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import logging
 from collections import defaultdict
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
@@ -104,6 +104,19 @@ class SceneIntelligenceDashboard:
     cloud_status: dict[str, Any] = field(default_factory=dict)
     categories: dict[str, int] = field(default_factory=dict)
     popular_scenes: list[dict[str, Any]] = field(default_factory=list)
+    automation_policy: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class SceneAutomationPolicy:
+    """Policy for autonomous scene activation."""
+
+    enabled: bool = True
+    min_confidence_auto: float = 0.72
+    require_home_presence: bool = True
+    allow_night_automation: bool = False
+    quiet_hours_start: int = 22
+    quiet_hours_end: int = 6
 
 
 # ── Built-in scenes ──────────────────────────────────────────────────────
@@ -244,6 +257,7 @@ class SceneIntelligenceEngine:
         self._patterns: list[LearnedPattern] = []
         self._activation_log: list[tuple[datetime, str, SceneContext]] = []
         self._cloud = CloudStatus()
+        self._policy = SceneAutomationPolicy()
 
         # Load built-in scenes
         for s in _BUILTIN_SCENES:
@@ -478,6 +492,87 @@ class SceneIntelligenceEngine:
             scene.rating = round((scene.rating + rating) / 2, 1)
         return True
 
+    # ── Automation Policy ───────────────────────────────────────────────
+
+    def configure_policy(self, **kwargs: Any) -> dict[str, Any]:
+        """Configure autonomous scene activation behavior."""
+        if "enabled" in kwargs:
+            self._policy.enabled = bool(kwargs.get("enabled"))
+        if "require_home_presence" in kwargs:
+            self._policy.require_home_presence = bool(kwargs.get("require_home_presence"))
+        if "allow_night_automation" in kwargs:
+            self._policy.allow_night_automation = bool(kwargs.get("allow_night_automation"))
+        if "min_confidence_auto" in kwargs:
+            try:
+                self._policy.min_confidence_auto = max(
+                    0.0, min(1.0, float(kwargs.get("min_confidence_auto")))
+                )
+            except (TypeError, ValueError):
+                pass
+        if "quiet_hours_start" in kwargs:
+            try:
+                self._policy.quiet_hours_start = max(0, min(23, int(kwargs.get("quiet_hours_start"))))
+            except (TypeError, ValueError):
+                pass
+        if "quiet_hours_end" in kwargs:
+            try:
+                self._policy.quiet_hours_end = max(0, min(23, int(kwargs.get("quiet_hours_end"))))
+            except (TypeError, ValueError):
+                pass
+        return self.get_policy()
+
+    def get_policy(self) -> dict[str, Any]:
+        """Return current scene automation policy."""
+        return asdict(self._policy)
+
+    def _is_quiet_hour(self, hour: int) -> bool:
+        start = int(self._policy.quiet_hours_start)
+        end = int(self._policy.quiet_hours_end)
+        if start == end:
+            return False
+        if start < end:
+            return start <= hour < end
+        return hour >= start or hour < end
+
+    def suggest_and_maybe_activate(
+        self, context: SceneContext | None = None, zone_id: str = ""
+    ) -> dict[str, Any]:
+        """Suggest scenes and auto-activate top result if policy allows it."""
+        ctx = context or SceneContext(hour=datetime.now(tz=timezone.utc).hour)
+        suggestions = self.suggest_scenes(ctx, limit=3)
+
+        result = {
+            "ok": True,
+            "auto_activated": False,
+            "activated_scene_id": None,
+            "suggestions": [
+                {
+                    "scene_id": s.scene_id,
+                    "name_de": s.name_de,
+                    "confidence": s.confidence,
+                    "reason_de": s.reason_de,
+                }
+                for s in suggestions
+            ],
+            "policy": self.get_policy(),
+        }
+
+        if not self._policy.enabled or not suggestions:
+            return result
+
+        top = suggestions[0]
+        if top.confidence < self._policy.min_confidence_auto:
+            return result
+        if self._policy.require_home_presence and not ctx.is_home:
+            return result
+        if not self._policy.allow_night_automation and self._is_quiet_hour(ctx.hour):
+            return result
+
+        if self.activate_scene(top.scene_id, zone_id=zone_id):
+            result["auto_activated"] = True
+            result["activated_scene_id"] = top.scene_id
+        return result
+
     # ── Query ────────────────────────────────────────────────────────────
 
     def get_scenes(self, category: str | None = None,
@@ -530,6 +625,7 @@ class SceneIntelligenceEngine:
             learned_patterns=len(self._patterns),
             cloud_status=self.get_cloud_status(),
             categories=categories,
+            automation_policy=self.get_policy(),
             popular_scenes=[
                 {
                     "scene_id": s.scene_id,

@@ -23,6 +23,9 @@ def test_register_blueprints_keeps_core_and_hub_routes_available():
     assert "/api/v1/habitus/rules" in routes
     assert "/api/v1/habitus/rules/summary" in routes
     assert "/api/v1/habitus/dashboard_cards/rules" in routes
+    assert "/api/v1/hub/light/config" in routes
+    assert "/api/v1/hub/media/config" in routes
+    assert "/api/v1/hub/scenes/config" in routes
 
 
 def test_main_exposes_status_and_capabilities_compat_endpoints():
@@ -44,6 +47,10 @@ def test_main_exposes_status_and_capabilities_compat_endpoints():
 
     chat_status = client.get("/api/v1/chat/status")
     assert chat_status.status_code in (200, 503)
+
+    dashboard = client.get("/")
+    assert dashboard.status_code == 200
+    assert "no-store" in str(dashboard.headers.get("Cache-Control", ""))
 
 
 def test_habitus_compat_endpoints_return_expected_schema():

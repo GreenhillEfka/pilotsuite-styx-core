@@ -60,3 +60,17 @@ def test_dashboard_template_exposes_llm_routing_controls() -> None:
     assert 'id="set-routing"' in text
     assert "saveRoutingConfig" in text
     assert "/chat/routing" in text
+
+
+def test_dashboard_template_has_module_specs_for_media_light_scenes() -> None:
+    text = _dashboard_template()
+    assert "/api/v1/hub/media/config" in text
+    assert "/api/v1/hub/light/config" in text
+    assert "/api/v1/hub/scenes/config" in text
+
+
+def test_dashboard_template_has_media_assignment_dropdown_controls() -> None:
+    text = _dashboard_template()
+    assert 'id="media-zone-select"' in text
+    assert 'id="media-player-select"' in text
+    assert "assignMediaPlayer" in text

@@ -1,5 +1,31 @@
 # Changelog - PilotSuite Core Add-on
 
+## [8.5.0] - 2026-02-25 — MUSIKWOLKE/LICHT/SZENEN CONFIG + DASHBOARD UX ROUND
+
+### Added
+- New Hub policy endpoints:
+  - `GET/POST /api/v1/hub/media/config`
+  - `GET/POST /api/v1/hub/light/config`
+  - `GET/POST /api/v1/hub/scenes/config`
+- Adaptive lighting context + recommendations:
+  - `POST /api/v1/hub/light/context`
+  - `GET /api/v1/hub/light/recommendations`
+- Scene auto decision endpoint:
+  - `POST /api/v1/hub/scenes/auto`
+
+### Changed
+- Musikwolke engine now supports runtime policy (presence-follow toggle, cooldown, max hops).
+- Light engine now supports adaptive policy (time/presence trigger mode, indoor/outdoor ratio threshold, zone mode context).
+- Scene engine now supports configurable auto-activation policy (confidence threshold, quiet hours, home-presence guard).
+- Dashboard module config panel now includes Media, Light, and Scenes module settings.
+- Media panel now supports dropdown-based player assignment/removal (no CSV/manual text flow).
+- Dashboard root (`/`) now sends no-cache headers; settings show dashboard build to verify updates.
+- Hub policy settings are persisted via `ModuleRegistry` for restart-safe behavior.
+
+### Validation
+- `pytest -q tests/test_media_follow.py tests/test_light_intelligence.py tests/test_scene_intelligence.py tests/test_bootstrap_routes.py tests/test_dashboard_template_habitus.py`
+- Result: **130 passed**
+
 ## [8.4.3] - 2026-02-25 — CORE FUNCTIONALITY COMPATIBILITY PASS
 
 ### Added

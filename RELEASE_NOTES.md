@@ -1,5 +1,32 @@
 # Release Notes - PilotSuite Core
 
+## [8.5.0] - 2026-02-25 — MODULE CONFIG + ADAPTIVE AUTOMATION
+
+### Added
+- Hub config APIs for core runtime policies:
+  - `/api/v1/hub/media/config`
+  - `/api/v1/hub/light/config`
+  - `/api/v1/hub/scenes/config`
+- New adaptive endpoints:
+  - `/api/v1/hub/light/context`
+  - `/api/v1/hub/light/recommendations`
+  - `/api/v1/hub/scenes/auto`
+
+### Improved
+- Musikwolke: cooldown + max-hop guard + presence-driven follow policy.
+- Lichtmodul: kombinierte Zeit/Praesenz-Steuerung mit Innen/Aussen-Helligkeitsverhaeltnis.
+- Szenenmodul: konfigurierbare Auto-Aktivierung mit Quiet-Hours und Presence-Guard.
+- Dashboard:
+  - direkte Modulkonfiguration fuer Media/Light/Scenes
+  - dropdown-basierte Media-Zuordnung statt manueller CSV-Workflows
+  - no-cache response headers + sichtbarer Dashboard-Build
+
+### Persistence
+- Hub policy settings are stored via ModuleRegistry and restored on API access after restart.
+
+### Testing
+- 130 targeted tests passed across engine behavior, route wiring, and dashboard template checks.
+
 ## [8.4.3] - 2026-02-25 — HABITUS + HINTS COMPATIBILITY ROUND
 
 ### Added

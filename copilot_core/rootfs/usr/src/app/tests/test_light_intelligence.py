@@ -232,6 +232,37 @@ class TestDashboard:
         assert dashboard.cloud_filter_active is False
 
 
+class TestAdaptiveLightingPolicy:
+    def test_configure_automation(self, engine):
+        cfg = engine.configure_automation(
+            enabled=True,
+            trigger_mode="presence_only",
+            ratio_threshold=0.3,
+            absence_grace_minutes=5,
+        )
+        assert cfg["enabled"] is True
+        assert cfg["trigger_mode"] == "presence_only"
+        assert cfg["ratio_threshold"] == pytest.approx(0.3, abs=0.001)
+        assert cfg["absence_grace_minutes"] == 5
+
+    def test_recommendation_requires_presence_when_configured(self, configured_engine):
+        configured_engine.configure_automation(trigger_mode="presence_only")
+        configured_engine.update_brightness("sensor.outdoor_lux", 9000.0)
+        configured_engine.update_brightness("sensor.wohnzimmer_lux", 60.0)
+        rec = configured_engine.evaluate_zone_lighting("wohnbereich", hour=20)
+        assert rec["should_turn_on"] is False
+        assert rec["reason"] == "no_presence"
+
+    def test_recommendation_turns_on_with_presence_and_low_lux(self, configured_engine):
+        configured_engine.configure_automation(trigger_mode="presence_only")
+        configured_engine.update_zone_context("wohnbereich", present=True, zone_mode="active")
+        configured_engine.update_brightness("sensor.outdoor_lux", 9000.0)
+        configured_engine.update_brightness("sensor.wohnzimmer_lux", 40.0)
+        rec = configured_engine.evaluate_zone_lighting("wohnbereich", hour=20)
+        assert rec["should_turn_on"] is True
+        assert rec["target_brightness_pct"] > 0
+
+
 class TestEdgeCases:
     def test_zero_outdoor(self, configured_engine):
         configured_engine.update_brightness("sensor.outdoor_lux", 0.0)

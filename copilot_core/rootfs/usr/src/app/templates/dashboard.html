@@ -528,6 +528,7 @@ a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
 // XSS-safe | Resilient | Real Module Health | Module Control API
 // ==================================================
 const DASHBOARD_AUTH_TOKEN={{ dashboard_auth_token|tojson }};
+const DASHBOARD_BUILD={{ dashboard_build|tojson }};
 function detectIngressBasePath(){
   try{
     const p=(window.location&&window.location.pathname)||'';
@@ -561,6 +562,8 @@ const MODULE_DEFS=[
   {id:'knowledge_graph',name:'Knowledge Graph',desc:'Semantisches Entity-Netzwerk',icon:'&#x1f310;',color:'var(--blue)'},
   {id:'conversation_memory',name:'Gedaechtnis',desc:'Lifelong Learning SQLite',icon:'&#x1f4da;',color:'var(--pink)'},
   {id:'media_zones',name:'Media Zonen',desc:'Musikwolke + Zonen-Player',icon:'&#x1f3b6;',color:'var(--orange)'},
+  {id:'light_intelligence',name:'Lichtintelligenz',desc:'Zeit + Praesenz + Innen/Aussen-Lux',icon:'&#x1f50c;',color:'var(--yellow)'},
+  {id:'scene_intelligence',name:'Szenen',desc:'Szenenvorschlaege + Auto-Aktivierung',icon:'&#x1f3ad;',color:'var(--pink)'},
   {id:'energy_context',name:'Energie',desc:'PV, Grid, Verbrauch',icon:'&#x26a1;',color:'var(--green)'},
   {id:'weather_context',name:'Wetter',desc:'Wetter + DWD Warnungen',icon:'&#x26c5;',color:'var(--blue)'},
   {id:'network',name:'Netzwerk',desc:'WLAN/LAN-Qualitaet (UniFi wenn vorhanden)',icon:'&#x1f4f6;',color:'var(--cyan)'},
@@ -604,6 +607,50 @@ const MODULE_CONFIG_SPECS={
     fields:[
       {key:'idle_timeout',label:'Idle Timeout (s)',type:'number',step:'1',min:30,max:3600},
       {key:'sleep_timeout',label:'Sleep Timeout (s)',type:'number',step:'1',min:60,max:86400},
+    ],
+  },
+  media_zones:{
+    label:'Media Zonen / Musikwolke',
+    getPath:'/api/v1/hub/media/config',
+    postPath:'/api/v1/hub/media/config',
+    parseGet:(raw)=>raw?.config||null,
+    fields:[
+      {key:'auto_follow_on_presence',label:'Auto-Follow bei Praesenz',type:'boolean'},
+      {key:'require_active_playback',label:'Nur aktive Wiedergabe folgen',type:'boolean'},
+      {key:'transfer_cooldown_sec',label:'Transfer Cooldown (s)',type:'number',step:'1',min:0,max:3600},
+      {key:'max_zone_hops',label:'Max Zonen-Hops',type:'number',step:'1',min:0,max:100},
+    ],
+  },
+  light_intelligence:{
+    label:'Lichtintelligenz',
+    getPath:'/api/v1/hub/light/config',
+    postPath:'/api/v1/hub/light/config',
+    parseGet:(raw)=>raw?.config||null,
+    fields:[
+      {key:'enabled',label:'Adaptive Steuerung aktiv',type:'boolean'},
+      {key:'trigger_mode',label:'Trigger-Modus',type:'select',options:[
+        {value:'time_or_presence',label:'Zeit oder Praesenz'},
+        {value:'presence_only',label:'Nur Praesenz'},
+        {value:'time_only',label:'Nur Zeit'},
+      ]},
+      {key:'use_indoor_outdoor_ratio',label:'Innen/Aussen-Verhaeltnis nutzen',type:'boolean'},
+      {key:'ratio_threshold',label:'Ratio-Schwelle',type:'number',step:'0.01',min:0.01,max:1},
+      {key:'dark_outdoor_lux_threshold',label:'Aussen dunkel unter (Lux)',type:'number',step:'10',min:0,max:20000},
+      {key:'absence_grace_minutes',label:'Abwesenheits-Toleranz (min)',type:'number',step:'1',min:0,max:240},
+    ],
+  },
+  scene_intelligence:{
+    label:'Szenen-Automation',
+    getPath:'/api/v1/hub/scenes/config',
+    postPath:'/api/v1/hub/scenes/config',
+    parseGet:(raw)=>raw?.config||null,
+    fields:[
+      {key:'enabled',label:'Auto-Szenen aktiv',type:'boolean'},
+      {key:'min_confidence_auto',label:'Min Confidence Auto',type:'number',step:'0.01',min:0,max:1},
+      {key:'require_home_presence',label:'Nur wenn Zuhause',type:'boolean'},
+      {key:'allow_night_automation',label:'Nacht-Automation erlauben',type:'boolean'},
+      {key:'quiet_hours_start',label:'Ruhezeit Start (h)',type:'number',step:'1',min:0,max:23},
+      {key:'quiet_hours_end',label:'Ruhezeit Ende (h)',type:'number',step:'1',min:0,max:23},
     ],
   },
 };
@@ -777,9 +824,12 @@ async function fetchModuleHealth(){
     api('/api/v1/media/musikwolke'),                     // [12]
     api('/api/v1/waste/status'),                         // [13]
     api('/api/v1/birthday/status'),                      // [14]
+    api('/api/v1/hub/light'),                            // [15]
+    api('/api/v1/hub/media'),                            // [16]
+    api('/api/v1/hub/scenes'),                           // [17]
   ]);
   const v=r=>r.status==='fulfilled'?r.value:null;
-  const [gr,hrWrap,mrWrap,sr,nrWrap,memr,er,wr,ur,tgr,capr,mzr,mkr,wastr,bdayr]=settled.map(v);
+  const [gr,hrWrap,mrWrap,sr,nrWrap,memr,er,wr,ur,tgr,capr,mzr,mkr,wastr,bdayr,lightHub,mediaHub,scenesHub]=settled.map(v);
   const hr=hrWrap?.data||null;
   const mr=mrWrap?.data||null;
   const nr=nrWrap?.data||null;
@@ -798,6 +848,8 @@ async function fetchModuleHealth(){
     knowledge_graph:caps.includes('knowledge_graph')||feats.knowledge_graph?'active':'learning',
     conversation_memory:memr?.stats?.total_messages>0?'active':memr?'learning':'off',
     media_zones:  zoneCount>0?'active':mzr?'learning':'off',
+    light_intelligence: lightHub?.ok?(lightHub?.zones?.length>0?'active':'learning'):'off',
+    scene_intelligence: scenesHub?.ok?(scenesHub?.total_scenes>0?'active':'learning'):'off',
     energy_context:er?.status==='ok'||er?.ok?'active':er?'learning':'off',
     weather_context:wr?.status==='ok'||wr?.ok?'active':wr?'learning':'off',
     network:      ur?.status==='healthy'?'active':ur?.status==='degraded'?'learning':'off',
@@ -816,6 +868,8 @@ async function fetchModuleHealth(){
       neurons:      neuronCount>0?`${neuronCount} Signale aktiv`:'Warte auf Events',
       conversation_memory:memr?.stats?`${memr.stats.total_messages||0} Nachrichten`:'Leer',
       media_zones:  zoneCount>0?`${zoneCount} Zonen, ${mkSessions.length} Musikwolke`:(mzr?'Bereit':'Nicht gestartet'),
+      light_intelligence:lightHub?.ok?`${(lightHub?.zones||[]).length||0} Zonen, ${(lightHub?.suggested_scene_name||'keine Suggestion')}`:'Nicht gestartet',
+      scene_intelligence:scenesHub?.ok?`${scenesHub?.total_scenes||0} Szenen, ${(scenesHub?.learned_patterns||0)} Muster`:'Nicht gestartet',
       energy_context:er?.status==='ok'?'Online':(er?'Degradiert':'Nicht konfiguriert'),
       weather_context:wr?.status==='ok'?'Online':(wr?'Degradiert':'Nicht konfiguriert'),
       network:      ur?.status||'Nicht konfiguriert',
@@ -2050,6 +2104,14 @@ function _moduleFieldHtml(moduleId,field,value){
       <option value="off"${current==='off'?' selected':''}>off</option>
     </select>`;
   }
+  if(field.type==='select'&&Array.isArray(field.options)){
+    const opts=field.options.map((opt)=>{
+      const ov=String(opt?.value??'');
+      const ol=String(opt?.label??ov);
+      return `<option value="${escapeHtml(ov)}"${String(value)===ov?' selected':''}>${escapeHtml(ol)}</option>`;
+    }).join('');
+    return `<select id="${inputId}" data-key="${field.key}" data-type="${field.type}" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px;color:var(--text);font-size:12px;outline:none">${opts}</select>`;
+  }
   const step=field.step!==undefined?` step="${field.step}"`:'';
   const min=field.min!==undefined?` min="${field.min}"`:'';
   const max=field.max!==undefined?` max="${field.max}"`:'';
@@ -2297,19 +2359,67 @@ async function loadAutomations(){
 async function loadMediaZones(){
   const c=$('media-zones-panel');if(!c)return;
   try{
-    const [zonesRes,mkRes]=await Promise.allSettled([api('/api/v1/media/zones'),api('/api/v1/media/musikwolke')]);
+    const [zonesRes,mkRes,hubZonesRes,playersRes]=await Promise.allSettled([
+      api('/api/v1/media/zones'),
+      api('/api/v1/media/musikwolke'),
+      api('/api/v1/hub/zones'),
+      api('/api/v1/entities?domain=media_player&limit=250'),
+    ]);
     const zones=(zonesRes.status==='fulfilled'?zonesRes.value:null);
     const mk=(mkRes.status==='fulfilled'?mkRes.value:null);
+    const hubZones=(hubZonesRes.status==='fulfilled'?hubZonesRes.value:null);
+    const playersRaw=(playersRes.status==='fulfilled'?playersRes.value:null);
     const zoneData=zones?.zones||{};
     const zoneIds=Object.keys(zoneData);
+    const zoneMap={};
+    zoneIds.forEach((zid)=>{zoneMap[zid]={zone_id:zid,name:zid}});
+    (hubZones?.zones||[]).forEach((z)=>{if(z?.zone_id)zoneMap[z.zone_id]=z});
+    const allZones=Object.values(zoneMap).sort((a,b)=>String(a.name||a.zone_id).localeCompare(String(b.name||b.zone_id),'de',{sensitivity:'base'}));
+    const players=(playersRaw?.entities||[]).map((p)=>({
+      entity_id:String(p.entity_id||''),
+      name:String((p.attributes&&p.attributes.friendly_name)||p.entity_id||''),
+      state:String(p.state||''),
+    })).filter((p)=>p.entity_id.startsWith('media_player.'));
     const sessions=mk?.sessions||[];
     let html='';
+    html+='<div style="display:grid;grid-template-columns:1fr 1fr auto auto;gap:8px;align-items:end;margin-bottom:10px">';
+    html+='<label style="font-size:11px;color:var(--dim)">Zone<select id="media-zone-select" style="width:100%;margin-top:4px;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px;color:var(--text);font-size:12px">';
+    if(!allZones.length){
+      html+='<option value="">keine Zone</option>';
+    }else{
+      allZones.forEach((z)=>{
+        html+=`<option value="${escapeHtml(z.zone_id||'')}">${escapeHtml(z.name||z.zone_id||'?')}</option>`;
+      });
+    }
+    html+='</select></label>';
+    html+='<label style="font-size:11px;color:var(--dim)">Media Player<select id="media-player-select" style="width:100%;margin-top:4px;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px;color:var(--text);font-size:12px">';
+    if(!players.length){
+      html+='<option value="">keine Media Player gefunden</option>';
+    }else{
+      players.forEach((p)=>{
+        const label=`${p.name} (${p.entity_id})`;
+        html+=`<option value="${escapeHtml(p.entity_id)}">${escapeHtml(label)}</option>`;
+      });
+    }
+    html+='</select></label>';
+    html+='<label style="font-size:11px;color:var(--dim)">Rolle<select id="media-role-select" style="width:100%;margin-top:4px;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px;color:var(--text);font-size:12px"><option value="primary">primary</option><option value="ambient">ambient</option><option value="aux">aux</option></select></label>';
+    html+='<button id="media-assign-btn" style="height:33px;background:var(--accent);color:#fff;border:none;border-radius:6px;padding:0 12px;cursor:pointer;font-size:11px;font-weight:600">Zuordnen</button>';
+    html+='</div>';
     if(zoneIds.length){
-      html+='<table class="tbl"><tr><th>Zone</th><th>Player</th></tr>';
+      html+='<table class="tbl"><tr><th>Zone</th><th>Player</th><th>Rolle</th><th></th></tr>';
       zoneIds.forEach(z=>{
         const players=zoneData[z];
-        const pList=Array.isArray(players)?players.map(p=>escapeHtml(typeof p==='string'?p:p.entity_id||'?')).join(', '):'--';
-        html+=`<tr><td>${escapeHtml(z)}</td><td>${pList}</td></tr>`;
+        const rows=Array.isArray(players)?players:[];
+        if(!rows.length){
+          html+=`<tr><td>${escapeHtml(z)}</td><td colspan="3" style="color:var(--dim)">Keine Player</td></tr>`;
+          return;
+        }
+        rows.forEach((p,idx)=>{
+          const eid=String(typeof p==='string'?p:(p.entity_id||''));
+          const role=String((p&&p.role)||'primary');
+          const zoneCell=idx===0?`<td rowspan="${rows.length}">${escapeHtml(z)}</td>`:'';
+          html+=`<tr>${zoneCell}<td>${escapeHtml(eid||'?')}</td><td>${escapeHtml(role)}</td><td><button class="media-unassign" data-zone="${escapeHtml(z)}" data-entity="${escapeHtml(eid)}" style="background:none;border:1px solid var(--border);color:var(--red);font-size:10px;padding:3px 8px;border-radius:4px;cursor:pointer">Entfernen</button></td></tr>`;
+        });
       });
       html+='</table>';
     }else{
@@ -2327,7 +2437,55 @@ async function loadMediaZones(){
       html+='<div style="margin-top:8px;font-size:11px;color:var(--dim)">Keine aktiven Musikwolke-Sessions. Starte via Chat: &quot;Musikwolke starten&quot;</div>';
     }
     c.innerHTML=html;
+    $('media-assign-btn')?.addEventListener('click',assignMediaPlayer);
+    c.querySelectorAll('.media-unassign').forEach((btn)=>{
+      btn.addEventListener('click',async(ev)=>{
+        const zoneId=ev.currentTarget?.getAttribute('data-zone')||'';
+        const entityId=ev.currentTarget?.getAttribute('data-entity')||'';
+        if(!zoneId||!entityId)return;
+        await unassignMediaPlayer(zoneId,entityId);
+      });
+    });
   }catch(e){c.innerHTML='<div class="empty">Media Zones nicht erreichbar</div>'}
+}
+
+async function assignMediaPlayer(){
+  const zoneId=String($('media-zone-select')?.value||'').trim();
+  const entityId=String($('media-player-select')?.value||'').trim();
+  const role=String($('media-role-select')?.value||'primary').trim()||'primary';
+  if(!zoneId||!entityId){
+    addHistory('⚠️ Media-Zuordnung: Zone und Player auswaehlen');
+    return;
+  }
+  try{
+    const r=await fetch(API+'/api/v1/media/zones/'+encodeURIComponent(zoneId)+'/assign',withAuth({
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({entity_id:entityId,role}),
+    }));
+    const data=await r.json().catch(()=>null);
+    if(!r.ok||data?.ok===false){
+      throw new Error(data?.error||('HTTP '+r.status));
+    }
+    addHistory('Media-Zuordnung gespeichert: '+entityId+' -> '+zoneId);
+    await loadMediaZones();
+  }catch(e){
+    addHistory('⚠️ Media-Zuordnung fehlgeschlagen: '+escapeHtml(e.message||'unbekannt'));
+  }
+}
+
+async function unassignMediaPlayer(zoneId,entityId){
+  try{
+    const r=await fetch(API+'/api/v1/media/zones/'+encodeURIComponent(zoneId)+'/'+encodeURIComponent(entityId),withAuth({method:'DELETE'}));
+    const data=await r.json().catch(()=>null);
+    if(!r.ok||data?.ok===false){
+      throw new Error(data?.error||('HTTP '+r.status));
+    }
+    addHistory('Media-Zuordnung entfernt: '+entityId+' aus '+zoneId);
+    await loadMediaZones();
+  }catch(e){
+    addHistory('⚠️ Entfernen fehlgeschlagen: '+escapeHtml(e.message||'unbekannt'));
+  }
 }
 
 // -- Waste Collection Panel (v3.2.0) --
@@ -2534,6 +2692,7 @@ async function loadSettings(){
     const mcpOk=caps?.ok===true;
     $('set-system').innerHTML=
       `<tr><td>Version</td><td>${status.version?badge('v'+status.version,'p'):badge('--','y')}</td></tr>`+
+      `<tr><td>Dashboard Build</td><td>${badge(String(DASHBOARD_BUILD||'--'),'b')}</td></tr>`+
       `<tr><td>API Route</td><td><code>${escapeHtml(API||'(direct)')}</code> ${badge(API_MODE==='ingress'?'Ingress':'Direct','b')}</td></tr>`+
       `<tr><td>Ollama URL</td><td><code>${escapeHtml(status.ollama_url||'localhost:11434')}</code></td></tr>`+
       `<tr><td>Cloud URL</td><td><code>${escapeHtml(status.cloud_api_url||'--')}</code></td></tr>`+
