@@ -642,6 +642,373 @@ HA_TOOLS = [
             "required": ["action"]
         }
     ),
+    
+    # ===== RFC-Phase 2: Core Tools =====
+    
+    # 1. Scene Automation Skills
+    MCPTool(
+        name="pilotsuite.create_scene_from_behavior",
+        description=(
+            "Create a new scene from current device states. "
+            "Use when user wants to 'create scene', 'Scene speichern', "
+            "'what is this scene called?', or 'scene erstellen'."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "scene_name": {
+                    "type": "string",
+                    "description": "Name for the new scene"
+                },
+                "scene_id": {
+                    "type": "string",
+                    "description": "Optional scene ID (slug format)"
+                },
+                "include_states": {
+                    "type": "boolean",
+                    "description": "Include current device states (default: true)"
+                },
+                "description": {
+                    "type": "string",
+                    "description": "Optional description for the scene"
+                }
+            },
+            "required": ["scene_name"]
+        }
+    ),
+    
+    MCPTool(
+        name="pilotsuite.list_scenes",
+        description=(
+            "List all available scenes in Home Assistant. "
+            "Use when user asks 'what scenes exist?', 'zeige Szenen', "
+            "'which scenes are available?', or 'szenen auflisten'."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "include_state": {
+                    "type": "boolean",
+                    "description": "Include current scene state (default: false)"
+                }
+            }
+        }
+    ),
+    
+    # 2. Multi-Zone Audio Control
+    MCPTool(
+        name="pilotsuite.play_zone",
+        description=(
+            "Play media on a specific zone/group. "
+            "Already implemented - kept for RFC compliance."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "zone": {
+                    "type": "string",
+                    "description": "Zone name or entity_id"
+                },
+                "media_content_id": {
+                    "type": "string",
+                    "description": "Media content ID (URL or entity)"
+                },
+                "media_content_type": {
+                    "type": "string",
+                    "description": "Media content type (music, video, etc.)"
+                },
+                "volume_level": {
+                    "type": "number",
+                    "description": "Volume level 0-1"
+                }
+            },
+            "required": ["zone", "media_content_id"]
+        }
+    ),
+    
+    MCPTool(
+        name="pilotsuite.group_zones",
+        description=(
+            "Group multiple zones together for synchronized playback. "
+            "Use when user says 'group zones', 'gruppiere Lautsprecher', "
+            "'make group', or 'synchronisiere zones'."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "group_name": {
+                    "type": "string",
+                    "description": "Name for the group"
+                },
+                "entity_ids": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "List of entity_ids to group"
+                }
+            },
+            "required": ["entity_ids"]
+        }
+    ),
+    
+    MCPTool(
+        name="pilotsuite.ungroup_zones",
+        description=(
+            "Ungroup previously grouped zones. "
+            "Use when user says 'ungroup', 'gruppe auflösen', "
+            "'remove from group', or 'trenne zones'."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "entity_id": {
+                    "type": "string",
+                    "description": "Main speaker entity_id of the group"
+                }
+            },
+            "required": ["entity_id"]
+        }
+    ),
+    
+    # 3. Security & Access (New)
+    MCPTool(
+        name="pilotsuite.door_status",
+        description=(
+            "Check the status of doors and windows. "
+            "Use when user asks 'is the door closed?', 'Türstatus', "
+            "'are windows open?', or 'status vom Eingangstür'."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "entity_id": {
+                    "type": "string",
+                    "description": "Optional door/window entity_id"
+                },
+                "area": {
+                    "type": "string",
+                    "description": "Optional area to filter"
+                }
+            }
+        }
+    ),
+    
+    MCPTool(
+        name="pilotsuite.lock_door",
+        description=(
+            "Lock a door or entry point. "
+            "Use when user says 'lock the door', 'Tür verriegeln', "
+            "'sicherheit an', or 'verschließe Eingang'."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "entity_id": {
+                    "type": "string",
+                    "description": "Lock entity_id"
+                },
+                "lock_action": {
+                    "type": "string",
+                    "enum": ["lock", "secure"],
+                    "description": "Lock action type (default: lock)"
+                }
+            },
+            "required": ["entity_id"]
+        }
+    ),
+    
+    MCPTool(
+        name="pilotsuite.unlock_door",
+        description=(
+            "Unlock a door or entry point. "
+            "Use when user says 'unlock door', 'Tür öffnen', "
+            "'sicherheit aus', or 'entsperre Eingang'."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "entity_id": {
+                    "type": "string",
+                    "description": "Lock entity_id"
+                }
+            },
+            "required": ["entity_id"]
+        }
+    ),
+    
+    # 4. Maintenance & Diagnostics (New)
+    MCPTool(
+        name="pilotsuite.system_health",
+        description=(
+            "Check system health status and diagnostics. "
+            "Use when user asks 'is everything ok?', 'Systemstatus', "
+            "'check health', or 'was ist los mit dem System?'."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "include_details": {
+                    "type": "boolean",
+                    "description": "Include detailed diagnostics (default: false)"
+                }
+            }
+        }
+    ),
+    
+    MCPTool(
+        name="pilotsuite.restart_service",
+        description=(
+            "Restart a Home Assistant service. "
+            "Use when user says 'restart service', 'dienst neu starten', "
+            "'reload core', or 'neustart benötigt'."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "service": {
+                    "type": "string",
+                    "enum": ["core", "supervisor", "addon", "custom"],
+                    "description": "Service to restart"
+                },
+                "addon_id": {
+                    "type": "string",
+                    "description": "Add-on ID (for 'addon' service)"
+                }
+            },
+            "required": ["service"]
+        }
+    ),
+    
+    # 5. Calendar & Scheduling
+    MCPTool(
+        name="pilotsuite.calendar_events",
+        description=(
+            "List calendar events for today or a specific date. "
+            "Already implemented - kept for RFC compliance."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "calendar_id": {
+                    "type": "string",
+                    "description": "Calendar entity_id"
+                },
+                "start_date": {
+                    "type": "string",
+                    "description": "Start date (ISO format)"
+                },
+                "end_date": {
+                    "type": "string",
+                    "description": "End date (ISO format)"
+                }
+            },
+            "required": ["calendar_id"]
+        }
+    ),
+    
+    MCPTool(
+        name="pilotsuite.upcoming_events",
+        description=(
+            "Get upcoming events within a time range. "
+            "Use when user asks 'what's next?', 'nächste Termine', "
+            "'any events today?', or 'Was kommt als nächstes?'."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "hours_ahead": {
+                    "type": "integer",
+                    "description": "Hours ahead to check (default: 24)"
+                },
+                "calendar_id": {
+                    "type": "string",
+                    "description": "Optional calendar filter"
+                }
+            }
+        }
+    ),
+    
+    MCPTool(
+        name="pilotsuite.optimal_time",
+        description=(
+            "Find optimal time for a task based on calendar and preferences. "
+            "Use when user asks 'when is best?', 'beste Zeit', "
+            "'wann passt es?', or 'termin vorschlag'."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "duration_minutes": {
+                    "type": "integer",
+                    "description": "Duration in minutes"
+                },
+                "calendar_id": {
+                    "type": "string",
+                    "description": "Calendar to check"
+                },
+                "preferred_hours": {
+                    "type": "array",
+                    "items": {"type": "integer"},
+                    "description": "Preferred hour range (e.g., [9, 17])"
+                }
+            },
+            "required": ["duration_minutes", "calendar_id"]
+        }
+    ),
+    
+    # 6. Weather-Based Automation (New)
+    MCPTool(
+        name="pilotsuite.weather_forecast",
+        description=(
+            "Get weather forecast for a location. "
+            "Already implemented - kept for RFC compliance."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "location": {
+                    "type": "string",
+                    "description": "Location name"
+                },
+                "days": {
+                    "type": "integer",
+                    "description": "Forecast days (default: 3)"
+                }
+            },
+            "required": ["location"]
+        }
+    ),
+    
+    MCPTool(
+        name="pilotsuite.weather_trigger",
+        description=(
+            "Set weather-based automation triggers. "
+            "Use when user says 'when it rains', 'bei Regen', "
+            "'wetter aktion', or 'wetterbasierte automation'."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "condition": {
+                    "type": "string",
+                    "enum": ["rain", "snow", "temperature_low", "temperature_high", "wind"],
+                    "description": "Weather condition to trigger on"
+                },
+                "threshold": {
+                    "type": "number",
+                    "description": "Threshold value (mm for rain, °C for temp)"
+                },
+                "action": {
+                    "type": "string",
+                    "description": "Action to trigger (e.g., 'turn_on_lights', 'close_windows')"
+                },
+                "entity_id": {
+                    "type": "string",
+                    "description": "Target entity for action"
+                }
+            },
+            "required": ["condition", "action", "entity_id"]
+        }
+    ),
 ]
 
 
