@@ -2863,3 +2863,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.api.v1.gloo import gloo_bp
         app.register_blueprint(gloo_bp)
     except: pass
+    try:
+        from copilot_core.api.v1.etcd import etcd_bp
+        app.register_blueprint(etcd_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.zk import zk_bp
+        app.register_blueprint(zk_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.redis import redis_bp
+        app.register_blueprint(redis_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.memcached import memcached_bp
+        app.register_blueprint(memcached_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.rabbitmq import rabbitmq_bp
+        app.register_blueprint(rabbitmq_bp)
+    except: pass
