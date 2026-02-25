@@ -4283,3 +4283,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.api.v1.gpt4all import gpt4all_bp
         app.register_blueprint(gpt4all_bp)
     except: pass
+    try:
+        from copilot_core.api.v1.ollama import ollama_bp
+        app.register_blueprint(ollama_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.localai import localai_bp
+        app.register_blueprint(localai_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.lmstudio import lmstudio_bp
+        app.register_blueprint(lmstudio_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.textgenwebui import textgenwebui_bp
+        app.register_blueprint(textgenwebui_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.koboldcpp import koboldcpp_bp
+        app.register_blueprint(koboldcpp_bp)
+    except: pass
