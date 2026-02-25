@@ -91,3 +91,20 @@ def test_dashboard_template_exposes_event_log_chat_history_tabs() -> None:
     assert "setHistoryTab('logs')" in text
     assert "/api/v1/events?limit=40" in text
     assert "/api/v1/dev/logs?limit=40" in text
+
+
+def test_dashboard_template_exposes_homekit_zone_server_panel() -> None:
+    text = _dashboard_template()
+    assert 'id="hab-homekit-servers"' in text
+    assert "syncHomeKitServers()" in text
+    assert "loadHomeKitServers()" in text
+    assert "/api/v1/homekit/servers" in text
+    assert "/api/v1/homekit/toggle" in text
+
+
+def test_dashboard_template_has_resizable_module_config_windows() -> None:
+    text = _dashboard_template()
+    assert 'id="module-config-window-layer"' in text
+    assert "openModuleConfigWindow(" in text
+    assert "_bindModuleWindowDrag(" in text
+    assert "resize:both" in text

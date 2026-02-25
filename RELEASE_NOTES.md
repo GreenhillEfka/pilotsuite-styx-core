@@ -1,5 +1,29 @@
 # Release Notes - PilotSuite Core
 
+## [8.10.0] - 2026-02-25 — HOMEKIT SERVERS + DASHBOARD UX
+
+### Added
+- New HomeKit zone-server API with persistent config and QR endpoints.
+- Automatic server generation from Habitus zones (zone name + compatible entities).
+- Dedicated HomeKit section on the Habitus dashboard:
+  - server status/connectivity
+  - setup code + pairing QR
+  - per-zone config save/enable/disable actions.
+- Per-module floating config windows in dashboard:
+  - open by clicking module cards
+  - draggable and mouse-resizable.
+
+### Changed
+- Module config renderer now supports multi-target forms (inline + window instances).
+- HomeKit QR endpoints accept query-token fallback for token-protected dashboard image loading.
+
+### Fixed
+- Habitus page keeps loading zones/dependencies/HomeKit even when no habit rules are present.
+
+### Validation
+- `pytest -q tests/test_homekit_api.py tests/test_dashboard_template_habitus.py` passed.
+- `pytest -q tests/test_bootstrap_routes.py tests/test_onyx_bridge_api.py tests/test_module_and_shopping_api.py` passed.
+
 ## [8.9.1] - 2026-02-25 — VERSION & INSTALL DOC SYNC
 
 ### Changed

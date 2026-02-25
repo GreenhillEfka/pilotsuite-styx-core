@@ -1,5 +1,35 @@
 # Changelog - PilotSuite Core Add-on
 
+## [8.10.0] - 2026-02-25 — HOMEKIT ZONE SERVERS + RESIZABLE MODULE WINDOWS
+
+### Added
+- New HomeKit zone server API with persistent per-zone config:
+  - `GET /api/v1/homekit/status`
+  - `GET /api/v1/homekit/servers`
+  - `GET /api/v1/homekit/servers/<zone_id>`
+  - `POST /api/v1/homekit/toggle`
+  - `POST /api/v1/homekit/servers/<zone_id>/config`
+  - `POST /api/v1/homekit/sync`
+  - `GET /api/v1/homekit/all-zones-info`
+  - `GET /api/v1/homekit/qr/<zone_id>.svg|png`
+- Automatic HomeKit server generation from Habitus zones (zone name + supported entities).
+- Habitus dashboard now includes a dedicated HomeKit server management panel with:
+  - zone connectivity status
+  - setup code + QR pairing
+  - per-zone enable/disable + config edits.
+- Module configuration windows now open per module card and are draggable/resizable.
+
+### Changed
+- Dashboard module config loader now supports multiple config targets (inline panel + floating windows).
+- HomeKit QR endpoints now support token-protected setups via query token fallback for image requests.
+
+### Fixed
+- Habitus page no longer exits early when no rules exist; zones/dependencies/HomeKit panel still load.
+
+### Validation
+- `pytest -q tests/test_homekit_api.py tests/test_dashboard_template_habitus.py` → passed.
+- Additional regression checks passed for bootstrap routes and dashboard endpoints.
+
 ## [8.9.1] - 2026-02-25 — DOCS + VERSION LINE HARDENING
 
 ### Changed

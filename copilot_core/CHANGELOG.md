@@ -3,6 +3,13 @@
 This file exists so Home Assistant can show an add-on changelog.
 For full history, see the repository-level `CHANGELOG.md`.
 
+## 8.10.0
+- HomeKit-Zonenserver API erweitert (Status/Toggle/Config/Sync + QR-Endpunkte).
+- HomeKit-Server werden automatisch aus Habitus-Zonen erzeugt (Name + kompatible Entitaeten).
+- Habitus-Dashboard zeigt HomeKit-Server-Panel mit QR/Setup-Code und pro-Zone Konfiguration.
+- Modulkonfiguration im Dashboard jetzt als verschiebbare + groessenveraenderbare Fenster pro Modul.
+- Habitus-Ansicht laedt Zonen/HomeKit auch ohne vorhandene Regeln.
+
 ## 8.9.1
 - Versionsabgleich auf `8.9.1` in `config.yaml`, `manifest.json` und Laufzeit-`VERSION`.
 - Add-on-Doku (`DOCS.md`) auf aktuelle Produktionspfade und Modelldefaults aktualisiert.
