@@ -3603,3 +3603,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.api.v1.haproxy import haproxy_bp
         app.register_blueprint(haproxy_bp)
     except: pass
+    try:
+        from copilot_core.api.v1.cilium import cilium_bp
+        app.register_blueprint(cilium_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.calico import calico_bp
+        app.register_blueprint(calico_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.flannel import flannel_bp
+        app.register_blueprint(flannel_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.weavenet import weavenet_bp
+        app.register_blueprint(weavenet_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.canal import canal_bp
+        app.register_blueprint(canal_bp)
+    except: pass
