@@ -3583,3 +3583,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.api.v1.nginxingress import nginxingress_bp
         app.register_blueprint(nginxingress_bp)
     except: pass
+    try:
+        from copilot_core.api.v1.traefik import traefik_bp
+        app.register_blueprint(traefik_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.ambassador import ambassador_bp
+        app.register_blueprint(ambassador_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.glooeedge import glooeedge_bp
+        app.register_blueprint(glooeedge_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.contour import contour_bp
+        app.register_blueprint(contour_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.haproxy import haproxy_bp
+        app.register_blueprint(haproxy_bp)
+    except: pass
