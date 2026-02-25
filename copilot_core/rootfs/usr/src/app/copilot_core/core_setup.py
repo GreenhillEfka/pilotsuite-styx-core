@@ -2943,3 +2943,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.api.v1.annoy import annoy_bp
         app.register_blueprint(annoy_bp)
     except: pass
+    try:
+        from copilot_core.api.v1.faiss import faiss_bp
+        app.register_blueprint(faiss_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.scann import scann_bp
+        app.register_blueprint(scann_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.pgvector import pgvector_bp
+        app.register_blueprint(pgvector_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.clickhouse import clickhouse_bp
+        app.register_blueprint(clickhouse_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.duckdb import duckdb_bp
+        app.register_blueprint(duckdb_bp)
+    except: pass
