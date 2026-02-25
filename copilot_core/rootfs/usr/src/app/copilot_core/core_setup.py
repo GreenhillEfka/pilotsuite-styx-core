@@ -2663,3 +2663,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.api.v1.lldap import lldap_bp
         app.register_blueprint(lldap_bp)
     except: pass
+    try:
+        from copilot_core.api.v1.authentik import authentik_bp
+        app.register_blueprint(authentik_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.zitadel import zitadel_bp
+        app.register_blueprint(zitadel_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.casdoor import casdoor_bp
+        app.register_blueprint(casdoor_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.lemmy import lemmy_bp
+        app.register_blueprint(lemmy_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.pixelfed import pixelfed_bp
+        app.register_blueprint(pixelfed_bp)
+    except: pass
