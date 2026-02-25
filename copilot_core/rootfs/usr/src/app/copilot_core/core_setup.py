@@ -3223,3 +3223,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.api.v1.cfworkers import cfworkers_bp
         app.register_blueprint(cfworkers_bp)
     except: pass
+    try:
+        from copilot_core.api.v1.vercel import vercel_bp
+        app.register_blueprint(vercel_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.netlify import netlify_bp
+        app.register_blueprint(netlify_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.cfpages import cfpages_bp
+        app.register_blueprint(cfpages_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.render import render_bp
+        app.register_blueprint(render_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.railway import railway_bp
+        app.register_blueprint(railway_bp)
+    except: pass
