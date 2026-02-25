@@ -3263,3 +3263,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.api.v1.turso import turso_bp
         app.register_blueprint(turso_bp)
     except: pass
+    try:
+        from copilot_core.api.v1.denodeploy import denodeploy_bp
+        app.register_blueprint(denodeploy_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.cfkv import cfkv_bp
+        app.register_blueprint(cfkv_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.durables import durables_bp
+        app.register_blueprint(durables_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.r2storage import r2storage_bp
+        app.register_blueprint(r2storage_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.d1 import d1_bp
+        app.register_blueprint(d1_bp)
+    except: pass
