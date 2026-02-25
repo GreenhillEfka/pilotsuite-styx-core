@@ -1,0 +1,54 @@
+name: Add-on Validation
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  validate-addon:
+    runs-on: "ubuntu-latest"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate repository metadata
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          repo = Path("repository.json")
+          if not repo.exists():
+              raise SystemExit("repository.json missing")
+          with repo.open("r", encoding="utf-8") as fh:
+              data = json.load(fh)
+          for key in ("name", "url", "maintainer"):
+              if not str(data.get(key, "")).strip():
+                  raise SystemExit(f"repository.json missing required key: {key}")
+          print("repository.json valid")
+          PY
+
+      - name: Validate add-on version sync
+        run: |
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+
+          cfg = Path("copilot_core/config.yaml").read_text(encoding="utf-8")
+          version_match = re.search(r'^version:\\s*"?(.*?)"?\\s*$', cfg, flags=re.MULTILINE)
+          if not version_match:
+              raise SystemExit("copilot_core/config.yaml missing version")
+          config_version = version_match.group(1).strip()
+          runtime_version = Path("copilot_core/rootfs/usr/src/app/VERSION").read_text(encoding="utf-8").strip()
+          if config_version != runtime_version:
+              raise SystemExit(
+                  f"Version mismatch: config.yaml={config_version} VERSION={runtime_version}"
+              )
+          print(f"version sync OK: {config_version}")
+          PY

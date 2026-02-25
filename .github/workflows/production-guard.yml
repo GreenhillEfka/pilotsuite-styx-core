@@ -30,10 +30,20 @@ jobs:
             exit 1
           fi
 
-      - name: HACS Validation
-        uses: "hacs/action@main"
-        with:
-          category: "plugin"
+      - name: Add-on metadata sanity
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          with open("repository.json", "r", encoding="utf-8") as fh:
+              data = json.load(fh)
+          assert data.get("name"), "repository.json missing name"
+          assert data.get("url"), "repository.json missing url"
+          assert data.get("maintainer"), "repository.json missing maintainer"
+          assert Path("copilot_core/config.yaml").exists(), "copilot_core/config.yaml missing"
+          print("Add-on metadata looks valid")
+          PY
 
       - name: Success marker
         run: echo "✅ Production Guard passed"
