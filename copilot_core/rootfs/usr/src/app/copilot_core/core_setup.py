@@ -2023,3 +2023,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.api.v1.conduit import conduit_bp
         app.register_blueprint(conduit_bp)
     except: pass
+    try:
+        from copilot_core.api.v1.signal import signal_bp
+        app.register_blueprint(signal_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.session import session_bp
+        app.register_blueprint(session_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.xmpp import xmpp_bp
+        app.register_blueprint(xmpp_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.irc import irc_bp
+        app.register_blueprint(irc_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.mattermost import mattermost_bp
+        app.register_blueprint(mattermost_bp)
+    except: pass
