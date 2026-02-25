@@ -13,7 +13,7 @@
 
 ## P2 (Nice to have)
 
-- [ ] MCP Phase 2 – erweiterte Skills für AI-Clients
+- [x] MCP Phase 2 – erweiterte Skills für AI-Clients (Web Search via SearXNG, v8.1.0)
 - [ ] Test Suite Expansion – Regressionssicherheit, Integrationstests
 - [ ] Multi-User Preference Learning – MUPL深化 (bereits v0.8.x integriert, aber erweiterbar)
 
@@ -22,5 +22,5 @@
 ## Notes
 
 *Last updated: 2026-02-25*
-*Based on Styx v7.26.0*
-*Next Task: P2 – MCP Phase 2 + Test Suite Expansion*
+*Based on Styx v8.1.1*
+*Next Task: P2 – Test Suite Expansion*

@@ -1,5 +1,47 @@
 # Release Notes - PilotSuite Core
 
+## [8.1.1] - 2026-02-25 — VERSION SYNC
+
+### Added
+- None
+
+### Changed
+- Version sync: `config.yaml` and `VERSION` file aligned to `8.1.1`
+- Minor version bump to reflect runtime/file consistency
+
+### Fixed
+- `config.yaml` version drift (was 7.40.0, now 8.1.1)
+
+### Testing
+- Version resolution validated
+- Runtime version returns `8.1.1` consistently
+
+## [8.1.0] - 2026-02-25 — MCP PHASE 2: WEB SEARCH + TEST SUITE
+
+### Added
+- **MCP Phase 2: Web Search via SearXNG**
+  - New MCP tool: `pilotsuite.search_web`
+  - Supports query, language, categories, time_range, safesearch, max_results
+  - Integration with local SearXNG instance (http://192.168.30.18:4041)
+- **Enhanced MCP Test Suite**
+  - `test_mcp_web_search_tool_exists` – verifies search_web tool registration
+  - `test_mcp_web_search_tool_schema` – validates input schema
+
+### Changed
+- MCP_TOOLS extended with web search capability
+- VERSION bumped to 8.1.0
+- All MCP tools now return structured JSON results
+
+### Fixed
+- None
+
+### Testing
+- pytest passed: MCP server contract tests
+- SearXNG endpoint reachable
+- Web search tool schema validated
+
+---
+
 ## [7.26.0] - 2026-02-25 — INPUT NUMBER + ZONES + PATTERN APIs
 
 ### Added
