@@ -2343,3 +2343,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.api.v1.xen import xen_bp
         app.register_blueprint(xen_bp)
     except: pass
+    try:
+        from copilot_core.api.v1.libvirt import libvirt_bp
+        app.register_blueprint(libvirt_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.qemu import qemu_bp
+        app.register_blueprint(qemu_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.kvm import kvm_bp
+        app.register_blueprint(kvm_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.vbox import vbox_bp
+        app.register_blueprint(vbox_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.esxi import esxi_bp
+        app.register_blueprint(esxi_bp)
+    except: pass
