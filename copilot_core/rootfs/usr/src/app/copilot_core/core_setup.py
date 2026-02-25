@@ -2043,3 +2043,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.api.v1.mattermost import mattermost_bp
         app.register_blueprint(mattermost_bp)
     except: pass
+    try:
+        from copilot_core.api.v1.rocketchat import rocketchat_bp
+        app.register_blueprint(rocketchat_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.zulip import zulip_bp
+        app.register_blueprint(zulip_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.tox import tox_bp
+        app.register_blueprint(tox_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.simplex import simplex_bp
+        app.register_blueprint(simplex_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.deltachat import deltachat_bp
+        app.register_blueprint(deltachat_bp)
+    except: pass
