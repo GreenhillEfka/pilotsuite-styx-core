@@ -2083,3 +2083,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.api.v1.briar import briar_bp
         app.register_blueprint(briar_bp)
     except: pass
+    try:
+        from copilot_core.api.v1.jmap import jmap_bp
+        app.register_blueprint(jmap_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.fastmail import fastmail_bp
+        app.register_blueprint(fastmail_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.protonmail import protonmail_bp
+        app.register_blueprint(protonmail_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.tutanota import tutanota_bp
+        app.register_blueprint(tutanota_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.mailu import mailu_bp
+        app.register_blueprint(mailu_bp)
+    except: pass
