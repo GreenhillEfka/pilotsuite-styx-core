@@ -1963,3 +1963,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.api.v1.spacewalk import spacewalk_bp
         app.register_blueprint(spacewalk_bp)
     except: pass
+    try:
+        from copilot_core.api.v1.argocd import argocd_bp
+        app.register_blueprint(argocd_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.flux import flux_bp
+        app.register_blueprint(flux_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.tekton import tekton_bp
+        app.register_blueprint(tekton_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.spinnaker import spinnaker_bp
+        app.register_blueprint(spinnaker_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.argorollouts import argorollouts_bp
+        app.register_blueprint(argorollouts_bp)
+    except: pass
