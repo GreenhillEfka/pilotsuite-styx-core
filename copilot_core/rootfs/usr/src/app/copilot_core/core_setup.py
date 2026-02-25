@@ -2443,3 +2443,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.api.v1.pxe import pxe_bp
         app.register_blueprint(pxe_bp)
     except: pass
+    try:
+        from copilot_core.api.v1.ipxe import ipxe_bp
+        app.register_blueprint(ipxe_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.grub import grub_bp
+        app.register_blueprint(grub_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.syslinux import syslinux_bp
+        app.register_blueprint(syslinux_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.pxelinux import pxelinux_bp
+        app.register_blueprint(pxelinux_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.refind import refind_bp
+        app.register_blueprint(refind_bp)
+    except: pass
