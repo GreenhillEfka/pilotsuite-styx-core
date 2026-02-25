@@ -149,8 +149,21 @@ class MediaZoneManager:
         return {"Authorization": f"Bearer {token}",
                 "Content-Type": "application/json"}
 
+    @staticmethod
+    def _normalize_entity_ids(players: List[Dict[str, Any]]) -> list[str]:
+        out: list[str] = []
+        seen: set[str] = set()
+        for item in players:
+            entity_id = str(item.get("entity_id", "")).strip()
+            if not entity_id or entity_id in seen:
+                continue
+            seen.add(entity_id)
+            out.append(entity_id)
+        return out
+
     def _call_service(self, domain: str, service: str,
-                      data: dict) -> dict:
+                      data: dict,
+                      timeout: int = 10) -> dict:
         """Call a HA service via Supervisor API."""
         token = os.environ.get("SUPERVISOR_TOKEN", "")
         if not token:
@@ -158,11 +171,62 @@ class MediaZoneManager:
         try:
             resp = requests.post(
                 f"{SUPERVISOR_API}/services/{domain}/{service}",
-                json=data, headers=self._ha_headers(), timeout=10,
+                json=data, headers=self._ha_headers(), timeout=timeout,
             )
             return {"ok": resp.ok, "status": resp.status_code}
         except Exception as exc:
             return {"ok": False, "error": str(exc)}
+
+    def _get_entity_state(self, entity_id: str) -> dict:
+        """Best-effort state fetch for one HA entity."""
+        token = os.environ.get("SUPERVISOR_TOKEN", "")
+        if not token:
+            return {}
+        try:
+            resp = requests.get(
+                f"{SUPERVISOR_API}/states/{entity_id}",
+                headers=self._ha_headers(),
+                timeout=5,
+            )
+            if resp.ok:
+                payload = resp.json()
+                if isinstance(payload, dict):
+                    return payload
+        except Exception:
+            pass
+        return {}
+
+    def _pick_zone_leader(self, zone_id: str, preferred_entity_id: str | None = None) -> str | None:
+        players = self._normalize_entity_ids(self.get_zone_players(zone_id))
+        if not players:
+            return None
+        if preferred_entity_id and preferred_entity_id in players:
+            return preferred_entity_id
+        return players[0]
+
+    def _join_players(self, leader_entity_id: str, members: list[str]) -> dict:
+        """Join members to a leader (Sonos and compatible media_player integrations)."""
+        clean_members = [m for m in members if m and m != leader_entity_id]
+        if not clean_members:
+            return {"ok": True, "joined": [], "leader": leader_entity_id}
+        result = self._call_service(
+            "media_player",
+            "join",
+            {"entity_id": leader_entity_id, "group_members": clean_members},
+        )
+        return {"ok": bool(result.get("ok")), "joined": clean_members, "leader": leader_entity_id, "result": result}
+
+    def _unjoin_players(self, members: list[str]) -> dict:
+        """Unjoin members from current groups."""
+        clean_members = [m for m in members if m]
+        if not clean_members:
+            return {"ok": True, "ungrouped": []}
+        result = self._call_service(
+            "media_player",
+            "unjoin",
+            {"entity_id": clean_members},
+        )
+        return {"ok": bool(result.get("ok")), "ungrouped": clean_members, "result": result}
 
     def play_zone(self, zone_id: str) -> dict:
         """Resume playback on all players in a zone."""
@@ -214,7 +278,10 @@ class MediaZoneManager:
     # ------------------------------------------------------------------
 
     def start_musikwolke(self, person_id: str,
-                         source_zone: str) -> dict:
+                         source_zone: str,
+                         mode: str = "group",
+                         degroup_on_leave: bool = True,
+                         leader_entity_id: str | None = None) -> dict:
         """Start a Musikwolke session: audio follows person through zones.
 
         The media currently playing in source_zone will follow person_id
@@ -222,19 +289,51 @@ class MediaZoneManager:
         """
         import uuid
         session_id = uuid.uuid4().hex[:10]
-        players = self.get_zone_players(source_zone)
+        players = self._normalize_entity_ids(self.get_zone_players(source_zone))
         if not players:
             return {"ok": False, "error": f"No players in zone {source_zone}"}
+
+        leader = self._pick_zone_leader(source_zone, leader_entity_id)
+        if not leader:
+            return {"ok": False, "error": "No leader player available"}
+
+        mode_clean = str(mode or "group").strip().lower()
+        if mode_clean not in {"group", "follow"}:
+            mode_clean = "group"
+
+        grouped_entities: set[str] = set()
+        if mode_clean == "group":
+            group_result = self._join_players(leader, players)
+            if group_result.get("ok"):
+                grouped_entities.update(group_result.get("joined", []))
 
         self._musikwolke_sessions[session_id] = {
             "person_id": person_id,
             "active_zones": [source_zone],
             "source_zone": source_zone,
+            "current_zone": source_zone,
             "started_at": time.time(),
+            "last_updated": time.time(),
+            "mode": mode_clean,
+            "degroup_on_leave": bool(degroup_on_leave),
+            "leader_entity_id": leader,
+            "grouped_entities": sorted(grouped_entities),
         }
-        _LOGGER.info("Musikwolke started: session=%s, person=%s, zone=%s",
-                      session_id, person_id, source_zone)
-        return {"ok": True, "session_id": session_id, "source_zone": source_zone}
+        _LOGGER.info(
+            "Musikwolke started: session=%s, person=%s, zone=%s, mode=%s, leader=%s",
+            session_id,
+            person_id,
+            source_zone,
+            mode_clean,
+            leader,
+        )
+        return {
+            "ok": True,
+            "session_id": session_id,
+            "source_zone": source_zone,
+            "leader_entity_id": leader,
+            "mode": mode_clean,
+        }
 
     def update_musikwolke(self, session_id: str,
                           entered_zone: str) -> dict:
@@ -247,30 +346,57 @@ class MediaZoneManager:
         if not session:
             return {"ok": False, "error": "Session not found"}
 
-        new_players = self.get_zone_players(entered_zone)
+        new_players = self._normalize_entity_ids(self.get_zone_players(entered_zone))
         if not new_players:
             return {"ok": False, "error": f"No players in zone {entered_zone}"}
 
-        # Start playback in new zone
-        for p in new_players:
-            self._call_service("media_player", "media_play",
-                               {"entity_id": p["entity_id"]})
+        leader = str(session.get("leader_entity_id") or "").strip()
+        mode = str(session.get("mode") or "group")
+        previous_zone = str(session.get("current_zone") or session.get("source_zone") or "")
+        previously_grouped = set(session.get("grouped_entities", []))
 
-        # Reduce volume in previous zones (fade out effect)
-        for prev_zone in session["active_zones"]:
-            if prev_zone != entered_zone:
-                prev_players = self.get_zone_players(prev_zone)
-                for p in prev_players:
-                    self._call_service("media_player", "volume_set", {
-                        "entity_id": p["entity_id"],
-                        "volume_level": 0.15,  # Fade to background
-                    })
+        if mode == "group" and leader:
+            join_result = self._join_players(leader, new_players)
+            if join_result.get("ok"):
+                previously_grouped.update(join_result.get("joined", []))
+        else:
+            # Fallback mode: start playback in new zone and fade previous zones.
+            for entity_id in new_players:
+                self._call_service("media_player", "media_play", {"entity_id": entity_id})
+            for prev_zone in session.get("active_zones", []):
+                if prev_zone == entered_zone:
+                    continue
+                prev_players = self._normalize_entity_ids(self.get_zone_players(prev_zone))
+                for entity_id in prev_players:
+                    self._call_service(
+                        "media_player",
+                        "volume_set",
+                        {"entity_id": entity_id, "volume_level": 0.15},
+                    )
 
-        session["active_zones"].append(entered_zone)
+        if session.get("degroup_on_leave", True) and previous_zone and previous_zone != entered_zone:
+            leaving_entities = self._normalize_entity_ids(self.get_zone_players(previous_zone))
+            leaving_members = [entity_id for entity_id in leaving_entities if entity_id != leader]
+            self._unjoin_players(leaving_members)
+            for entity_id in leaving_members:
+                previously_grouped.discard(entity_id)
+
+        if entered_zone not in session["active_zones"]:
+            session["active_zones"].append(entered_zone)
+        session["current_zone"] = entered_zone
+        session["last_updated"] = time.time()
+        session["grouped_entities"] = sorted(previously_grouped)
         _LOGGER.info("Musikwolke extended to zone %s (session=%s)",
                       entered_zone, session_id)
-        return {"ok": True, "session_id": session_id,
-                "active_zones": session["active_zones"]}
+        return {
+            "ok": True,
+            "session_id": session_id,
+            "active_zones": session["active_zones"],
+            "leader_entity_id": leader,
+            "mode": mode,
+            "current_zone": entered_zone,
+            "grouped_entities": session["grouped_entities"],
+        }
 
     def stop_musikwolke(self, session_id: str) -> dict:
         """Stop a Musikwolke session."""
@@ -278,20 +404,112 @@ class MediaZoneManager:
         if not session:
             return {"ok": False, "error": "Session not found"}
 
-        # Pause all zones except source
-        for zone in session["active_zones"]:
-            if zone != session["source_zone"]:
-                self.pause_zone(zone)
+        leader = str(session.get("leader_entity_id") or "").strip()
+        grouped = [entity_id for entity_id in session.get("grouped_entities", []) if entity_id != leader]
+
+        if session.get("mode") == "group" and session.get("degroup_on_leave", True):
+            self._unjoin_players(grouped)
+        else:
+            # Fallback behavior: pause all zones except source.
+            for zone in session["active_zones"]:
+                if zone != session["source_zone"]:
+                    self.pause_zone(zone)
 
         _LOGGER.info("Musikwolke stopped: session=%s", session_id)
-        return {"ok": True, "session_id": session_id}
+        return {
+            "ok": True,
+            "session_id": session_id,
+            "leader_entity_id": leader or None,
+            "ungrouped_entities": grouped,
+        }
 
     def get_musikwolke_sessions(self) -> List[Dict[str, Any]]:
         """List active Musikwolke sessions."""
-        return [
-            {"session_id": sid, **s}
-            for sid, s in self._musikwolke_sessions.items()
-        ]
+        sessions: list[dict[str, Any]] = []
+        for sid, raw in self._musikwolke_sessions.items():
+            payload = dict(raw)
+            payload["session_id"] = sid
+            payload["grouped_entities"] = list(payload.get("grouped_entities", []))
+            sessions.append(payload)
+        return sessions
+
+    def get_zone_favorites(self, zone_id: str) -> dict:
+        """Return best-effort favorite/source list for a zone's primary player."""
+        leader = self._pick_zone_leader(zone_id)
+        if not leader:
+            return {"ok": False, "error": f"No players in zone {zone_id}", "favorites": []}
+
+        state = self._get_entity_state(leader)
+        attrs = state.get("attributes", {}) if isinstance(state, dict) else {}
+        source_list = attrs.get("source_list") if isinstance(attrs.get("source_list"), list) else []
+        sonos_favs = attrs.get("sonos_favorites") if isinstance(attrs.get("sonos_favorites"), list) else []
+
+        favorites: list[str] = []
+        seen: set[str] = set()
+        for item in source_list + sonos_favs:
+            name = str(item).strip()
+            if not name or name in seen:
+                continue
+            seen.add(name)
+            favorites.append(name)
+
+        return {"ok": True, "zone_id": zone_id, "leader_entity_id": leader, "favorites": favorites}
+
+    def play_zone_favorite(self, zone_id: str, favorite_name: str,
+                           media_content_type: str = "favorite_item") -> dict:
+        """Play a Sonos/source favorite in a zone."""
+        favorite = str(favorite_name or "").strip()
+        if not favorite:
+            return {"ok": False, "error": "Missing favorite_name"}
+
+        leader = self._pick_zone_leader(zone_id)
+        if not leader:
+            return {"ok": False, "error": f"No players in zone {zone_id}"}
+
+        result = self._call_service(
+            "media_player",
+            "play_media",
+            {
+                "entity_id": leader,
+                "media_content_id": favorite,
+                "media_content_type": media_content_type or "favorite_item",
+            },
+        )
+        return {
+            "ok": bool(result.get("ok")),
+            "zone_id": zone_id,
+            "leader_entity_id": leader,
+            "favorite_name": favorite,
+            "result": result,
+        }
+
+    def search_and_play(self, zone_id: str, query: str,
+                        media_content_type: str = "music") -> dict:
+        """Play content by manual search query on the zone leader."""
+        search_query = str(query or "").strip()
+        if not search_query:
+            return {"ok": False, "error": "Missing query"}
+
+        leader = self._pick_zone_leader(zone_id)
+        if not leader:
+            return {"ok": False, "error": f"No players in zone {zone_id}"}
+
+        result = self._call_service(
+            "media_player",
+            "play_media",
+            {
+                "entity_id": leader,
+                "media_content_id": search_query,
+                "media_content_type": media_content_type or "music",
+            },
+        )
+        return {
+            "ok": bool(result.get("ok")),
+            "zone_id": zone_id,
+            "leader_entity_id": leader,
+            "query": search_query,
+            "result": result,
+        }
 
     # ------------------------------------------------------------------
     # Zone media state

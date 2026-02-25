@@ -569,6 +569,8 @@ a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
       <tr><td>Automationen</td><td><code>/api/v1/automations</code></td></tr>
       <tr><td>Media Zonen</td><td><code>/api/v1/media/zones</code></td></tr>
       <tr><td>Musikwolke</td><td><code>/api/v1/media/musikwolke</code></td></tr>
+      <tr><td>Media Favoriten</td><td><code>/api/v1/media/zones/&lt;zone_id&gt;/favorites</code></td></tr>
+      <tr><td>Media Suche</td><td><code>/api/v1/media/zones/&lt;zone_id&gt;/play-search</code></td></tr>
       <tr><td>Proaktiv</td><td><code>/api/v1/media/proactive/zone-entry</code></td></tr>
       <tr><td>Erklaerungen</td><td><code>/api/v1/explain</code></td></tr>
       <tr><td>Vorhersagen</td><td><code>/api/v1/predict</code></td></tr>
@@ -787,6 +789,7 @@ let _editingZoneId='';
 let _chatStatus=null;
 let brainMode=localStorage.getItem('styx_brain_mode')||'neuron';
 let _zoneActivityByModule={};
+let _musikwolkeSessions=[];
 const CHAT_MODEL_STORAGE_KEY='styx_chat_model';
 
 // -- Helpers --
@@ -3150,7 +3153,8 @@ async function loadMediaZones(){
       name:String((p.attributes&&p.attributes.friendly_name)||p.entity_id||''),
       state:String(p.state||''),
     })).filter((p)=>p.entity_id.startsWith('media_player.'));
-    const sessions=mk?.sessions||[];
+    const sessions=Array.isArray(mk?.sessions)?mk.sessions:[];
+    _musikwolkeSessions=sessions;
     let html='';
     html+='<div style="display:grid;grid-template-columns:1fr 1fr auto auto;gap:8px;align-items:end;margin-bottom:10px">';
     html+='<label style="font-size:11px;color:var(--dim)">Zone<select id="media-zone-select" style="width:100%;margin-top:4px;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px;color:var(--text);font-size:12px">';
@@ -3175,6 +3179,24 @@ async function loadMediaZones(){
     html+='<label style="font-size:11px;color:var(--dim)">Rolle<select id="media-role-select" style="width:100%;margin-top:4px;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px;color:var(--text);font-size:12px"><option value="primary">primary</option><option value="ambient">ambient</option><option value="aux">aux</option></select></label>';
     html+='<button id="media-assign-btn" style="height:33px;background:var(--accent);color:#fff;border:none;border-radius:6px;padding:0 12px;cursor:pointer;font-size:11px;font-weight:600">Zuordnen</button>';
     html+='</div>';
+
+    html+='<div style="display:grid;grid-template-columns:1fr 1fr auto auto;gap:8px;align-items:end;margin-bottom:10px">';
+    html+='<label style="font-size:11px;color:var(--dim)">Person ID<input id="mk-person-id" type="text" value="person.home" placeholder="person.andreas" style="width:100%;margin-top:4px;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text);font-size:12px;outline:none"></label>';
+    html+='<label style="font-size:11px;color:var(--dim)">Musikwolke Modus<select id="mk-mode-select" style="width:100%;margin-top:4px;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px;color:var(--text);font-size:12px"><option value="group">group (Sonos Join)</option><option value="follow">follow (Play/Fade)</option></select></label>';
+    html+='<label style="font-size:11px;color:var(--dim);display:flex;align-items:center;gap:6px;margin-bottom:6px"><input id="mk-degroup" type="checkbox" checked>Beim Verlassen degruppieren</label>';
+    html+='<button id="mk-start-btn" style="height:33px;background:var(--accent2);color:#fff;border:none;border-radius:6px;padding:0 12px;cursor:pointer;font-size:11px;font-weight:600">Musikwolke starten</button>';
+    html+='</div>';
+
+    html+='<div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:end;margin-bottom:10px">';
+    html+='<label style="font-size:11px;color:var(--dim)">Sonos Favorit / Quelle<select id="media-favorite-select" style="width:100%;margin-top:4px;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px;color:var(--text);font-size:12px"><option value="">Favoriten laden...</option></select></label>';
+    html+='<button id="media-favorite-play-btn" style="height:33px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:0 12px;cursor:pointer;font-size:11px;font-weight:600">Favorit spielen</button>';
+    html+='</div>';
+
+    html+='<div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:end;margin-bottom:10px">';
+    html+='<label style="font-size:11px;color:var(--dim)">Manuelle Musiksuche<input id="media-search-query" type="text" placeholder="z.B. Jazz am Abend" style="width:100%;margin-top:4px;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text);font-size:12px;outline:none"></label>';
+    html+='<button id="media-search-play-btn" style="height:33px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:0 12px;cursor:pointer;font-size:11px;font-weight:600">Suchen &amp; spielen</button>';
+    html+='</div>';
+
     if(zoneIds.length){
       html+='<table class="tbl"><tr><th>Zone</th><th>Player</th><th>Rolle</th><th></th></tr>';
       zoneIds.forEach(z=>{
@@ -3201,13 +3223,21 @@ async function loadMediaZones(){
         const sid=escapeHtml(s.session_id||'?');
         const pid=escapeHtml(s.person_id||'?');
         const zone=escapeHtml(s.current_zone||s.source_zone||'?');
-        html+=`<div class="pat"><span>${pid}</span><span class="arr">&rarr;</span><span>${zone}</span><span class="meta">${sid}</span></div>`;
+        const mode=escapeHtml(s.mode||'group');
+        html+=`<div class="pat"><span>${pid}</span><span class="arr">&rarr;</span><span>${zone}</span><span class="meta">${sid} · ${mode}</span><button class="media-stop-session" data-session="${sid}" style="margin-left:6px;background:none;border:1px solid var(--border);color:var(--red);font-size:10px;padding:3px 8px;border-radius:4px;cursor:pointer">Stop</button></div>`;
       });
     }else{
       html+='<div style="margin-top:8px;font-size:11px;color:var(--dim)">Keine aktiven Musikwolke-Sessions. Starte via Chat: &quot;Musikwolke starten&quot;</div>';
     }
     c.innerHTML=html;
     $('media-assign-btn')?.addEventListener('click',assignMediaPlayer);
+    $('mk-start-btn')?.addEventListener('click',startMusikwolkeFromPanel);
+    $('media-favorite-play-btn')?.addEventListener('click',playZoneFavoriteFromPanel);
+    $('media-search-play-btn')?.addEventListener('click',playZoneSearchFromPanel);
+    $('media-zone-select')?.addEventListener('change',async()=>{
+      const zoneId=String($('media-zone-select')?.value||'').trim();
+      await refreshZoneFavorites(zoneId);
+    });
     c.querySelectorAll('.media-unassign').forEach((btn)=>{
       btn.addEventListener('click',async(ev)=>{
         const zoneId=ev.currentTarget?.getAttribute('data-zone')||'';
@@ -3216,7 +3246,124 @@ async function loadMediaZones(){
         await unassignMediaPlayer(zoneId,entityId);
       });
     });
+    c.querySelectorAll('.media-stop-session').forEach((btn)=>{
+      btn.addEventListener('click',async(ev)=>{
+        const sid=String(ev.currentTarget?.getAttribute('data-session')||'').trim();
+        if(!sid)return;
+        await stopMusikwolkeSession(sid);
+      });
+    });
+    await refreshZoneFavorites(String($('media-zone-select')?.value||'').trim());
   }catch(e){c.innerHTML='<div class="empty">Media Zones nicht erreichbar</div>'}
+}
+
+async function refreshZoneFavorites(zoneId){
+  const sel=$('media-favorite-select');
+  if(!sel)return;
+  const zid=String(zoneId||'').trim();
+  if(!zid){
+    sel.innerHTML='<option value="">Zone waehlen...</option>';
+    return;
+  }
+  const data=await api('/api/v1/media/zones/'+encodeURIComponent(zid)+'/favorites');
+  const favorites=Array.isArray(data?.favorites)?data.favorites:[];
+  if(!favorites.length){
+    sel.innerHTML='<option value="">Keine Favoriten gefunden</option>';
+    return;
+  }
+  sel.innerHTML=favorites.map((fav)=>`<option value="${escapeHtml(fav)}">${escapeHtml(fav)}</option>`).join('');
+}
+
+async function startMusikwolkeFromPanel(){
+  const zoneId=String($('media-zone-select')?.value||'').trim();
+  const personId=String($('mk-person-id')?.value||'').trim();
+  const mode=String($('mk-mode-select')?.value||'group').trim()||'group';
+  const degroup=!!$('mk-degroup')?.checked;
+  if(!zoneId||!personId){
+    addHistory('⚠️ Musikwolke: Zone und Person-ID benoetigt');
+    return;
+  }
+  try{
+    const r=await fetch(API+'/api/v1/media/musikwolke/start',withAuth({
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({person_id:personId,source_zone:zoneId,mode,degroup_on_leave:degroup}),
+    }));
+    const data=await r.json().catch(()=>null);
+    if(!r.ok||data?.ok===false){
+      throw new Error(data?.error||('HTTP '+r.status));
+    }
+    addHistory('Musikwolke gestartet: '+personId+' in '+zoneId);
+    await loadMediaZones();
+  }catch(e){
+    addHistory('⚠️ Musikwolke Start fehlgeschlagen: '+escapeHtml(e.message||'unbekannt'));
+  }
+}
+
+async function stopMusikwolkeSession(sessionId){
+  const sid=String(sessionId||'').trim();
+  if(!sid)return;
+  try{
+    const r=await fetch(API+'/api/v1/media/musikwolke/'+encodeURIComponent(sid)+'/stop',withAuth({
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:'{}',
+    }));
+    const data=await r.json().catch(()=>null);
+    if(!r.ok||data?.ok===false){
+      throw new Error(data?.error||('HTTP '+r.status));
+    }
+    addHistory('Musikwolke gestoppt: '+sid);
+    await loadMediaZones();
+  }catch(e){
+    addHistory('⚠️ Musikwolke Stop fehlgeschlagen: '+escapeHtml(e.message||'unbekannt'));
+  }
+}
+
+async function playZoneFavoriteFromPanel(){
+  const zoneId=String($('media-zone-select')?.value||'').trim();
+  const favorite=String($('media-favorite-select')?.value||'').trim();
+  if(!zoneId||!favorite){
+    addHistory('⚠️ Favorit: Zone und Favorit waehlen');
+    return;
+  }
+  try{
+    const r=await fetch(API+'/api/v1/media/zones/'+encodeURIComponent(zoneId)+'/play-favorite',withAuth({
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({favorite_name:favorite}),
+    }));
+    const data=await r.json().catch(()=>null);
+    if(!r.ok||data?.ok===false){
+      throw new Error(data?.error||('HTTP '+r.status));
+    }
+    addHistory('Favorit gestartet: '+favorite+' ('+zoneId+')');
+  }catch(e){
+    addHistory('⚠️ Favorit konnte nicht gestartet werden: '+escapeHtml(e.message||'unbekannt'));
+  }
+}
+
+async function playZoneSearchFromPanel(){
+  const zoneId=String($('media-zone-select')?.value||'').trim();
+  const query=String($('media-search-query')?.value||'').trim();
+  if(!zoneId||!query){
+    addHistory('⚠️ Suche: Zone und Suchtext benoetigt');
+    return;
+  }
+  try{
+    const r=await fetch(API+'/api/v1/media/zones/'+encodeURIComponent(zoneId)+'/play-search',withAuth({
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({query}),
+    }));
+    const data=await r.json().catch(()=>null);
+    if(!r.ok||data?.ok===false){
+      throw new Error(data?.error||('HTTP '+r.status));
+    }
+    addHistory('Musiksuche gestartet: '+query+' ('+zoneId+')');
+  }catch(e){
+    addHistory('⚠️ Musiksuche fehlgeschlagen: '+escapeHtml(e.message||'unbekannt'));
+  }
 }
 
 async function assignMediaPlayer(){
@@ -3318,13 +3465,7 @@ async function loadBirthdayPanel(){
 async function loadNewsWarnings(){
   const c=$('news-warnings-panel');if(!c)return;
   try{
-    const [newsRes,warnRes]=await Promise.allSettled([
-      api('/api/v1/capabilities'),
-      fetch(API+'/api/v1/media/proactive/zone-entry',withAuth({method:'GET'}))
-        .then(r=>r.ok?r.json():null)
-        .catch(()=>null)
-    ]);
-    const caps=(newsRes.status==='fulfilled'?newsRes.value:null);
+    const caps=await api('/api/v1/capabilities');
     let html='<div style="font-size:11px;color:var(--dim)">';
     html+='<p><strong>DuckDuckGo-Suche:</strong> Styx kann das Web durchsuchen (kein API-Key noetig)</p>';
     html+='<p style="margin-top:4px"><strong>Nachrichten:</strong> Tagesschau + Spiegel via RSS (15-Min-Cache)</p>';

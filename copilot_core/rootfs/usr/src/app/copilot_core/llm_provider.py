@@ -10,7 +10,7 @@ Config (addon options -> conversation section):
   ollama_model:     qwen3:0.6b
   cloud_api_url:    https://ollama.com/v1  (or another OpenAI-compatible /v1 endpoint)
   cloud_api_key:    sk-...
-  cloud_model:      gpt-oss:20b / gpt-4o-mini (provider specific)
+  cloud_model:      qwen3.5:cloud / gpt-4o-mini (provider specific)
   prefer_local:     true  (legacy toggle, maps to primary_provider=offline)
 
 Runtime routing (stored in /data/llm_runtime_settings.json):
@@ -53,7 +53,6 @@ _DEFAULT_OLLAMA_CLOUD_MODEL = "qwen3.5:cloud"
 _DEFAULT_OLLAMA_CLOUD_MODELS = (
     "qwen3.5:cloud",
     "qwen3:cloud",
-    "gpt-oss:20b",
 )
 _DEFAULT_OFFLINE_MODELS = ("qwen3:0.6b", "qwen3:4b", "llama3.2:3b", "mistral:7b")
 _RUNTIME_SETTINGS_PATH = "/data/llm_runtime_settings.json"

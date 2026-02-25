@@ -19,7 +19,7 @@ configuration:
     description: API key for the fallback cloud endpoint
   conversation_cloud_model:
     name: Cloud Model (Fallback)
-    description: Model name to use on the fallback cloud endpoint (e.g. gpt-oss:20b on Ollama Cloud, gpt-4o-mini on OpenAI-compatible APIs)
+    description: Model name to use on the fallback cloud endpoint (e.g. qwen3.5:cloud on Ollama Cloud, gpt-4o-mini on OpenAI-compatible APIs)
   conversation_prefer_local:
     name: Prefer Local Ollama
     description: Try local Ollama first and use cloud fallback only when local is unavailable

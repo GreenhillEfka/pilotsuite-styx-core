@@ -1,5 +1,28 @@
 # Release Notes - PilotSuite Core
 
+## [8.9.0] - 2026-02-25 — MUSIKWOLKE SONOS FLOW + REQUEST HARDENING
+
+### Added
+- New media control endpoints for zone-based UX:
+  - `GET /api/v1/media/zones/<zone_id>/favorites`
+  - `POST /api/v1/media/zones/<zone_id>/play-favorite`
+  - `POST /api/v1/media/zones/<zone_id>/play-search`
+- Musikwolke start API now accepts:
+  - `mode` (`group` or `follow`)
+  - `degroup_on_leave`
+  - `leader_entity_id`
+
+### Improved
+- Musikwolke flow now supports leader-based group join/unjoin and tracks grouped members.
+- Proactive zone-entry auto-starts Musikwolke when media is already active in the entered zone.
+- Dashboard media section adds one-click controls for:
+  - start/stop Musikwolke
+  - Sonos favorites/sources
+  - manual music search playback.
+- Ollama Cloud defaults now use `qwen3.5:cloud` as the add-on default cloud model.
+- Haushalt overview uses cached news/warnings fetches to reduce queue depth pressure.
+- Waitress defaults updated for bursty dashboard traffic (`threads=16`).
+
 ## [8.8.0] - 2026-02-25 — REACT-FIRST HABITUS & MODEL CONTROL
 
 ### Added

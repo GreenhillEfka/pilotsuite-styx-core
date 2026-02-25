@@ -50,7 +50,7 @@ Siehe: [pilotsuite-styx-ha Installation](https://github.com/GreenhillEfka/pilots
 Im Add-on unter **Configuration**:
 - `conversation_cloud_api_url` (z. B. `https://ollama.com/v1` oder `https://api.openai.com/v1`)
 - `conversation_cloud_api_key`
-- `conversation_cloud_model` (z. B. `gpt-oss:20b` fuer Ollama Cloud, `gpt-4o-mini` fuer OpenAI-kompatible APIs)
+- `conversation_cloud_model` (z. B. `qwen3.5:cloud` fuer Ollama Cloud, `gpt-4o-mini` fuer OpenAI-kompatible APIs)
 - `conversation_prefer_local` (`true` = Ollama zuerst, dann Cloud-Fallback)
 
 Hinweis:

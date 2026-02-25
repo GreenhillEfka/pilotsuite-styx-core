@@ -389,7 +389,10 @@ def start_musikwolke():
 
         {
             "person_id": "person.alice",
-            "source_zone": "living_room"
+            "source_zone": "living_room",
+            "mode": "group",                  // optional: group|follow
+            "degroup_on_leave": true,         // optional
+            "leader_entity_id": "media_player.sonos_living_room" // optional
         }
 
     Response::
@@ -408,6 +411,9 @@ def start_musikwolke():
     data = request.get_json(silent=True) or {}
     person_id = data.get("person_id", "").strip()
     source_zone = data.get("source_zone", "").strip()
+    mode = str(data.get("mode", "group")).strip().lower() or "group"
+    degroup_on_leave = bool(data.get("degroup_on_leave", True))
+    leader_entity_id = str(data.get("leader_entity_id", "")).strip() or None
 
     if not person_id:
         return jsonify({
@@ -422,16 +428,28 @@ def start_musikwolke():
         }), 400
 
     try:
-        result = mgr.start_musikwolke(person_id=person_id, source_zone=source_zone)
+        result = mgr.start_musikwolke(
+            person_id=person_id,
+            source_zone=source_zone,
+            mode=mode,
+            degroup_on_leave=degroup_on_leave,
+            leader_entity_id=leader_entity_id,
+        )
     except Exception as exc:
         _LOGGER.exception("Failed to start Musikwolke session")
         return jsonify({"ok": False, "error": str(exc)}), 500
+
+    if isinstance(result, dict) and result.get("ok") is False:
+        return jsonify(result), 400
 
     return jsonify({
         "ok": True,
         "session_id": result.get("session_id") if isinstance(result, dict) else result,
         "person_id": person_id,
         "source_zone": source_zone,
+        "mode": mode,
+        "degroup_on_leave": degroup_on_leave,
+        "leader_entity_id": leader_entity_id,
     }), 201
 
 
@@ -462,15 +480,19 @@ def update_musikwolke(session_id: str):
         }), 400
 
     try:
-        mgr.update_musikwolke(session_id=session_id, entered_zone=entered_zone)
+        update_result = mgr.update_musikwolke(session_id=session_id, entered_zone=entered_zone)
     except Exception as exc:
         _LOGGER.exception("Failed to update Musikwolke session %s", session_id)
         return jsonify({"ok": False, "error": str(exc)}), 500
+
+    if isinstance(update_result, dict) and update_result.get("ok") is False:
+        return jsonify(update_result), 400
 
     return jsonify({
         "ok": True,
         "session_id": session_id,
         "entered_zone": entered_zone,
+        "details": update_result if isinstance(update_result, dict) else {},
     })
 
 
@@ -488,15 +510,19 @@ def stop_musikwolke(session_id: str):
         return err
 
     try:
-        mgr.stop_musikwolke(session_id=session_id)
+        stop_result = mgr.stop_musikwolke(session_id=session_id)
     except Exception as exc:
         _LOGGER.exception("Failed to stop Musikwolke session %s", session_id)
         return jsonify({"ok": False, "error": str(exc)}), 500
+
+    if isinstance(stop_result, dict) and stop_result.get("ok") is False:
+        return jsonify(stop_result), 400
 
     return jsonify({
         "ok": True,
         "session_id": session_id,
         "stopped": True,
+        "details": stop_result if isinstance(stop_result, dict) else {},
     })
 
 
@@ -522,6 +548,86 @@ def list_musikwolke_sessions():
         return jsonify({"ok": False, "error": str(exc)}), 500
 
     return jsonify({"ok": True, "sessions": sessions})
+
+
+@media_zones_bp.route("/zones/<zone_id>/favorites", methods=["GET"])
+@require_token
+def get_zone_favorites(zone_id: str):
+    """Return favorites/source list for zone leader player."""
+    mgr, err = _require_media_mgr()
+    if err:
+        return err
+
+    try:
+        result = mgr.get_zone_favorites(zone_id)
+    except Exception as exc:
+        _LOGGER.exception("Failed to read favorites for zone %s", zone_id)
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+    if not isinstance(result, dict):
+        return jsonify({"ok": False, "error": "invalid_response"}), 500
+    status = 200 if result.get("ok") else 400
+    return jsonify(result), status
+
+
+@media_zones_bp.route("/zones/<zone_id>/play-favorite", methods=["POST"])
+@require_token
+def play_zone_favorite(zone_id: str):
+    """Play favorite on a zone leader player."""
+    mgr, err = _require_media_mgr()
+    if err:
+        return err
+
+    data = request.get_json(silent=True) or {}
+    favorite_name = str(data.get("favorite_name", "")).strip()
+    media_content_type = str(data.get("media_content_type", "favorite_item")).strip() or "favorite_item"
+    if not favorite_name:
+        return jsonify({"ok": False, "error": "Missing required field 'favorite_name'"}), 400
+
+    try:
+        result = mgr.play_zone_favorite(
+            zone_id=zone_id,
+            favorite_name=favorite_name,
+            media_content_type=media_content_type,
+        )
+    except Exception as exc:
+        _LOGGER.exception("Failed to play favorite in zone %s", zone_id)
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+    if not isinstance(result, dict):
+        return jsonify({"ok": False, "error": "invalid_response"}), 500
+    status = 200 if result.get("ok") else 400
+    return jsonify(result), status
+
+
+@media_zones_bp.route("/zones/<zone_id>/play-search", methods=["POST"])
+@require_token
+def play_zone_search(zone_id: str):
+    """Play content by query on zone leader player."""
+    mgr, err = _require_media_mgr()
+    if err:
+        return err
+
+    data = request.get_json(silent=True) or {}
+    query = str(data.get("query", "")).strip()
+    media_content_type = str(data.get("media_content_type", "music")).strip() or "music"
+    if not query:
+        return jsonify({"ok": False, "error": "Missing required field 'query'"}), 400
+
+    try:
+        result = mgr.search_and_play(
+            zone_id=zone_id,
+            query=query,
+            media_content_type=media_content_type,
+        )
+    except Exception as exc:
+        _LOGGER.exception("Failed to start media search in zone %s", zone_id)
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+    if not isinstance(result, dict):
+        return jsonify({"ok": False, "error": "invalid_response"}), 500
+    status = 200 if result.get("ok") else 400
+    return jsonify(result), status
 
 
 # ===================================================================
@@ -586,16 +692,40 @@ def proactive_zone_entry():
 
     # Also update active Musikwolke sessions for this person
     musikwolke_updated = False
+    musikwolke_started = False
+    musikwolke_session_id = ""
     if _media_mgr is not None:
         try:
             sessions = _media_mgr.get_musikwolke_sessions()
+            matched = False
             for sess in (sessions if isinstance(sessions, list) else []):
                 sess_person = sess.get("person_id", "") if isinstance(sess, dict) else ""
                 sess_id = sess.get("session_id", "") if isinstance(sess, dict) else ""
                 if sess_person == person_id and sess_id:
                     _media_mgr.update_musikwolke(session_id=sess_id, entered_zone=zone_id)
                     musikwolke_updated = True
+                    matched = True
                     _LOGGER.info("Musikwolke session %s: %s -> %s", sess_id, person_id, zone_id)
+            # Auto-start Musikwolke when no session exists and media is already active in the entered zone.
+            if not matched:
+                zone_state = _media_mgr.get_zone_media_state(zone_id)
+                if isinstance(zone_state, dict) and str(zone_state.get("state")) == "playing":
+                    started = _media_mgr.start_musikwolke(
+                        person_id=person_id,
+                        source_zone=zone_id,
+                        mode=str(data.get("mode", "group")).strip().lower() or "group",
+                        degroup_on_leave=bool(data.get("degroup_on_leave", True)),
+                        leader_entity_id=str(data.get("leader_entity_id", "")).strip() or None,
+                    )
+                    if isinstance(started, dict) and started.get("ok"):
+                        musikwolke_started = True
+                        musikwolke_session_id = str(started.get("session_id", ""))
+                        _LOGGER.info(
+                            "Auto-started Musikwolke session %s for %s in %s",
+                            musikwolke_session_id,
+                            person_id,
+                            zone_id,
+                        )
         except Exception:
             _LOGGER.debug("Failed to update Musikwolke on zone entry", exc_info=True)
 
@@ -605,6 +735,8 @@ def proactive_zone_entry():
         "zone_id": zone_id,
         "suggestions": suggestions,
         "musikwolke_updated": musikwolke_updated,
+        "musikwolke_started": musikwolke_started,
+        "musikwolke_session_id": musikwolke_session_id or None,
     })
 
 

@@ -51,8 +51,8 @@ def _waitress_int_env(name: str, default: int, minimum: int, maximum: int) -> in
 def _build_waitress_server_config() -> dict[str, int]:
     """Resolve waitress server parameters with production-safe defaults."""
     return {
-        # Default waitress threads=4 can overload quickly under dashboard fan-out.
-        "threads": _waitress_int_env("WAITRESS_THREADS", 12, 4, 128),
+        # Dashboard and HA polling can spike concurrent requests; 16 keeps queue depth stable.
+        "threads": _waitress_int_env("WAITRESS_THREADS", 16, 4, 128),
         "connection_limit": _waitress_int_env("WAITRESS_CONNECTION_LIMIT", 300, 50, 5000),
         "backlog": _waitress_int_env("WAITRESS_BACKLOG", 1024, 128, 65535),
         "channel_timeout": _waitress_int_env("WAITRESS_CHANNEL_TIMEOUT", 120, 30, 3600),

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import time
+import threading
 
 from flask import Blueprint, jsonify, current_app
 
@@ -18,6 +19,14 @@ from copilot_core.api.security import require_token
 _LOGGER = logging.getLogger(__name__)
 
 haushalt_bp = Blueprint("haushalt", __name__, url_prefix="/api/v1/haushalt")
+
+_NETWORK_CACHE_TTL_S = 300
+_network_cache_lock = threading.Lock()
+_network_cache: dict[str, object] = {
+    "ts": 0.0,
+    "news": {"items": [], "error": "not_initialized"},
+    "warnings": {"warnings": [], "error": "not_initialized"},
+}
 
 
 def _first_weather_snapshot() -> dict:
@@ -46,6 +55,46 @@ def _first_weather_snapshot() -> dict:
         return {}
 
 
+def _cached_news_and_warnings(web_search_service) -> tuple[dict, dict]:
+    """Read news/warnings with short-lived cache to protect waitress queue depth."""
+    if not web_search_service:
+        return {"items": [], "error": "not_initialized"}, {"warnings": [], "error": "not_initialized"}
+
+    now = time.time()
+    cached_ts = float(_network_cache.get("ts", 0.0) or 0.0)
+    if now - cached_ts < _NETWORK_CACHE_TTL_S:
+        return (
+            dict(_network_cache.get("news", {"items": []})),
+            dict(_network_cache.get("warnings", {"warnings": []})),
+        )
+
+    with _network_cache_lock:
+        cached_ts = float(_network_cache.get("ts", 0.0) or 0.0)
+        if now - cached_ts < _NETWORK_CACHE_TTL_S:
+            return (
+                dict(_network_cache.get("news", {"items": []})),
+                dict(_network_cache.get("warnings", {"warnings": []})),
+            )
+
+        news_data = {"items": [], "error": "not_initialized"}
+        warnings_data = {"warnings": [], "error": "not_initialized"}
+        try:
+            news_data = web_search_service.get_news(max_items=8)
+        except Exception as exc:
+            _LOGGER.debug("Could not load household news: %s", exc)
+            news_data = {"items": [], "error": str(exc)}
+        try:
+            warnings_data = web_search_service.get_regional_warnings()
+        except Exception as exc:
+            _LOGGER.debug("Could not load household warnings: %s", exc)
+            warnings_data = {"warnings": [], "error": str(exc)}
+
+        _network_cache["ts"] = now
+        _network_cache["news"] = news_data
+        _network_cache["warnings"] = warnings_data
+        return dict(news_data), dict(warnings_data)
+
+
 @haushalt_bp.route("/overview", methods=["GET"])
 @require_token
 def haushalt_overview():
@@ -64,19 +113,7 @@ def haushalt_overview():
     waste_data = waste_service.get_status() if waste_service else {"ok": False, "error": "not initialized"}
     birthday_data = birthday_service.get_status() if birthday_service else {"ok": False, "error": "not initialized"}
     weather_data = _first_weather_snapshot()
-    news_data = {"items": [], "error": "not_initialized"}
-    warnings_data = {"warnings": [], "error": "not_initialized"}
-    if web_search_service:
-        try:
-            news_data = web_search_service.get_news(max_items=8)
-        except Exception as exc:
-            _LOGGER.debug("Could not load household news: %s", exc)
-            news_data = {"items": [], "error": str(exc)}
-        try:
-            warnings_data = web_search_service.get_regional_warnings()
-        except Exception as exc:
-            _LOGGER.debug("Could not load household warnings: %s", exc)
-            warnings_data = {"warnings": [], "error": str(exc)}
+    news_data, warnings_data = _cached_news_and_warnings(web_search_service)
 
     system_health = {"status": "unknown"}
     if system_health_service:

@@ -1,5 +1,34 @@
 # Changelog - PilotSuite Core Add-on
 
+## [8.9.0] - 2026-02-25 — MUSIKWOLKE SONOS FLOW + LOAD HARDENING
+
+### Added
+- Media API extensions for zone-native playback control:
+  - `GET /api/v1/media/zones/<zone_id>/favorites`
+  - `POST /api/v1/media/zones/<zone_id>/play-favorite`
+  - `POST /api/v1/media/zones/<zone_id>/play-search`
+- Musikwolke session control now supports policy parameters:
+  - `mode` (`group` | `follow`)
+  - `degroup_on_leave`
+  - `leader_entity_id`
+- Proactive zone-entry flow can now auto-start Musikwolke when a person enters a zone with active playback.
+
+### Changed
+- `MediaZoneManager` upgraded for Sonos-style grouping:
+  - joins new zone players to a leader (`media_player.join`)
+  - optional de-group on zone leave (`media_player.unjoin`)
+  - tracks grouped entities + current zone per session.
+- Ollama Cloud add-on defaults aligned to `qwen3.5:cloud` (instead of legacy non-`:cloud` defaults).
+- Dashboard media panel upgraded:
+  - direct Musikwolke start/stop controls
+  - zone favorite/source dropdown
+  - manual search-and-play action.
+
+### Improved
+- Haushalt overview now caches external news/warnings requests to reduce blocking request pressure.
+- Waitress default thread pool increased from `12` to `16` for better burst handling on dashboard fan-out.
+- Dashboard info table now includes new media favorites/search endpoints.
+
 ## [8.8.0] - 2026-02-25 — REACT-FIRST HABITUS MGMT + CLOUD MODEL UX
 
 ### Added
@@ -37,7 +66,7 @@
 
 ### Improved
 - Waitress runtime tuning now supports bounded env-based worker config:
-  - `WAITRESS_THREADS` (default `12`)
+  - `WAITRESS_THREADS` (default `16`)
   - `WAITRESS_CONNECTION_LIMIT` (default `300`)
   - `WAITRESS_BACKLOG` (default `1024`)
   - `WAITRESS_CHANNEL_TIMEOUT` (default `120`)

@@ -18,7 +18,7 @@ def test_waitress_config_defaults(monkeypatch):
     main = importlib.import_module("main")
     cfg = main._build_waitress_server_config()
 
-    assert cfg["threads"] == 12
+    assert cfg["threads"] == 16
     assert cfg["connection_limit"] == 300
     assert cfg["backlog"] == 1024
     assert cfg["channel_timeout"] == 120

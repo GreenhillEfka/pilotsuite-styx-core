@@ -34,9 +34,9 @@ lovelace:
 | `auth_token` | _(leer)_ | API-Token fuer Core + Dashboard |
 | `conversation_ollama_url` | `http://localhost:11435` | lokaler Ollama-Endpunkt |
 | `conversation_ollama_model` | `qwen3:0.6b` | Standardmodell (empfohlen) |
-| `conversation_cloud_api_url` | _(leer)_ | externer Fallback (`https://ollama.com/v1`, OpenAI-kompatibel) |
+| `conversation_cloud_api_url` | `https://ollama.com/v1` | externer Fallback (`/v1`, OpenAI-kompatibel) |
 | `conversation_cloud_api_key` | _(leer)_ | API-Key fuer externen Fallback |
-| `conversation_cloud_model` | `gpt-4o-mini` | Cloud-Modell (wird fuer Ollama Cloud kompatibel gemappt) |
+| `conversation_cloud_model` | `qwen3.5:cloud` | Cloud-Modell (Ollama Cloud Default) |
 | `conversation_prefer_local` | `true` | lokal zuerst, dann Cloud-Fallback |
 
 **Wo trage ich den Cloud API Key ein?**  
@@ -52,5 +52,5 @@ Im Add-on unter **Configuration** in `conversation_cloud_api_key`.
 ## Troubleshooting
 
 - **LLM nicht erreichbar**: Add-on Logs prüfen, dann `/chat/status` aufrufen.
-- **`model not found`**: lokales Modell (`qwen3:0.6b`) setzen oder Cloud-Fallback korrekt konfigurieren.
+- **`model not found`**: lokales Modell (`qwen3:0.6b`) setzen oder Cloud-Fallback korrekt konfigurieren (`qwen3.5:cloud` auf Ollama Cloud).
 - **Dashboards fehlen**: Integration-Service `ai_home_copilot.show_installation_guide` ausführen und Anleitung übernehmen.

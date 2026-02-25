@@ -3,6 +3,16 @@
 This file exists so Home Assistant can show an add-on changelog.
 For full history, see the repository-level `CHANGELOG.md`.
 
+## 8.9.0
+- Musikwolke erweitert: Leader-Join/Unjoin, `mode` (`group|follow`), `degroup_on_leave`, `leader_entity_id`.
+- Neue Media-Endpunkte fuer Zone-Favoriten und Suche:
+  - `GET /api/v1/media/zones/<zone_id>/favorites`
+  - `POST /api/v1/media/zones/<zone_id>/play-favorite`
+  - `POST /api/v1/media/zones/<zone_id>/play-search`
+- Proaktive Zone-Entry-Logik startet Musikwolke automatisch bei aktiver Wiedergabe.
+- Haushalt-API entlastet (TTL-Cache fuer News/Warnungen), Waitress-Tuning fuer Lastspitzen.
+- Cloud-Default im Add-on auf `qwen3.5:cloud` harmonisiert.
+
 ## 8.4.1
 - Conversation API wiederhergestellt (vollständige `chat`- und `v1`-Routen) inkl. Alias-Handling.
 - OpenAI-Compat-Blueprint (`/v1/models`, `/v1/chat/completions`) wird beim App-Start registriert.
