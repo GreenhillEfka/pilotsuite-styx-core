@@ -3,6 +3,11 @@
 This file exists so Home Assistant can show an add-on changelog.
 For full history, see the repository-level `CHANGELOG.md`.
 
+## 8.9.1
+- Versionsabgleich auf `8.9.1` in `config.yaml`, `manifest.json` und Laufzeit-`VERSION`.
+- Add-on-Doku (`DOCS.md`) auf aktuelle Produktionspfade und Modelldefaults aktualisiert.
+- Setup-Hinweis um HA-Neustart nach HACS/Add-on-Updates ergaenzt.
+
 ## 8.9.0
 - Musikwolke erweitert: Leader-Join/Unjoin, `mode` (`group|follow`), `degroup_on_leave`, `leader_entity_id`.
 - Neue Media-Endpunkte fuer Zone-Favoriten und Suche:

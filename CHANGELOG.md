@@ -1,5 +1,21 @@
 # Changelog - PilotSuite Core Add-on
 
+## [8.9.1] - 2026-02-25 — DOCS + VERSION LINE HARDENING
+
+### Changed
+- Version line synchronized to `8.9.1` across add-on runtime files:
+  - `copilot_core/config.yaml`
+  - `copilot_core/manifest.json`
+  - `copilot_core/rootfs/usr/src/app/VERSION`
+- Add-on installation docs refreshed for current production defaults:
+  - Core API on `:8909`
+  - local model `qwen3:0.6b`
+  - cloud fallback `qwen3.5:cloud` via `https://ollama.com/v1`
+
+### Improved
+- Setup instructions now explicitly align with paired HA integration release line.
+- Troubleshooting guidance now clarifies expected post-update HA restart requirements.
+
 ## [8.9.0] - 2026-02-25 — MUSIKWOLKE SONOS FLOW + LOAD HARDENING
 
 ### Added

@@ -1,56 +1,47 @@
-# PilotSuite Core Add-on
+# PilotSuite Core Add-on (Styx)
 
-## Exakte Installation
+Stand: **v8.9.1**
 
-1. **Add-on installieren**: Add-on Store -> Menu (⋮) -> Repositories ->  
-   `https://github.com/GreenhillEfka/pilotsuite-styx-core`
-2. **PilotSuite Core starten** und auf `running` warten.
-3. **HACS Integration installieren**:  
-   `https://github.com/GreenhillEfka/pilotsuite-styx-ha`
-4. **Integration hinzufügen**: Settings -> Devices & Services -> Add Integration -> **PilotSuite**.
-5. **Dashboard-Wiring prüfen** (optional manuell):
+## Installation (Production)
 
-```yaml
-lovelace:
-  dashboards:
-    copilot-pilotsuite:
-      mode: yaml
-      title: "PilotSuite - Styx"
-      icon: mdi:robot-outline
-      show_in_sidebar: true
-      filename: "pilotsuite-styx/pilotsuite_dashboard_latest.yaml"
-    copilot-habitus-zones:
-      mode: yaml
-      title: "PilotSuite - Habitus Zones"
-      icon: mdi:layers-outline
-      show_in_sidebar: true
-      filename: "pilotsuite-styx/habitus_zones_dashboard_latest.yaml"
-```
+1. Home Assistant → **Einstellungen** → **Add-ons** → **Add-on Store**
+2. Menü (⋮) → **Repositories**
+3. Repository hinzufügen: `https://github.com/GreenhillEfka/pilotsuite-styx-core`
+4. **PilotSuite Core** installieren und starten
+5. Health prüfen: `http://<HA-IP>:8909/health`
 
-## Konfiguration (wichtig)
+## Passende HACS Integration
+
+Zusätzlich installieren:
+- `https://github.com/GreenhillEfka/pilotsuite-styx-ha`
+- Integration: **PilotSuite - Styx**
+- Verbindung zur Core API: Port `8909`
+
+## Wichtige Konfigurationsfelder
 
 | Option | Default | Zweck |
 |---|---|---|
-| `auth_token` | _(leer)_ | API-Token fuer Core + Dashboard |
-| `conversation_ollama_url` | `http://localhost:11435` | lokaler Ollama-Endpunkt |
-| `conversation_ollama_model` | `qwen3:0.6b` | Standardmodell (empfohlen) |
-| `conversation_cloud_api_url` | `https://ollama.com/v1` | externer Fallback (`/v1`, OpenAI-kompatibel) |
-| `conversation_cloud_api_key` | _(leer)_ | API-Key fuer externen Fallback |
-| `conversation_cloud_model` | `qwen3.5:cloud` | Cloud-Modell (Ollama Cloud Default) |
-| `conversation_prefer_local` | `true` | lokal zuerst, dann Cloud-Fallback |
+| `auth_token` | leer | Optionaler API-Schutz |
+| `conversation_ollama_url` | `http://localhost:11435` | Lokaler Ollama-Endpunkt |
+| `conversation_ollama_model` | `qwen3:0.6b` | Primäres Offline-Modell |
+| `conversation_cloud_api_url` | `https://ollama.com/v1` | Cloud-Fallback-Endpunkt |
+| `conversation_cloud_api_key` | leer | API-Key für Fallback |
+| `conversation_cloud_model` | `qwen3.5:cloud` | Primäres Cloud-Modell |
+| `conversation_prefer_local` | `true` | Lokal zuerst, Cloud nur Fallback |
 
-**Wo trage ich den Cloud API Key ein?**  
-Im Add-on unter **Configuration** in `conversation_cloud_api_key`.
+## Betriebschecks
 
-## Betriebs-Checks
-
-- Core API: `GET /health`
-- Chat-Status: `GET /chat/status`
-- OpenAI-kompatibel: `POST /v1/chat/completions`
-- Selbstreparatur: `POST /api/v1/agent/self-heal`
+- `GET /health`
+- `GET /chat/status`
+- `GET /api/v1/status`
+- `POST /v1/chat/completions`
 
 ## Troubleshooting
 
-- **LLM nicht erreichbar**: Add-on Logs prüfen, dann `/chat/status` aufrufen.
-- **`model not found`**: lokales Modell (`qwen3:0.6b`) setzen oder Cloud-Fallback korrekt konfigurieren (`qwen3.5:cloud` auf Ollama Cloud).
-- **Dashboards fehlen**: Integration-Service `ai_home_copilot.show_installation_guide` ausführen und Anleitung übernehmen.
+- `model not found`: lokales Modell pullen oder Cloud-Fallback korrekt setzen.
+- `Kein LLM-Provider verfügbar`: `conversation_ollama_url` und/oder `conversation_cloud_*` prüfen.
+- Nach HACS/Add-on Updates ist ein HA-Neustart oft erforderlich (`Restart required`).
+
+## Hinweis
+
+Die vollständige End-to-End-Setup-Anleitung (inkl. HA-Konfigflow) ist im HA-Repo unter `SETUP.md` dokumentiert.
