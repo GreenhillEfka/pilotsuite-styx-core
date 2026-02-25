@@ -4083,3 +4083,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.api.v1.lambdalabs import lambdalabs_bp
         app.register_blueprint(lambdalabs_bp)
     except: pass
+    try:
+        from copilot_core.api.v1.runpod import runpod_bp
+        app.register_blueprint(runpod_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.paperspacecore import paperspacecore_bp
+        app.register_blueprint(paperspacecore_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.vastai import vastai_bp
+        app.register_blueprint(vastai_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.massedcompute import massedcompute_bp
+        app.register_blueprint(massedcompute_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.gpush import gpush_bp
+        app.register_blueprint(gpush_bp)
+    except: pass
