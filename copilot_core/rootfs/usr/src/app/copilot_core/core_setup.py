@@ -3123,3 +3123,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.api.v1.shynet import shynet_bp
         app.register_blueprint(shynet_bp)
     except: pass
+    try:
+        from copilot_core.api.v1.cloudflare import cloudflare_bp
+        app.register_blueprint(cloudflare_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.aws import aws_bp
+        app.register_blueprint(aws_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.gcp import gcp_bp
+        app.register_blueprint(gcp_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.azure import azure_bp
+        app.register_blueprint(azure_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.digitalocean import digitalocean_bp
+        app.register_blueprint(digitalocean_bp)
+    except: pass
