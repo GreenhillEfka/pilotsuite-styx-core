@@ -2923,3 +2923,23 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         from copilot_core.api.v1.qdrant import qdrant_bp
         app.register_blueprint(qdrant_bp)
     except: pass
+    try:
+        from copilot_core.api.v1.milvus import milvus_bp
+        app.register_blueprint(milvus_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.pinecone import pinecone_bp
+        app.register_blueprint(pinecone_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.weaviate import weaviate_bp
+        app.register_blueprint(weaviate_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.chroma import chroma_bp
+        app.register_blueprint(chroma_bp)
+    except: pass
+    try:
+        from copilot_core.api.v1.annoy import annoy_bp
+        app.register_blueprint(annoy_bp)
+    except: pass
