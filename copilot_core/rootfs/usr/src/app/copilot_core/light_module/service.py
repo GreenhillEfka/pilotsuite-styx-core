@@ -758,7 +758,7 @@ class LightModuleService:
         # Update state to reflect preset
         state = self._states.get(zone_id)
         if state is not None:
-            state.brightness_pct = preset["color_temp_k"]  # Will be overridden
+            state.brightness_pct = preset["brightness_pct"]
             state.color_temp_k = preset["color_temp_k"]
             state.should_be_on = True
             state.reason = f"preset:{preset_name}"

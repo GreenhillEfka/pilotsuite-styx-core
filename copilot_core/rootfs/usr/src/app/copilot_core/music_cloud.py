@@ -161,10 +161,12 @@ class MusicCloudService:
         media_zone_manager: Any = None,
         config_path: str | None = None,
         override_modes_service: Any = None,
+        event_bus: Any = None,
     ) -> None:
         self._media_mgr = media_zone_manager
         self._config_path = config_path or CONFIG_PATH
         self._override_modes = override_modes_service
+        self._event_bus = event_bus
         self._lock = threading.Lock()
 
         # In-memory state
@@ -682,6 +684,7 @@ class MusicCloudService:
             group_id=group_id,
             source_zone=source_zone,
             coordinator_entity=coordinator_entity,
+            coordinator_zone=source_zone,
         )
         self._active_groups[group_id] = group
         return group
@@ -892,6 +895,7 @@ class MusicCloudService:
                     "group_id": g.group_id,
                     "source_zone": g.source_zone,
                     "coordinator": g.coordinator_entity,
+                    "coordinator_zone": g.coordinator_zone or g.source_zone,
                     "grouped_zones": list(g.grouped_zones),
                     "grouped_entities": list(g.grouped_entities),
                     "created_at": g.created_at,
@@ -1275,8 +1279,16 @@ class MusicCloudService:
     # Event log
     # ------------------------------------------------------------------
 
+    def _publish_event(self, topic: str, data: dict[str, Any]) -> None:
+        """Publish an event to the EventBus if available."""
+        if self._event_bus is not None:
+            try:
+                self._event_bus.publish(topic, data, source="music_cloud")
+            except Exception:
+                _LOGGER.debug("Failed to publish event %s", topic)
+
     def _log_event(self, event_type: str, zone_id: str, data: dict[str, Any]) -> None:
-        """Append to the in-memory event ring buffer."""
+        """Append to the in-memory event ring buffer and publish to EventBus."""
         entry = {
             "event_type": event_type,
             "zone_id": zone_id,
@@ -1287,6 +1299,8 @@ class MusicCloudService:
         # Keep last 200 events
         if len(self._event_log) > 200:
             self._event_log = self._event_log[-200:]
+        # Publish to EventBus
+        self._publish_event(f"music_cloud.{event_type}", entry)
 
     def get_event_log(self, limit: int = 50) -> list[dict[str, Any]]:
         """Return recent events (newest first)."""
