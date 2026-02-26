@@ -4766,7 +4766,14 @@ async function loadSettings(){
       `<tr><td>Primary</td><td>${badge(_routingProviderLabel(status.primary_provider||'offline'),'g')} · ${escapeHtml(status.primary_model||'--')}</td></tr>`+
       `<tr><td>Secondary</td><td>${badge(_routingProviderLabel(status.secondary_provider||'cloud'),'y')} · ${escapeHtml(status.secondary_model||'--')}</td></tr>`+
       `<tr><td>Charakter</td><td>${escapeHtml(status.character||'copilot')}</td></tr>`+
-      `<tr><td>Anfragen/h</td><td>${status.calls_this_hour||0} / ${status.max_calls_per_hour||60}</td></tr>`;
+      `<tr><td>Anfragen/h</td><td>${status.calls_this_hour||0} / ${status.max_calls_per_hour||60}</td></tr>`+
+      `<tr><td>Timeouts</td><td>Offline: ${status.offline_timeout||120}s · Cloud: ${status.cloud_timeout||60}s</td></tr>`+
+      (status.circuit_breakers?
+        `<tr><td>Circuit Breaker</td><td>${Object.entries(status.circuit_breakers||{}).map(([k,v])=>`${escapeHtml(k)}: ${v.state==='closed'?badge('OK','g'):v.state==='open'?badge('OFFEN','r'):badge('Test','y')} (${v.failure_count}/${v.failure_threshold})`).join(' · ')}</td></tr>`
+        :'')+
+      (status.usage?
+        `<tr><td>Nutzung</td><td>Offline: ${(status.usage.offline||{}).requests||0} Anfr. · Cloud: ${(status.usage.cloud||{}).requests||0} Anfr. (${(status.usage.cloud||{}).tokens||0} Token)</td></tr>`
+        :'');
     _renderRoutingControls(status);
     // Models
     const models=status?.model_catalog?.offline?.models||status.installed_models||[];
@@ -4806,8 +4813,8 @@ async function loadSettings(){
       `<tr><td>API Route</td><td><code>${escapeHtml(API||'(direct)')}</code> ${badge(API_MODE==='ingress'?'Ingress':'Direct','b')}</td></tr>`+
       `<tr><td>System Health</td><td>${healthBadge}</td></tr>`+
       `<tr><td>CPU / RAM / Disk</td><td>${cpuPct>=0?cpuPct.toFixed(1)+'%':'--'} / ${memPct>=0?memPct.toFixed(1)+'%':'--'} / ${diskPct>=0?diskPct.toFixed(1)+'%':'--'}</td></tr>`+
-      `<tr><td>Ollama URL</td><td><code>${escapeHtml(status.ollama_url||'localhost:11434')}</code></td></tr>`+
-      `<tr><td>Cloud URL</td><td><code>${escapeHtml(status.cloud_api_url||'--')}</code></td></tr>`+
+      `<tr><td>Ollama URL</td><td><code>${escapeHtml(status.ollama_url||'localhost:11434')}</code> <button onclick="validateOllama()" style="margin-left:6px;background:var(--surface);border:1px solid var(--border);color:var(--dim);border-radius:4px;padding:2px 6px;font-size:9px;cursor:pointer">Testen</button></td></tr>`+
+      `<tr><td>Cloud URL</td><td><code>${escapeHtml(status.cloud_api_url||'--')}</code> ${status.cloud_configured?'<button onclick="validateCloud()" style="margin-left:6px;background:var(--surface);border:1px solid var(--border);color:var(--dim);border-radius:4px;padding:2px 6px;font-size:9px;cursor:pointer">Testen</button>':''}</td></tr>`+
       `<tr><td>Telegram</td><td>${tg?.running?badge('Aktiv','g'):badge('Aus','y')}</td></tr>`+
       `<tr><td>MCP Server</td><td>${mcpOk?badge('Aktiv','g'):badge('Offline','r')}</td></tr>`+
       `<tr><td>Onyx Bridge</td><td>${onyx?.ok?badge('Aktiv','g'):badge('Offline','r')} ${onyx?.ha_reachable?badge('HA erreichbar','b'):''}</td></tr>`+
@@ -5192,6 +5199,32 @@ async function toggleHomeKit(zoneId,zoneName,entityIds){
       await loadHomeKitServers();
     }else{addHistory('HomeKit-Fehler: '+(d.error||'unbekannt'))}
   }catch(e){addHistory('HomeKit-Fehler: '+e.message)}
+}
+
+// ==================================================
+// PRE-FLIGHT VALIDATION
+// ==================================================
+async function validateOllama(){
+  addHistory('Teste Ollama-Verbindung...');
+  try{
+    const r=await api('/chat/validate/ollama');
+    if(r?.ok){
+      addHistory(`Ollama OK: ${r.models_installed||0} Modelle installiert, Aktiv: ${escapeHtml(r.active_model||'--')} (${r.active_model_installed?'installiert':'NICHT installiert'})`);
+    }else{
+      addHistory(`Ollama FEHLER: ${escapeHtml(r?.error||'Unbekannt')}`);
+    }
+  }catch(e){addHistory('Ollama-Test fehlgeschlagen: '+e.message)}
+}
+async function validateCloud(){
+  addHistory('Teste Cloud-API-Verbindung...');
+  try{
+    const r=await api('/chat/validate/cloud');
+    if(r?.ok){
+      addHistory(`Cloud API OK: Typ ${escapeHtml(r.provider_type||'--')}, ${r.models_available||0} Modelle, Aktiv: ${escapeHtml(r.active_model||'--')}`);
+    }else{
+      addHistory(`Cloud API FEHLER: ${escapeHtml(r?.error||'Unbekannt')}`);
+    }
+  }catch(e){addHistory('Cloud-Test fehlgeschlagen: '+e.message)}
 }
 
 // ==================================================

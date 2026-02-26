@@ -820,11 +820,12 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
     except Exception:
         _LOGGER.exception("Failed to register Light Module API")
 
-    # Register Scene Management API (v3.4.0)
+    # Register Scene Management API (v3.4.0) — with persistent storage
     try:
-        from copilot_core.api.v1.scenes import scenes_bp
+        from copilot_core.api.v1.scenes import scenes_bp, init_scene_store
+        init_scene_store()
         app.register_blueprint(scenes_bp)
-        _LOGGER.info("Registered Scenes API (/api/v1/scenes/*)")
+        _LOGGER.info("Registered Scenes API (/api/v1/scenes/*) — store loaded")
     except Exception:
         _LOGGER.exception("Failed to register Scenes API")
 

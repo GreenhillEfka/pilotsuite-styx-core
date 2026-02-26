@@ -715,6 +715,14 @@ def _handle_chat_completions():
         # Store user message in conversation memory (lifelong learning)
         _store_in_memory(user_message, role="user")
 
+        # Use native streaming when stream=true and no tool-calling
+        # (tool-calling requires buffered response for server-side execution)
+        if stream and not tools:
+            return _stream_response_native(
+                messages, model_override=model_override,
+                temperature=temperature, max_tokens=max_tokens, tools=tools,
+            )
+
         response = _process_conversation(messages, model_override=model_override,
                                          temperature=temperature, max_tokens=max_tokens,
                                          tools=tools)
@@ -1038,6 +1046,41 @@ def llm_routing_set():
         "ok": True,
         "status": status,
         "catalog": provider.model_catalog(force_refresh=True),
+    })
+
+
+@conversation_bp.route('/validate/cloud', methods=['GET'])
+@require_token
+def validate_cloud():
+    """Pre-flight validation: check cloud API connectivity and credentials.
+
+    Returns: {"ok": true/false, "provider_type": "...", "models_available": N, ...}
+    """
+    provider = _get_llm_provider()
+    result = provider.validate_cloud_connection()
+    return jsonify(result), 200 if result.get("ok") else 502
+
+
+@conversation_bp.route('/validate/ollama', methods=['GET'])
+@require_token
+def validate_ollama():
+    """Pre-flight validation: check Ollama connectivity and model availability.
+
+    Returns: {"ok": true/false, "models_installed": N, "active_model_installed": true/false, ...}
+    """
+    provider = _get_llm_provider()
+    result = provider.validate_ollama_connection()
+    return jsonify(result), 200 if result.get("ok") else 502
+
+
+@conversation_bp.route('/usage', methods=['GET'])
+@require_token
+def llm_usage():
+    """Return LLM usage statistics (requests + tokens per provider)."""
+    provider = _get_llm_provider()
+    return jsonify({
+        "ok": True,
+        "usage": provider.get_usage_stats(),
     })
 
 
@@ -2134,13 +2177,18 @@ def process_with_tool_execution(user_message: str) -> str:
 
 
 def _stream_response(response: dict):
-    """OpenAI-compatible SSE streaming implementation."""
+    """OpenAI-compatible SSE streaming implementation.
+
+    If the response was generated from a buffered (non-streaming) call,
+    simulates streaming by chunking word-by-word. For true streaming,
+    use the chat_stream path via LLMProvider.chat_stream().
+    """
     model = response.get("model", DEFAULT_MODEL)
     response_id = response.get("id", f"chatcmpl-{os.urandom(12).hex()}")
 
     def generate():
         content = response["choices"][0]["message"]["content"]
-        # Stream word by word for natural feel
+        # Stream word by word for natural feel (buffered responses)
         words = content.split()
         for i, word in enumerate(words):
             chunk = {
@@ -2165,6 +2213,45 @@ def _stream_response(response: dict):
             "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
         }
         yield f"data: {json.dumps(final)}\n\n"
+        yield "data: [DONE]\n\n"
+
+    return Response(generate(), mimetype='text/event-stream',
+                    headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+def _stream_response_native(messages, model_override=None, temperature=None,
+                            max_tokens=None, tools=None):
+    """True streaming via LLMProvider.chat_stream() — proxies SSE from backend.
+
+    Uses real token-by-token streaming from Ollama or Cloud API.
+    """
+    provider = _get_llm_provider()
+
+    def generate():
+        for chunk in provider.chat_stream(
+            messages=messages,
+            tools=tools,
+            model=model_override,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        ):
+            if chunk.get("error"):
+                # Yield error as a final chunk
+                error_chunk = {
+                    "id": f"chatcmpl-{os.urandom(12).hex()}",
+                    "object": "chat.completion.chunk",
+                    "created": int(time.time()),
+                    "model": model_override or "unknown",
+                    "choices": [{
+                        "index": 0,
+                        "delta": {"content": chunk.get("content", "Error")},
+                        "finish_reason": "stop",
+                    }],
+                }
+                yield f"data: {json.dumps(error_chunk)}\n\n"
+                yield "data: [DONE]\n\n"
+                return
+            yield f"data: {json.dumps(chunk)}\n\n"
         yield "data: [DONE]\n\n"
 
     return Response(generate(), mimetype='text/event-stream',
