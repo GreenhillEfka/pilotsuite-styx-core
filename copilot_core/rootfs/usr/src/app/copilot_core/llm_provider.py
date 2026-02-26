@@ -73,7 +73,7 @@ _CLOUD_MODEL_ALIASES = {"cloud", "remote"}
 
 # SearXNG web search integration (v7.11.1)
 _SEARXNG_ENABLED = os.environ.get("SEARXNG_ENABLED", "false").lower() == "true"
-_SEARXNG_BASE_URL = os.environ.get("SEARXNG_BASE_URL", "http://192.168.30.18:4041")
+_SEARXNG_BASE_URL = os.environ.get("SEARXNG_BASE_URL", "")
 _SEARXNG_TIMEOUT = int(os.environ.get("SEARXNG_TIMEOUT", "10"))
 
 

@@ -250,8 +250,9 @@ def _execute_mcp_tool(name: str, arguments: dict) -> dict:
             safesearch = arguments.get("safesearch", 1)
             max_results = min(int(arguments.get("max_results", 10)), 50)
             
-            # SearXNG API endpoint
-            searxng_url = "http://192.168.30.18:4041/search"
+            # SearXNG API endpoint (from env or config.yaml)
+            searxng_base = os.environ.get("SEARXNG_BASE_URL", "").rstrip("/")
+            searxng_url = f"{searxng_base}/search" if searxng_base else ""
             
             params = {
                 "q": query,

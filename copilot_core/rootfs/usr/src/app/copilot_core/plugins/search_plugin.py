@@ -26,10 +26,12 @@ class SearchPlugin(PluginBase):
 
     def __init__(self, config: Dict[str, Any]):
         super().__init__(config)
+        import os
         from .search.searxng_client import SearXNGClient
 
+        default_url = os.environ.get("SEARXNG_BASE_URL", "")
         self.client = SearXNGClient(
-            base_url=config.get("base_url", "http://192.168.30.18:4041")
+            base_url=config.get("base_url", default_url)
         )
         self.timeout = config.get("timeout", 10)
         self.max_results = config.get("max_results", 10)

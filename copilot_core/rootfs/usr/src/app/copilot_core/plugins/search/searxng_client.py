@@ -12,7 +12,7 @@ from typing import List, Dict, Optional
 class SearXNGClient:
     """SearXNG HTML client — privacy-respecting metasearch for PilotSuite."""
 
-    def __init__(self, base_url: str = "http://192.168.30.18:4041"):
+    def __init__(self, base_url: str = ""):
         self.base_url = base_url.rstrip("/")
         self.timeout = 10
         self.max_results = 10
