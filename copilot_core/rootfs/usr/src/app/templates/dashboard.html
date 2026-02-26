@@ -567,29 +567,64 @@ a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
 </div>
 <!-- Legacy all-modules list (hidden, used by JS) -->
 <div class="grid g2" id="module-list" style="display:none"></div>
-<!-- Neuron System -->
+<!-- Neuron System with 3-Ring Visualization -->
 <div class="card" style="margin-top:14px">
-  <h2><span class="ic">&#x1f9e0;</span> Neuronensystem</h2>
-  <p style="font-size:11px;color:var(--dim);margin-bottom:10px">Kontext-, Zustands- und Stimmungs-Neuronen mit Tag-basierter Auto-Zuordnung.</p>
-  <div id="neuron-system-panel">
-    <div class="grid g3" style="margin-bottom:10px">
-      <div class="card" style="border-left:3px solid var(--blue)">
-        <h2 style="color:var(--blue)">Kontext-Neuronen</h2>
-        <p style="font-size:10px;color:var(--dim)">Praesenz, Licht, Bewegung, Wetter</p>
-        <div id="neuron-context-list" style="font-size:11px;margin-top:6px"><span class="b b-b">Lade...</span></div>
+  <h2><span class="ic">&#x1f9e0;</span> Neuronensystem &amp; Neuronenlayer</h2>
+  <p style="font-size:11px;color:var(--dim);margin-bottom:10px">3-Ring Neuronenlayer: Kontext (aussen) &rarr; Zustand (mitte) &rarr; Stimmung (innen). Tag-basierte Auto-Zuordnung.</p>
+  <div style="display:grid;grid-template-columns:320px 1fr;gap:14px;align-items:start">
+    <!-- 3-Ring SVG Visualization -->
+    <div style="text-align:center">
+      <svg id="neuron-layer-svg" viewBox="0 0 320 320" width="320" height="320" style="max-width:100%">
+        <defs>
+          <filter id="neuronGlow"><feGaussianBlur stdDeviation="3" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+        </defs>
+        <!-- Outer ring: Context (blue) -->
+        <circle cx="160" cy="160" r="150" fill="none" stroke="rgba(96,165,250,.2)" stroke-width="28"/>
+        <circle cx="160" cy="160" r="150" fill="none" stroke="rgba(96,165,250,.6)" stroke-width="2" stroke-dasharray="4 4"/>
+        <!-- Middle ring: State (green) -->
+        <circle cx="160" cy="160" r="105" fill="none" stroke="rgba(52,211,153,.2)" stroke-width="28"/>
+        <circle cx="160" cy="160" r="105" fill="none" stroke="rgba(52,211,153,.6)" stroke-width="2" stroke-dasharray="4 4"/>
+        <!-- Inner ring: Mood (orange) -->
+        <circle cx="160" cy="160" r="60" fill="none" stroke="rgba(251,146,60,.2)" stroke-width="28"/>
+        <circle cx="160" cy="160" r="60" fill="none" stroke="rgba(251,146,60,.6)" stroke-width="2" stroke-dasharray="4 4"/>
+        <!-- Center label -->
+        <text x="160" y="160" text-anchor="middle" dominant-baseline="central" fill="var(--accent2)" font-size="11" font-weight="700">MOOD</text>
+        <!-- Ring labels -->
+        <text x="160" y="30" text-anchor="middle" fill="var(--blue)" font-size="9" font-weight="600">KONTEXT</text>
+        <text x="160" y="75" text-anchor="middle" fill="var(--green)" font-size="9" font-weight="600">ZUSTAND</text>
+        <!-- Neuron dots (populated by JS) -->
+        <g id="neuron-dots-context"></g>
+        <g id="neuron-dots-state"></g>
+        <g id="neuron-dots-mood"></g>
+      </svg>
+      <div style="display:flex;gap:8px;justify-content:center;margin-top:4px;flex-wrap:wrap">
+        <span class="b b-b" id="neuron-context-count">Kontext: --</span>
+        <span class="b b-g" id="neuron-state-count">Zustand: --</span>
+        <span class="b b-y" id="neuron-mood-count">Stimmung: --</span>
       </div>
-      <div class="card" style="border-left:3px solid var(--green)">
-        <h2 style="color:var(--green)">Zustands-Neuronen</h2>
-        <p style="font-size:10px;color:var(--dim)">Temperatur, Energie, Klima</p>
-        <div id="neuron-state-list" style="font-size:11px;margin-top:6px"><span class="b b-g">Lade...</span></div>
+    </div>
+    <!-- Entity Lists per Layer -->
+    <div>
+      <div class="card" style="border-left:3px solid var(--blue);margin-bottom:8px;padding:10px">
+        <h2 style="color:var(--blue);font-size:11px">Kontext-Neuronen</h2>
+        <div id="neuron-context-list" style="font-size:11px;margin-top:4px;max-height:120px;overflow-y:auto"><span class="b b-b">Lade...</span></div>
       </div>
-      <div class="card" style="border-left:3px solid var(--orange)">
-        <h2 style="color:var(--orange)">Stimmungs-Neuronen</h2>
-        <p style="font-size:10px;color:var(--dim)">Media, Musik, Kalender</p>
-        <div id="neuron-mood-list" style="font-size:11px;margin-top:6px"><span class="b b-y">Lade...</span></div>
+      <div class="card" style="border-left:3px solid var(--green);margin-bottom:8px;padding:10px">
+        <h2 style="color:var(--green);font-size:11px">Zustands-Neuronen</h2>
+        <div id="neuron-state-list" style="font-size:11px;margin-top:4px;max-height:120px;overflow-y:auto"><span class="b b-g">Lade...</span></div>
+      </div>
+      <div class="card" style="border-left:3px solid var(--orange);padding:10px">
+        <h2 style="color:var(--orange);font-size:11px">Stimmungs-Neuronen</h2>
+        <div id="neuron-mood-list" style="font-size:11px;margin-top:4px;max-height:120px;overflow-y:auto"><span class="b b-y">Lade...</span></div>
       </div>
     </div>
   </div>
+</div>
+<!-- Tagged-but-not-in-Zone Entities -->
+<div class="card" style="margin-top:14px">
+  <h2><span class="ic">&#x1f3f7;</span> Relevante Entities ohne Zone</h2>
+  <p style="font-size:11px;color:var(--dim);margin-bottom:10px">Entities mit PilotSuite-Tags (z.B. &quot;Licht&quot;, &quot;Styx&quot;) die keiner Habitus-Zone zugeordnet sind. Diese sind trotzdem fuer das Neuronensystem relevant.</p>
+  <div id="tagged-not-in-zone-panel"><div class="loading"><div class="spinner"></div>Lade...</div></div>
 </div>
 <!-- Module Configuration -->
 <div class="card" style="margin-top:14px">
@@ -3801,6 +3836,117 @@ async function loadModules(){
   }
 }
 
+// -- Neuronenlayer 3-Ring Visualization (v9.2.0) --
+async function loadNeuronLayer(){
+  const svg=$('neuron-layer-svg');if(!svg)return;
+  const ctxG=$('neuron-dots-context'),stG=$('neuron-dots-state'),moG=$('neuron-dots-mood');
+  const ctxCount=$('neuron-context-count'),stCount=$('neuron-state-count'),moCount=$('neuron-mood-count');
+  const ctxList=$('neuron-context-list'),stList=$('neuron-state-list'),moList=$('neuron-mood-list');
+  try{
+    const neuronsData=await api('/api/v1/neurons');
+    const raw=neuronsData?.data||{};
+    const layers={context:{items:{},r:150,g:ctxG,count:ctxCount,list:ctxList,color:'96,165,250'},
+      state:{items:{},r:105,g:stG,count:stCount,list:stList,color:'52,211,153'},
+      mood:{items:{},r:60,g:moG,count:moCount,list:moList,color:'251,146,60'}};
+    ['context','state','mood'].forEach(k=>{
+      layers[k].items=raw[k]&&typeof raw[k]==='object'?raw[k]:{};
+    });
+    Object.entries(layers).forEach(([key,layer])=>{
+      const entries=Object.entries(layer.items);
+      if(layer.g)layer.g.innerHTML='';
+      if(layer.count){
+        const labels={context:'Kontext',state:'Zustand',mood:'Stimmung'};
+        layer.count.textContent=labels[key]+': '+entries.length;
+      }
+      // Place dots evenly around the ring
+      entries.forEach(([name,state],i)=>{
+        const angle=(Math.PI*2*i)/Math.max(1,entries.length)-Math.PI/2;
+        const cx=160+Math.cos(angle)*layer.r;
+        const cy=160+Math.sin(angle)*layer.r;
+        const val=Number(state?.value??state?.current_value??state?.score??0.5);
+        const opacity=0.4+Math.min(1,Math.max(0,val))*0.6;
+        const dot=document.createElementNS('http://www.w3.org/2000/svg','circle');
+        dot.setAttribute('cx',cx.toFixed(1));
+        dot.setAttribute('cy',cy.toFixed(1));
+        dot.setAttribute('r','6');
+        dot.setAttribute('fill','rgba('+layer.color+','+opacity.toFixed(2)+')');
+        dot.setAttribute('stroke','rgba('+layer.color+',0.9)');
+        dot.setAttribute('stroke-width','1.5');
+        dot.setAttribute('filter','url(#neuronGlow)');
+        const title=document.createElementNS('http://www.w3.org/2000/svg','title');
+        title.textContent=name+' ('+val.toFixed(2)+')';
+        dot.appendChild(title);
+        if(layer.g)layer.g.appendChild(dot);
+      });
+      // Fill entity list
+      if(layer.list){
+        if(!entries.length){layer.list.innerHTML='<span style="color:var(--dim)">Keine Neuronen</span>';return;}
+        const colors={context:'var(--blue)',state:'var(--green)',mood:'var(--orange)'};
+        layer.list.innerHTML=entries.map(([name,state])=>{
+          const val=Number(state?.value??state?.current_value??state?.score??0.5);
+          const pct=Math.round(val*100);
+          return `<div style="display:flex;justify-content:space-between;padding:2px 0;border-bottom:1px solid var(--border)"><span>${escapeHtml(name)}</span><span style="color:${colors[key]};font-weight:600">${pct}%</span></div>`;
+        }).join('');
+      }
+    });
+  }catch(e){
+    console.error('loadNeuronLayer:',e);
+    if(ctxList)ctxList.innerHTML='<span style="color:var(--dim)">Neuronen nicht verfuegbar</span>';
+    if(stList)stList.innerHTML='<span style="color:var(--dim)">Neuronen nicht verfuegbar</span>';
+    if(moList)moList.innerHTML='<span style="color:var(--dim)">Neuronen nicht verfuegbar</span>';
+  }
+}
+
+// -- Tagged-but-not-in-Zone Entities Panel (v9.2.0) --
+async function loadTaggedNotInZone(){
+  const panel=$('tagged-not-in-zone-panel');if(!panel)return;
+  try{
+    const [zonesRes,entitiesRes]=await Promise.allSettled([
+      api('/api/v1/hub/zones'),
+      api('/api/v1/entities?limit=2000'),
+    ]);
+    const zones=(zonesRes.status==='fulfilled'?zonesRes.value:null);
+    const entities=(entitiesRes.status==='fulfilled'?entitiesRes.value:null);
+    // Collect all entity_ids that are in a zone
+    const zoneEntityIds=new Set();
+    (zones?.zones||[]).forEach(z=>{
+      (z.entities||[]).forEach(e=>{
+        const eid=typeof e==='string'?e:(e.entity_id||'');
+        if(eid)zoneEntityIds.add(eid);
+      });
+    });
+    // Find entities with PilotSuite-relevant tags/keywords that are NOT in any zone
+    const allEntities=entities?.entities||entities?.data||[];
+    const styxKeywords=['styx','pilotsuite','pilot','neuron','habitus','licht','light','temperatur','temperature','bewegung','motion','energie','energy','klima','climate','media_player'];
+    const unzoned=allEntities.filter(e=>{
+      const eid=e.entity_id||e.id||'';
+      if(!eid||zoneEntityIds.has(eid))return false;
+      const lower=eid.toLowerCase()+(e.name||'').toLowerCase()+(e.domain||'').toLowerCase();
+      return styxKeywords.some(kw=>lower.includes(kw));
+    }).slice(0,50);
+    if(!unzoned.length){
+      panel.innerHTML='<div class="empty" style="padding:8px">Alle relevanten Entities sind Zonen zugeordnet &#x2705;</div>';
+      return;
+    }
+    let h='<div style="font-size:11px;color:var(--dim);margin-bottom:6px">'+unzoned.length+' Entities mit relevanten Tags, aber ohne Zone:</div>';
+    h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:4px">';
+    unzoned.forEach(e=>{
+      const eid=e.entity_id||e.id||'';
+      const name=e.name||e.friendly_name||eid;
+      const domain=(eid.split('.')[0]||'').replace(/_/g,' ');
+      h+=`<div style="display:flex;align-items:center;gap:6px;padding:4px 8px;background:var(--card-bg);border:1px solid var(--border);border-radius:6px;font-size:11px">
+        <span style="color:var(--yellow);font-size:14px">&#x1f3f7;</span>
+        <div><div style="font-weight:600">${escapeHtml(name)}</div><div style="color:var(--dim);font-size:10px">${escapeHtml(domain)} &middot; ${escapeHtml(eid)}</div></div>
+      </div>`;
+    });
+    h+='</div>';
+    panel.innerHTML=h;
+  }catch(e){
+    console.error('loadTaggedNotInZone:',e);
+    panel.innerHTML='<div class="empty">Daten nicht verfuegbar</div>';
+  }
+}
+
 // -- Module Toggle (calls Module Control API + persists + syncs pipeline) --
 async function toggleModule(btn,modId){
   const states=['on','learn','off'];
@@ -5522,7 +5668,7 @@ async function validateCloud(){
 // ==================================================
 // PAGE LOADER — Resilient wrapper
 // ==================================================
-const _loaders={styx:async()=>{await loadStyx();loadOverviewHealth();loadMood();},chat:async()=>{},habitus:async()=>{await loadHabitus();loadEntitySuggestions('hab-entity-suggestions');loadScenes();},mood:loadMood,modules:async()=>{await loadModules();loadAutomations();loadMediaZones();},system:async()=>{await loadSystemOverview(false);await loadSelfRepairPanel(false);},haushalt:loadHaushalt,settings:loadSettings};
+const _loaders={styx:async()=>{await loadStyx();loadOverviewHealth();loadMood();},chat:async()=>{},habitus:async()=>{await loadHabitus();loadEntitySuggestions('hab-entity-suggestions');loadScenes();},mood:loadMood,modules:async()=>{await loadModules();loadAutomations();loadMediaZones();loadNeuronLayer();loadTaggedNotInZone();},system:async()=>{await loadSystemOverview(false);await loadSelfRepairPanel(false);},haushalt:loadHaushalt,settings:loadSettings};
 function loadPage(p){
   const fn=_loaders[p];
   if(!fn)return;
