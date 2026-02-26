@@ -323,22 +323,46 @@ a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
 
 <!-- Navigation -->
 <div class="nav" id="nav">
-<button class="active" data-page="styx">Styx</button>
+<button class="active" data-page="styx">&#x1f3e0; Übersicht</button>
+<button data-page="chat">&#x1f4ac; Chat</button>
 <button data-page="habitus">Habitus</button>
-<button data-page="mood">Stimmung</button>
 <button data-page="modules">Module</button>
-<button data-page="system">System</button>
-<button data-page="haushalt">&#x1f3e0; Haushalt</button>
 <button data-page="settings">Einstellungen</button>
+<button data-page="haushalt">Haushalt</button>
+<button data-page="system">System</button>
 </div>
 
-<!-- ========== STYX PAGE: Brain + Chat + History ========== -->
+<!-- ========== OVERVIEW PAGE (Styx) ========== -->
 <div class="page active" id="page-styx">
 <!-- Module Pipelines -->
 <div class="pipelines" id="pipelines"></div>
-<!-- Main Layout -->
-<div class="styx-layout">
-  <!-- LEFT: Brain Graph -->
+<!-- Top Row: System Health + Mood -->
+<div class="grid g2" style="margin-bottom:14px">
+  <div class="card">
+    <h2><span class="ic">&#x1f3af;</span> System-Gesundheit</h2>
+    <div id="overview-health" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+      <div class="stat"><div class="v" id="overview-health-score">--</div><div class="l">Health Score</div></div>
+      <div style="flex:1;min-width:120px">
+        <div class="gauge"><div class="gauge-hd"><span>Pipeline</span><span class="gv" id="overview-pipeline-status">--</span></div><div class="gauge-bar"><div class="gauge-fill" id="overview-pipeline-bar" style="width:0;background:var(--green)"></div></div></div>
+        <div class="gauge"><div class="gauge-hd"><span>LLM</span><span class="gv" id="overview-llm-status">--</span></div><div class="gauge-bar"><div class="gauge-fill" id="overview-llm-bar" style="width:0;background:var(--blue)"></div></div></div>
+        <div class="gauge"><div class="gauge-hd"><span>Core API</span><span class="gv" id="overview-core-status">--</span></div><div class="gauge-bar"><div class="gauge-fill" id="overview-core-bar" style="width:0;background:var(--cyan)"></div></div></div>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <h2><span class="ic">&#x1f3b5;</span> Stimmung</h2>
+    <div id="overview-mood" style="text-align:center;padding:8px 0">
+      <div class="stat"><div class="v" id="overview-mood-value">--</div><div class="l">Aktuelle Stimmung</div></div>
+      <div style="display:flex;gap:8px;justify-content:center;margin-top:6px">
+        <span class="b b-g" id="overview-mood-comfort">Comfort: --</span>
+        <span class="b b-b" id="overview-mood-joy">Joy: --</span>
+        <span class="b b-c" id="overview-mood-frugality">Frugality: --</span>
+      </div>
+    </div>
+  </div>
+</div>
+<!-- Brain Graph -->
+<div class="styx-layout" style="height:auto;min-height:400px">
   <div class="styx-brain">
     <div class="brain-wrap" id="brain-canvas">
       <div class="brain-legend" id="brain-legend"></div>
@@ -365,31 +389,13 @@ a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
     <!-- Quick navigation -->
     <div class="suggest-bar">
       <span class="suggest-btn" onclick="navigateTo('habitus')">Habitus erkunden</span>
-      <span class="suggest-btn" onclick="navigateTo('mood')">Stimmung pruefen</span>
+      <span class="suggest-btn" onclick="navigateTo('chat')">Chat mit Styx</span>
       <span class="suggest-btn" onclick="navigateTo('modules')">Module verwalten</span>
     </div>
   </div>
-  <!-- RIGHT: Chat + History -->
+  <!-- RIGHT: History / Activity -->
   <div class="styx-right">
-    <!-- Chat -->
-    <div class="chat-panel">
-      <div class="chat-hd">
-        <span>&#x2726;</span>
-        <span id="assistant-name">Styx</span>
-        <span class="b b-p" id="chat-model">--</span>
-        <select id="chat-model-select" title="Chat-Modell waehlen"></select>
-        <button onclick="clearChatHistory()" title="Chatverlauf loeschen" style="margin-left:auto;background:transparent;border:1px solid var(--border);color:var(--dim);border-radius:6px;padding:2px 8px;cursor:pointer;font-size:11px">&#x1f5d1;</button>
-      </div>
-      <div class="chat-msgs" id="chat-msgs">
-        <div class="msg a" id="styx-greeting">Hallo! Ich bin <strong>Styx</strong>, dein PilotSuite Assistent. Ich verbinde dein Smart Home mit lokaler KI. Wie kann ich helfen?</div>
-      </div>
-      <div class="chat-in">
-        <input type="text" id="chat-input" placeholder="Frag Styx..." autocomplete="off">
-        <button id="chat-send" onclick="sendChat()">&#x2728;</button>
-      </div>
-    </div>
-    <!-- History -->
-    <div class="history-panel" id="history-panel">
+    <div class="history-panel" id="history-panel" style="max-height:100%;flex:1">
       <div class="hd">Verlauf &amp; Aktivitaet</div>
       <div class="history-tabs" id="history-tabs">
         <button class="active" data-tab="live" onclick="setHistoryTab('live')">Live</button>
@@ -399,6 +405,33 @@ a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
         <button data-tab="chat" onclick="setHistoryTab('chat')">Chat</button>
       </div>
       <div id="history-items"><div class="hist-item"><span class="ht">jetzt</span><span>PilotSuite gestartet</span></div></div>
+    </div>
+  </div>
+</div>
+<!-- Mood Trend (inline) -->
+<div class="card" style="margin-top:14px">
+  <h2><span class="ic">&#x1f4ca;</span> Mood Trend</h2>
+  <div class="trend-chart" id="overview-mood-trend"><canvas id="overview-mood-trend-canvas"></canvas></div>
+</div>
+</div>
+
+<!-- ========== CHAT PAGE ========== -->
+<div class="page" id="page-chat">
+<div style="display:grid;grid-template-columns:1fr;gap:14px;height:calc(100vh - 120px);min-height:500px">
+  <div class="chat-panel" style="height:100%">
+    <div class="chat-hd">
+      <span>&#x2726;</span>
+      <span id="assistant-name">Styx</span>
+      <span class="b b-p" id="chat-model">--</span>
+      <select id="chat-model-select" title="Chat-Modell waehlen"></select>
+      <button onclick="clearChatHistory()" title="Chatverlauf loeschen" style="margin-left:auto;background:transparent;border:1px solid var(--border);color:var(--dim);border-radius:6px;padding:2px 8px;cursor:pointer;font-size:11px">&#x1f5d1;</button>
+    </div>
+    <div class="chat-msgs" id="chat-msgs">
+      <div class="msg a" id="styx-greeting">Hallo! Ich bin <strong>Styx</strong>, dein PilotSuite Assistent. Ich verbinde dein Smart Home mit lokaler KI. Wie kann ich helfen?</div>
+    </div>
+    <div class="chat-in">
+      <input type="text" id="chat-input" placeholder="Frag Styx..." autocomplete="off">
+      <button id="chat-send" onclick="sendChat()">&#x2728;</button>
     </div>
   </div>
 </div>
@@ -498,16 +531,102 @@ a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
 
 <!-- ========== MODULES PAGE ========== -->
 <div class="page" id="page-modules">
+<!-- Tier Legend -->
 <div class="card" style="margin-bottom:14px">
-  <h2><span class="ic">&#x2699;&#xfe0f;</span> Neurale Pipeline</h2>
-  <p style="font-size:12px;color:var(--dim);margin-bottom:12px">Module steuern wie Styx dein Zuhause wahrnimmt. Toggles steuern den echten Backend-Zustand.</p>
-  <div style="display:flex;gap:8px;margin-top:6px">
-    <span class="b b-g">Aktiv = Auto-Apply (beide Module aktiv = doppelte Sicherheit)</span>
-    <span class="b b-y">Lernen = Vorschlaege zur manuellen Uebernahme</span>
-    <span class="b b-r">Aus = deaktiviert</span>
+  <h2><span class="ic">&#x2699;&#xfe0f;</span> Module &amp; Neurale Pipeline</h2>
+  <p style="font-size:12px;color:var(--dim);margin-bottom:12px">Module steuern wie Styx dein Zuhause wahrnimmt. Geordnet nach Tier: Kernel &rarr; Brain &rarr; Kontext &rarr; Erweiterungen.</p>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">
+    <span class="b b-p">Tier 0 — Kernel (immer aktiv)</span>
+    <span class="b b-b">Tier 1 — Brain (Intelligenz)</span>
+    <span class="b b-c">Tier 2 — Kontext (bedingt)</span>
+    <span class="b b-y">Tier 3 — Erweiterungen</span>
+  </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">
+    <span class="b b-g">Aktiv</span>
+    <span class="b b-y">Lernen</span>
+    <span class="b b-r">Aus/Fehler</span>
   </div>
 </div>
-<div class="grid g2" id="module-list"></div>
+<!-- System + Brain Modules (Tier 0+1) — always visible -->
+<div class="card" style="margin-bottom:14px">
+  <h2><span class="ic">&#x1f5a5;</span> System &amp; Brain (Tier 0 + 1)</h2>
+  <p style="font-size:11px;color:var(--dim);margin-bottom:10px">Kernel- und Brain-Module sind systemkritisch und immer aktiv.</p>
+  <div class="grid g2" id="module-list-system"></div>
+</div>
+<!-- Context Modules (Tier 2) — conditional -->
+<div class="card" style="margin-bottom:14px">
+  <h2><span class="ic">&#x1f50d;</span> Kontext-Module (Tier 2)</h2>
+  <p style="font-size:11px;color:var(--dim);margin-bottom:10px">Automatisch aktiviert wenn relevante HA-Entities vorhanden sind.</p>
+  <div class="grid g2" id="module-list-context"></div>
+</div>
+<!-- Extension Modules (Tier 3) — user-activated -->
+<div class="card" style="margin-bottom:14px">
+  <h2><span class="ic">&#x1f9e9;</span> Erweiterungen (Tier 3)</h2>
+  <p style="font-size:11px;color:var(--dim);margin-bottom:10px">Optionale Module — vom Benutzer explizit aktiviert.</p>
+  <div class="grid g2" id="module-list-extensions"></div>
+</div>
+<!-- Legacy all-modules list (hidden, used by JS) -->
+<div class="grid g2" id="module-list" style="display:none"></div>
+<!-- Neuron System with 3-Ring Visualization -->
+<div class="card" style="margin-top:14px">
+  <h2><span class="ic">&#x1f9e0;</span> Neuronensystem &amp; Neuronenlayer</h2>
+  <p style="font-size:11px;color:var(--dim);margin-bottom:10px">3-Ring Neuronenlayer: Kontext (aussen) &rarr; Zustand (mitte) &rarr; Stimmung (innen). Tag-basierte Auto-Zuordnung.</p>
+  <div style="display:grid;grid-template-columns:320px 1fr;gap:14px;align-items:start">
+    <!-- 3-Ring SVG Visualization -->
+    <div style="text-align:center">
+      <svg id="neuron-layer-svg" viewBox="0 0 320 320" width="320" height="320" style="max-width:100%">
+        <defs>
+          <filter id="neuronGlow"><feGaussianBlur stdDeviation="3" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+        </defs>
+        <!-- Outer ring: Context (blue) -->
+        <circle cx="160" cy="160" r="150" fill="none" stroke="rgba(96,165,250,.2)" stroke-width="28"/>
+        <circle cx="160" cy="160" r="150" fill="none" stroke="rgba(96,165,250,.6)" stroke-width="2" stroke-dasharray="4 4"/>
+        <!-- Middle ring: State (green) -->
+        <circle cx="160" cy="160" r="105" fill="none" stroke="rgba(52,211,153,.2)" stroke-width="28"/>
+        <circle cx="160" cy="160" r="105" fill="none" stroke="rgba(52,211,153,.6)" stroke-width="2" stroke-dasharray="4 4"/>
+        <!-- Inner ring: Mood (orange) -->
+        <circle cx="160" cy="160" r="60" fill="none" stroke="rgba(251,146,60,.2)" stroke-width="28"/>
+        <circle cx="160" cy="160" r="60" fill="none" stroke="rgba(251,146,60,.6)" stroke-width="2" stroke-dasharray="4 4"/>
+        <!-- Center label -->
+        <text x="160" y="160" text-anchor="middle" dominant-baseline="central" fill="var(--accent2)" font-size="11" font-weight="700">MOOD</text>
+        <!-- Ring labels -->
+        <text x="160" y="30" text-anchor="middle" fill="var(--blue)" font-size="9" font-weight="600">KONTEXT</text>
+        <text x="160" y="75" text-anchor="middle" fill="var(--green)" font-size="9" font-weight="600">ZUSTAND</text>
+        <!-- Neuron dots (populated by JS) -->
+        <g id="neuron-dots-context"></g>
+        <g id="neuron-dots-state"></g>
+        <g id="neuron-dots-mood"></g>
+      </svg>
+      <div style="display:flex;gap:8px;justify-content:center;margin-top:4px;flex-wrap:wrap">
+        <span class="b b-b" id="neuron-context-count">Kontext: --</span>
+        <span class="b b-g" id="neuron-state-count">Zustand: --</span>
+        <span class="b b-y" id="neuron-mood-count">Stimmung: --</span>
+      </div>
+    </div>
+    <!-- Entity Lists per Layer -->
+    <div>
+      <div class="card" style="border-left:3px solid var(--blue);margin-bottom:8px;padding:10px">
+        <h2 style="color:var(--blue);font-size:11px">Kontext-Neuronen</h2>
+        <div id="neuron-context-list" style="font-size:11px;margin-top:4px;max-height:120px;overflow-y:auto"><span class="b b-b">Lade...</span></div>
+      </div>
+      <div class="card" style="border-left:3px solid var(--green);margin-bottom:8px;padding:10px">
+        <h2 style="color:var(--green);font-size:11px">Zustands-Neuronen</h2>
+        <div id="neuron-state-list" style="font-size:11px;margin-top:4px;max-height:120px;overflow-y:auto"><span class="b b-g">Lade...</span></div>
+      </div>
+      <div class="card" style="border-left:3px solid var(--orange);padding:10px">
+        <h2 style="color:var(--orange);font-size:11px">Stimmungs-Neuronen</h2>
+        <div id="neuron-mood-list" style="font-size:11px;margin-top:4px;max-height:120px;overflow-y:auto"><span class="b b-y">Lade...</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+<!-- Tagged-but-not-in-Zone Entities -->
+<div class="card" style="margin-top:14px">
+  <h2><span class="ic">&#x1f3f7;</span> Relevante Entities ohne Zone</h2>
+  <p style="font-size:11px;color:var(--dim);margin-bottom:10px">Entities mit PilotSuite-Tags (z.B. &quot;Licht&quot;, &quot;Styx&quot;) die keiner Habitus-Zone zugeordnet sind. Diese sind trotzdem fuer das Neuronensystem relevant.</p>
+  <div id="tagged-not-in-zone-panel"><div class="loading"><div class="spinner"></div>Lade...</div></div>
+</div>
+<!-- Module Configuration -->
 <div class="card" style="margin-top:14px">
   <h2><span class="ic">&#9881;</span> Modul-Konfiguration</h2>
   <p style="font-size:11px;color:var(--dim);margin-bottom:10px">Runtime-Parameter fuer konfigurierbare Module. Quelle ist die Core-API.</p>
@@ -518,26 +637,13 @@ a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
   </div>
   <div id="module-config-body"><div class="empty">Waehle ein Modul.</div></div>
 </div>
+<!-- Media Zones -->
 <div class="card" style="margin-top:14px">
   <h2><span class="ic">&#x1f3b5;</span> Media Zonen &amp; Musikwolke</h2>
   <p style="font-size:11px;color:var(--dim);margin-bottom:10px">Zone-Player-Zuordnung und Musikwolke Smart Audio Follow</p>
   <div id="media-zones-panel"><div class="loading"><div class="spinner"></div>Lade Media Zonen...</div></div>
 </div>
-<div class="card" style="margin-top:14px">
-  <h2><span class="ic">&#x1f30d;</span> Web &amp; News</h2>
-  <p style="font-size:11px;color:var(--dim);margin-bottom:10px">Aktuelle Nachrichten und Warnungen im LLM-Kontext</p>
-  <div id="news-warnings-panel"><div class="loading"><div class="spinner"></div>Lade Nachrichten...</div></div>
-</div>
-<div class="card" style="margin-top:14px">
-  <h2><span class="ic">&#x267b;</span> Müllabfuhr</h2>
-  <p style="font-size:11px;color:var(--dim);margin-bottom:10px">Waste Collection Schedule + Erinnerungen mit TTS</p>
-  <div id="waste-panel"><div class="loading"><div class="spinner"></div>Lade Müllabfuhr...</div></div>
-</div>
-<div class="card" style="margin-top:14px">
-  <h2><span class="ic">&#x1f382;</span> Geburtstage</h2>
-  <p style="font-size:11px;color:var(--dim);margin-bottom:10px">Kalender-basierte Geburtstags-Erinnerungen</p>
-  <div id="birthday-panel"><div class="loading"><div class="spinner"></div>Lade Geburtstage...</div></div>
-</div>
+<!-- Automations -->
 <div class="card" style="margin-top:14px">
   <h2><span class="ic">&#x1f916;</span> Erstellte Automationen</h2>
   <p style="font-size:11px;color:var(--dim);margin-bottom:10px">Aus akzeptierten Vorschlaegen erstellte HA-Automationen</p>
@@ -1450,6 +1556,43 @@ function navigateTo(p){
 // ==================================================
 // STYX PAGE (Brain + Chat + History)
 // ==================================================
+async function loadOverviewHealth(){
+  try{
+    const status=await api('/api/v1/status');
+    if(status){
+      const hs=$('overview-health-score');
+      if(hs){
+        const score=status.health_score||status.score||'--';
+        hs.textContent=typeof score==='number'?score+'%':score;
+      }
+      const ps=$('overview-pipeline-status');
+      const pb=$('overview-pipeline-bar');
+      if(ps){ps.textContent=status.pipeline_status||'--';}
+      if(pb){pb.style.width=(status.pipeline_status==='healthy'?'100%':'40%');}
+      const ls=$('overview-llm-status');
+      const lb=$('overview-llm-bar');
+      if(ls){ls.textContent=status.llm_status||status.ollama_status||'--';}
+      if(lb){lb.style.width=(status.llm_status==='available'||status.ollama_status==='connected')?'100%':'30%';}
+      const cs=$('overview-core-status');
+      const cb=$('overview-core-bar');
+      if(cs){cs.textContent='online';}
+      if(cb){cb.style.width='100%';}
+    }
+    // Mood summary
+    const mood=await api('/api/v1/hub/mood/current');
+    if(mood){
+      const mv=$('overview-mood-value');
+      if(mv){mv.textContent=mood.label||mood.mood||'--';}
+      const mc=$('overview-mood-comfort');
+      if(mc){mc.textContent='Comfort: '+(mood.comfort!=null?Math.round(mood.comfort*100)+'%':'--');}
+      const mj=$('overview-mood-joy');
+      if(mj){mj.textContent='Joy: '+(mood.joy!=null?Math.round(mood.joy*100)+'%':'--');}
+      const mf=$('overview-mood-frugality');
+      if(mf){mf.textContent='Frugality: '+(mood.frugality!=null?Math.round(mood.frugality*100)+'%':'--');}
+    }
+  }catch(e){console.warn('Overview health load:',e);}
+}
+
 async function loadStyx(opts={}){
   const background=!!opts.background;
   try{
@@ -3631,6 +3774,21 @@ async function loadModules(){
     MODULE_DEFS_RUNTIME=[...merged.values()].sort((a,b)=>String(a.name||a.id).localeCompare(String(b.name||b.id),'de',{sensitivity:'base'}));
     initModuleConfigSelect();
     c.innerHTML='';
+
+    // Tier classification for module cards
+    const TIER_0_1=['legacy','coordinator_module','performance_scaling','events_forwarder','entity_tags',
+      'brain_graph_sync','knowledge_graph_sync','habitus_miner','candidate_poller','mood','mood_context',
+      'zone_sync','history_backfill','entity_discovery'];
+    const TIER_2=['energy_context','weather_context','media_zones','camera_context','network',
+      'ml_context','voice_context','person_tracking'];
+
+    const systemC=$('module-list-system');
+    const contextC=$('module-list-context');
+    const extC=$('module-list-extensions');
+    if(systemC)systemC.innerHTML='';
+    if(contextC)contextC.innerHTML='';
+    if(extC)extC.innerHTML='';
+
     MODULE_DEFS_RUNTIME.forEach(m=>{
       // Detected state from APIs
       const detected=health[m.id]||'unknown';
@@ -3639,9 +3797,14 @@ async function loadModules(){
       const toggleCls=st==='active'?'on':st==='learning'?'learn':'off';
       const badgeCls=st==='active'?'g':st==='learning'?'y':st==='off'?'r':'b';
       const stTitles={active:'Aktiv: Auto-Apply (wenn beide Module aktiv)',learning:'Learning: Vorschlaege zur manuellen Uebernahme',off:'Deaktiviert'};
+      // Determine tier
+      let tierLabel='T3';
+      let tierColor='var(--yellow)';
+      if(TIER_0_1.includes(m.id)){tierLabel='T0/1';tierColor='var(--accent2)';}
+      else if(TIER_2.includes(m.id)){tierLabel='T2';tierColor='var(--cyan)';}
       const card=el('div','mod-card',
         `<div class="mod-icon" style="background:${m.color}20;color:${m.color}">${m.icon}</div>
-        <div class="mod-info"><h3>${escapeHtml(m.name)}</h3><p>${escapeHtml(m.desc)}</p>
+        <div class="mod-info"><h3>${escapeHtml(m.name)} <span style="font-size:9px;color:${tierColor};border:1px solid ${tierColor};border-radius:4px;padding:0 4px;margin-left:4px">${tierLabel}</span></h3><p>${escapeHtml(m.desc)}</p>
         <div style="margin-top:4px">${badge(detail,badgeCls)}</div></div>
         <div class="mod-status">
           <button class="mod-toggle ${toggleCls}" data-mod="${m.id}" title="${stTitles[st]||st}"></button>
@@ -3657,11 +3820,130 @@ async function loadModules(){
         loadSelectedModuleConfig(false,'module-config-body',m.id);
         openModuleConfigWindow(m.id);
       });
-      c.appendChild(card);
+      // Append to tier container
+      if(TIER_0_1.includes(m.id)){
+        if(systemC)systemC.appendChild(card);
+      }else if(TIER_2.includes(m.id)){
+        if(contextC)contextC.appendChild(card);
+      }else{
+        if(extC)extC.appendChild(card);
+      }
+      c.appendChild(card.cloneNode(true));
     });
     loadSelectedModuleConfig(false,'module-config-body',_selectedModuleConfig);
   }catch(e){
     c.innerHTML='<div class="empty">\u26a0\ufe0f Modul-Status konnte nicht geladen werden.<br>'+escapeHtml(e.message)+'</div>';
+  }
+}
+
+// -- Neuronenlayer 3-Ring Visualization (v9.2.0) --
+async function loadNeuronLayer(){
+  const svg=$('neuron-layer-svg');if(!svg)return;
+  const ctxG=$('neuron-dots-context'),stG=$('neuron-dots-state'),moG=$('neuron-dots-mood');
+  const ctxCount=$('neuron-context-count'),stCount=$('neuron-state-count'),moCount=$('neuron-mood-count');
+  const ctxList=$('neuron-context-list'),stList=$('neuron-state-list'),moList=$('neuron-mood-list');
+  try{
+    const neuronsData=await api('/api/v1/neurons');
+    const raw=neuronsData?.data||{};
+    const layers={context:{items:{},r:150,g:ctxG,count:ctxCount,list:ctxList,color:'96,165,250'},
+      state:{items:{},r:105,g:stG,count:stCount,list:stList,color:'52,211,153'},
+      mood:{items:{},r:60,g:moG,count:moCount,list:moList,color:'251,146,60'}};
+    ['context','state','mood'].forEach(k=>{
+      layers[k].items=raw[k]&&typeof raw[k]==='object'?raw[k]:{};
+    });
+    Object.entries(layers).forEach(([key,layer])=>{
+      const entries=Object.entries(layer.items);
+      if(layer.g)layer.g.innerHTML='';
+      if(layer.count){
+        const labels={context:'Kontext',state:'Zustand',mood:'Stimmung'};
+        layer.count.textContent=labels[key]+': '+entries.length;
+      }
+      // Place dots evenly around the ring
+      entries.forEach(([name,state],i)=>{
+        const angle=(Math.PI*2*i)/Math.max(1,entries.length)-Math.PI/2;
+        const cx=160+Math.cos(angle)*layer.r;
+        const cy=160+Math.sin(angle)*layer.r;
+        const val=Number(state?.value??state?.current_value??state?.score??0.5);
+        const opacity=0.4+Math.min(1,Math.max(0,val))*0.6;
+        const dot=document.createElementNS('http://www.w3.org/2000/svg','circle');
+        dot.setAttribute('cx',cx.toFixed(1));
+        dot.setAttribute('cy',cy.toFixed(1));
+        dot.setAttribute('r','6');
+        dot.setAttribute('fill','rgba('+layer.color+','+opacity.toFixed(2)+')');
+        dot.setAttribute('stroke','rgba('+layer.color+',0.9)');
+        dot.setAttribute('stroke-width','1.5');
+        dot.setAttribute('filter','url(#neuronGlow)');
+        const title=document.createElementNS('http://www.w3.org/2000/svg','title');
+        title.textContent=name+' ('+val.toFixed(2)+')';
+        dot.appendChild(title);
+        if(layer.g)layer.g.appendChild(dot);
+      });
+      // Fill entity list
+      if(layer.list){
+        if(!entries.length){layer.list.innerHTML='<span style="color:var(--dim)">Keine Neuronen</span>';return;}
+        const colors={context:'var(--blue)',state:'var(--green)',mood:'var(--orange)'};
+        layer.list.innerHTML=entries.map(([name,state])=>{
+          const val=Number(state?.value??state?.current_value??state?.score??0.5);
+          const pct=Math.round(val*100);
+          return `<div style="display:flex;justify-content:space-between;padding:2px 0;border-bottom:1px solid var(--border)"><span>${escapeHtml(name)}</span><span style="color:${colors[key]};font-weight:600">${pct}%</span></div>`;
+        }).join('');
+      }
+    });
+  }catch(e){
+    console.error('loadNeuronLayer:',e);
+    if(ctxList)ctxList.innerHTML='<span style="color:var(--dim)">Neuronen nicht verfuegbar</span>';
+    if(stList)stList.innerHTML='<span style="color:var(--dim)">Neuronen nicht verfuegbar</span>';
+    if(moList)moList.innerHTML='<span style="color:var(--dim)">Neuronen nicht verfuegbar</span>';
+  }
+}
+
+// -- Tagged-but-not-in-Zone Entities Panel (v9.2.0) --
+async function loadTaggedNotInZone(){
+  const panel=$('tagged-not-in-zone-panel');if(!panel)return;
+  try{
+    const [zonesRes,entitiesRes]=await Promise.allSettled([
+      api('/api/v1/hub/zones'),
+      api('/api/v1/entities?limit=2000'),
+    ]);
+    const zones=(zonesRes.status==='fulfilled'?zonesRes.value:null);
+    const entities=(entitiesRes.status==='fulfilled'?entitiesRes.value:null);
+    // Collect all entity_ids that are in a zone
+    const zoneEntityIds=new Set();
+    (zones?.zones||[]).forEach(z=>{
+      (z.entities||[]).forEach(e=>{
+        const eid=typeof e==='string'?e:(e.entity_id||'');
+        if(eid)zoneEntityIds.add(eid);
+      });
+    });
+    // Find entities with PilotSuite-relevant tags/keywords that are NOT in any zone
+    const allEntities=entities?.entities||entities?.data||[];
+    const styxKeywords=['styx','pilotsuite','pilot','neuron','habitus','licht','light','temperatur','temperature','bewegung','motion','energie','energy','klima','climate','media_player'];
+    const unzoned=allEntities.filter(e=>{
+      const eid=e.entity_id||e.id||'';
+      if(!eid||zoneEntityIds.has(eid))return false;
+      const lower=eid.toLowerCase()+(e.name||'').toLowerCase()+(e.domain||'').toLowerCase();
+      return styxKeywords.some(kw=>lower.includes(kw));
+    }).slice(0,50);
+    if(!unzoned.length){
+      panel.innerHTML='<div class="empty" style="padding:8px">Alle relevanten Entities sind Zonen zugeordnet &#x2705;</div>';
+      return;
+    }
+    let h='<div style="font-size:11px;color:var(--dim);margin-bottom:6px">'+unzoned.length+' Entities mit relevanten Tags, aber ohne Zone:</div>';
+    h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:4px">';
+    unzoned.forEach(e=>{
+      const eid=e.entity_id||e.id||'';
+      const name=e.name||e.friendly_name||eid;
+      const domain=(eid.split('.')[0]||'').replace(/_/g,' ');
+      h+=`<div style="display:flex;align-items:center;gap:6px;padding:4px 8px;background:var(--card-bg);border:1px solid var(--border);border-radius:6px;font-size:11px">
+        <span style="color:var(--yellow);font-size:14px">&#x1f3f7;</span>
+        <div><div style="font-weight:600">${escapeHtml(name)}</div><div style="color:var(--dim);font-size:10px">${escapeHtml(domain)} &middot; ${escapeHtml(eid)}</div></div>
+      </div>`;
+    });
+    h+='</div>';
+    panel.innerHTML=h;
+  }catch(e){
+    console.error('loadTaggedNotInZone:',e);
+    panel.innerHTML='<div class="empty">Daten nicht verfuegbar</div>';
   }
 }
 
@@ -4648,11 +4930,13 @@ async function quickApplyRoutingModel(provider,model){
     addHistory('\u26a0\ufe0f Modellwahl fehlgeschlagen: '+(e.message||'unbekannt'));
   }
 }
-async function pullOfflineModel(model){
+async function pullOfflineModel(model,btn){
   const selected=String(model||'').trim();
   if(!selected)return;
+  if(btn){btn.disabled=true;btn.textContent='\u23f3 Starte...';}
   try{
-    const r=await fetch(API+'/api/v1/agent/models/pull',withAuth({
+    // Try streaming endpoint first, fallback to blocking
+    const r=await fetch(API+'/chat/models/pull',withAuth({
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({model:selected}),
@@ -4662,11 +4946,41 @@ async function pullOfflineModel(model){
     if(!r.ok||data?.ok===false){
       throw new Error(data?.error||data?.message||('HTTP '+r.status));
     }
-    const status=String(data?.pull?.status||'started');
-    addHistory(`Offline Modell ${selected}: ${status}`);
-    setTimeout(()=>{loadSettings().catch(()=>{});},1200);
+    const status=String(data?.status||data?.pull?.status||'started');
+    if(btn){btn.textContent='\u2713 '+status;btn.className='model-btn model-btn-active';}
+    addHistory('\u2705 Modell-Download: '+escapeHtml(selected)+' — '+escapeHtml(status));
+    setTimeout(()=>{loadSettings().catch(()=>{});},1500);
   }catch(e){
+    if(btn){btn.disabled=false;btn.textContent='\u2b07 Download';}
     addHistory('\u26a0\ufe0f Modell-Download fehlgeschlagen: '+(e.message||'unbekannt'));
+  }
+}
+async function pullManualModel(){
+  const input=document.getElementById('manual-model-input');
+  const statusEl=document.getElementById('manual-model-status');
+  if(!input)return;
+  const model=String(input.value||'').trim();
+  if(!model){if(statusEl)statusEl.innerHTML=badge('Modellname eingeben','y');return;}
+  if(statusEl)statusEl.innerHTML=badge('\u23f3 Download laeuft...','b');
+  try{
+    const r=await fetch(API+'/chat/models/pull',withAuth({
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({model:model}),
+    }));
+    let data={};
+    try{data=await r.json()}catch(_err){data={}}
+    if(!r.ok||data?.ok===false){
+      throw new Error(data?.error||data?.message||('HTTP '+r.status));
+    }
+    const status=String(data?.status||data?.pull?.status||'success');
+    if(statusEl)statusEl.innerHTML=badge('\u2713 '+status,'g');
+    addHistory('\u2705 Manueller Modell-Download: '+escapeHtml(model)+' — '+escapeHtml(status));
+    input.value='';
+    setTimeout(()=>{loadSettings().catch(()=>{});},1500);
+  }catch(e){
+    if(statusEl)statusEl.innerHTML=badge('\u26a0 '+String(e.message||'Fehler').slice(0,60),'r');
+    addHistory('\u26a0\ufe0f Manueller Modell-Download fehlgeschlagen: '+(e.message||'unbekannt'));
   }
 }
 async function applyModulePreset(presetId){
@@ -4806,7 +5120,7 @@ async function pullModelWithProgress(model,btn){
     item.appendChild(progressDiv);
   }
   try{
-    const r=await fetch(API+'/api/v1/agent/models/pull',withAuth({
+    const r=await fetch(API+'/chat/models/pull',withAuth({
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({model:selected}),
@@ -4816,9 +5130,9 @@ async function pullModelWithProgress(model,btn){
     if(!r.ok||data?.ok===false){
       throw new Error(data?.error||data?.message||('HTTP '+r.status));
     }
-    const status=String(data?.pull?.status||'started');
+    const status=String(data?.status||data?.pull?.status||'started');
     btn.innerHTML='&#x2b07; '+escapeHtml(status);
-    addHistory('Modell-Download gestartet: '+escapeHtml(selected));
+    addHistory('\u2705 Modell-Download gestartet: '+escapeHtml(selected));
     // Simulate progress indicator; re-check status periodically
     let progress=10;
     const progressFill=progressDiv?progressDiv.querySelector('.model-progress-fill'):null;
@@ -4987,21 +5301,39 @@ async function loadSettings(){
   if(rec&&rec.models){
     rc.innerHTML='';
     rec.models.forEach(m=>{
+      const mid=String(m.id||m.name||'');
+      const ev=encodeURIComponent(mid);
       const mbadges=[m.installed?badge('Installiert','g'):badge((m.size_mb||'?')+'MB','y')];
       if(m.active)mbadges.push(badge('Aktiv','p'));
       if(m.supports_tools)mbadges.push(badge('Tools','b'));
       mbadges.push(badge('Offline','b'));
+      const dlBtn=m.installed
+        ?`<button class="model-btn" onclick="quickApplyRoutingModel('offline',decodeURIComponent('${ev}'))" style="margin-left:6px;background:var(--surface);border:1px solid var(--border);color:var(--dim);border-radius:6px;padding:3px 7px;font-size:10px;cursor:pointer">Auswaehlen</button>`
+        :`<button class="model-btn model-btn-download" onclick="pullOfflineModel(decodeURIComponent('${ev}'),this)" style="margin-left:6px;font-size:10px;padding:3px 7px;border-radius:6px;cursor:pointer">&#x2b07; Download</button>`;
       rc.appendChild(el('div','pat',
         `<div><strong>${escapeHtml(m.name||'')}</strong><br><span style="font-size:10px;color:var(--dim)">${escapeHtml(m.description||'')}</span></div>
-        <div class="meta">${mbadges.join(' ')}</div>`));
+        <div class="meta">${mbadges.join(' ')}${dlBtn}</div>`));
     });
     (rec.cloud_models||[]).forEach(m=>{
+      const mid=String(m.id||m.name||'');
+      const ev=encodeURIComponent(mid);
       const mbadges=[badge('Cloud','p')];
       if(m.active)mbadges.push(badge('Aktiv','g'));
+      const selectBtn=`<button class="model-btn" onclick="quickApplyRoutingModel('cloud',decodeURIComponent('${ev}'))" style="margin-left:6px;background:var(--surface);border:1px solid var(--border);color:var(--dim);border-radius:6px;padding:3px 7px;font-size:10px;cursor:pointer">Auswaehlen</button>`;
       rc.appendChild(el('div','pat',
         `<div><strong>${escapeHtml(m.name||m.id||'')}</strong><br><span style="font-size:10px;color:var(--dim)">${escapeHtml(m.description||'Cloud fallback Modell')}</span></div>
-        <div class="meta">${mbadges.join(' ')}</div>`));
+        <div class="meta">${mbadges.join(' ')}${selectBtn}</div>`));
     });
+    // Manual model entry
+    const manualDiv=document.createElement('div');
+    manualDiv.style.cssText='margin-top:12px;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--surface)';
+    manualDiv.innerHTML=`<div style="font-size:11px;color:var(--dim);margin-bottom:6px"><strong>Manuelles Modell</strong> — beliebigen Ollama-Modellnamen eingeben</div>
+      <div style="display:flex;gap:6px;align-items:center">
+        <input id="manual-model-input" type="text" placeholder="z.B. phi3:mini, gemma2:2b, ..." style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--fg);font-size:12px;font-family:inherit" onkeydown="if(event.key==='Enter')pullManualModel()">
+        <button onclick="pullManualModel()" style="background:var(--accent);border:none;color:#fff;border-radius:6px;padding:6px 12px;font-size:11px;cursor:pointer;white-space:nowrap">&#x2b07; Download</button>
+      </div>
+      <div id="manual-model-status" style="margin-top:4px;font-size:10px"></div>`;
+    rc.appendChild(manualDiv);
   }else{rc.innerHTML='<div class="empty">Keine Empfehlungen verfuegbar</div>'}
 }
 
@@ -5336,7 +5668,7 @@ async function validateCloud(){
 // ==================================================
 // PAGE LOADER — Resilient wrapper
 // ==================================================
-const _loaders={styx:loadStyx,habitus:async()=>{await loadHabitus();loadEntitySuggestions('hab-entity-suggestions');loadScenes();},mood:loadMood,modules:async()=>{await loadModules();loadAutomations();loadMediaZones();loadNewsWarnings();loadWastePanel();loadBirthdayPanel()},system:async()=>{await loadSystemOverview(false);await loadSelfRepairPanel(false);},haushalt:loadHaushalt,settings:loadSettings};
+const _loaders={styx:async()=>{await loadStyx();loadOverviewHealth();loadMood();},chat:async()=>{},habitus:async()=>{await loadHabitus();loadEntitySuggestions('hab-entity-suggestions');loadScenes();},mood:loadMood,modules:async()=>{await loadModules();loadAutomations();loadMediaZones();loadNeuronLayer();loadTaggedNotInZone();},system:async()=>{await loadSystemOverview(false);await loadSelfRepairPanel(false);},haushalt:loadHaushalt,settings:loadSettings};
 function loadPage(p){
   const fn=_loaders[p];
   if(!fn)return;
