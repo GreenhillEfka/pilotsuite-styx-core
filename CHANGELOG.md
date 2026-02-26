@@ -1,5 +1,25 @@
 # Changelog - PilotSuite Core Add-on
 
+## [8.11.1] - 2026-02-26 — SELF-REPAIR WORKSPACE BRANCH FLOW
+
+### Added
+- Self-Repair workspace endpoints:
+  - `GET /api/v1/self-repair/workspace/status`
+  - `POST /api/v1/self-repair/workspace/prepare`
+- Safe Git workspace preparation in Self-Repair:
+  - clone/sync active source repo (official/private)
+  - prepare per-run working branch (`styx-self-repair-*`)
+  - expose workspace metadata in status and jobs.
+- System dashboard Self-Repair panel now shows workspace readiness and a direct "Workspace vorbereiten" action.
+
+### Changed
+- Self-Repair jobs now execute workspace prep before plan generation and attach branch/head details to each job record.
+- Architecture docs updated to reflect v2.1 state and remaining v2 patch/push roadmap.
+
+### Validation
+- `pytest -q tests/test_self_repair_api.py tests/test_dashboard_template_habitus.py tests/test_system_overview_api.py tests/test_dashboard_endpoints.py` passed.
+- GitHub CI / Add-on Validation / Production Guard passed on commit `f955656`.
+
 ## [8.11.0] - 2026-02-25 — SYSTEM OVERVIEW + SENSOR/NEURON LAYER UX
 
 ### Added
