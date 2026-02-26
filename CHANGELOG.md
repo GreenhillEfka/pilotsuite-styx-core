@@ -1,5 +1,23 @@
 # Changelog - PilotSuite Core Add-on
 
+## [9.1.0] - 2026-02-26 — DEVICE REGISTRY + ENHANCED ENTITY SEARCH
+
+### Added
+- **Entity Search v2**: Device cache, manufacturer grouping, HA labels support.
+  - `GET /api/v1/entities/devices` — devices grouped by manufacturer.
+  - `GET /api/v1/entities/<entity_id>` — single entity detail endpoint.
+  - Search now supports `manufacturer` and `label` filters.
+  - Bulk import now accepts `devices` alongside entities+areas.
+  - Stats endpoint includes manufacturer_counts and device totals.
+- **Enhanced Role Patterns**: Added cover, vacuum, lock, alarm patterns (18 total, DE+EN).
+- **Enhanced Domain Icons**: Added notify, calendar, todo icons (36 total).
+
+### Changed
+- **entity_search.py**: Entity cache preserves device/area info across state updates (merge strategy).
+  - `update_entity_cache()` now merges with existing entries instead of overwriting.
+  - `_build_zone_suggestions()` uses area_name from cache for better zone matching.
+- **Version**: `config.yaml` → `9.1.0`. Paired with HA Integration `v9.1.0`.
+
 ## [9.0.0] - 2026-02-26 — ARCHITECTURE OVERHAUL + EVENTBUS + ENTITY SEARCH
 
 ### Added
