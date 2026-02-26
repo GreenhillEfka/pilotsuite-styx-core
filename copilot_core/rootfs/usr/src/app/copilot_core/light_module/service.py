@@ -606,3 +606,168 @@ class LightModuleService:
                 **evaluation.to_dict(),
             })
         return results
+
+    # ---- Brightness Threshold Configuration --------------------------------
+
+    def set_brightness_threshold(
+        self,
+        zone_id: str,
+        min_brightness_pct: int | None = None,
+        max_brightness_pct: int | None = None,
+        outdoor_lux_bright_threshold: float | None = None,
+        outdoor_lux_dark_threshold: float | None = None,
+    ) -> dict[str, Any]:
+        """Set the brightness threshold parameters for a zone.
+
+        This controls when automatic lighting kicks in based on the ratio
+        of outdoor to indoor illumination.
+
+        Parameters
+        ----------
+        zone_id : str
+            Zone to configure.
+        min_brightness_pct : int, optional
+            Minimum brightness when lights are on (slider: 1-100).
+        max_brightness_pct : int, optional
+            Maximum brightness (slider: 1-100).
+        outdoor_lux_bright_threshold : float, optional
+            Lux above which natural light is abundant (slider: 1000-50000).
+        outdoor_lux_dark_threshold : float, optional
+            Lux below which it's dark (slider: 10-1000).
+        """
+        updates: dict[str, Any] = {}
+
+        if min_brightness_pct is not None:
+            updates["min_brightness_pct"] = max(1, min(100, int(min_brightness_pct)))
+        if max_brightness_pct is not None:
+            updates["max_brightness_pct"] = max(1, min(100, int(max_brightness_pct)))
+        if outdoor_lux_bright_threshold is not None:
+            self._global_config["outdoor_lux_bright_threshold"] = max(
+                100, min(100000, float(outdoor_lux_bright_threshold))
+            )
+        if outdoor_lux_dark_threshold is not None:
+            self._global_config["outdoor_lux_dark_threshold"] = max(
+                1, min(10000, float(outdoor_lux_dark_threshold))
+            )
+
+        if updates:
+            self.upsert_zone_profile(zone_id, updates)
+
+        if outdoor_lux_bright_threshold is not None or outdoor_lux_dark_threshold is not None:
+            with self._lock:
+                self._save()
+
+        return {
+            "ok": True,
+            "zone_id": zone_id,
+            "profile": self.get_zone_profile(zone_id),
+            "global_thresholds": {
+                "outdoor_lux_bright_threshold": self._global_config.get("outdoor_lux_bright_threshold", 10000),
+                "outdoor_lux_dark_threshold": self._global_config.get("outdoor_lux_dark_threshold", 100),
+            },
+        }
+
+    def get_brightness_info(self, zone_id: str) -> dict[str, Any]:
+        """Get comprehensive brightness information for a zone.
+
+        Returns current indoor/outdoor lux, computed ratio, and whether
+        artificial light is needed at the current illumination levels.
+        """
+        profile = self._profiles.get(zone_id)
+        state = self._states.get(zone_id)
+
+        if profile is None:
+            return {"ok": False, "error": f"No profile for zone {zone_id}"}
+
+        outdoor = state.outdoor_lux if state else 0.0
+        indoor = state.indoor_lux if state else 0.0
+
+        bright_thresh = self._global_config.get("outdoor_lux_bright_threshold", 10000)
+        dark_thresh = self._global_config.get("outdoor_lux_dark_threshold", 100)
+
+        # Compute the target brightness at current conditions
+        target_brightness = brightness_ratio_adjustment(
+            outdoor_lux=outdoor,
+            indoor_lux=indoor,
+            min_brightness_pct=profile.min_brightness_pct,
+            max_brightness_pct=profile.max_brightness_pct,
+            bright_threshold=bright_thresh,
+            dark_threshold=dark_thresh,
+        )
+
+        ratio = indoor / max(outdoor, 1.0) if outdoor > 0 else 0.0
+
+        return {
+            "ok": True,
+            "zone_id": zone_id,
+            "indoor_lux": indoor,
+            "outdoor_lux": outdoor,
+            "brightness_ratio": round(ratio, 4),
+            "target_brightness_pct": target_brightness,
+            "natural_light_sufficient": outdoor >= bright_thresh and ratio > 0.3,
+            "config": {
+                "min_brightness_pct": profile.min_brightness_pct,
+                "max_brightness_pct": profile.max_brightness_pct,
+                "outdoor_lux_bright_threshold": bright_thresh,
+                "outdoor_lux_dark_threshold": dark_thresh,
+            },
+        }
+
+    # ---- Light Presets (time/color) ----------------------------------------
+
+    def get_time_color_presets(self) -> dict[str, Any]:
+        """Return the circadian time/color presets configuration."""
+        return {
+            "ok": True,
+            "circadian_enabled": self._global_config.get("circadian_enabled", True),
+            "default_color_temp_min_k": self._global_config.get("default_color_temp_min_k", 2200),
+            "default_color_temp_max_k": self._global_config.get("default_color_temp_max_k", 5500),
+            "presets": {
+                "warm_night": {"color_temp_k": 2200, "brightness_pct": 15, "label": "Warmes Nachtlicht"},
+                "evening": {"color_temp_k": 2700, "brightness_pct": 60, "label": "Gemütlicher Abend"},
+                "day": {"color_temp_k": 4500, "brightness_pct": 100, "label": "Tageslicht"},
+                "focus": {"color_temp_k": 5500, "brightness_pct": 100, "label": "Konzentration"},
+                "movie": {"color_temp_k": 2400, "brightness_pct": 10, "label": "Filmmodus"},
+                "relax": {"color_temp_k": 3000, "brightness_pct": 40, "label": "Entspannung"},
+            },
+        }
+
+    def apply_preset_to_zone(
+        self,
+        zone_id: str,
+        preset_name: str,
+    ) -> dict[str, Any]:
+        """Apply a named light preset to a zone.
+
+        Parameters
+        ----------
+        zone_id : str
+            The zone to apply the preset to.
+        preset_name : str
+            One of: warm_night, evening, day, focus, movie, relax.
+        """
+        presets = self.get_time_color_presets()["presets"]
+        preset = presets.get(preset_name)
+        if preset is None:
+            return {"ok": False, "error": f"Unknown preset '{preset_name}'"}
+
+        profile = self._profiles.get(zone_id)
+        if profile is None:
+            return {"ok": False, "error": f"No profile for zone {zone_id}"}
+
+        # Update state to reflect preset
+        state = self._states.get(zone_id)
+        if state is not None:
+            state.brightness_pct = preset["color_temp_k"]  # Will be overridden
+            state.color_temp_k = preset["color_temp_k"]
+            state.should_be_on = True
+            state.reason = f"preset:{preset_name}"
+
+        return {
+            "ok": True,
+            "zone_id": zone_id,
+            "preset": preset_name,
+            "brightness_pct": preset["brightness_pct"],
+            "color_temp_k": preset["color_temp_k"],
+            "label": preset["label"],
+        }

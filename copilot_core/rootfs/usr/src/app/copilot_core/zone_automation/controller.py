@@ -208,12 +208,14 @@ class ZoneAutomationController:
         event_bus: Any = None,
         light_module_service: Any = None,
         music_cloud_service: Any = None,
+        override_modes_service: Any = None,
         data_dir: str | None = None,
     ) -> None:
         self._lock = threading.Lock()
         self._event_bus = event_bus
         self._light_module = light_module_service
         self._music_cloud = music_cloud_service
+        self._override_modes = override_modes_service
 
         # Persistence
         if data_dir is not None:
@@ -657,6 +659,15 @@ class ZoneAutomationController:
             evaluations.append(self.evaluate_zone(zone_id))
         return evaluations
 
+    def _get_zone_consequences(self, zone_id: str) -> dict[str, Any]:
+        """Get merged override mode consequences for a zone."""
+        if self._override_modes is None:
+            return {}
+        try:
+            return self._override_modes.get_effective_consequences(zone_id)
+        except Exception:
+            return {}
+
     def _compute_light_action(
         self,
         config: ZoneAutomationConfig,
@@ -668,6 +679,15 @@ class ZoneAutomationController:
 
         Returns (action, brightness_pct, color_temp_k, reason).
         """
+        # Check override modes
+        consequences = self._get_zone_consequences(config.zone_id)
+        if consequences:
+            if not consequences.get("light_allowed", True):
+                return ("none", 0, 4000, "light_suppressed_by_override")
+            cons = consequences.get("consequences", {})
+            if cons.get("light_manual_override"):
+                return ("none", 0, 4000, "manual_override_mode")
+
         # If we have a LightModuleService, delegate the full evaluation
         if self._light_module is not None:
             try:
@@ -736,6 +756,12 @@ class ZoneAutomationController:
             return "none"
         if not config.media_follow_presence:
             return "none"
+
+        # Check override modes
+        consequences = self._get_zone_consequences(config.zone_id)
+        if consequences:
+            if not consequences.get("music_allowed", True):
+                return "none"
 
         if presence.occupied:
             return "follow"

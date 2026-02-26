@@ -232,7 +232,9 @@ class TestMotionDetection:
 class TestZoneIdle:
 
     def test_idle_ungroups(self, svc, fake_mgr):
-        """Zone idle -> ungrouped."""
+        """Zone idle -> ungrouped (overtime disabled)."""
+        # Disable overtime so idle triggers immediate ungrouping
+        svc.update_config(overtime_sec=0)
         fake_mgr.set_zone_playing("living_room", "media_player.sonos_living")
         svc.on_motion_detected(zone_id="kitchen")
         assert len(fake_mgr._join_calls) == 1
@@ -261,6 +263,7 @@ class TestZoneIdle:
 
     def test_idle_removes_group_when_last_zone(self, svc, fake_mgr):
         """When the last grouped zone goes idle, the group is removed."""
+        svc.update_config(overtime_sec=0)
         fake_mgr.set_zone_playing("living_room", "media_player.sonos_living")
         svc.on_motion_detected(zone_id="kitchen")
         svc.on_zone_idle(zone_id="kitchen")
@@ -269,6 +272,7 @@ class TestZoneIdle:
 
     def test_idle_keeps_group_when_other_zones_remain(self, svc, fake_mgr):
         """Ungrouping one zone keeps the group if others remain."""
+        svc.update_config(overtime_sec=0)
         fake_mgr.set_zone_playing("living_room", "media_player.sonos_living")
         svc.on_motion_detected(zone_id="kitchen")
         svc.on_motion_detected(zone_id="bedroom")

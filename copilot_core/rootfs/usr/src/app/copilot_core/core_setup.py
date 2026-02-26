@@ -527,10 +527,20 @@ def init_services(hass=None, config: dict = None):
     except Exception:
         _LOGGER.exception("Failed to init MediaZoneManager")
 
+    # Initialize Override Modes Service (Party/Vacation/Sleep/Eco/Guest)
+    try:
+        from copilot_core.override_modes import OverrideModesService
+        override_modes_service = OverrideModesService(event_bus=event_bus)
+        services["override_modes_service"] = override_modes_service
+        _LOGGER.info("OverrideModesService initialized (6 built-in modes)")
+    except Exception:
+        _LOGGER.exception("Failed to init OverrideModesService")
+
     # Initialize Music Cloud Service (Sonos zone-following via motion sensors)
     try:
         music_cloud_service = MusicCloudService(
             media_zone_manager=services.get("media_zone_manager"),
+            override_modes_service=services.get("override_modes_service"),
         )
         services["music_cloud_service"] = music_cloud_service
         _LOGGER.info("MusicCloudService initialized")
@@ -599,6 +609,7 @@ def init_services(hass=None, config: dict = None):
             event_bus=event_bus,
             light_module_service=services.get("light_module_service"),
             music_cloud_service=services.get("music_cloud_service"),
+            override_modes_service=services.get("override_modes_service"),
         )
         services["zone_automation_controller"] = zone_automation_controller
         _LOGGER.info("ZoneAutomationController initialized (presence + light + brightness + media)")
@@ -931,6 +942,16 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         _LOGGER.info("Registered Music Cloud API (/api/v1/media/cloud/*)")
     except Exception:
         _LOGGER.exception("Failed to register Music Cloud API")
+
+    # Register Override Modes API (Party/Vacation/Sleep/Eco/Guest)
+    try:
+        from copilot_core.api.v1.override_modes import override_modes_bp, init_override_modes_api
+        if services and services.get("override_modes_service"):
+            init_override_modes_api(services["override_modes_service"])
+        app.register_blueprint(override_modes_bp)
+        _LOGGER.info("Registered Override Modes API (/api/v1/modes/*)")
+    except Exception:
+        _LOGGER.exception("Failed to register Override Modes API")
 
     # Register Reminders API (waste + birthdays, v3.2.0)
     try:
