@@ -445,6 +445,7 @@ def version():
 
 
 @app.get("/api/v1/status")
+@require_token
 def api_status():
     """Compatibility status endpoint used by HA integration and dashboard."""
     return jsonify(
@@ -458,6 +459,7 @@ def api_status():
 
 
 @app.get("/api/v1/capabilities")
+@require_token
 def api_capabilities():
     """Compatibility capabilities endpoint (minimal, stable schema)."""
     services = app.config.get("COPILOT_SERVICES", {}) or {}
@@ -482,6 +484,7 @@ def api_capabilities():
 
 
 @app.get("/api/v1/chat/status")
+@require_token
 def api_chat_status():
     """Compatibility alias for legacy clients expecting /api/v1/chat/status."""
     try:
