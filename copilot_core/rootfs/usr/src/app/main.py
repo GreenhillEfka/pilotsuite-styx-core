@@ -607,6 +607,9 @@ def api_capabilities():
             "ok": True,
             "time": _now_iso(),
             "version": APP_VERSION,
+            "api": {
+                "schema_version": API_VERSION,
+            },
             "modules": {
                 "events": {"enabled": True},
                 "brain_graph": {"enabled": services.get("brain_graph_service") is not None},
@@ -617,6 +620,32 @@ def api_capabilities():
                 "module_control": {"enabled": services.get("module_registry") is not None},
                 "hub": {"enabled": services.get("hub_zones") is not None},
                 "conversation": {"enabled": services.get("llm_provider") is not None},
+                # Dashboards / UX helpers
+                "habitus_dashboard_cards": {
+                    "enabled": True,
+                    "endpoints": [
+                        "/api/v1/habitus/dashboard_cards",
+                        "/api/v1/habitus/dashboard_cards/rules",
+                        "/api/v1/habitus/dashboard_cards/health",
+                    ],
+                },
+                # v10.x modules
+                "override_modes": {
+                    "enabled": services.get("override_modes_service") is not None,
+                    "endpoints": ["/api/v1/modes"],
+                },
+                "music_cloud": {
+                    "enabled": services.get("music_cloud_service") is not None,
+                    "endpoints": ["/api/v1/media/cloud/status", "/api/v1/media/cloud/config"],
+                },
+                "light_module": {
+                    "enabled": services.get("light_module_service") is not None,
+                    "endpoints": ["/api/v1/light-module/status", "/api/v1/light-module/config"],
+                },
+                "zone_automation": {
+                    "enabled": services.get("zone_automation_controller") is not None,
+                    "endpoints": ["/api/v1/zone-automation/status", "/api/v1/zone-automation/config"],
+                },
             },
         }
     )

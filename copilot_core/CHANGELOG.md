@@ -3,6 +3,20 @@
 This file exists so Home Assistant can show an add-on changelog.
 For full history, see the repository-level `CHANGELOG.md`.
 
+## 10.1.1
+- Fix: Add-on Versionsync wiederhergestellt (`config.yaml` + `manifest.json` + `VERSION`).
+- Doku: Versionshinweise konsolidiert (Core/HA Paarung klarer).
+
+## 10.1.0
+- Stabilitaet: Logikstruktur gehaertet, Bugfixes, EventBus-Bridges konsolidiert.
+
+## 10.0.1
+- Override Modes: manuelle/temporäre Modus-Schicht inkl. Sensor-/Status-Integration.
+- Musikwolke: Coordinator-Flow + Presets (u.a. Volume/Light) erweitert.
+
+## 10.0.0
+- Zone Automation Controller: Presence/Brightness/Automation-Grundlage + API.
+
 ## 9.0.0
 - **Architektur-Overhaul**: Zentraler EventBus fuer Inter-Modul-Kommunikation (pub/sub, Wildcards, History).
 - **Habitus Zones API**: Bidirektionale HA-Core Zonensynchronisation mit JSON-Persistenz.

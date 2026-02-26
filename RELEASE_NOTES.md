@@ -1,5 +1,23 @@
 # Release Notes - PilotSuite Core
 
+## [10.1.1] - 2026-02-26 — VERSION SYNC (ADD-ON VALIDATION)
+
+- Fix: Versionsync zwischen Add-on Metadaten und Runtime wiederhergestellt.
+  (`copilot_core/config.yaml`, `copilot_core/manifest.json`, `/usr/src/app/VERSION`)
+
+## [10.1.0] - 2026-02-26 — HARDENING + EVENTBUS BRIDGES
+
+- Stabilitaet: Logikstruktur gehaertet, Bugfixes, EventBus-Bridge-Wiring konsolidiert.
+
+## [10.0.1] - 2026-02-26 — OVERRIDE MODES + MUSIKWOLKE PRESETS
+
+- Neue Override Modes (temporäre manuelle Steuerung, sauberer Status/Sensor-Export).
+- Musikwolke: Coordinator-Flows + Presets (z.B. Volume/Light) erweitert.
+
+## [10.0.0] - 2026-02-26 — ZONE AUTOMATION CONTROLLER
+
+- Zone Automation: Presence Engine + Brightness Manager + API als Basis fuer kontextbasierte Automationen.
+
 ## [9.0.0] - 2026-02-26 — ARCHITECTURE OVERHAUL + EVENTBUS + ENTITY SEARCH
 
 ### Highlights

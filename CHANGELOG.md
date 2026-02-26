@@ -1,5 +1,31 @@
 # Changelog - PilotSuite Core Add-on
 
+## [10.1.1] - 2026-02-26 — VERSION SYNC (ADD-ON VALIDATION)
+
+### Fixed
+- Versionen wieder strikt synchronisiert (Home Assistant Add-on):
+  - `copilot_core/config.yaml`
+  - `copilot_core/rootfs/usr/src/app/VERSION`
+  - `copilot_core/manifest.json`
+
+## [10.1.0] - 2026-02-26 — HARDENING + EVENTBUS BRIDGES
+
+### Changed
+- Logik-Struktur gehaertet, Bugfixes, und EventBus-Bridge-Wiring konsolidiert.
+
+## [10.0.1] - 2026-02-26 — OVERRIDE MODES + MUSIKWOLKE COORDINATOR
+
+### Added
+- Override Modes (manuelle/temporäre Steuerungsmodi mit sauberer Sensor-/Status-Integration).
+
+### Changed
+- Musikwolke: Coordinator-Flows und Presets (u.a. Volume/Light) erweitert.
+
+## [10.0.0] - 2026-02-26 — ZONE AUTOMATION CONTROLLER
+
+### Added
+- Zone Automation: Controller/Presence/Brightness-Manager + API-Endpunkte als Basis fuer zone-basierte Automationslogik.
+
 ## [9.1.0] - 2026-02-26 — DEVICE REGISTRY + ENHANCED ENTITY SEARCH
 
 ### Added

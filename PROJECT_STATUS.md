@@ -1,17 +1,18 @@
-# PilotSuite - Production Status (2026-02-25)
+# PilotSuite - Production Status (2026-02-26)
 
 Scope: dual-repo production audit (`pilotsuite-styx-core` + `pilotsuite-styx-ha`).
 
 Release baseline for this status:
-- Core add-on target: `8.9.0`
-- HA integration target: `8.9.0`
+- Core add-on target: `10.1.1`
+- HA integration target: `10.1.1`
 
 ## Executive summary
-System is release-ready with validated critical communication loops and continuous guardrails.
+System is release-ready once CI gates are green (Core add-on validation + HA HACS validation) and versions/docs are synchronized.
 
 Validated for current baseline:
 - Main CI green in both repositories.
-- Add-on/HACS validation green for latest main commits.
+- HACS validation green in HA repo.
+- Core add-on validation must be green (blocked if add-on metadata/runtime versions drift).
 - Production guard workflows active (15-minute cadence).
 
 Additional hardening completed:
