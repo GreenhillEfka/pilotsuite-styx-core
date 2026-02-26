@@ -1,9 +1,9 @@
-# PilotSuite Styx Self-Repair (v1)
+# PilotSuite Styx Self-Repair (v2.1)
 
 ## Zielbild
 Styx soll bei Teil-Ausfaellen (Integritaet `degraded`) nicht nur warnen, sondern reproduzierbar analysieren, priorisieren und sichere Reparaturplaene liefern.
 
-## v1 (jetzt implementiert)
+## v1 Basis (weiterhin aktiv)
 - API: `/api/v1/self-repair/*`
 - Integritaets-Snapshot aus `/api/v1/system/overview` (Score + Statusfarbe: green/orange/red)
 - Fehleraggregation (letzte N Fehler) aus Dev-Surface + Log-Fallback
@@ -16,15 +16,24 @@ Styx soll bei Teil-Ausfaellen (Integritaet `degraded`) nicht nur warnen, sondern
   - Repair-Job-Historie
   - Kanalumschaltung official/private
 
+## v2.1 (neu implementiert)
+- Git-Workspace-Flow pro Job:
+  - Clone/Fast-Sync des aktiven Repos (`official` oder `private`)
+  - Vorbereitung eines isolierten Branches `styx-self-repair-<timestamp>-<id>`
+  - Branch/Commit/Workspace-Metadaten werden im Job gespeichert
+- Manueller Workspace-Prepare-Endpunkt für UI und Tests:
+  - `POST /api/v1/self-repair/workspace/prepare`
+  - `GET /api/v1/self-repair/workspace/status`
+- Dashboard zeigt jetzt Git/Workspace-Bereitschaft und bietet "Workspace vorbereiten".
+
 ## Sicherheitsgrenzen (absichtlich)
 - Kein ungeprueftes Auto-Patching im Runtime-Container
 - Kein automatischer Push/PR in v1
 - Ergebnisse sind gezielte Handlungsplaene, nicht blindes Schreiben in produktiven Code
 
 ## Geplante v2/v3 Erweiterungen
-- **v2 Assistive Patcher:**
-  - Lokaler Workspace-Clone (`official` + optional `private`)
-  - Patch-Erzeugung in Branch `styx-self-repair/*`
+- **v2 Assistive Patcher (naechster Schritt):**
+  - Patch-Erzeugung in vorbereitetem Branch `styx-self-repair/*`
   - Tests/Lint als Gate vor Push
 - **v3 Full Loop (opt-in):**
   - Push in User-Repo
@@ -39,6 +48,8 @@ Styx soll bei Teil-Ausfaellen (Integritaet `degraded`) nicht nur warnen, sondern
 - `POST /api/v1/self-repair/github/test` (PAT + Repo validieren, optional speichern)
 - `GET /api/v1/self-repair/errors?limit=10`
 - `POST /api/v1/self-repair/self-check`
+- `GET /api/v1/self-repair/workspace/status`
+- `POST /api/v1/self-repair/workspace/prepare`
 - `GET /api/v1/self-repair/jobs`
 - `POST /api/v1/self-repair/jobs`
 - `GET /api/v1/self-repair/jobs/<job_id>`

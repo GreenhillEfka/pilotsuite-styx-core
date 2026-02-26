@@ -126,6 +126,18 @@ def test_create_self_repair_job(monkeypatch):
     )
     monkeypatch.setattr(
         self_repair,
+        "_prepare_workspace_branch",
+        lambda settings, force_sync=False, branch_hint="": {
+            "ok": True,
+            "workspace": {
+                "repo_path": "/tmp/workspace/repo",
+                "working_branch": "styx-self-repair-test",
+                "head": "abc1234",
+            },
+        },
+    )
+    monkeypatch.setattr(
+        self_repair,
         "_generate_repair_plan",
         lambda **kwargs: {
             "provider_result": {"provider": "ollama", "content": "ok"},
@@ -151,7 +163,43 @@ def test_create_self_repair_job(monkeypatch):
     assert job["status"] == "completed"
     assert job["llm"]["provider"] == "ollama"
     assert job["plan"]["diagnosis"] == "ok"
+    assert job["workspace"]["working_branch"] == "styx-self-repair-test"
     assert captured["job"]["id"] == job["id"]
+
+
+def test_workspace_prepare_endpoint(monkeypatch):
+    monkeypatch.setattr(
+        self_repair,
+        "_load_settings",
+        lambda: {
+            "enabled": True,
+            "source_channel": "official",
+            "official_repo": {"owner": "GreenhillEfka", "name": "pilotsuite-styx-core", "default_branch": "main"},
+            "github": {"token": "", "repo_owner": "", "repo_name": "", "default_branch": "main"},
+            "workspace": {"enabled": True, "root_path": "/tmp/ws", "sync_on_job": True},
+        },
+    )
+    monkeypatch.setattr(
+        self_repair,
+        "_prepare_workspace_branch",
+        lambda settings, force_sync=False, branch_hint="": {
+            "ok": True,
+            "workspace": {
+                "repo_path": "/tmp/ws/greenhillefka__pilotsuite-styx-core",
+                "working_branch": branch_hint or "styx-self-repair-1",
+                "head": "def5678",
+                "actions": ["cloned", "fetched", "branch_prepared"],
+            },
+        },
+    )
+
+    app = _build_app()
+    client = app.test_client()
+    response = client.post("/api/v1/self-repair/workspace/prepare", json={"force_sync": True, "branch": "fix-1"})
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["ok"] is True
+    assert payload["workspace"]["working_branch"] == "fix-1"
 
 
 def test_github_connection_test_and_save(monkeypatch):

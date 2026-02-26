@@ -3989,6 +3989,7 @@ function renderSelfRepairPanel(data){
   const integrity=data.integrity||{};
   const settings=data.settings||{};
   const repo=data.repo||{};
+  const workspace=data.workspace||{};
   const llm=data.llm||{};
   const errors=Array.isArray(data.errors_preview)?data.errors_preview:[];
   const jobs=(data.jobs&&Array.isArray(data.jobs.items))?data.jobs.items:[];
@@ -4012,6 +4013,7 @@ function renderSelfRepairPanel(data){
     `</div>`+
     `<div style="font-size:11px;color:var(--dim)">`+
     `Repo: <strong>${escapeHtml(repoName)}</strong> · Working branch: <code>${escapeHtml(repo.working_branch||'styx-self-repair')}</code><br>`+
+    `Workspace: <code>${escapeHtml(String(workspace.repo_path||'--'))}</code> · Git ${workspace.git_available?'bereit':'fehlt'} · Repo ${workspace.repo_present?'vorhanden':'noch nicht geklont'}<br>`+
     `LLM: Primary ${escapeHtml(String(llmStatus.primary_provider||'offline'))} / Secondary ${escapeHtml(String(llmStatus.secondary_provider||'cloud'))}`+
     (cloudConfigured?'':' · Cloud nicht konfiguriert')+
     `</div>`;
@@ -4021,6 +4023,7 @@ function renderSelfRepairPanel(data){
     `<button class="btn-sm" onclick="loadSelfRepairPanel(true)">Refresh</button>`+
     `<button class="btn-sm" onclick="setSelfRepairChannel('official')" ${channel==='official'?'disabled':''}>Official</button>`+
     `<button class="btn-sm" onclick="setSelfRepairChannel('private')" ${channel==='private'?'disabled':''}>Private</button>`+
+    `<button class="btn-sm" onclick="prepareSelfRepairWorkspace(true)">Workspace vorbereiten</button>`+
     `<input id="self-repair-private-repo" placeholder="owner/repo" value="${escapeHtml(privateRepoInput)}" style="min-width:170px;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px;color:var(--text);font-size:11px" />`+
     `<input id="self-repair-github-token" type="password" placeholder="GitHub PAT" style="min-width:170px;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px;color:var(--text);font-size:11px" />`+
     `<button class="btn-sm" onclick="connectSelfRepairGithub()">GitHub verbinden</button>`+
@@ -4107,6 +4110,25 @@ async function createSelfRepairJob(errorId=''){
     await loadSelfRepairPanel(true);
   }catch(e){
     addHistory('\u26a0\ufe0f Self-Repair Job fehlgeschlagen: '+escapeHtml(e.message||'unbekannt'));
+  }
+}
+async function prepareSelfRepairWorkspace(forceSync=true){
+  try{
+    const r=await fetch(API+'/api/v1/self-repair/workspace/prepare',withAuth({
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({force_sync:!!forceSync}),
+    }));
+    const data=await r.json().catch(()=>null);
+    if(!r.ok||data?.ok===false){
+      throw new Error(data?.error||('HTTP '+r.status));
+    }
+    const ws=data.workspace||{};
+    addHistory('Workspace bereit: '+String(ws.repo||'--')+' @ '+String(ws.working_branch||'--'));
+    _selfRepairStatusCache=null;
+    await loadSelfRepairPanel(true);
+  }catch(e){
+    addHistory('\u26a0\ufe0f Workspace-Prepare fehlgeschlagen: '+escapeHtml(e.message||'unbekannt'));
   }
 }
 async function setSelfRepairChannel(channel){

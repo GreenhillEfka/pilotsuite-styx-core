@@ -19,11 +19,14 @@ import json
 import logging
 import os
 import re
+import shutil
+import subprocess
 import threading
 import time
 import uuid
 from copy import deepcopy
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 from flask import Blueprint, jsonify, request
@@ -40,6 +43,8 @@ self_repair_bp = Blueprint("self_repair", __name__, url_prefix="/api/v1/self-rep
 
 _SETTINGS_PATH = os.environ.get("SELF_REPAIR_SETTINGS_PATH", "/data/self_repair_settings.json")
 _JOBS_PATH = os.environ.get("SELF_REPAIR_JOBS_PATH", "/data/self_repair_jobs.json")
+_WORKSPACE_ROOT = os.environ.get("SELF_REPAIR_WORKSPACE_ROOT", "/data/self_repair/workspaces")
+_GIT_ASKPASS_PATH = os.environ.get("SELF_REPAIR_GIT_ASKPASS_PATH", "/tmp/pilotsuite_git_askpass.sh")
 _MAX_JOB_HISTORY = 80
 _MAX_ERROR_LIMIT = 100
 
@@ -78,6 +83,11 @@ _DEFAULT_SETTINGS: dict[str, Any] = {
         "allow_push": False,
         "allow_upstream_pr": False,
         "upstream_repo": "GreenhillEfka/pilotsuite-styx-core",
+    },
+    "workspace": {
+        "enabled": True,
+        "root_path": _WORKSPACE_ROOT,
+        "sync_on_job": True,
     },
 }
 
@@ -200,6 +210,9 @@ def _load_settings() -> dict[str, Any]:
         if isinstance(stored.get("github"), dict):
             settings["github"].update(stored["github"])
 
+        if isinstance(stored.get("workspace"), dict):
+            settings["workspace"].update(stored["workspace"])
+
     # Normalize
     settings["repair_mode"] = str(settings.get("repair_mode", "advisory")).strip().lower()
     if settings["repair_mode"] not in {"advisory", "assisted", "auto"}:
@@ -233,6 +246,12 @@ def _load_settings() -> dict[str, Any]:
         github["repo_name"] = name
 
     settings["github"] = github
+    workspace = settings.get("workspace", {})
+    workspace["enabled"] = bool(workspace.get("enabled", True))
+    workspace["sync_on_job"] = bool(workspace.get("sync_on_job", True))
+    root_path = str(workspace.get("root_path") or _WORKSPACE_ROOT).strip()
+    workspace["root_path"] = root_path or _WORKSPACE_ROOT
+    settings["workspace"] = workspace
     return settings
 
 
@@ -273,6 +292,9 @@ def _update_settings(patch: dict[str, Any]) -> dict[str, Any]:
 
     if isinstance(patch.get("github"), dict):
         settings["github"].update(patch["github"])
+
+    if isinstance(patch.get("workspace"), dict):
+        settings["workspace"].update(patch["workspace"])
 
     normalized = _load_settings_from_payload(settings)
     _save_settings(normalized)
@@ -598,12 +620,250 @@ def _github_get(path: str, token: str, timeout: float = 8.0) -> tuple[int, dict[
         return 0, None
 
 
+def _sanitize_git_ref(value: str, fallback: str) -> str:
+    text = re.sub(r"[^a-zA-Z0-9._/-]+", "-", str(value or "").strip()).strip(".-/")
+    return text[:120] if text else fallback
+
+
+def _workspace_dir_name(owner: str, name: str) -> str:
+    combined = f"{owner}__{name}".lower()
+    return re.sub(r"[^a-z0-9._-]+", "_", combined)[:120]
+
+
+def _active_repo_descriptor(settings: dict[str, Any]) -> dict[str, Any]:
+    official = settings.get("official_repo", {}) if isinstance(settings, dict) else {}
+    github = settings.get("github", {}) if isinstance(settings, dict) else {}
+    channel = str(settings.get("source_channel") or "official").strip().lower()
+    if channel not in {"official", "private"}:
+        channel = "official"
+
+    if channel == "private":
+        owner = str(github.get("repo_owner") or "").strip()
+        name = str(github.get("repo_name") or "").strip()
+        if owner and name:
+            return {
+                "channel": "private",
+                "owner": owner,
+                "name": name,
+                "base_branch": str(github.get("default_branch") or "main").strip() or "main",
+                "clone_url": f"https://github.com/{owner}/{name}.git",
+                "token": str(github.get("token") or "").strip(),
+                "working_branch_prefix": str(github.get("working_branch") or "styx-self-repair").strip()
+                or "styx-self-repair",
+            }
+
+    owner = str(official.get("owner") or "").strip() or "GreenhillEfka"
+    name = str(official.get("name") or "").strip() or "pilotsuite-styx-core"
+    return {
+        "channel": "official",
+        "owner": owner,
+        "name": name,
+        "base_branch": str(official.get("default_branch") or "main").strip() or "main",
+        "clone_url": f"https://github.com/{owner}/{name}.git",
+        "token": "",
+        "working_branch_prefix": "styx-self-repair",
+    }
+
+
+def _workspace_settings(settings: dict[str, Any]) -> dict[str, Any]:
+    workspace = settings.get("workspace", {}) if isinstance(settings, dict) else {}
+    root_path = str(workspace.get("root_path") or _WORKSPACE_ROOT).strip() or _WORKSPACE_ROOT
+    return {
+        "enabled": bool(workspace.get("enabled", True)),
+        "sync_on_job": bool(workspace.get("sync_on_job", True)),
+        "root_path": root_path,
+    }
+
+
+def _workspace_repo_path(settings: dict[str, Any]) -> Path:
+    workspace = _workspace_settings(settings)
+    repo = _active_repo_descriptor(settings)
+    return Path(workspace["root_path"]).expanduser() / _workspace_dir_name(repo["owner"], repo["name"])
+
+
+def _workspace_status(settings: dict[str, Any]) -> dict[str, Any]:
+    workspace = _workspace_settings(settings)
+    repo = _active_repo_descriptor(settings)
+    repo_path = _workspace_repo_path(settings)
+    git_path = shutil.which("git")
+    return {
+        "enabled": workspace["enabled"],
+        "sync_on_job": workspace["sync_on_job"],
+        "git_available": bool(git_path),
+        "git_path": git_path or "",
+        "root_path": workspace["root_path"],
+        "repo_path": str(repo_path),
+        "repo_present": bool((repo_path / ".git").exists()),
+        "active_channel": repo["channel"],
+        "repo": f"{repo['owner']}/{repo['name']}",
+        "base_branch": repo["base_branch"],
+    }
+
+
+def _ensure_git_askpass_script() -> str | None:
+    path = Path(_GIT_ASKPASS_PATH)
+    script = (
+        "#!/bin/sh\n"
+        "case \"$1\" in\n"
+        "  *sername*) printf '%s\\n' \"${PILOTSUITE_GIT_USERNAME:-x-access-token}\" ;;\n"
+        "  *assword*) printf '%s\\n' \"${PILOTSUITE_GIT_TOKEN:-}\" ;;\n"
+        "  *) printf '\\n' ;;\n"
+        "esac\n"
+    )
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if not path.exists() or path.read_text(encoding="utf-8", errors="ignore") != script:
+            path.write_text(script, encoding="utf-8")
+        path.chmod(0o700)
+        return str(path)
+    except Exception:
+        return None
+
+
+def _run_git(args: list[str], *, cwd: Path | None = None, token: str = "", timeout: float = 45.0) -> dict[str, Any]:
+    binary = shutil.which("git")
+    if not binary:
+        return {"ok": False, "error": "git_not_available", "code": None, "stdout": "", "stderr": ""}
+
+    env = os.environ.copy()
+    env["GIT_TERMINAL_PROMPT"] = "0"
+    env["GIT_ASKPASS"] = ""
+    clean_token = str(token or "").strip()
+    if clean_token:
+        askpass = _ensure_git_askpass_script()
+        if not askpass:
+            return {"ok": False, "error": "git_askpass_unavailable", "code": None, "stdout": "", "stderr": ""}
+        env["GIT_ASKPASS"] = askpass
+        env["PILOTSUITE_GIT_USERNAME"] = "x-access-token"
+        env["PILOTSUITE_GIT_TOKEN"] = clean_token
+
+    cmd = [binary, *args]
+    try:
+        completed = subprocess.run(
+            cmd,
+            cwd=str(cwd) if cwd else None,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+        )
+    except subprocess.TimeoutExpired as exc:
+        return {
+            "ok": False,
+            "error": "timeout",
+            "code": None,
+            "stdout": (exc.stdout or "")[-2000:],
+            "stderr": (exc.stderr or "")[-2000:],
+        }
+    except Exception as exc:
+        return {"ok": False, "error": str(exc), "code": None, "stdout": "", "stderr": ""}
+
+    return {
+        "ok": completed.returncode == 0,
+        "error": "",
+        "code": completed.returncode,
+        "stdout": (completed.stdout or "")[-2000:],
+        "stderr": (completed.stderr or "")[-2000:],
+    }
+
+
+def _prepare_workspace_branch(
+    settings: dict[str, Any],
+    *,
+    force_sync: bool = False,
+    branch_hint: str = "",
+) -> dict[str, Any]:
+    workspace = _workspace_settings(settings)
+    repo = _active_repo_descriptor(settings)
+    status = _workspace_status(settings)
+
+    if not workspace["enabled"]:
+        return {"ok": False, "error": "workspace_disabled", "workspace": status}
+    if not status["git_available"]:
+        return {"ok": False, "error": "git_not_available", "workspace": status}
+    if repo["channel"] == "private" and not repo["token"]:
+        return {"ok": False, "error": "private_repo_token_required", "workspace": status}
+
+    root = Path(workspace["root_path"]).expanduser()
+    repo_path = _workspace_repo_path(settings)
+    actions: list[str] = []
+    try:
+        root.mkdir(parents=True, exist_ok=True)
+    except Exception as exc:
+        return {"ok": False, "error": f"workspace_root_unwritable:{exc}", "workspace": status}
+
+    clone_timeout = 150.0
+    if not (repo_path / ".git").exists():
+        clone = _run_git(
+            [
+                "clone",
+                "--origin",
+                "origin",
+                "--branch",
+                repo["base_branch"],
+                "--single-branch",
+                repo["clone_url"],
+                str(repo_path),
+            ],
+            token=repo["token"],
+            timeout=clone_timeout,
+        )
+        if not clone["ok"]:
+            return {
+                "ok": False,
+                "error": "clone_failed",
+                "workspace": status,
+                "git": {"clone": clone},
+            }
+        actions.append("cloned")
+
+    should_sync = bool(force_sync or workspace["sync_on_job"])
+    if should_sync:
+        fetch = _run_git(["fetch", "--all", "--prune"], cwd=repo_path, token=repo["token"], timeout=60.0)
+        if not fetch["ok"]:
+            return {"ok": False, "error": "fetch_failed", "workspace": status, "git": {"fetch": fetch}}
+        actions.append("fetched")
+
+    base_branch = _sanitize_git_ref(repo["base_branch"], "main")
+    branch_prefix = _sanitize_git_ref(repo["working_branch_prefix"], "styx-self-repair")
+    branch_name = _sanitize_git_ref(
+        branch_hint or f"{branch_prefix}-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:4]}",
+        branch_prefix,
+    )
+
+    source_ref = f"origin/{base_branch}"
+    check_origin = _run_git(["rev-parse", "--verify", source_ref], cwd=repo_path, token=repo["token"])
+    if not check_origin["ok"]:
+        source_ref = base_branch
+
+    checkout = _run_git(["checkout", "-B", branch_name, source_ref], cwd=repo_path, token=repo["token"], timeout=45.0)
+    if not checkout["ok"]:
+        return {"ok": False, "error": "checkout_failed", "workspace": status, "git": {"checkout": checkout}}
+    actions.append("branch_prepared")
+
+    head = _run_git(["rev-parse", "--short", "HEAD"], cwd=repo_path, token=repo["token"])
+    branch = _run_git(["rev-parse", "--abbrev-ref", "HEAD"], cwd=repo_path, token=repo["token"])
+
+    prepared = {
+        **status,
+        "repo_path": str(repo_path),
+        "repo_present": True,
+        "working_branch": (branch.get("stdout") or "").strip() if branch.get("ok") else branch_name,
+        "head": (head.get("stdout") or "").strip() if head.get("ok") else "",
+        "prepared_at": _now_iso(),
+        "actions": actions,
+    }
+    return {"ok": True, "workspace": prepared}
+
+
 def _build_self_check(limit: int = 10, force: bool = False) -> dict[str, Any]:
     settings = _load_settings()
     integrity = _build_integrity_snapshot(force=force)
     errors = _collect_error_events(limit=limit, include_warnings=True)
     repo = _repo_snapshot(settings)
     llm = _llm_snapshot(force_refresh=force)
+    workspace = _workspace_status(settings)
 
     fixability_counts: dict[str, int] = {"high": 0, "medium": 0, "low": 0}
     for row in errors:
@@ -619,6 +879,7 @@ def _build_self_check(limit: int = 10, force: bool = False) -> dict[str, Any]:
         "time": _now_iso(),
         "integrity": integrity,
         "repo": repo,
+        "workspace": workspace,
         "llm": llm,
         "errors": errors,
         "summary": {
@@ -767,6 +1028,7 @@ def get_self_repair_status():
             "settings": _sanitize_settings(settings),
             "integrity": check.get("integrity", {}),
             "repo": check.get("repo", {}),
+            "workspace": check.get("workspace", _workspace_status(settings)),
             "llm": check.get("llm", {}),
             "errors_preview": check.get("errors", [])[:10],
             "jobs": {
@@ -793,6 +1055,31 @@ def update_self_repair_settings():
 
     settings = _update_settings(body)
     return jsonify({"ok": True, "settings": _sanitize_settings(settings), "time": _now_iso()})
+
+
+@self_repair_bp.route("/workspace/status", methods=["GET"])
+@require_token
+def get_workspace_status():
+    settings = _load_settings()
+    return jsonify({"ok": True, "workspace": _workspace_status(settings), "time": _now_iso()})
+
+
+@self_repair_bp.route("/workspace/prepare", methods=["POST"])
+@require_token
+def prepare_workspace():
+    settings = _load_settings()
+    body = request.get_json(silent=True) or {}
+    if not isinstance(body, dict):
+        body = {}
+
+    result = _prepare_workspace_branch(
+        settings,
+        force_sync=bool(body.get("force_sync", False)),
+        branch_hint=str(body.get("branch") or "").strip(),
+    )
+    code = 200 if bool(result.get("ok")) else 400
+    result["time"] = _now_iso()
+    return jsonify(result), code
 
 
 @self_repair_bp.route("/github/test", methods=["POST"])
@@ -949,6 +1236,13 @@ def create_self_repair_job():
     integrity = _build_integrity_snapshot(force=bool(body.get("force", False)))
     llm = _llm_snapshot(force_refresh=False)
     repo = _repo_snapshot(settings)
+    workspace_sync = bool(body.get("workspace_force_sync", False))
+    workspace_branch_hint = str(body.get("workspace_branch") or "").strip()
+    workspace = _prepare_workspace_branch(
+        settings,
+        force_sync=workspace_sync,
+        branch_hint=workspace_branch_hint,
+    )
 
     job_id = "sr_" + uuid.uuid4().hex[:12]
     started = _now_iso()
@@ -964,6 +1258,7 @@ def create_self_repair_job():
         "errors": selected_errors,
         "integrity": integrity,
         "repo": repo,
+        "workspace": workspace.get("workspace", _workspace_status(settings)),
         "execution": {
             "code_changes_applied": False,
             "git_push_attempted": False,
@@ -973,6 +1268,13 @@ def create_self_repair_job():
     }
 
     try:
+        if not workspace.get("ok"):
+            job["execution"]["notes"] = (
+                "Workspace-Preparation fehlgeschlagen. Repair-Plan wurde trotzdem erstellt, "
+                "aber Branch-Flow ist nicht bereit."
+            )
+            job["execution"]["workspace_error"] = workspace.get("error")
+
         repair = _generate_repair_plan(
             selected_errors=selected_errors,
             integrity=integrity,
