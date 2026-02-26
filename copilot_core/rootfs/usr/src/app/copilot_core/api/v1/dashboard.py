@@ -123,18 +123,166 @@ def brain_summary():
         }), 500
 
 
+@bp.get("/brain-graph-data")
+def brain_graph_data():
+    """Return full brain graph structure for frontend visualization.
+
+    Returns d3.js / vis.js compatible nodes + edges arrays
+    suitable for rendering an interactive force-directed graph.
+
+    Query params:
+        limit_nodes: Max nodes to return (default 200)
+        limit_edges: Max edges to return (default 500)
+    """
+    brain_service = _get_brain_graph_service()
+
+    if not brain_service:
+        return jsonify({
+            "ok": False,
+            "error": "Brain Graph service not available",
+            "time": _now_iso(),
+        }), 503
+
+    try:
+        limit_nodes = int(request.args.get("limit_nodes", "200"))
+        limit_edges = int(request.args.get("limit_edges", "500"))
+
+        state = brain_service.export_state(
+            limit_nodes=limit_nodes,
+            limit_edges=limit_edges,
+        )
+
+        raw_nodes = state.get("nodes", [])
+        raw_edges = state.get("edges", [])
+
+        # Kind → color/shape mapping for frontend rendering
+        _KIND_COLORS = {
+            "concept": "#60a5fa", "entity": "#34d399", "zone": "#fb923c",
+            "person": "#f472b6", "automation": "#a78bfa", "device": "#fbbf24",
+            "action": "#f87171", "scene": "#c084fc",
+        }
+        _KIND_SHAPES = {
+            "concept": "dot", "entity": "diamond", "zone": "box",
+            "person": "star", "automation": "triangle", "device": "square",
+        }
+
+        vis_nodes = []
+        for n in raw_nodes:
+            kind = n.get("kind", "unknown")
+            vis_nodes.append({
+                "id": n.get("id"),
+                "label": n.get("label", n.get("id", "")),
+                "group": kind,
+                "domain": n.get("domain"),
+                "value": round(n.get("score", 0), 6),
+                "title": f"{n.get('label', '')} ({kind})",
+                "color": _KIND_COLORS.get(kind, "#94a3b8"),
+                "shape": _KIND_SHAPES.get(kind, "dot"),
+            })
+
+        vis_edges = []
+        for e in raw_edges:
+            vis_edges.append({
+                "from": e.get("from"),
+                "to": e.get("to"),
+                "label": e.get("type", ""),
+                "value": round(e.get("weight", 0), 6),
+                "arrows": "to",
+            })
+
+        kind_groups = {}
+        for n in vis_nodes:
+            group = n["group"]
+            if group not in kind_groups:
+                kind_groups[group] = {
+                    "color": _KIND_COLORS.get(group, "#94a3b8"),
+                    "shape": _KIND_SHAPES.get(group, "dot"),
+                }
+
+        return jsonify({
+            "ok": True,
+            "time": _now_iso(),
+            "nodes": vis_nodes,
+            "edges": vis_edges,
+            "groups": kind_groups,
+            "total_nodes": len(vis_nodes),
+            "total_edges": len(vis_edges),
+        })
+
+    except Exception as e:
+        return jsonify({
+            "ok": False,
+            "error": str(e),
+            "time": _now_iso(),
+        }), 500
+
+
+@bp.get("/neuron-layers")
+def neuron_layers():
+    """Return neuron layer data for visualization.
+
+    Structured as context -> state -> mood pipeline with per-neuron values.
+    """
+    try:
+        from copilot_core.neurons.manager import get_neuron_manager
+        manager = get_neuron_manager()
+        summary = manager.get_neuron_summary()
+
+        layers = {}
+        for layer_name in ("context", "state", "mood"):
+            layer_data = summary.get(layer_name, {})
+            neurons_in_layer = []
+            for n_name, n_state in layer_data.items():
+                neurons_in_layer.append({
+                    "name": n_name,
+                    "value": n_state.get("value", 0),
+                    "confidence": n_state.get("confidence", 0),
+                    "trend": n_state.get("trend", "stable"),
+                    "last_update": n_state.get("last_update"),
+                })
+            layers[layer_name] = {
+                "count": len(neurons_in_layer),
+                "neurons": sorted(
+                    neurons_in_layer,
+                    key=lambda n: n.get("value", 0),
+                    reverse=True,
+                ),
+            }
+
+        mood_summary = manager.get_mood_summary()
+
+        return jsonify({
+            "ok": True,
+            "time": _now_iso(),
+            "layers": layers,
+            "dominant_mood": mood_summary.get("mood", "unknown"),
+            "mood_confidence": mood_summary.get("confidence", 0.0),
+            "total_neurons": summary.get("total_count", 0),
+            "pipeline": ["context", "state", "mood", "suggestions"],
+        })
+
+    except Exception as e:
+        return jsonify({
+            "ok": False,
+            "error": str(e),
+            "time": _now_iso(),
+        }), 500
+
+
 @bp.get("/health")
 def health():
     """Health check for dashboard module."""
     brain_ok = _get_brain_graph_service() is not None
-    
+
     return jsonify({
         "ok": True,
         "time": _now_iso(),
         "module": "dashboard",
-        "version": "0.1.0",
+        "version": "0.2.0",
         "features": [
             "brain_graph_summary",
+            "brain_graph_data",
+            "neuron_layers",
             "node_statistics",
             "edge_statistics",
         ],
@@ -144,6 +292,8 @@ def health():
         "status": "active",
         "endpoints": [
             "/api/v1/dashboard/brain-summary",
+            "/api/v1/dashboard/brain-graph-data",
+            "/api/v1/dashboard/neuron-layers",
             "/api/v1/dashboard/health",
         ],
     })
