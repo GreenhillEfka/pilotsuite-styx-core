@@ -44,7 +44,7 @@ from copilot_core.event_bus import EventBus, get_event_bus
 
 # SearXNG web search integration (v7.11.1)
 _SEARXNG_ENABLED = os.environ.get("SEARXNG_ENABLED", "false").lower() == "true"
-_SEARXNG_BASE_URL = os.environ.get("SEARXNG_BASE_URL", "http://192.168.30.18:4041")
+_SEARXNG_BASE_URL = os.environ.get("SEARXNG_BASE_URL", "")
 
 # PilotSuite Phase 5 APIs
 from copilot_core.telegram import TelegramBot
@@ -136,6 +136,8 @@ def init_services(hass=None, config: dict = None):
         "hub_brain_activity": None,
         # Adaptive Light Module (v1.0.0)
         "light_module_service": None,
+        # Zone Automation Controller (v10.0.0)
+        "zone_automation_controller": None,
     }
 
     # Initialize system health service (requires hass)
@@ -413,12 +415,15 @@ def init_services(hass=None, config: dict = None):
         event_bus.subscribe("event.ingested", _on_event_ingested)
 
         # Periodic neuron evaluation via daemon thread
+        neuron_eval_interval = _safe_int(
+            neuron_config.get("evaluation_interval", 60), 60, 10, 3600
+        )
         import threading
         def _periodic_neuron_eval():
-            """Run neuron pipeline every 60 seconds."""
+            """Run neuron pipeline at configured interval."""
             import time
             while True:
-                time.sleep(60)
+                time.sleep(neuron_eval_interval)
                 try:
                     result = neuron_manager.evaluate()
                     event_bus.publish("neuron.evaluated", {
@@ -434,7 +439,7 @@ def init_services(hass=None, config: dict = None):
             target=_periodic_neuron_eval, daemon=True, name="neuron-eval"
         )
         eval_thread.start()
-        _LOGGER.info("Neuron periodic evaluation started (60s interval)")
+        _LOGGER.info("Neuron periodic evaluation started (%ds interval)", neuron_eval_interval)
 
         services["neuron_manager"] = neuron_manager
     except Exception:
@@ -585,6 +590,20 @@ def init_services(hass=None, config: dict = None):
         _LOGGER.info("LightModuleService initialized (adaptive lighting)")
     except Exception:
         _LOGGER.exception("Failed to init LightModuleService")
+
+    # Initialize Zone Automation Controller (v10.0.0)
+    # Coordinates presence, brightness, circadian light, mood, and media per zone.
+    try:
+        from copilot_core.zone_automation import ZoneAutomationController
+        zone_automation_controller = ZoneAutomationController(
+            event_bus=event_bus,
+            light_module_service=services.get("light_module_service"),
+            music_cloud_service=services.get("music_cloud_service"),
+        )
+        services["zone_automation_controller"] = zone_automation_controller
+        _LOGGER.info("ZoneAutomationController initialized (presence + light + brightness + media)")
+    except Exception:
+        _LOGGER.exception("Failed to init ZoneAutomationController")
 
     # ── PilotSuite Hub — All 17 engines (v7.6.1 — granular fault isolation) ──
 
@@ -959,6 +978,16 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         _LOGGER.info("Registered Light Module API (/api/v1/light-module/*)")
     except Exception:
         _LOGGER.exception("Failed to register Light Module API")
+
+    # Register Zone Automation API (v10.0.0)
+    try:
+        from copilot_core.zone_automation.api import zone_automation_bp, init_zone_automation_api
+        if services and services.get("zone_automation_controller"):
+            init_zone_automation_api(services["zone_automation_controller"])
+        app.register_blueprint(zone_automation_bp)
+        _LOGGER.info("Registered Zone Automation API (/api/v1/zone-automation/*)")
+    except Exception:
+        _LOGGER.exception("Failed to register Zone Automation API")
 
     # Register Scene Management API (v3.4.0) — with persistent storage
     try:
