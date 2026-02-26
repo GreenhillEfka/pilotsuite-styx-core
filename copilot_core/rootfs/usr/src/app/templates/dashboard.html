@@ -592,6 +592,21 @@ a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
   <h2><span class="ic">&#x1f3e0;</span> Habitus-Zonen Status-Summary</h2>
   <div id="system-zones"><div class="loading"><div class="spinner"></div>Lade Zonenstatus...</div></div>
 </div>
+<div class="card" style="margin-top:14px">
+  <h2><span class="ic">&#x1f50d;</span> HA Entity Discovery</h2>
+  <p style="font-size:11px;color:var(--dim);margin-bottom:10px">
+    Liest alle Entitaeten, Raeume, Geraete, Etagen und Labels aus Home Assistant aus
+    (REST + WebSocket API). Ergebnis wird im Entity-Cache und unter
+    <code>/data/ha_discovery.json</code> gespeichert.
+  </p>
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+    <button class="btn-sm" onclick="runHaDiscovery()">&#x1f504; HA Discovery starten</button>
+    <button class="btn-sm" onclick="downloadHaDiscovery()">&#x1f4e5; Export herunterladen</button>
+    <button class="btn-sm" onclick="loadHaBridgeStatus()">&#x1f4ca; Status</button>
+    <span id="ha-discovery-status" style="font-size:11px;color:var(--dim)">--</span>
+  </div>
+  <div id="ha-discovery-result"></div>
+</div>
 </div>
 
 <!-- ========== HAUSHALT PAGE ========== -->
@@ -1022,6 +1037,75 @@ function _parseConfigInput(input,field){
     return String(input.value||'').split(',').map(s=>s.trim()).filter(Boolean);
   }
   return String(input.value||'').trim();
+}
+/* ── HA Discovery Bridge ───────────────────────────────────────── */
+async function runHaDiscovery(){
+  const el=document.getElementById('ha-discovery-result');
+  const st=document.getElementById('ha-discovery-status');
+  el.innerHTML='<div class="loading"><div class="spinner"></div>HA Discovery laeuft... (REST + WebSocket)</div>';
+  st.textContent='laeuft...';
+  try{
+    const d=await api('/api/v1/ha/discover','POST');
+    if(!d){el.innerHTML='<div class="empty">Fehler: Keine Antwort vom Backend</div>';st.textContent='Fehler';return;}
+    const ok=d.ok;
+    let html='<table class="tbl"><tbody>';
+    html+=`<tr><td>Entitaeten</td><td><strong>${d.entities||0}</strong></td></tr>`;
+    html+=`<tr><td>Raeume (Areas)</td><td><strong>${d.areas||0}</strong></td></tr>`;
+    html+=`<tr><td>Geraete (Devices)</td><td><strong>${d.devices||0}</strong></td></tr>`;
+    if(d.rest){
+      if(d.rest.config)html+=`<tr><td>HA Version</td><td>${escapeHtml(d.rest.config.version||'--')}</td></tr>`;
+      if(d.rest.addons!==undefined)html+=`<tr><td>Add-ons</td><td>${d.rest.addons}</td></tr>`;
+      if(d.rest.services!==undefined)html+=`<tr><td>Service-Domains</td><td>${d.rest.services}</td></tr>`;
+    }
+    if(d.ws){
+      html+=`<tr><td>Entity Registry (WS)</td><td>${d.ws.entity_registry||0}</td></tr>`;
+      html+=`<tr><td>Device Registry (WS)</td><td>${d.ws.device_registry||0}</td></tr>`;
+      html+=`<tr><td>Area Registry (WS)</td><td>${d.ws.area_registry||0}</td></tr>`;
+      html+=`<tr><td>Floor Registry (WS)</td><td>${d.ws.floor_registry||0}</td></tr>`;
+      html+=`<tr><td>Label Registry (WS)</td><td>${d.ws.label_registry||0}</td></tr>`;
+    }
+    html+='</tbody></table>';
+    if(d.errors&&d.errors.length>0){
+      html+=`<p style="color:var(--warn);font-size:12px;margin-top:8px">Fehler: ${d.errors.map(escapeHtml).join(', ')}</p>`;
+    }
+    html+=`<p style="font-size:11px;color:var(--dim);margin-top:8px">Gespeichert unter: <code>/data/ha_discovery.json</code></p>`;
+    el.innerHTML=html;
+    st.textContent=ok?`${d.entities} Entitaeten geladen`:'mit Fehlern abgeschlossen';
+  }catch(e){
+    el.innerHTML=`<div class="empty">Fehler: ${escapeHtml(String(e))}</div>`;
+    st.textContent='Fehler';
+  }
+}
+async function downloadHaDiscovery(){
+  try{
+    const r=await fetch(API+'/api/v1/ha/export',withAuth({method:'GET'}));
+    if(!r.ok){alert('Export nicht verfuegbar. Zuerst Discovery starten.');return;}
+    const blob=await r.blob();
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url;a.download='ha_discovery.json';document.body.appendChild(a);a.click();
+    document.body.removeChild(a);URL.revokeObjectURL(url);
+  }catch(e){alert('Export fehlgeschlagen: '+e);}
+}
+async function loadHaBridgeStatus(){
+  const el=document.getElementById('ha-discovery-result');
+  const d=await api('/api/v1/ha/status');
+  if(!d){el.innerHTML='<div class="empty">Status nicht verfuegbar</div>';return;}
+  let html='<table class="tbl"><tbody>';
+  html+=`<tr><td>Token verfuegbar</td><td>${d.token_available?badge('Ja','green'):badge('Nein','red')}</td></tr>`;
+  html+=`<tr><td>Supervisor API</td><td><code>${escapeHtml(d.supervisor_api||'--')}</code></td></tr>`;
+  html+=`<tr><td>Externe HA API</td><td><code>${escapeHtml(d.external_ha_api||'--')}</code></td></tr>`;
+  if(d.last_discovery){
+    const ts=d.last_discovery.timestamp?new Date(d.last_discovery.timestamp*1000).toLocaleString():'nie';
+    html+=`<tr><td>Letzte Discovery</td><td>${escapeHtml(ts)}</td></tr>`;
+    html+=`<tr><td>Entitaeten</td><td>${d.last_discovery.entities||0}</td></tr>`;
+    html+=`<tr><td>Raeume</td><td>${d.last_discovery.areas||0}</td></tr>`;
+    html+=`<tr><td>Geraete</td><td>${d.last_discovery.devices||0}</td></tr>`;
+  }else{
+    html+='<tr><td>Letzte Discovery</td><td>noch nicht ausgefuehrt</td></tr>';
+  }
+  html+='</tbody></table>';
+  el.innerHTML=html;
 }
 function badge(t,c){return`<span class="b b-${c}">${escapeHtml(t)}</span>`}
 function el(tag,cls,html){const e=document.createElement(tag);if(cls)e.className=cls;if(html)e.innerHTML=html;return e}

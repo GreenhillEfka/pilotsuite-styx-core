@@ -25,7 +25,8 @@ RUN apk add --no-cache \
         pydantic==2.12.5 \
         requests==2.31.0 \
         qrcode==8.0 \
-        numpy && \
+        numpy \
+        websockets==13.1 && \
     # Remove build deps to keep image small
     apk del gcc g++ musl-dev python3-dev linux-headers
 

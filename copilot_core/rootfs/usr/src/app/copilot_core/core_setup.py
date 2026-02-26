@@ -1232,6 +1232,16 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
     except Exception:
         _LOGGER.exception("Failed to register Entity Search API")
 
+    # Register HA Bridge API (v9.1.0 — discover HA data from within add-on)
+    try:
+        from copilot_core.api.v1.ha_bridge import ha_bridge_bp, auto_discover_on_startup
+        app.register_blueprint(ha_bridge_bp)
+        _LOGGER.info("Registered HA Bridge API (/api/v1/ha/discover, /status)")
+        # Auto-discover HA entities on startup (background thread)
+        auto_discover_on_startup()
+    except Exception:
+        _LOGGER.exception("Failed to register HA Bridge API")
+
     # Register Config Management API (v7.28.0)
     try:
         from copilot_core.api.v1.config_management import config_bp
