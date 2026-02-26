@@ -1,5 +1,5 @@
 name: PilotSuite Core
-version: "9.3.0"
+version: "9.6.0"
 slug: copilot_core
 description: "PilotSuite Styx Core — AI Home Copilot with Brain Architecture, Neural Sensors, and local LLM conversation."
 url: https://github.com/GreenhillEfka/pilotsuite-styx-core
@@ -26,6 +26,7 @@ webui: "http://[HOST]:[PORT:8909]/"
 options:
   log_level: info
   auth_token: ""
+  # Conversation / LLM
   conversation_ollama_url: "http://localhost:11435"
   conversation_ollama_model: "qwen3:0.6b"
   conversation_cloud_api_url: "https://ollama.com/v1"
@@ -34,11 +35,32 @@ options:
   conversation_prefer_local: true
   conversation_assistant_name: Styx
   conversation_enabled: true
-  searxng_enabled: true
-  searxng_base_url: "http://192.168.30.18:4041"
+  # SearXNG web search
+  searxng_enabled: false
+  searxng_base_url: ""
+  # Brain Graph
+  brain_graph_max_nodes: 500
+  brain_graph_max_edges: 1500
+  brain_graph_node_min_score: 0.1
+  brain_graph_edge_min_weight: 0.1
+  brain_graph_node_half_life_hours: 24.0
+  brain_graph_edge_half_life_hours: 12.0
+  brain_graph_prune_interval_minutes: 60
+  # Neural System
+  neuron_evaluation_interval: 60
+  neuron_enabled: true
+  # Telegram Bot
+  telegram_enabled: false
+  telegram_token: ""
+  telegram_allowed_chat_ids: []
+  # Household Profile
+  household_name: ""
+  household_members: []
+  household_age_groups: []
 schema:
   log_level: "list(trace|debug|info|warning|error)"
   auth_token: "password?"
+  # Conversation / LLM
   conversation_ollama_url: "str?"
   conversation_ollama_model: "str?"
   conversation_cloud_api_url: "str?"
@@ -47,7 +69,28 @@ schema:
   conversation_prefer_local: "bool?"
   conversation_assistant_name: "str?"
   conversation_enabled: "bool?"
+  # SearXNG
   searxng_enabled: "bool?"
   searxng_base_url: "str?"
-  # Cloud-Modell Empfehlung (im Dashboard wechselbar):
-  # - qwen3.5:cloud (Ollama Cloud Default)
+  # Brain Graph
+  brain_graph_max_nodes: "int(100,5000)?"
+  brain_graph_max_edges: "int(100,15000)?"
+  brain_graph_node_min_score: "float?"
+  brain_graph_edge_min_weight: "float?"
+  brain_graph_node_half_life_hours: "float?"
+  brain_graph_edge_half_life_hours: "float?"
+  brain_graph_prune_interval_minutes: "int(1,1440)?"
+  # Neural System
+  neuron_evaluation_interval: "int(10,3600)?"
+  neuron_enabled: "bool?"
+  # Telegram
+  telegram_enabled: "bool?"
+  telegram_token: "password?"
+  telegram_allowed_chat_ids:
+    - "int?"
+  # Household
+  household_name: "str?"
+  household_members:
+    - "str?"
+  household_age_groups:
+    - "str?"

@@ -27,12 +27,90 @@ _main_logger = _logging.getLogger(__name__)
 
 
 def _load_options_json(path: str = "/data/options.json") -> dict:
-    """Lade Add-on Konfiguration aus options.json (Home Assistant Supervisor)."""
+    """Lade Add-on Konfiguration aus options.json (Home Assistant Supervisor).
+
+    The HA Supervisor stores add-on options as a flat dict with keys like
+    ``conversation_ollama_url``, ``conversation_cloud_api_key``, etc.
+    ``init_services()`` expects these grouped into nested dicts
+    (``config["conversation"]["ollama_url"]``).  This function reads the
+    flat JSON and restructures it.
+    """
     try:
         with open(path, "r", encoding="utf-8") as fh:
-            return json.load(fh) or {}
+            flat = json.load(fh) or {}
     except Exception:
-        return {}
+        flat = {}
+
+    return _restructure_flat_config(flat)
+
+
+def _restructure_flat_config(flat: dict) -> dict:
+    """Transform flat add-on options into the nested dict init_services expects."""
+    result: dict = {}
+
+    # Mapping tables: flat_key -> (sub_dict_name, nested_key)
+    _NESTED_MAPS: dict[str, tuple[str, str]] = {
+        # Conversation
+        "conversation_ollama_url": ("conversation", "ollama_url"),
+        "conversation_ollama_model": ("conversation", "ollama_model"),
+        "conversation_cloud_api_url": ("conversation", "cloud_api_url"),
+        "conversation_cloud_api_key": ("conversation", "cloud_api_key"),
+        "conversation_cloud_model": ("conversation", "cloud_model"),
+        "conversation_prefer_local": ("conversation", "prefer_local"),
+        "conversation_assistant_name": ("conversation", "assistant_name"),
+        "conversation_enabled": ("conversation", "enabled"),
+        # Brain Graph
+        "brain_graph_max_nodes": ("brain_graph", "max_nodes"),
+        "brain_graph_max_edges": ("brain_graph", "max_edges"),
+        "brain_graph_node_min_score": ("brain_graph", "node_min_score"),
+        "brain_graph_edge_min_weight": ("brain_graph", "edge_min_weight"),
+        "brain_graph_node_half_life_hours": ("brain_graph", "node_half_life_hours"),
+        "brain_graph_edge_half_life_hours": ("brain_graph", "edge_half_life_hours"),
+        "brain_graph_prune_interval_minutes": ("brain_graph", "prune_interval_minutes"),
+        # Neurons
+        "neuron_evaluation_interval": ("neurons", "evaluation_interval"),
+        "neuron_enabled": ("neurons", "enabled"),
+        # Telegram
+        "telegram_enabled": ("telegram", "enabled"),
+        "telegram_token": ("telegram", "token"),
+        "telegram_allowed_chat_ids": ("telegram", "allowed_chat_ids"),
+        # Household
+        "household_name": ("household", "name"),
+        "household_members": ("household", "members"),
+        "household_age_groups": ("household", "age_groups"),
+    }
+
+    # SearXNG keys → set as env vars (read at module import time)
+    _SEARXNG_ENV = {
+        "searxng_enabled": "SEARXNG_ENABLED",
+        "searxng_base_url": "SEARXNG_BASE_URL",
+    }
+
+    sub_dicts: dict[str, dict] = {}
+
+    for key, value in flat.items():
+        if value is None:
+            continue
+
+        if key in _NESTED_MAPS:
+            group, nested_key = _NESTED_MAPS[key]
+            sub_dicts.setdefault(group, {})[nested_key] = value
+        elif key in _SEARXNG_ENV:
+            env_name = _SEARXNG_ENV[key]
+            env_val = str(value).lower() if isinstance(value, bool) else str(value)
+            os.environ.setdefault(env_name, env_val)
+            result[key] = value
+        else:
+            result[key] = value
+
+    result.update(sub_dicts)
+
+    # Set auth token env var for security module
+    auth_token = str(flat.get("auth_token", "") or "").strip()
+    if auth_token:
+        os.environ.setdefault("COPILOT_AUTH_TOKEN", auth_token)
+
+    return result
 
 
 def _waitress_int_env(name: str, default: int, minimum: int, maximum: int) -> int:

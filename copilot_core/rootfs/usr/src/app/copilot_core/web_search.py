@@ -38,8 +38,10 @@ logger = logging.getLogger(__name__)
 
 _REQUEST_TIMEOUT = 10  # seconds
 
-# SearXNG local instance
-_SEARXNG_URL = "http://192.168.30.18:4041/search"
+# SearXNG local instance (configurable via env SEARXNG_BASE_URL)
+import os as _os
+_SEARXNG_BASE = _os.environ.get("SEARXNG_BASE_URL", "").rstrip("/")
+_SEARXNG_URL = f"{_SEARXNG_BASE}/search" if _SEARXNG_BASE else ""
 
 # Default German news RSS feeds
 _DEFAULT_NEWS_FEEDS: List[Dict[str, str]] = [

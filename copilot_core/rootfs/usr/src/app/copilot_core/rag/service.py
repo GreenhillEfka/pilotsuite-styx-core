@@ -38,7 +38,7 @@ class RagService:
         *,
         default_chunk_size: int = 800,
         default_chunk_overlap: int = 120,
-        default_threshold: float = 0.35,
+        default_threshold: float = 0.20,
     ) -> None:
         self._vector_store = vector_store
         self._embedding_engine = embedding_engine

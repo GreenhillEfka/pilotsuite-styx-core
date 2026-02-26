@@ -167,23 +167,23 @@ copilot_core/
 
 ## Aktueller Stand
 
-### Version v7.7.19
+### Version v9.5.0
 
-- **Tests:** 1962 passed, 1 skipped
-- 28+ Backend-Module implementiert und registriert
-- 40+ API Endpoints (30 Flask Blueprints)
-- Security: Token-Validierung mit `hmac.compare_digest`
-- Brain Graph mit Persistenz, Pruning, SVG-Snapshots
+- **Tests:** 2207 passed, 1 skipped
+- **Python-Dateien:** 1092
+- 22+ Services via init_services(), alle mit Error Boundary
+- 50+ API Endpoints (40+ Flask Blueprints)
+- NeuronManager mit context→state→mood Pipeline + /api/v1/dashboard/neuron-layers
+- Brain Graph mit SQLite Persistenz, Decay, Pruning, vis.js-Format Export
 - Habitus Miner mit Zone Mining und Association Rules
 - Mood Engine mit 3D-Scoring (Comfort/Joy/Frugality)
-- Event Ingest mit Deduplication und Idempotency
+- Event Ingest mit Deduplication und Idempotency + EventBus
 - Candidate Management mit State Machine
-- Knowledge Graph, Vector Store, Search
-- Cross-Home Sync und Collective Intelligence
-- System Health Checks (Zigbee, Z-Wave, Recorder, etc.)
-- Ollama LLM Integration (Default: qwen3:0.6b, Optional: qwen3:4b)
-- Dashboard Auth Bridge fuer Token-geschuetzte API
-- Ollama Cloud Endpoint Hardening
+- RAG Pipeline (VectorStore + EmbeddingEngine)
+- 17 PilotSuite Hub Engines mit granularer Fehler-Isolation
+- Circuit Breaker (HA Supervisor, Ollama, Cloud API) mit Test-Reset
+- Ollama LLM Integration (Default: qwen3:0.6b) + Cloud Fallback
+- Conversation Memory, Telegram Bot, Adaptive Light Module
 
 ---
 
