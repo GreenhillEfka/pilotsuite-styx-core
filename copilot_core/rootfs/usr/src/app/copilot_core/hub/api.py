@@ -1280,6 +1280,107 @@ def get_zone_modes():
     return jsonify({"ok": True, "modes": _zone_engine.get_modes()})
 
 
+@hub_bp.route("/zones/sync", methods=["POST"])
+@require_token
+def sync_zones_from_ha():
+    """Sync zone definitions from HA integration.
+
+    Accepts a full zone list from the HA options flow and reconciles
+    with the local zone engine.  Creates missing zones, updates existing
+    ones, and removes zones that are no longer present on the HA side.
+
+    JSON body: {"zones": [{"zone_id": "...", "name": "...", "entity_ids": [...], ...}, ...]}
+    """
+    import logging as _log
+    logger = _log.getLogger(__name__)
+
+    if not _zone_engine:
+        return jsonify({"error": "Zone engine not initialized"}), 503
+
+    body = request.get_json(silent=True) or {}
+    incoming = body.get("zones", [])
+    if not isinstance(incoming, list):
+        return jsonify({"ok": False, "error": "zones must be a list"}), 400
+
+    created = 0
+    updated = 0
+    deleted = 0
+
+    incoming_ids: set[str] = set()
+    for z in incoming:
+        if not isinstance(z, dict):
+            continue
+        zid = z.get("zone_id", "")
+        if not zid:
+            continue
+        incoming_ids.add(zid)
+        name = z.get("name", zid)
+        entity_ids = z.get("entity_ids", [])
+        entities_map = z.get("entities")
+        metadata = z.get("metadata", {})
+
+        existing = _zone_engine.get_zone(zid)
+        if existing:
+            # Update settings with entity info from HA
+            settings = existing.get("settings", {})
+            if entities_map and isinstance(entities_map, dict):
+                settings["entity_roles"] = entities_map
+            if metadata and isinstance(metadata, dict):
+                ha_area_ids = metadata.get("ha_area_ids")
+                if ha_area_ids:
+                    settings["ha_area_ids"] = ha_area_ids
+            _zone_engine.set_zone_settings(zid, settings)
+            updated += 1
+        else:
+            # Register entities as a room then create zone
+            room_id = f"room:{zid.replace('zone:', '')}"
+            try:
+                _zone_engine.register_room(
+                    room_id=room_id,
+                    name=name,
+                    area_id=(metadata or {}).get("ha_area_ids", [""])[0] if isinstance((metadata or {}).get("ha_area_ids"), list) else "",
+                    entities=entity_ids if isinstance(entity_ids, list) else list(entity_ids),
+                )
+            except Exception:
+                pass  # Room may already exist
+
+            try:
+                zone = _zone_engine.create_zone(
+                    zone_id=zid,
+                    name=name,
+                    room_ids=[room_id],
+                )
+                if entities_map and isinstance(entities_map, dict):
+                    _zone_engine.set_zone_settings(zid, {"entity_roles": entities_map})
+                created += 1
+            except Exception as exc:
+                logger.debug("Could not create zone %s during sync: %s", zid, exc)
+
+    # Remove zones that no longer exist in HA
+    try:
+        overview = _zone_engine.get_overview()
+        for z_info in (overview.zones if hasattr(overview, "zones") else []):
+            existing_id = z_info.get("zone_id", "") if isinstance(z_info, dict) else getattr(z_info, "zone_id", "")
+            if existing_id and existing_id not in incoming_ids:
+                _zone_engine.delete_zone(existing_id)
+                deleted += 1
+    except Exception as exc:
+        logger.debug("Could not remove stale zones during sync: %s", exc)
+
+    # Sync HomeKit servers
+    homekit_sync = _sync_homekit_servers()
+
+    logger.info("Zone sync from HA: created=%d updated=%d deleted=%d", created, updated, deleted)
+    return jsonify({
+        "ok": True,
+        "created": created,
+        "updated": updated,
+        "deleted": deleted,
+        "total": len(incoming_ids),
+        "homekit_sync": homekit_sync,
+    })
+
+
 # ── Habitus Management + Automation (v8.5.1) ──────────────────────────────
 
 
