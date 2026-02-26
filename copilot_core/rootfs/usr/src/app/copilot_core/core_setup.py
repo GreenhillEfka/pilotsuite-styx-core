@@ -53,6 +53,7 @@ from copilot_core.telegram import TelegramBot
 from copilot_core.module_registry import ModuleRegistry
 from copilot_core.automation_creator import AutomationCreator
 from copilot_core.media_zone_manager import MediaZoneManager
+from copilot_core.music_cloud import MusicCloudService
 from copilot_core.proactive_engine import ProactiveContextEngine
 from copilot_core.web_search import WebSearchService
 from copilot_core.waste_service import WasteCollectionService, BirthdayService
@@ -105,6 +106,7 @@ def init_services(hass=None, config: dict = None):
         "module_registry": None,
         "automation_creator": None,
         "media_zone_manager": None,
+        "music_cloud_service": None,
         "proactive_engine": None,
         "web_search_service": None,
         "waste_service": None,
@@ -130,6 +132,8 @@ def init_services(hass=None, config: dict = None):
         "hub_integration": None,
         "hub_brain_arch": None,
         "hub_brain_activity": None,
+        # Adaptive Light Module (v1.0.0)
+        "light_module_service": None,
     }
 
     # Initialize system health service (requires hass)
@@ -378,6 +382,16 @@ def init_services(hass=None, config: dict = None):
     except Exception:
         _LOGGER.exception("Failed to init MediaZoneManager")
 
+    # Initialize Music Cloud Service (Sonos zone-following via motion sensors)
+    try:
+        music_cloud_service = MusicCloudService(
+            media_zone_manager=services.get("media_zone_manager"),
+        )
+        services["music_cloud_service"] = music_cloud_service
+        _LOGGER.info("MusicCloudService initialized")
+    except Exception:
+        _LOGGER.exception("Failed to init MusicCloudService")
+
     # NOTE: ProactiveContextEngine moved below waste/birthday init (v3.2.3)
 
     # Initialize Web Search Service (v3.1.0 -- news, search, regional warnings)
@@ -422,6 +436,15 @@ def init_services(hass=None, config: dict = None):
         _LOGGER.info("ProactiveContextEngine initialized (with presence triggers)")
     except Exception:
         _LOGGER.exception("Failed to init ProactiveContextEngine")
+
+    # Initialize Adaptive Light Module Service (v1.0.0)
+    try:
+        from copilot_core.light_module.service import LightModuleService
+        light_module_service = LightModuleService()
+        services["light_module_service"] = light_module_service
+        _LOGGER.info("LightModuleService initialized (adaptive lighting)")
+    except Exception:
+        _LOGGER.exception("Failed to init LightModuleService")
 
     # ── PilotSuite Hub — All 17 engines (v7.6.1 — granular fault isolation) ──
 
@@ -737,6 +760,19 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
     except Exception:
         _LOGGER.exception("Failed to register Media Zones API")
 
+    # Register Music Cloud API (Sonos zone-following via motion sensors)
+    try:
+        from copilot_core.api.v1.music_cloud import media_cloud_bp, init_music_cloud_api
+        if services:
+            init_music_cloud_api(
+                services.get("music_cloud_service"),
+                services.get("media_zone_manager"),
+            )
+        app.register_blueprint(media_cloud_bp)
+        _LOGGER.info("Registered Music Cloud API (/api/v1/media/cloud/*)")
+    except Exception:
+        _LOGGER.exception("Failed to register Music Cloud API")
+
     # Register Reminders API (waste + birthdays, v3.2.0)
     try:
         from copilot_core.api.v1.reminders import reminders_bp, init_reminders_api
@@ -773,6 +809,16 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         _LOGGER.info("Registered Presence API (/api/v1/presence/*)")
     except Exception:
         _LOGGER.exception("Failed to register Presence API")
+
+    # Register Adaptive Light Module API (v1.0.0)
+    try:
+        from copilot_core.light_module.api import light_module_bp, init_light_module_api
+        if services and services.get("light_module_service"):
+            init_light_module_api(services["light_module_service"])
+        app.register_blueprint(light_module_bp)
+        _LOGGER.info("Registered Light Module API (/api/v1/light-module/*)")
+    except Exception:
+        _LOGGER.exception("Failed to register Light Module API")
 
     # Register Scene Management API (v3.4.0)
     try:

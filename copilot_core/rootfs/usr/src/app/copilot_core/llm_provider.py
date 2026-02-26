@@ -99,6 +99,13 @@ class LLMProvider:
             return module_post(url, **kwargs)
         return self.session.post(url, **kwargs)
 
+    def _http_delete(self, url: str, **kwargs):
+        """HTTP DELETE wrapper with the same test monkeypatch compatibility."""
+        module_delete = getattr(http_requests, "delete", None)
+        if callable(module_delete) and getattr(module_delete, "__module__", "") != "requests.api":
+            return module_delete(url, **kwargs)
+        return self.session.delete(url, **kwargs)
+
     def _load_config(self):
         """Load config from env + runtime routing overrides."""
         self.ollama_url = os.environ.get("OLLAMA_URL", "http://localhost:11434")
@@ -289,15 +296,24 @@ class LLMProvider:
         offline_models = self._get_offline_models(force_refresh=force_refresh)
         offline_installed = self._get_installed_offline_models(force_refresh=force_refresh)
         cloud_models = self._get_cloud_models(force_refresh=force_refresh)
+        installed_detailed = self._fetch_installed_offline_models_detailed() if force_refresh else []
+
+        # Separate cloud models (with :cloud suffix) prominently
+        cloud_suffix_models = [m for m in cloud_models if ":cloud" in m.lower()]
+        cloud_other_models = [m for m in cloud_models if ":cloud" not in m.lower()]
+
         return {
             "offline": {
                 "models": offline_models,
                 "installed_models": offline_installed,
+                "installed_models_detailed": installed_detailed,
                 "active_model": self.ollama_model,
                 "recommended": list(_DEFAULT_OFFLINE_MODELS),
             },
             "cloud": {
-                "models": cloud_models,
+                "models": cloud_suffix_models + cloud_other_models,
+                "cloud_native_models": cloud_suffix_models,
+                "cloud_other_models": cloud_other_models,
                 "active_model": self.cloud_model,
                 "recommended": self._recommended_cloud_models(),
                 "configured": self.has_cloud_fallback,
@@ -453,6 +469,34 @@ class LLMProvider:
             logger.debug("Could not list installed Ollama models", exc_info=True)
         return models
 
+    def _fetch_installed_offline_models_detailed(self) -> list[dict]:
+        """Fetch installed Ollama models with size and detail information."""
+        models: list[dict] = []
+        seen: set[str] = set()
+        try:
+            resp = self._http_get(f"{self.ollama_url}/api/tags", timeout=5)
+            if resp.status_code == 200:
+                for model in resp.json().get("models", []):
+                    name = str(model.get("name", "")).strip()
+                    if name and name not in seen:
+                        seen.add(name)
+                        size_bytes = model.get("size", 0)
+                        size_mb = round(size_bytes / (1024 * 1024), 1) if size_bytes else 0
+                        details = model.get("details", {})
+                        models.append({
+                            "id": name,
+                            "size_bytes": size_bytes,
+                            "size_mb": size_mb,
+                            "digest": model.get("digest", "")[:16],
+                            "modified_at": model.get("modified_at", ""),
+                            "family": details.get("family", ""),
+                            "parameter_size": details.get("parameter_size", ""),
+                            "quantization_level": details.get("quantization_level", ""),
+                        })
+        except Exception:
+            logger.debug("Could not list installed Ollama models (detailed)", exc_info=True)
+        return models
+
     def _get_installed_offline_models(self, *, force_refresh: bool = False) -> list[str]:
         now = time.monotonic()
         cache = self._catalog_cache[_PROVIDER_OFFLINE]
@@ -543,6 +587,134 @@ class LLMProvider:
             return resp.status_code == 200
         except Exception:
             return False
+
+    # ------------------------------------------------------------------
+    # Ollama model management (pull / delete / info)
+    # ------------------------------------------------------------------
+
+    def pull_model(self, model_name: str) -> dict:
+        """Pull/download an Ollama model (blocking). Returns progress info."""
+        try:
+            resp = self._http_post(
+                f"{self.ollama_url}/api/pull",
+                json={"name": model_name, "stream": False},
+                timeout=600,
+            )
+            if resp.status_code == 200:
+                logger.info("Model pulled successfully: %s", model_name)
+                # Invalidate catalog cache so new model shows up immediately
+                self._catalog_cache[_PROVIDER_OFFLINE] = {"models": [], "installed": [], "ts": 0.0}
+                return {"ok": True, "model": model_name, "status": "downloaded"}
+            return {"ok": False, "error": resp.text[:200]}
+        except http_requests.exceptions.ConnectionError:
+            return {"ok": False, "error": f"Ollama not reachable at {self.ollama_url}"}
+        except http_requests.exceptions.Timeout:
+            return {"ok": False, "error": "Download timed out (>600s). Try a smaller model or retry."}
+        except Exception as exc:
+            logger.warning("Model pull failed (%s): %s", model_name, exc)
+            return {"ok": False, "error": str(exc)[:200]}
+
+    def pull_model_stream(self, model_name: str):
+        """Pull/download an Ollama model with streaming progress.
+
+        Yields NDJSON dicts with download progress:
+            {"status": "pulling ...", "digest": "...", "total": N, "completed": N}
+
+        The caller is responsible for formatting these as SSE events.
+        """
+        try:
+            resp = self._http_post(
+                f"{self.ollama_url}/api/pull",
+                json={"name": model_name, "stream": True},
+                timeout=600,
+                stream=True,
+            )
+            if resp.status_code != 200:
+                yield {"ok": False, "error": resp.text[:200]}
+                return
+
+            for line in resp.iter_lines(decode_unicode=True):
+                if not line:
+                    continue
+                try:
+                    data = json.loads(line)
+                    yield data
+                except json.JSONDecodeError:
+                    continue
+
+            # Invalidate catalog cache after successful pull
+            self._catalog_cache[_PROVIDER_OFFLINE] = {"models": [], "installed": [], "ts": 0.0}
+            logger.info("Model pull (streamed) completed: %s", model_name)
+
+        except http_requests.exceptions.ConnectionError:
+            yield {"ok": False, "error": f"Ollama not reachable at {self.ollama_url}"}
+        except http_requests.exceptions.Timeout:
+            yield {"ok": False, "error": "Download timed out (>600s). Try a smaller model or retry."}
+        except Exception as exc:
+            logger.warning("Model pull stream failed (%s): %s", model_name, exc)
+            yield {"ok": False, "error": str(exc)[:200]}
+
+    def delete_model(self, model_name: str) -> dict:
+        """Delete an Ollama model."""
+        try:
+            resp = self._http_delete(
+                f"{self.ollama_url}/api/delete",
+                json={"name": model_name},
+                timeout=30,
+            )
+            if resp.status_code == 200:
+                logger.info("Model deleted: %s", model_name)
+                self._catalog_cache[_PROVIDER_OFFLINE] = {"models": [], "installed": [], "ts": 0.0}
+                return {"ok": True, "model": model_name, "status": "deleted"}
+            return {"ok": False, "error": resp.text[:200]}
+        except http_requests.exceptions.ConnectionError:
+            return {"ok": False, "error": f"Ollama not reachable at {self.ollama_url}"}
+        except Exception as exc:
+            logger.warning("Model delete failed (%s): %s", model_name, exc)
+            return {"ok": False, "error": str(exc)[:200]}
+
+    def get_model_info(self, model_name: str) -> dict:
+        """Get detailed info about an Ollama model (size, quantization, etc.)."""
+        try:
+            resp = self._http_post(
+                f"{self.ollama_url}/api/show",
+                json={"name": model_name},
+                timeout=10,
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                # Extract key info for dashboard display
+                details = data.get("details", {})
+                model_info = data.get("model_info", {})
+                return {
+                    "ok": True,
+                    "model": model_name,
+                    "license": data.get("license", "")[:200],
+                    "modelfile": data.get("modelfile", "")[:500],
+                    "template": data.get("template", "")[:200],
+                    "parameters": data.get("parameters", "")[:200],
+                    "details": {
+                        "parent_model": details.get("parent_model", ""),
+                        "format": details.get("format", ""),
+                        "family": details.get("family", ""),
+                        "families": details.get("families", []),
+                        "parameter_size": details.get("parameter_size", ""),
+                        "quantization_level": details.get("quantization_level", ""),
+                    },
+                    "model_info": {
+                        k: v for k, v in model_info.items()
+                        if isinstance(v, (str, int, float, bool))
+                    } if model_info else {},
+                    "modified_at": data.get("modified_at", ""),
+                }
+            if resp.status_code == 404:
+                return {"ok": False, "error": f"Model '{model_name}' not found"}
+            return {"ok": False, "error": resp.text[:200]}
+        except http_requests.exceptions.ConnectionError:
+            return {"ok": False, "error": f"Ollama not reachable at {self.ollama_url}"}
+        except Exception as exc:
+            logger.warning("Model info failed (%s): %s", model_name, exc)
+            return {"ok": False, "error": str(exc)[:200]}
 
     def _try_ollama(self, messages, tools, model, temperature, max_tokens):
         requested_model = (model or self.ollama_model or "").strip()

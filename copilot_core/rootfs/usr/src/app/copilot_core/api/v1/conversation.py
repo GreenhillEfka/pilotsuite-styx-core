@@ -899,6 +899,112 @@ def llm_model_catalog():
     })
 
 
+# ---------------------------------------------------------------------------
+# Model management endpoints (pull / delete / info / streaming pull)
+# ---------------------------------------------------------------------------
+
+@conversation_bp.route('/models/pull', methods=['POST'])
+@require_token
+def pull_model():
+    """Pull/download an Ollama model (blocking).
+
+    Body: {"model": "qwen3:0.6b"}
+    Returns: {"ok": true, "model": "qwen3:0.6b", "status": "downloaded"}
+
+    Note: This is a blocking call that can take several minutes for large models.
+    For progress tracking, use POST /chat/models/pull/stream instead.
+    """
+    body = request.get_json(silent=True) or {}
+    model_name = str(body.get("model", "") or "").strip()
+    if not model_name:
+        return jsonify({"ok": False, "error": "Missing 'model' field"}), 400
+
+    provider = _get_llm_provider()
+    result = provider.pull_model(model_name)
+    status_code = 200 if result.get("ok") else 502
+    return jsonify(result), status_code
+
+
+@conversation_bp.route('/models/pull/stream', methods=['POST'])
+@require_token
+def pull_model_stream():
+    """Pull/download an Ollama model with SSE streaming progress.
+
+    Body: {"model": "qwen3:0.6b"}
+    Returns: SSE stream with NDJSON progress events:
+        data: {"status": "pulling manifest"}
+        data: {"status": "downloading ...", "digest": "sha256:...", "total": 123456, "completed": 5000}
+        data: {"status": "success"}
+    """
+    body = request.get_json(silent=True) or {}
+    model_name = str(body.get("model", "") or "").strip()
+    if not model_name:
+        return jsonify({"ok": False, "error": "Missing 'model' field"}), 400
+
+    provider = _get_llm_provider()
+
+    def generate():
+        for progress in provider.pull_model_stream(model_name):
+            yield f"data: {json.dumps(progress)}\n\n"
+        yield "data: [DONE]\n\n"
+
+    return Response(
+        generate(),
+        mimetype='text/event-stream',
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
+
+
+@conversation_bp.route('/models/<path:model_id>', methods=['DELETE'])
+@require_token
+def delete_model(model_id):
+    """Delete an Ollama model.
+
+    DELETE /chat/models/qwen3:0.6b
+    Returns: {"ok": true, "model": "qwen3:0.6b", "status": "deleted"}
+    """
+    model_name = str(model_id or "").strip()
+    if not model_name:
+        return jsonify({"ok": False, "error": "Missing model ID"}), 400
+
+    provider = _get_llm_provider()
+
+    # Prevent deleting the currently active model
+    status = provider.status()
+    if model_name == status.get("ollama_model"):
+        return jsonify({
+            "ok": False,
+            "error": f"Cannot delete the currently active model '{model_name}'. "
+                     "Switch to a different model first.",
+        }), 409
+
+    result = provider.delete_model(model_name)
+    status_code = 200 if result.get("ok") else 502
+    return jsonify(result), status_code
+
+
+@conversation_bp.route('/models/<path:model_id>/info', methods=['GET'])
+@require_token
+def get_model_info(model_id):
+    """Get detailed info about an Ollama model (size, quantization, family, etc.).
+
+    GET /chat/models/qwen3:0.6b/info
+    Returns model details including parameter_size, quantization_level, family, etc.
+    """
+    model_name = str(model_id or "").strip()
+    if not model_name:
+        return jsonify({"ok": False, "error": "Missing model ID"}), 400
+
+    provider = _get_llm_provider()
+    result = provider.get_model_info(model_name)
+    status_code = 200 if result.get("ok") else (404 if "not found" in str(result.get("error", "")).lower() else 502)
+    return jsonify(result), status_code
+
+
 @conversation_bp.route('/routing', methods=['GET'])
 def llm_routing_get():
     """Return current LLM routing config."""
