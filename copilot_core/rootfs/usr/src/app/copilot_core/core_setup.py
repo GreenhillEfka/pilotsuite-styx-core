@@ -541,6 +541,7 @@ def init_services(hass=None, config: dict = None):
         music_cloud_service = MusicCloudService(
             media_zone_manager=services.get("media_zone_manager"),
             override_modes_service=services.get("override_modes_service"),
+            event_bus=event_bus,
         )
         services["music_cloud_service"] = music_cloud_service
         _LOGGER.info("MusicCloudService initialized")
@@ -612,6 +613,47 @@ def init_services(hass=None, config: dict = None):
             override_modes_service=services.get("override_modes_service"),
         )
         services["zone_automation_controller"] = zone_automation_controller
+
+        # Wire EventBus → ZoneAutomationController: forward sensor updates
+        def _on_event_for_zone_automation(topic: str, data: dict) -> None:
+            """Forward ingested HA events to zone automation for evaluation."""
+            try:
+                states = data.get("states", {})
+                for entity_id, new_state in states.items():
+                    zone_automation_controller.process_sensor_update(
+                        entity_id, str(new_state), {}
+                    )
+            except Exception:
+                _LOGGER.debug("Zone automation event forwarding failed")
+
+        event_bus.subscribe("event.ingested", _on_event_for_zone_automation)
+        _LOGGER.info("ZoneAutomationController wired to EventBus (event.ingested)")
+
+        # Wire EventBus → OverrideModesService: vacation alarm on presence
+        override_modes_svc = services.get("override_modes_service")
+        if override_modes_svc:
+            def _on_presence_for_vacation_alarm(topic: str, data: dict) -> None:
+                """Check for vacation mode + presence → trigger alarm event."""
+                try:
+                    states = data.get("states", {})
+                    for entity_id, new_state in states.items():
+                        if "motion" in entity_id and str(new_state).lower() in ("on", "detected"):
+                            consequences = override_modes_svc.get_effective_consequences("")
+                            if consequences.get("presence_alarm"):
+                                event_bus.publish("alarm.vacation_presence", {
+                                    "entity_id": entity_id,
+                                    "state": str(new_state),
+                                    "message": f"Motion detected ({entity_id}) while vacation mode active",
+                                }, source="override_modes")
+                                _LOGGER.warning(
+                                    "VACATION ALARM: Motion detected (%s) while vacation mode active",
+                                    entity_id,
+                                )
+                except Exception:
+                    _LOGGER.debug("Vacation alarm check failed")
+
+            event_bus.subscribe("event.ingested", _on_presence_for_vacation_alarm)
+
         _LOGGER.info("ZoneAutomationController initialized (presence + light + brightness + media)")
     except Exception:
         _LOGGER.exception("Failed to init ZoneAutomationController")

@@ -125,6 +125,11 @@ class ZoneEvaluation:
     media_action: str = "none"  # follow, unfollow, none
     media_players: list[str] = field(default_factory=list)
 
+    # Heating/Climate
+    heating_action: str = "none"  # set_temp, none
+    heating_target_temp_c: float = 0.0
+    climate_entities: list[str] = field(default_factory=list)
+
     # Mood
     mood_override: str = ""
 
@@ -610,6 +615,12 @@ class ZoneAutomationController:
         # ---- Step 4: Media decision ----
         media_action = self._compute_media_action(config, presence)
 
+        # ---- Step 5: Heating/Climate decision ----
+        heating_action, heating_target = self._compute_heating_action(config)
+
+        # Collect climate entities from auto_tags
+        climate_entities = config.auto_tags.get("climate", [])
+
         # Build evaluation
         evaluation = ZoneEvaluation(
             zone_id=zone_id,
@@ -634,6 +645,10 @@ class ZoneAutomationController:
             # Media
             media_action=media_action,
             media_players=list(config.media_players),
+            # Heating
+            heating_action=heating_action,
+            heating_target_temp_c=heating_target,
+            climate_entities=climate_entities,
             # Mood
             mood_override=config.mood_scene_override,
         )
@@ -764,11 +779,41 @@ class ZoneAutomationController:
                 return "none"
 
         if presence.occupied:
+            # Execute: notify MusicCloudService of motion
+            if self._music_cloud is not None:
+                try:
+                    self._music_cloud.on_motion_detected(zone_id=config.zone_id)
+                except Exception:
+                    _LOGGER.debug("Failed to notify MusicCloud of motion in %s", config.zone_id)
             return "follow"
         elif presence.state == "vacant":
+            # Execute: notify MusicCloudService of idle
+            if self._music_cloud is not None:
+                try:
+                    self._music_cloud.on_zone_idle(zone_id=config.zone_id)
+                except Exception:
+                    _LOGGER.debug("Failed to notify MusicCloud of idle in %s", config.zone_id)
             return "unfollow"
 
         return "none"
+
+    def _compute_heating_action(
+        self,
+        config: ZoneAutomationConfig,
+    ) -> tuple[str, float]:
+        """Compute heating action from override mode consequences.
+
+        Returns (action, target_temp_c).
+        """
+        consequences = self._get_zone_consequences(config.zone_id)
+        if not consequences:
+            return "none", 0.0
+
+        target = consequences.get("heating_target_temp_c", 0)
+        if target and float(target) > 0:
+            return "set_temp", float(target)
+
+        return "none", 0.0
 
     # ---- Habitus zone sync -------------------------------------------------
 
