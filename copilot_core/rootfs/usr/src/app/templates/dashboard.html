@@ -506,11 +506,20 @@ a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
 <div class="card" style="margin-bottom:14px">
   <h2><span class="ic">&#x1f6e0;</span> PilotSuite Gesamtzustand</h2>
   <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
-    <button class="btn-sm" onclick="loadSystemOverview(true)">&#x21bb; Backend sync</button>
+    <button class="btn-sm" onclick="loadSystemOverview(true);loadSelfRepairPanel(true)">&#x21bb; Backend sync</button>
+    <button class="btn-sm" onclick="runSelfCheck(true)">Self-Check</button>
     <button class="btn-sm" onclick="reloadDashboardFrontend()">Frontend reload</button>
     <span id="system-last-update" style="font-size:11px;color:var(--dim)">--</span>
   </div>
   <div id="system-overall"><div class="loading"><div class="spinner"></div>Lade Systemstatus...</div></div>
+</div>
+<div class="card" style="margin-bottom:14px">
+  <h2><span class="ic">&#x1f527;</span> Styx Self-Repair</h2>
+  <p style="font-size:11px;color:var(--dim);margin-bottom:10px">Selbstcheck, letzte Fehler und advisory Reparaturjobs (sicherer Modus ohne Auto-Patching).</p>
+  <div id="self-repair-status"><div class="loading"><div class="spinner"></div>Lade Self-Repair Status...</div></div>
+  <div id="self-repair-controls" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0 8px 0"></div>
+  <div id="self-repair-errors"><div class="loading"><div class="spinner"></div>Lade Fehler...</div></div>
+  <div id="self-repair-jobs" style="margin-top:10px"><div class="empty">Keine Jobs</div></div>
 </div>
 <div class="grid g2">
   <div class="card">
@@ -892,6 +901,8 @@ let _moduleConfigWindows={};
 let _moduleWinZ=2400;
 let _systemOverviewCache=null;
 let _systemOverviewTs=0;
+let _selfRepairStatusCache=null;
+let _selfRepairStatusTs=0;
 const CHAT_MODEL_STORAGE_KEY='styx_chat_model';
 
 // -- Helpers --
@@ -3950,6 +3961,206 @@ async function loadSystemOverview(force=false){
   }
 }
 
+async function getSelfRepairStatus(force=false){
+  const now=Date.now();
+  if(!force&&_selfRepairStatusCache&&(now-_selfRepairStatusTs)<10000){
+    return _selfRepairStatusCache;
+  }
+  const data=await api('/api/v1/self-repair/status');
+  if(data&&data.ok){
+    _selfRepairStatusCache=data;
+    _selfRepairStatusTs=Date.now();
+  }
+  return data;
+}
+function renderSelfRepairPanel(data){
+  const statusEl=$('self-repair-status');
+  const controlsEl=$('self-repair-controls');
+  const errorsEl=$('self-repair-errors');
+  const jobsEl=$('self-repair-jobs');
+  if(!statusEl||!controlsEl||!errorsEl||!jobsEl)return;
+  if(!data||!data.ok){
+    statusEl.innerHTML='<div class="empty">Self-Repair API nicht erreichbar.</div>';
+    controlsEl.innerHTML='';
+    errorsEl.innerHTML='<div class="empty">Keine Fehlerdaten.</div>';
+    jobsEl.innerHTML='<div class="empty">Keine Jobdaten.</div>';
+    return;
+  }
+  const integrity=data.integrity||{};
+  const settings=data.settings||{};
+  const repo=data.repo||{};
+  const llm=data.llm||{};
+  const errors=Array.isArray(data.errors_preview)?data.errors_preview:[];
+  const jobs=(data.jobs&&Array.isArray(data.jobs.items))?data.jobs.items:[];
+  const mode=String(settings.repair_mode||'advisory');
+  const channel=String(repo.active_channel||'official');
+  const color=String(integrity.color||'gray');
+  const statusTone=color==='green'?'g':color==='orange'?'y':color==='red'?'r':'b';
+  const repoLabel=channel==='private'?'Privat':'Offiziell';
+  const repoName=channel==='private'?(repo.private_repo||'--'):(repo.official_repo||'--');
+  const llmStatus=(llm.status||{});
+  const cloudConfigured=!!llmStatus.cloud_configured;
+  const githubCfg=(settings.github||{});
+  const privateRepoInput=repo.private_repo||'';
+
+  statusEl.innerHTML=
+    `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px">`+
+    `${badge('Integritaet '+String(integrity.status||'unknown'),statusTone)} `+
+    `${badge('Score '+String(_num(integrity.score,0)),'p')} `+
+    `${badge('Mode '+escapeHtml(mode),'b')} `+
+    `${badge('Quelle '+escapeHtml(repoLabel),'c')}`+
+    `</div>`+
+    `<div style="font-size:11px;color:var(--dim)">`+
+    `Repo: <strong>${escapeHtml(repoName)}</strong> · Working branch: <code>${escapeHtml(repo.working_branch||'styx-self-repair')}</code><br>`+
+    `LLM: Primary ${escapeHtml(String(llmStatus.primary_provider||'offline'))} / Secondary ${escapeHtml(String(llmStatus.secondary_provider||'cloud'))}`+
+    (cloudConfigured?'':' · Cloud nicht konfiguriert')+
+    `</div>`;
+
+  controlsEl.innerHTML=
+    `<button class="btn-sm" onclick="runSelfCheck(true)">Self-Check jetzt</button>`+
+    `<button class="btn-sm" onclick="loadSelfRepairPanel(true)">Refresh</button>`+
+    `<button class="btn-sm" onclick="setSelfRepairChannel('official')" ${channel==='official'?'disabled':''}>Official</button>`+
+    `<button class="btn-sm" onclick="setSelfRepairChannel('private')" ${channel==='private'?'disabled':''}>Private</button>`+
+    `<input id="self-repair-private-repo" placeholder="owner/repo" value="${escapeHtml(privateRepoInput)}" style="min-width:170px;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px;color:var(--text);font-size:11px" />`+
+    `<input id="self-repair-github-token" type="password" placeholder="GitHub PAT" style="min-width:170px;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px;color:var(--text);font-size:11px" />`+
+    `<button class="btn-sm" onclick="connectSelfRepairGithub()">GitHub verbinden</button>`+
+    `<span style="font-size:10px;color:var(--dim)">Token: ${githubCfg.token_configured?escapeHtml(githubCfg.token_preview||'gesetzt'):'nicht gesetzt'}</span>`;
+
+  if(!errors.length){
+    errorsEl.innerHTML='<div class="empty">Keine Fehler im aktuellen Snapshot.</div>';
+  }else{
+    let html='<div class="system-scroll"><table class="tbl"><tr><th>Zeit</th><th>Fehler</th><th>Kategorie</th><th>Fix</th><th></th></tr>';
+    errors.forEach((err)=>{
+      const sev=String(err.severity||'warning').toLowerCase();
+      const tone=sev==='error'?'r':'y';
+      html+=`<tr>`+
+        `<td style="font-size:10px;color:var(--dim)">${escapeHtml(String(err.time||'--').replace('T',' ').slice(0,19))}</td>`+
+        `<td><strong>${escapeHtml(err.module||'--')}</strong><br><span style="font-size:10px;color:var(--dim)">${escapeHtml((err.message||'').slice(0,120))}</span></td>`+
+        `<td>${badge(escapeHtml(err.category||'generic'),'b')}<br><span style="font-size:10px;color:var(--dim)">${escapeHtml(err.hint||'')}</span></td>`+
+        `<td>${badge(escapeHtml(err.fixability||'low'),tone)}</td>`+
+        `<td><button class="btn-sm" onclick="createSelfRepairJob('${escapeHtml(err.id||'')}')">Fix planen</button></td>`+
+      `</tr>`;
+    });
+    html+='</table></div>';
+    errorsEl.innerHTML=html;
+  }
+
+  if(!jobs.length){
+    jobsEl.innerHTML='<div class="empty">Noch keine Self-Repair Jobs.</div>';
+  }else{
+    let html='<div class="system-scroll"><table class="tbl"><tr><th>Job</th><th>Status</th><th>Mode</th><th>LLM</th><th>Fehler</th></tr>';
+    jobs.slice().reverse().forEach((job)=>{
+      const st=String(job.status||'unknown');
+      const tone=st==='completed'?'g':st==='failed'?'r':'y';
+      const llmProvider=String(job.llm?.provider||'--');
+      html+=`<tr>`+
+        `<td><strong>${escapeHtml(job.id||'')}</strong><br><span style="font-size:10px;color:var(--dim)">${escapeHtml(String(job.created_at||'').replace('T',' ').slice(0,19))}</span></td>`+
+        `<td>${badge(st,tone)}</td>`+
+        `<td>${escapeHtml(job.mode||'advisory')}</td>`+
+        `<td>${escapeHtml(llmProvider)}</td>`+
+        `<td>${Array.isArray(job.errors)?job.errors.length:0}</td>`+
+      `</tr>`;
+    });
+    html+='</table></div>';
+    jobsEl.innerHTML=html;
+  }
+}
+async function loadSelfRepairPanel(force=false){
+  const data=await getSelfRepairStatus(force);
+  renderSelfRepairPanel(data);
+}
+async function runSelfCheck(force=true){
+  try{
+    const r=await fetch(API+'/api/v1/self-repair/self-check',withAuth({
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({force:!!force,limit:10}),
+    }));
+    const data=await r.json().catch(()=>null);
+    if(!r.ok||data?.ok===false){
+      throw new Error(data?.error||('HTTP '+r.status));
+    }
+    addHistory('Self-Check abgeschlossen: '+String(data?.integrity?.status||'unknown')+' · '+String(data?.summary?.error_count||0)+' Fehler');
+    _selfRepairStatusCache=null;
+    await loadSelfRepairPanel(true);
+  }catch(e){
+    addHistory('\u26a0\ufe0f Self-Check fehlgeschlagen: '+escapeHtml(e.message||'unbekannt'));
+  }
+}
+async function createSelfRepairJob(errorId=''){
+  const payload={limit:6};
+  const eid=String(errorId||'').trim();
+  if(eid)payload.error_ids=[eid];
+  try{
+    const r=await fetch(API+'/api/v1/self-repair/jobs',withAuth({
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(payload),
+    }));
+    const data=await r.json().catch(()=>null);
+    if(!r.ok||data?.ok===false){
+      throw new Error(data?.error||('HTTP '+r.status));
+    }
+    const job=data.job||{};
+    addHistory('Self-Repair Plan erstellt: '+escapeHtml(job.id||'--'));
+    _selfRepairStatusCache=null;
+    await loadSelfRepairPanel(true);
+  }catch(e){
+    addHistory('\u26a0\ufe0f Self-Repair Job fehlgeschlagen: '+escapeHtml(e.message||'unbekannt'));
+  }
+}
+async function setSelfRepairChannel(channel){
+  const target=String(channel||'official').toLowerCase();
+  if(target!=='official'&&target!=='private')return;
+  try{
+    const r=await fetch(API+'/api/v1/self-repair/settings',withAuth({
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({source_channel:target}),
+    }));
+    const data=await r.json().catch(()=>null);
+    if(!r.ok||data?.ok===false){
+      throw new Error(data?.error||('HTTP '+r.status));
+    }
+    addHistory('Self-Repair Quelle gesetzt: '+target);
+    _selfRepairStatusCache=null;
+    await loadSelfRepairPanel(true);
+  }catch(e){
+    addHistory('\u26a0\ufe0f Kanalwechsel fehlgeschlagen: '+escapeHtml(e.message||'unbekannt'));
+  }
+}
+async function connectSelfRepairGithub(){
+  const repoEl=$('self-repair-private-repo');
+  const tokenEl=$('self-repair-github-token');
+  const repo=String(repoEl?.value||'').trim();
+  const token=String(tokenEl?.value||'').trim();
+  if(!repo){
+    addHistory('\u26a0\ufe0f GitHub Repo fehlt (owner/repo)');
+    return;
+  }
+  if(!token){
+    addHistory('\u26a0\ufe0f GitHub Token fehlt');
+    return;
+  }
+  try{
+    const r=await fetch(API+'/api/v1/self-repair/github/test',withAuth({
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({repo,token,save:true}),
+    }));
+    const data=await r.json().catch(()=>null);
+    if(!r.ok||data?.ok===false){
+      throw new Error(data?.error||('HTTP '+r.status));
+    }
+    addHistory('GitHub verbunden: '+escapeHtml(String(data.repo||repo))+' als '+escapeHtml(String(data.authenticated_as||'user')));
+    if(tokenEl)tokenEl.value='';
+    _selfRepairStatusCache=null;
+    await loadSelfRepairPanel(true);
+  }catch(e){
+    addHistory('\u26a0\ufe0f GitHub Verbindung fehlgeschlagen: '+escapeHtml(e.message||'unbekannt'));
+  }
+}
+
 // ==================================================
 // SETTINGS
 // ==================================================
@@ -4558,7 +4769,7 @@ async function toggleHomeKit(zoneId,zoneName,entityIds){
 // ==================================================
 // PAGE LOADER — Resilient wrapper
 // ==================================================
-const _loaders={styx:loadStyx,habitus:async()=>{await loadHabitus();loadEntitySuggestions('hab-entity-suggestions');loadScenes();},mood:loadMood,modules:async()=>{await loadModules();loadAutomations();loadMediaZones();loadNewsWarnings();loadWastePanel();loadBirthdayPanel()},system:async()=>{await loadSystemOverview(false);},haushalt:loadHaushalt,settings:loadSettings};
+const _loaders={styx:loadStyx,habitus:async()=>{await loadHabitus();loadEntitySuggestions('hab-entity-suggestions');loadScenes();},mood:loadMood,modules:async()=>{await loadModules();loadAutomations();loadMediaZones();loadNewsWarnings();loadWastePanel();loadBirthdayPanel()},system:async()=>{await loadSystemOverview(false);await loadSelfRepairPanel(false);},haushalt:loadHaushalt,settings:loadSettings};
 function loadPage(p){
   const fn=_loaders[p];
   if(!fn)return;

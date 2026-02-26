@@ -814,6 +814,14 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
     except Exception:
         _LOGGER.exception("Failed to register System Status API")
 
+    # Register Self-Repair API (v8.12.0)
+    try:
+        from copilot_core.api.v1.self_repair import self_repair_bp
+        app.register_blueprint(self_repair_bp)
+        _LOGGER.info("Registered Self-Repair API (/api/v1/self-repair/*)")
+    except Exception:
+        _LOGGER.exception("Failed to register Self-Repair API")
+
     # Register Entity Management API (v7.13.0)
     try:
         from copilot_core.api.v1.entities import entities_bp

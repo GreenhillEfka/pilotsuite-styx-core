@@ -122,3 +122,16 @@ def test_dashboard_template_exposes_habitus_zone_status_summary() -> None:
     text = _dashboard_template()
     assert 'id="hab-zone-status-summary"' in text
     assert "loadHabitusZoneStatusSummary(" in text
+
+
+def test_dashboard_template_exposes_self_repair_panel_on_system_page() -> None:
+    text = _dashboard_template()
+    assert 'id="self-repair-status"' in text
+    assert 'id="self-repair-errors"' in text
+    assert 'id="self-repair-jobs"' in text
+    assert "runSelfCheck(" in text
+    assert "createSelfRepairJob(" in text
+    assert "connectSelfRepairGithub(" in text
+    assert "/api/v1/self-repair/status" in text
+    assert "/api/v1/self-repair/jobs" in text
+    assert "/api/v1/self-repair/github/test" in text
