@@ -1,5 +1,32 @@
 # Changelog - PilotSuite Core Add-on
 
+## [8.12.0] - 2026-02-26 — HABITUS ROOM CANDIDATES + RECOMMENDATION UX
+
+### Added
+- Habitus recommendation engine now derives **room candidates** per zone from HA states:
+  - area-based mapping (`attributes.area_id`)
+  - fallback room inference from entity/friendly-name tokens.
+- Recommendation payload now includes:
+  - `room_ids`
+  - `room_candidates[]` (room id/name, entity count, entities)
+  - stable primary `room_id`.
+- Dashboard Habitus page adds **Habitus-Zonen Empfehlungen** panel:
+  - zone cards with room candidates + metric coverage
+  - one-click "Ins Formular übernehmen" for multi-room zone prefill.
+- Bootstrap flow now supports multi-room zone creation/update from recommendations.
+
+### Changed
+- `/api/v1/hub/habitus/management/bootstrap_zones` now:
+  - registers all candidate rooms per zone
+  - creates zones with multiple `room_ids`
+  - persists `recommended_room_ids` and compact `room_candidates` in zone settings.
+- HomeKit zone cards in dashboard now show explicit zone connectivity status (`Zone verbunden` / `Zone fehlt`).
+
+### Validation
+- `pytest -q tests/test_habitus_management_api_helpers.py tests/test_dashboard_template_habitus.py` passed.
+- Additional regression set passed:
+  `tests/test_self_repair_api.py tests/test_system_overview_api.py tests/test_dashboard_endpoints.py tests/test_homekit_api.py tests/test_bootstrap_routes.py`.
+
 ## [8.11.1] - 2026-02-26 — SELF-REPAIR WORKSPACE BRANCH FLOW
 
 ### Added

@@ -60,6 +60,66 @@ _DEFAULT_HABITUS_ZONE_DEFS = [
     {"zone_id": "zone:gangbereich", "name": "Gangbereich", "room_id": "room:gangbereich", "keywords": ["gang", "flur", "eingang", "hall", "corridor"]},
     {"zone_id": "zone:buerobereich", "name": "Buerobereich", "room_id": "room:buerobereich", "keywords": ["buero", "büro", "office", "arbeits", "desk"]},
 ]
+_ROOM_TOKEN_SKIP = {
+    "sensor",
+    "binary",
+    "light",
+    "switch",
+    "climate",
+    "camera",
+    "cover",
+    "lock",
+    "media",
+    "player",
+    "motion",
+    "presence",
+    "occupancy",
+    "bewegung",
+    "praesenz",
+    "anwesenheit",
+    "status",
+    "state",
+    "temperature",
+    "temperatur",
+    "humidity",
+    "feuchte",
+    "helligkeit",
+    "lux",
+    "co2",
+    "noise",
+    "sound",
+    "tv",
+    "led",
+    "lampe",
+    "licht",
+    "decke",
+    "fenster",
+    "door",
+    "window",
+}
+_ROOM_NAME_OVERRIDES = {
+    "wohnzimmer": "Wohnzimmer",
+    "livingroom": "Wohnzimmer",
+    "kueche": "Kueche",
+    "kuche": "Kueche",
+    "kitchen": "Kueche",
+    "esszimmer": "Esszimmer",
+    "dining": "Essbereich",
+    "schlafzimmer": "Schlafzimmer",
+    "bedroom": "Schlafzimmer",
+    "bad": "Bad",
+    "badezimmer": "Bad",
+    "toilette": "Bad",
+    "wc": "WC",
+    "flur": "Flur",
+    "gang": "Flur",
+    "buero": "Buero",
+    "office": "Buero",
+    "garten": "Garten",
+    "terrasse": "Terrasse",
+    "balkon": "Balkon",
+    "balcony": "Balkon",
+}
 
 
 def _get_habitus_automation_advisor() -> HabitusAutomationAdvisor:
@@ -254,11 +314,87 @@ def _role_map(entity_ids: list[str]) -> dict[str, list[str]]:
     return {k: v for k, v in roles.items() if v}
 
 
+def _ascii_norm(value: str) -> str:
+    text = str(value or "").strip().lower()
+    return (
+        text.replace("ä", "ae")
+        .replace("ö", "oe")
+        .replace("ü", "ue")
+        .replace("ß", "ss")
+    )
+
+
+def _slug_token(value: str) -> str:
+    normalized = _ascii_norm(value)
+    slug = re.sub(r"[^a-z0-9]+", "_", normalized).strip("_")
+    return slug[:64]
+
+
+def _room_name_from_token(token: str) -> str:
+    key = _slug_token(token)
+    if not key:
+        return "Raum"
+    if key in _ROOM_NAME_OVERRIDES:
+        return _ROOM_NAME_OVERRIDES[key]
+    return " ".join(part.capitalize() for part in key.split("_") if part) or "Raum"
+
+
+def _entity_room_token(entity_id: str) -> str:
+    if "." not in entity_id:
+        return ""
+    object_id = entity_id.split(".", 1)[1]
+    tokens = [t for t in _slug_token(object_id).split("_") if t]
+    for token in tokens:
+        if token in _ROOM_TOKEN_SKIP:
+            continue
+        if len(token) < 2:
+            continue
+        return token
+    return ""
+
+
+def _text_room_token(text: str) -> str:
+    tokens = [t for t in _slug_token(text).split("_") if t]
+    for token in tokens:
+        if token in _ROOM_TOKEN_SKIP:
+            continue
+        if len(token) < 2:
+            continue
+        return token
+    return ""
+
+
+def _state_room_candidate(state: dict) -> dict[str, str] | None:
+    attrs = state.get("attributes") or {}
+    area = _slug_token(str(attrs.get("area_id") or attrs.get("room_id") or ""))
+    if area:
+        return {
+            "room_id": f"room:{area}",
+            "name": _room_name_from_token(area),
+            "source": "area",
+        }
+
+    entity_id = str(state.get("entity_id") or "")
+    friendly = str(attrs.get("friendly_name") or "")
+
+    from_entity = _entity_room_token(entity_id)
+    from_name = _text_room_token(friendly)
+    token = from_name or from_entity
+    if not token:
+        return None
+    return {
+        "room_id": f"room:{token}",
+        "name": _room_name_from_token(token),
+        "source": "inferred",
+    }
+
+
 def _build_habitus_recommendations(states: list[dict]) -> list[dict]:
     zones_out = []
     for z in _DEFAULT_HABITUS_ZONE_DEFS:
         keywords = [str(k).lower() for k in z.get("keywords", []) if str(k)]
         matched: list[str] = []
+        room_groups: dict[str, dict] = {}
         for st in states:
             entity_id = str(st.get("entity_id", ""))
             if "." not in entity_id:
@@ -270,14 +406,69 @@ def _build_habitus_recommendations(states: list[dict]) -> list[dict]:
             text = f"{entity_id} {attrs.get('friendly_name', '')}".lower()
             if any(keyword in text for keyword in keywords):
                 matched.append(entity_id)
+                room = _state_room_candidate(st)
+                if room:
+                    room_id = str(room.get("room_id", "")).strip()
+                    if room_id:
+                        entry = room_groups.setdefault(
+                            room_id,
+                            {
+                                "room_id": room_id,
+                                "name": str(room.get("name") or room_id),
+                                "entities": [],
+                                "match_count": 0,
+                            },
+                        )
+                        if entity_id not in entry["entities"]:
+                            entry["entities"].append(entity_id)
+                        entry["match_count"] += 1
 
         matched = sorted(dict.fromkeys(matched))
         roles = _role_map(matched)
+        room_candidates = sorted(
+            room_groups.values(),
+            key=lambda item: (
+                -int(item.get("match_count", 0)),
+                -len(item.get("entities", [])),
+                str(item.get("room_id", "")),
+            ),
+        )
+        if not room_candidates:
+            room_candidates = [
+                {
+                    "room_id": z["room_id"],
+                    "name": z["name"],
+                    "entities": matched[:],
+                    "match_count": len(matched),
+                }
+            ]
+
+        normalized_candidates: list[dict] = []
+        room_ids: list[str] = []
+        for candidate in room_candidates:
+            room_id = str(candidate.get("room_id", "")).strip()
+            if not room_id or room_id in room_ids:
+                continue
+            entities = [str(e) for e in candidate.get("entities", []) if str(e)]
+            room_ids.append(room_id)
+            normalized_candidates.append(
+                {
+                    "room_id": room_id,
+                    "name": str(candidate.get("name") or room_id),
+                    "entity_count": len(entities),
+                    "entities": entities,
+                    "match_count": int(candidate.get("match_count", len(entities))),
+                }
+            )
+
+        primary_room_id = room_ids[0] if room_ids else z["room_id"]
         zones_out.append(
             {
                 "zone_id": z["zone_id"],
                 "name": z["name"],
-                "room_id": z["room_id"],
+                "room_id": primary_room_id,
+                "room_ids": room_ids,
+                "room_candidates": normalized_candidates,
                 "keywords": keywords,
                 "recommended_entities": matched,
                 "recommended_count": len(matched),
@@ -1003,12 +1194,32 @@ def bootstrap_habitus_zones():
         name = str(zone.get("name", zone_id))
         entities = [str(e) for e in zone.get("recommended_entities", []) if str(e)]
         roles = zone.get("entity_roles", {}) if isinstance(zone.get("entity_roles"), dict) else {}
+        room_candidates = zone.get("room_candidates", []) if isinstance(zone.get("room_candidates"), list) else []
 
         if not zone_id or not room_id:
             continue
 
-        # Register/refresh room
-        _zone_engine.register_room(room_id=room_id, name=name, entities=entities)
+        room_ids: list[str] = []
+        for candidate in room_candidates:
+            if not isinstance(candidate, dict):
+                continue
+            candidate_room_id = str(candidate.get("room_id", "")).strip()
+            candidate_name = str(candidate.get("name") or candidate_room_id or name).strip() or name
+            candidate_entities = [str(e) for e in candidate.get("entities", []) if str(e)]
+            if not candidate_room_id:
+                continue
+            _zone_engine.register_room(
+                room_id=candidate_room_id,
+                name=candidate_name,
+                entities=candidate_entities or entities,
+            )
+            if candidate_room_id not in room_ids:
+                room_ids.append(candidate_room_id)
+
+        if not room_ids:
+            _zone_engine.register_room(room_id=room_id, name=name, entities=entities)
+            room_ids = [room_id]
+
         existing = _zone_engine.get_zone(zone_id)
         if existing and overwrite:
             _zone_engine.delete_zone(zone_id)
@@ -1017,8 +1228,10 @@ def bootstrap_habitus_zones():
         if existing:
             zones_updated += 1
             created = False
+            for rid in room_ids:
+                _zone_engine.add_room_to_zone(zone_id, rid)
         else:
-            _zone_engine.create_zone(zone_id=zone_id, name=name, room_ids=[room_id], icon="mdi:home-floor-1")
+            _zone_engine.create_zone(zone_id=zone_id, name=name, room_ids=room_ids, icon="mdi:home-floor-1")
             zones_created += 1
             created = True
 
@@ -1026,6 +1239,16 @@ def bootstrap_habitus_zones():
             zone_id,
             {
                 "entity_roles": roles,
+                "recommended_room_ids": room_ids,
+                "room_candidates": [
+                    {
+                        "room_id": str(candidate.get("room_id", "")),
+                        "name": str(candidate.get("name", "")),
+                        "entity_count": int(candidate.get("entity_count", 0)),
+                    }
+                    for candidate in room_candidates
+                    if isinstance(candidate, dict)
+                ],
                 "ux_defaults": {
                     "standard_metrics": ["motion", "brightness", "noise", "humidity", "heating", "co2", "camera"],
                     "show_suggestions": True,
@@ -1038,7 +1261,9 @@ def bootstrap_habitus_zones():
                 "name": name,
                 "created": created,
                 "entity_count": len(entities),
-                "room_id": room_id,
+                "room_id": room_ids[0] if room_ids else room_id,
+                "room_ids": room_ids,
+                "room_count": len(room_ids),
             }
         )
 

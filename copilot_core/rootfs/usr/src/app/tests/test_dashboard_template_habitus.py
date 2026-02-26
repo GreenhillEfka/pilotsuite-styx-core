@@ -102,6 +102,14 @@ def test_dashboard_template_exposes_homekit_zone_server_panel() -> None:
     assert "/api/v1/homekit/toggle" in text
 
 
+def test_dashboard_template_exposes_habitus_zone_recommendation_panel() -> None:
+    text = _dashboard_template()
+    assert 'id="hab-zone-recommendations"' in text
+    assert "renderHabitusZoneRecommendations(" in text
+    assert "applyZoneRecommendation(" in text
+    assert "/api/v1/hub/habitus/management/recommendations" in text
+
+
 def test_dashboard_template_has_resizable_module_config_windows() -> None:
     text = _dashboard_template()
     assert 'id="module-config-window-layer"' in text
@@ -132,6 +140,8 @@ def test_dashboard_template_exposes_self_repair_panel_on_system_page() -> None:
     assert "runSelfCheck(" in text
     assert "createSelfRepairJob(" in text
     assert "connectSelfRepairGithub(" in text
+    assert "prepareSelfRepairWorkspace(" in text
     assert "/api/v1/self-repair/status" in text
     assert "/api/v1/self-repair/jobs" in text
     assert "/api/v1/self-repair/github/test" in text
+    assert "/api/v1/self-repair/workspace/prepare" in text
