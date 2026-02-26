@@ -1,7 +1,7 @@
 # PilotSuite Core Add-on -- Architektur
 
 > Technisches Architekturdokument fuer das PilotSuite Core Add-on (ehemals PilotSuite Core).
-> Stand: v10.1.2 (2026-02-26)
+> Stand: v10.1.3 (2026-02-26)
 > Hinweis: Dieses Dokument beschreibt die Architekturprinzipien. Fuer den verifizierten Produktionszustand siehe `PROJECT_STATUS.md` und `docs/MODULE_INVENTORY.md`.
 
 ---

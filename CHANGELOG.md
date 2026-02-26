@@ -1,5 +1,12 @@
 # Changelog - PilotSuite Core Add-on
 
+## [10.1.3] - 2026-02-26 — PAIRED RELEASE (COMPAT GUARDRAILS)
+
+### Changed
+- Paired Release mit HA Integration `v10.1.3`:
+  - Core/HA Versionschutz (Major/Minor Mismatch -> Repairs Hinweis, HA-seitig)
+  - Contract-Tests gegen Endpoint-Pfade (HA-seitig)
+
 ## [10.1.2] - 2026-02-26 — PAIRED RELEASE (HA DOCS COMPLIANCE)
 
 ### Changed

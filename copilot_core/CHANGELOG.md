@@ -3,6 +3,9 @@
 This file exists so Home Assistant can show an add-on changelog.
 For full history, see the repository-level `CHANGELOG.md`.
 
+## 10.1.3
+- Paired Release zur HA Integration `v10.1.3` (Core/HA Versionschutz + Contract-Tests in HA).
+
 ## 10.1.2
 - Paired Release zur HA Integration `v10.1.2` (HA Best Practice: `single_config_entry`).
 
