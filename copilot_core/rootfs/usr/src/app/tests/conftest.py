@@ -22,3 +22,36 @@ def reset_auth_token_cache():
         sec._token_cache = ("", 0.0)
     except ImportError:
         pass
+
+
+@pytest.fixture(autouse=True)
+def reset_circuit_breakers():
+    """Reset all global circuit breakers before each test.
+
+    Prevents state leaking between tests — a test that triggers enough
+    failures to open a breaker would otherwise cause subsequent tests to
+    see the breaker still open and skip the call entirely.
+    """
+    try:
+        from copilot_core.circuit_breaker import (
+            ha_supervisor_breaker,
+            ollama_breaker,
+            cloud_api_breaker,
+        )
+        ha_supervisor_breaker.reset()
+        ollama_breaker.reset()
+        cloud_api_breaker.reset()
+    except ImportError:
+        pass
+    yield
+    try:
+        from copilot_core.circuit_breaker import (
+            ha_supervisor_breaker,
+            ollama_breaker,
+            cloud_api_breaker,
+        )
+        ha_supervisor_breaker.reset()
+        ollama_breaker.reset()
+        cloud_api_breaker.reset()
+    except ImportError:
+        pass

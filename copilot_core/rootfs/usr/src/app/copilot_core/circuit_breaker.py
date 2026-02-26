@@ -96,6 +96,13 @@ class CircuitBreaker:
                     )
                 self._state = CircuitState.OPEN
 
+    def reset(self) -> None:
+        """Reset breaker to initial CLOSED state (useful for testing)."""
+        with self._lock:
+            self._state = CircuitState.CLOSED
+            self._failure_count = 0
+            self._last_failure_time = 0
+
     def get_status(self) -> dict:
         return {
             "name": self.name,

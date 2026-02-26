@@ -47,9 +47,6 @@ _SEARXNG_ENABLED = os.environ.get("SEARXNG_ENABLED", "false").lower() == "true"
 _SEARXNG_BASE_URL = os.environ.get("SEARXNG_BASE_URL", "http://192.168.30.18:4041")
 
 # PilotSuite Phase 5 APIs
-from copilot_core.sharing.api import sharing_bp
-from copilot_core.api.v1.notifications import bp as notifications_bp
-from copilot_core.collective_intelligence.api import federated_bp
 from copilot_core.telegram import TelegramBot
 from copilot_core.module_registry import ModuleRegistry
 from copilot_core.automation_creator import AutomationCreator
@@ -478,7 +475,6 @@ def init_services(hass=None, config: dict = None):
 
     # Set conversation env vars from config (used by conversation.py + llm_provider.py)
     try:
-        import os
         conv_config = config.get("conversation", {}) if config else {}
         if conv_config.get("ollama_url"):
             os.environ.setdefault("OLLAMA_URL", conv_config["ollama_url"])
