@@ -1,5 +1,10 @@
 # Changelog - PilotSuite Core Add-on
 
+## [10.1.2] - 2026-02-26 — PAIRED RELEASE (HA DOCS COMPLIANCE)
+
+### Changed
+- Paired Release mit HA Integration `v10.1.2` (Manifest: `single_config_entry` nach HA Best Practice).
+
 ## [10.1.1] - 2026-02-26 — VERSION SYNC (ADD-ON VALIDATION)
 
 ### Fixed

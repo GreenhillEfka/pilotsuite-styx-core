@@ -1,5 +1,9 @@
 # Release Notes - PilotSuite Core
 
+## [10.1.2] - 2026-02-26 — PAIRED RELEASE (HA DOCS COMPLIANCE)
+
+- Paired Release mit HA Integration `v10.1.2` (HA Manifest Best Practice: `single_config_entry`).
+
 ## [10.1.1] - 2026-02-26 — VERSION SYNC (ADD-ON VALIDATION)
 
 - Fix: Versionsync zwischen Add-on Metadaten und Runtime wiederhergestellt.

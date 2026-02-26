@@ -74,4 +74,4 @@
 ---
 
 *Last updated: 2026-02-26*
-*Based on Styx v10.1.1*
+*Based on Styx v10.1.2*
