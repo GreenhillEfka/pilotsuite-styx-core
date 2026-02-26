@@ -405,28 +405,94 @@ def _get_user_context() -> str:
                 f"{hh.get('children', 0)} Kinder"
             )
 
-        # Brain graph quick stats
+        # Brain graph: enhanced context with relationships and active nodes
         bg_svc = services.get("brain_graph_service")
         if bg_svc:
-            stats = bg_svc.get_stats()
-            if stats.get("node_count", 0) > 0:
-                context_parts.append(
-                    f"Brain Graph: {stats['node_count']} Nodes, "
-                    f"{stats.get('edge_count', 0)} Edges"
-                )
+            try:
+                stats = bg_svc.get_stats()
+                bg_parts = []
+                if stats.get("node_count", 0) > 0:
+                    bg_parts.append(
+                        f"Brain Graph: {stats['node_count']} Nodes, "
+                        f"{stats.get('edge_count', 0)} Edges"
+                    )
+                # Active entity relationships (top scored edges)
+                try:
+                    export = bg_svc.export_state()
+                    edges = export.get("edges", [])
+                    if edges:
+                        top_edges = sorted(edges, key=lambda e: e.get("weight", 0), reverse=True)[:5]
+                        edge_lines = []
+                        for e in top_edges:
+                            edge_lines.append(
+                                f"  {e.get('source', '?')} --[{e.get('relation', '?')}]--> "
+                                f"{e.get('target', '?')} (w={e.get('weight', 0):.2f})"
+                            )
+                        bg_parts.append("Aktive Beziehungen:\n" + "\n".join(edge_lines))
+                    # High-score nodes (most active entities)
+                    nodes = export.get("nodes", [])
+                    if nodes:
+                        top_nodes = sorted(nodes, key=lambda n: n.get("score", 0), reverse=True)[:5]
+                        node_lines = [
+                            f"  {n.get('entity_id', n.get('id', '?'))}: {n.get('state', '?')} "
+                            f"(score={n.get('score', 0):.2f})"
+                            for n in top_nodes
+                        ]
+                        bg_parts.append("Aktive Entities:\n" + "\n".join(node_lines))
+                except Exception:
+                    pass
+                if bg_parts:
+                    context_parts.extend(bg_parts)
+            except Exception:
+                pass
+
+        # Neuron pipeline: inject current mood and neuron states into context
+        neuron_mgr = services.get("neuron_manager")
+        if neuron_mgr:
+            try:
+                mood_summary = neuron_mgr.get_mood_summary()
+                if mood_summary.get("mood") and mood_summary["mood"] != "unknown":
+                    mood_str = (
+                        f"Neuronale Stimmung: {mood_summary['mood']} "
+                        f"(Konfidenz: {mood_summary.get('confidence', 0):.0%})"
+                    )
+                    mood_values = mood_summary.get("mood_values", {})
+                    if mood_values:
+                        top_moods = sorted(mood_values.items(), key=lambda x: x[1], reverse=True)[:3]
+                        mood_str += " | " + ", ".join(f"{m}={v:.0%}" for m, v in top_moods)
+                    context_parts.append(mood_str)
+            except Exception:
+                pass
 
         # Habitus patterns (recent discoveries)
         habitus_svc = services.get("habitus_service")
         if habitus_svc:
-            recent = habitus_svc.list_recent_patterns(limit=3)
-            if recent:
-                pattern_lines = []
-                for p in recent:
-                    meta = p.get("metadata", {})
-                    ant = meta.get("antecedent", {}).get("full", "?")
-                    cons = meta.get("consequent", {}).get("full", "?")
-                    pattern_lines.append(f"{ant} -> {cons}")
-                context_parts.append("Erkannte Muster: " + "; ".join(pattern_lines))
+            try:
+                recent = habitus_svc.list_recent_patterns(limit=3)
+                if recent:
+                    pattern_lines = []
+                    for p in recent:
+                        meta = p.get("metadata", {})
+                        ant = meta.get("antecedent", {}).get("full", "?")
+                        cons = meta.get("consequent", {}).get("full", "?")
+                        pattern_lines.append(f"{ant} -> {cons}")
+                    context_parts.append("Erkannte Muster: " + "; ".join(pattern_lines))
+            except Exception:
+                pass
+
+        # Habitus zones: inject active zone summaries
+        try:
+            from copilot_core.api.v1.habitus_zones import get_all_zones
+            zones = get_all_zones()
+            if zones:
+                zone_summary = ", ".join(
+                    f"{z.get('name', z.get('zone_id', '?'))} "
+                    f"({len(z.get('entity_ids', []))} Entities)"
+                    for z in zones[:6]
+                )
+                context_parts.append(f"Habituszonen: {zone_summary}")
+        except Exception:
+            pass
 
         # Conversation memory: learned preferences
         conv_memory = services.get("conversation_memory")
@@ -715,6 +781,14 @@ def _handle_chat_completions():
         # Store user message in conversation memory (lifelong learning)
         _store_in_memory(user_message, role="user")
 
+        # Use native streaming when stream=true and no tool-calling
+        # (tool-calling requires buffered response for server-side execution)
+        if stream and not tools:
+            return _stream_response_native(
+                messages, model_override=model_override,
+                temperature=temperature, max_tokens=max_tokens, tools=tools,
+            )
+
         response = _process_conversation(messages, model_override=model_override,
                                          temperature=temperature, max_tokens=max_tokens,
                                          tools=tools)
@@ -899,6 +973,112 @@ def llm_model_catalog():
     })
 
 
+# ---------------------------------------------------------------------------
+# Model management endpoints (pull / delete / info / streaming pull)
+# ---------------------------------------------------------------------------
+
+@conversation_bp.route('/models/pull', methods=['POST'])
+@require_token
+def pull_model():
+    """Pull/download an Ollama model (blocking).
+
+    Body: {"model": "qwen3:0.6b"}
+    Returns: {"ok": true, "model": "qwen3:0.6b", "status": "downloaded"}
+
+    Note: This is a blocking call that can take several minutes for large models.
+    For progress tracking, use POST /chat/models/pull/stream instead.
+    """
+    body = request.get_json(silent=True) or {}
+    model_name = str(body.get("model", "") or "").strip()
+    if not model_name:
+        return jsonify({"ok": False, "error": "Missing 'model' field"}), 400
+
+    provider = _get_llm_provider()
+    result = provider.pull_model(model_name)
+    status_code = 200 if result.get("ok") else 502
+    return jsonify(result), status_code
+
+
+@conversation_bp.route('/models/pull/stream', methods=['POST'])
+@require_token
+def pull_model_stream():
+    """Pull/download an Ollama model with SSE streaming progress.
+
+    Body: {"model": "qwen3:0.6b"}
+    Returns: SSE stream with NDJSON progress events:
+        data: {"status": "pulling manifest"}
+        data: {"status": "downloading ...", "digest": "sha256:...", "total": 123456, "completed": 5000}
+        data: {"status": "success"}
+    """
+    body = request.get_json(silent=True) or {}
+    model_name = str(body.get("model", "") or "").strip()
+    if not model_name:
+        return jsonify({"ok": False, "error": "Missing 'model' field"}), 400
+
+    provider = _get_llm_provider()
+
+    def generate():
+        for progress in provider.pull_model_stream(model_name):
+            yield f"data: {json.dumps(progress)}\n\n"
+        yield "data: [DONE]\n\n"
+
+    return Response(
+        generate(),
+        mimetype='text/event-stream',
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
+
+
+@conversation_bp.route('/models/<path:model_id>', methods=['DELETE'])
+@require_token
+def delete_model(model_id):
+    """Delete an Ollama model.
+
+    DELETE /chat/models/qwen3:0.6b
+    Returns: {"ok": true, "model": "qwen3:0.6b", "status": "deleted"}
+    """
+    model_name = str(model_id or "").strip()
+    if not model_name:
+        return jsonify({"ok": False, "error": "Missing model ID"}), 400
+
+    provider = _get_llm_provider()
+
+    # Prevent deleting the currently active model
+    status = provider.status()
+    if model_name == status.get("ollama_model"):
+        return jsonify({
+            "ok": False,
+            "error": f"Cannot delete the currently active model '{model_name}'. "
+                     "Switch to a different model first.",
+        }), 409
+
+    result = provider.delete_model(model_name)
+    status_code = 200 if result.get("ok") else 502
+    return jsonify(result), status_code
+
+
+@conversation_bp.route('/models/<path:model_id>/info', methods=['GET'])
+@require_token
+def get_model_info(model_id):
+    """Get detailed info about an Ollama model (size, quantization, family, etc.).
+
+    GET /chat/models/qwen3:0.6b/info
+    Returns model details including parameter_size, quantization_level, family, etc.
+    """
+    model_name = str(model_id or "").strip()
+    if not model_name:
+        return jsonify({"ok": False, "error": "Missing model ID"}), 400
+
+    provider = _get_llm_provider()
+    result = provider.get_model_info(model_name)
+    status_code = 200 if result.get("ok") else (404 if "not found" in str(result.get("error", "")).lower() else 502)
+    return jsonify(result), status_code
+
+
 @conversation_bp.route('/routing', methods=['GET'])
 def llm_routing_get():
     """Return current LLM routing config."""
@@ -932,6 +1112,41 @@ def llm_routing_set():
         "ok": True,
         "status": status,
         "catalog": provider.model_catalog(force_refresh=True),
+    })
+
+
+@conversation_bp.route('/validate/cloud', methods=['GET'])
+@require_token
+def validate_cloud():
+    """Pre-flight validation: check cloud API connectivity and credentials.
+
+    Returns: {"ok": true/false, "provider_type": "...", "models_available": N, ...}
+    """
+    provider = _get_llm_provider()
+    result = provider.validate_cloud_connection()
+    return jsonify(result), 200 if result.get("ok") else 502
+
+
+@conversation_bp.route('/validate/ollama', methods=['GET'])
+@require_token
+def validate_ollama():
+    """Pre-flight validation: check Ollama connectivity and model availability.
+
+    Returns: {"ok": true/false, "models_installed": N, "active_model_installed": true/false, ...}
+    """
+    provider = _get_llm_provider()
+    result = provider.validate_ollama_connection()
+    return jsonify(result), 200 if result.get("ok") else 502
+
+
+@conversation_bp.route('/usage', methods=['GET'])
+@require_token
+def llm_usage():
+    """Return LLM usage statistics (requests + tokens per provider)."""
+    provider = _get_llm_provider()
+    return jsonify({
+        "ok": True,
+        "usage": provider.get_usage_stats(),
     })
 
 
@@ -2028,13 +2243,18 @@ def process_with_tool_execution(user_message: str) -> str:
 
 
 def _stream_response(response: dict):
-    """OpenAI-compatible SSE streaming implementation."""
+    """OpenAI-compatible SSE streaming implementation.
+
+    If the response was generated from a buffered (non-streaming) call,
+    simulates streaming by chunking word-by-word. For true streaming,
+    use the chat_stream path via LLMProvider.chat_stream().
+    """
     model = response.get("model", DEFAULT_MODEL)
     response_id = response.get("id", f"chatcmpl-{os.urandom(12).hex()}")
 
     def generate():
         content = response["choices"][0]["message"]["content"]
-        # Stream word by word for natural feel
+        # Stream word by word for natural feel (buffered responses)
         words = content.split()
         for i, word in enumerate(words):
             chunk = {
@@ -2059,6 +2279,45 @@ def _stream_response(response: dict):
             "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
         }
         yield f"data: {json.dumps(final)}\n\n"
+        yield "data: [DONE]\n\n"
+
+    return Response(generate(), mimetype='text/event-stream',
+                    headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+def _stream_response_native(messages, model_override=None, temperature=None,
+                            max_tokens=None, tools=None):
+    """True streaming via LLMProvider.chat_stream() — proxies SSE from backend.
+
+    Uses real token-by-token streaming from Ollama or Cloud API.
+    """
+    provider = _get_llm_provider()
+
+    def generate():
+        for chunk in provider.chat_stream(
+            messages=messages,
+            tools=tools,
+            model=model_override,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        ):
+            if chunk.get("error"):
+                # Yield error as a final chunk
+                error_chunk = {
+                    "id": f"chatcmpl-{os.urandom(12).hex()}",
+                    "object": "chat.completion.chunk",
+                    "created": int(time.time()),
+                    "model": model_override or "unknown",
+                    "choices": [{
+                        "index": 0,
+                        "delta": {"content": chunk.get("content", "Error")},
+                        "finish_reason": "stop",
+                    }],
+                }
+                yield f"data: {json.dumps(error_chunk)}\n\n"
+                yield "data: [DONE]\n\n"
+                return
+            yield f"data: {json.dumps(chunk)}\n\n"
         yield "data: [DONE]\n\n"
 
     return Response(generate(), mimetype='text/event-stream',

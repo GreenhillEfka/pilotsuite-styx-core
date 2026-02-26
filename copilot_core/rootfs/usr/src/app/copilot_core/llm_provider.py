@@ -25,6 +25,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import random
 import time
 from urllib.parse import urlparse
 
@@ -53,10 +54,17 @@ _DEFAULT_OLLAMA_CLOUD_MODEL = "qwen3.5:cloud"
 _DEFAULT_OLLAMA_CLOUD_MODELS = (
     "qwen3.5:cloud",
     "qwen3:cloud",
+    "deepseek-v3.1:671b-cloud",
+    "gpt-oss:20b-cloud",
 )
 _DEFAULT_OFFLINE_MODELS = ("qwen3:0.6b", "qwen3:4b", "llama3.2:3b", "mistral:7b")
 _RUNTIME_SETTINGS_PATH = "/data/llm_runtime_settings.json"
+_USAGE_STATS_PATH = "/data/llm_usage_stats.json"
 _CATALOG_CACHE_TTL_S = 45.0
+
+# Per-provider timeout defaults (seconds)
+_DEFAULT_OFFLINE_TIMEOUT = 120
+_DEFAULT_CLOUD_TIMEOUT = 60
 
 _PRIMARY_MODEL_ALIASES = {"", "pilotsuite", "default", "auto", "primary"}
 _SECONDARY_MODEL_ALIASES = {"secondary", "fallback"}
@@ -74,12 +82,23 @@ class LLMProvider:
 
     def __init__(self):
         self._settings_path = os.environ.get("LLM_RUNTIME_SETTINGS_PATH", _RUNTIME_SETTINGS_PATH)
+        self._usage_path = os.environ.get("LLM_USAGE_STATS_PATH", _USAGE_STATS_PATH)
         self._catalog_cache: dict[str, dict] = {
             _PROVIDER_OFFLINE: {"models": [], "installed": [], "ts": 0.0},
             _PROVIDER_CLOUD: {"models": [], "ts": 0.0},
         }
+        self._usage_stats: dict = self._load_usage_stats()
         self._load_config()
         self.session = http_requests.Session()  # Keep pooled session for production calls.
+
+        # Import circuit breakers (lazy to avoid circular imports)
+        try:
+            from copilot_core.circuit_breaker import ollama_breaker, cloud_api_breaker
+            self._ollama_breaker = ollama_breaker
+            self._cloud_breaker = cloud_api_breaker
+        except ImportError:
+            self._ollama_breaker = None
+            self._cloud_breaker = None
 
     def _http_get(self, url: str, **kwargs):
         """HTTP GET wrapper.
@@ -99,6 +118,13 @@ class LLMProvider:
             return module_post(url, **kwargs)
         return self.session.post(url, **kwargs)
 
+    def _http_delete(self, url: str, **kwargs):
+        """HTTP DELETE wrapper with the same test monkeypatch compatibility."""
+        module_delete = getattr(http_requests, "delete", None)
+        if callable(module_delete) and getattr(module_delete, "__module__", "") != "requests.api":
+            return module_delete(url, **kwargs)
+        return self.session.delete(url, **kwargs)
+
     def _load_config(self):
         """Load config from env + runtime routing overrides."""
         self.ollama_url = os.environ.get("OLLAMA_URL", "http://localhost:11434")
@@ -110,6 +136,8 @@ class LLMProvider:
         self.cloud_api_key = os.environ.get("CLOUD_API_KEY", "")
         configured_cloud_model = str(os.environ.get("CLOUD_MODEL", "") or "").strip()
         self.timeout = int(os.environ.get("LLM_TIMEOUT", "120"))
+        self.offline_timeout = int(os.environ.get("LLM_OFFLINE_TIMEOUT", str(_DEFAULT_OFFLINE_TIMEOUT)))
+        self.cloud_timeout = int(os.environ.get("LLM_CLOUD_TIMEOUT", str(_DEFAULT_CLOUD_TIMEOUT)))
         self._last_ollama_issue = "unknown"
         self.ollama_model_configured = configured_ollama_model
         self.ollama_model_overridden = False
@@ -188,6 +216,281 @@ class LLMProvider:
         self._catalog_cache[_PROVIDER_CLOUD] = {"models": [], "ts": 0.0}
         logger.info("LLM provider config reloaded (SearXNG: %s)", self.searxng_enabled)
 
+    # ------------------------------------------------------------------
+    # Usage tracking
+    # ------------------------------------------------------------------
+
+    def _load_usage_stats(self) -> dict:
+        """Load usage statistics from disk (best effort)."""
+        try:
+            with open(self._usage_path, "r", encoding="utf-8") as fh:
+                data = json.load(fh) or {}
+            if isinstance(data, dict):
+                return data
+        except FileNotFoundError:
+            pass
+        except Exception:
+            logger.debug("Could not load LLM usage stats")
+        return {"offline": {"requests": 0, "tokens": 0}, "cloud": {"requests": 0, "tokens": 0}}
+
+    def _save_usage_stats(self) -> None:
+        """Persist usage statistics to disk (best effort)."""
+        try:
+            folder = os.path.dirname(self._usage_path)
+            if folder:
+                os.makedirs(folder, exist_ok=True)
+            with open(self._usage_path, "w", encoding="utf-8") as fh:
+                json.dump(self._usage_stats, fh, ensure_ascii=False, indent=2)
+        except Exception:
+            logger.debug("Could not persist LLM usage stats")
+
+    def _track_usage(self, provider: str, tokens: int = 0) -> None:
+        """Record a request + token count for the given provider."""
+        key = "cloud" if provider == _PROVIDER_CLOUD else "offline"
+        if key not in self._usage_stats:
+            self._usage_stats[key] = {"requests": 0, "tokens": 0}
+        self._usage_stats[key]["requests"] += 1
+        self._usage_stats[key]["tokens"] += tokens
+        # Save every 10 requests to avoid excessive disk writes
+        total = sum(s.get("requests", 0) for s in self._usage_stats.values() if isinstance(s, dict))
+        if total % 10 == 0:
+            self._save_usage_stats()
+
+    def get_usage_stats(self) -> dict:
+        """Return current usage statistics."""
+        return dict(self._usage_stats)
+
+    # ------------------------------------------------------------------
+    # Pre-flight validation
+    # ------------------------------------------------------------------
+
+    def validate_cloud_connection(self) -> dict:
+        """Pre-flight check: validate cloud API key and connectivity.
+
+        Returns dict with ok=True/False and diagnostic info.
+        """
+        if not self.cloud_api_url or not self.cloud_api_key:
+            return {"ok": False, "error": "Cloud API not configured (missing URL or key)"}
+
+        base_url = self._normalize_cloud_base_url(self.cloud_api_url).rstrip("/")
+        if not base_url:
+            return {"ok": False, "error": "Invalid cloud API URL"}
+
+        # Try listing models as a lightweight connectivity + auth check
+        models_url = base_url if base_url.endswith("/models") else f"{base_url}/models"
+        headers = {"Authorization": f"Bearer {self.cloud_api_key}"}
+        try:
+            resp = self._http_get(models_url, headers=headers, timeout=10)
+            if resp.status_code == 401:
+                return {"ok": False, "error": "Invalid API key (401 Unauthorized)", "status_code": 401}
+            if resp.status_code == 403:
+                return {"ok": False, "error": "Access denied (403 Forbidden)", "status_code": 403}
+            if resp.status_code == 429:
+                return {"ok": False, "error": "Rate limited (429)", "status_code": 429}
+            if resp.status_code != 200:
+                return {"ok": False, "error": f"Unexpected status {resp.status_code}", "status_code": resp.status_code}
+
+            payload = resp.json()
+            model_count = 0
+            data = payload.get("data") if isinstance(payload, dict) else payload
+            if isinstance(data, list):
+                model_count = len(data)
+
+            is_ollama_cloud = self._is_ollama_cloud_host(base_url)
+            return {
+                "ok": True,
+                "provider_type": "ollama_cloud" if is_ollama_cloud else "openai_compatible",
+                "base_url": base_url,
+                "models_available": model_count,
+                "active_model": self.cloud_model,
+            }
+        except http_requests.exceptions.ConnectionError:
+            return {"ok": False, "error": f"Cannot reach {base_url}"}
+        except http_requests.exceptions.Timeout:
+            return {"ok": False, "error": f"Timeout connecting to {base_url}"}
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)[:200]}
+
+    def validate_ollama_connection(self) -> dict:
+        """Pre-flight check: validate local Ollama connectivity and model availability."""
+        try:
+            resp = self._http_get(f"{self.ollama_url}/api/tags", timeout=5)
+            if resp.status_code != 200:
+                return {"ok": False, "error": f"Ollama returned status {resp.status_code}"}
+            models = [m.get("name", "") for m in resp.json().get("models", [])]
+            model_installed = self.ollama_model in models
+            return {
+                "ok": True,
+                "ollama_url": self.ollama_url,
+                "models_installed": len(models),
+                "active_model": self.ollama_model,
+                "active_model_installed": model_installed,
+            }
+        except http_requests.exceptions.ConnectionError:
+            return {"ok": False, "error": f"Ollama not reachable at {self.ollama_url}"}
+        except http_requests.exceptions.Timeout:
+            return {"ok": False, "error": f"Ollama timeout at {self.ollama_url}"}
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)[:200]}
+
+    # ------------------------------------------------------------------
+    # Cloud streaming (proxy real SSE from cloud API)
+    # ------------------------------------------------------------------
+
+    def chat_stream(
+        self,
+        messages: list,
+        tools: list = None,
+        model: str = None,
+        temperature: float = None,
+        max_tokens: int = None,
+    ):
+        """Stream chat response from the best available provider.
+
+        Yields OpenAI-compatible SSE chunks as dicts. The caller formats as SSE.
+        Falls back to non-streaming + word-by-word if streaming is not supported.
+        """
+        for provider, selected_model in self._build_routing_targets(model):
+            if provider == _PROVIDER_OFFLINE:
+                gen = self._stream_ollama(messages, tools, selected_model, temperature, max_tokens)
+            else:
+                gen = self._stream_cloud(messages, tools, selected_model, temperature, max_tokens)
+            if gen is not None:
+                yield from gen
+                return
+        # No provider available — yield error
+        yield {
+            "error": True,
+            "content": self._offline_msg(),
+        }
+
+    def _stream_ollama(self, messages, tools, model, temperature, max_tokens):
+        """Stream from Ollama with native streaming support."""
+        if self._ollama_breaker:
+            from copilot_core.circuit_breaker import CircuitOpenError
+            if self._ollama_breaker.state.value == "open":
+                return None
+
+        requested_model = (model or self.ollama_model or "").strip()
+        payload = {"model": requested_model, "messages": messages, "stream": True}
+        opts = {}
+        if temperature is not None:
+            opts["temperature"] = temperature
+        if max_tokens is not None:
+            opts["num_predict"] = max_tokens
+        if opts:
+            payload["options"] = opts
+        if tools:
+            payload["tools"] = tools
+
+        try:
+            resp = self._http_post(
+                f"{self.ollama_url}/api/chat",
+                json=payload,
+                timeout=self.offline_timeout,
+                stream=True,
+            )
+            if resp.status_code != 200:
+                return None
+        except Exception:
+            if self._ollama_breaker:
+                self._ollama_breaker._on_failure()
+            return None
+
+        if self._ollama_breaker:
+            self._ollama_breaker._on_success()
+        self._track_usage(_PROVIDER_OFFLINE)
+
+        def _generate():
+            response_id = f"chatcmpl-{os.urandom(12).hex()}"
+            for line in resp.iter_lines(decode_unicode=True):
+                if not line:
+                    continue
+                try:
+                    data = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                msg = data.get("message", {})
+                content = msg.get("content", "")
+                done = data.get("done", False)
+                chunk = {
+                    "id": response_id,
+                    "object": "chat.completion.chunk",
+                    "created": int(time.time()),
+                    "model": requested_model,
+                    "choices": [{
+                        "index": 0,
+                        "delta": {"content": content} if content else {},
+                        "finish_reason": "stop" if done else None,
+                    }],
+                }
+                yield chunk
+                if done:
+                    break
+
+        return _generate()
+
+    def _stream_cloud(self, messages, tools, model, temperature, max_tokens):
+        """Stream from cloud API with real SSE proxy."""
+        if not self.cloud_api_url or not self.cloud_api_key:
+            return None
+
+        if self._cloud_breaker:
+            from copilot_core.circuit_breaker import CircuitOpenError
+            if self._cloud_breaker.state.value == "open":
+                return None
+
+        base_url = self._normalize_cloud_base_url(self.cloud_api_url)
+        selected_model = model or self.cloud_model or self._default_cloud_model_for_url(self.cloud_api_url)
+        selected_model = self._coerce_cloud_model_for_ollama_cloud(selected_model, base_url)
+
+        headers = {
+            "Authorization": f"Bearer {self.cloud_api_key}",
+            "Content-Type": "application/json",
+        }
+        payload = {"model": selected_model, "messages": messages, "stream": True}
+        if temperature is not None:
+            payload["temperature"] = temperature
+        if max_tokens is not None:
+            payload["max_tokens"] = max_tokens
+        if tools:
+            payload["tools"] = tools
+
+        url = base_url
+        if not url.endswith("/chat/completions"):
+            url = f"{url}/chat/completions"
+
+        try:
+            resp = self._http_post(url, json=payload, headers=headers, timeout=self.cloud_timeout, stream=True)
+            if resp.status_code != 200:
+                if self._cloud_breaker:
+                    self._cloud_breaker._on_failure()
+                return None
+        except Exception:
+            if self._cloud_breaker:
+                self._cloud_breaker._on_failure()
+            return None
+
+        if self._cloud_breaker:
+            self._cloud_breaker._on_success()
+        self._track_usage(_PROVIDER_CLOUD)
+
+        def _generate():
+            for line in resp.iter_lines(decode_unicode=True):
+                if not line:
+                    continue
+                if line.startswith("data: "):
+                    line = line[6:]
+                if line.strip() == "[DONE]":
+                    break
+                try:
+                    chunk = json.loads(line)
+                    yield chunk
+                except json.JSONDecodeError:
+                    continue
+
+        return _generate()
+
     def search_web(self, query: str) -> str:
         """Web search via SearXNG if enabled, otherwise return placeholder."""
         if not self.searxng_enabled:
@@ -264,6 +567,13 @@ class LLMProvider:
                 active_provider = "cloud"
                 break
 
+        # Circuit breaker status
+        breakers = {}
+        if self._ollama_breaker:
+            breakers["ollama"] = self._ollama_breaker.get_status()
+        if self._cloud_breaker:
+            breakers["cloud"] = self._cloud_breaker.get_status()
+
         return {
             "ollama_available": ollama_ok,
             "ollama_url": self.ollama_url,
@@ -282,6 +592,10 @@ class LLMProvider:
             "routing_runtime_path": self._settings_path,
             "searxng_enabled": self.searxng_enabled,
             "searxng_base_url": self.searxng_base_url,
+            "offline_timeout": self.offline_timeout,
+            "cloud_timeout": self.cloud_timeout,
+            "circuit_breakers": breakers,
+            "usage": self.get_usage_stats(),
         }
 
     def model_catalog(self, *, force_refresh: bool = False) -> dict:
@@ -289,15 +603,24 @@ class LLMProvider:
         offline_models = self._get_offline_models(force_refresh=force_refresh)
         offline_installed = self._get_installed_offline_models(force_refresh=force_refresh)
         cloud_models = self._get_cloud_models(force_refresh=force_refresh)
+        installed_detailed = self._fetch_installed_offline_models_detailed() if force_refresh else []
+
+        # Separate cloud models (with :cloud suffix) prominently
+        cloud_suffix_models = [m for m in cloud_models if ":cloud" in m.lower()]
+        cloud_other_models = [m for m in cloud_models if ":cloud" not in m.lower()]
+
         return {
             "offline": {
                 "models": offline_models,
                 "installed_models": offline_installed,
+                "installed_models_detailed": installed_detailed,
                 "active_model": self.ollama_model,
                 "recommended": list(_DEFAULT_OFFLINE_MODELS),
             },
             "cloud": {
-                "models": cloud_models,
+                "models": cloud_suffix_models + cloud_other_models,
+                "cloud_native_models": cloud_suffix_models,
+                "cloud_other_models": cloud_other_models,
                 "active_model": self.cloud_model,
                 "recommended": self._recommended_cloud_models(),
                 "configured": self.has_cloud_fallback,
@@ -453,6 +776,34 @@ class LLMProvider:
             logger.debug("Could not list installed Ollama models", exc_info=True)
         return models
 
+    def _fetch_installed_offline_models_detailed(self) -> list[dict]:
+        """Fetch installed Ollama models with size and detail information."""
+        models: list[dict] = []
+        seen: set[str] = set()
+        try:
+            resp = self._http_get(f"{self.ollama_url}/api/tags", timeout=5)
+            if resp.status_code == 200:
+                for model in resp.json().get("models", []):
+                    name = str(model.get("name", "")).strip()
+                    if name and name not in seen:
+                        seen.add(name)
+                        size_bytes = model.get("size", 0)
+                        size_mb = round(size_bytes / (1024 * 1024), 1) if size_bytes else 0
+                        details = model.get("details", {})
+                        models.append({
+                            "id": name,
+                            "size_bytes": size_bytes,
+                            "size_mb": size_mb,
+                            "digest": model.get("digest", "")[:16],
+                            "modified_at": model.get("modified_at", ""),
+                            "family": details.get("family", ""),
+                            "parameter_size": details.get("parameter_size", ""),
+                            "quantization_level": details.get("quantization_level", ""),
+                        })
+        except Exception:
+            logger.debug("Could not list installed Ollama models (detailed)", exc_info=True)
+        return models
+
     def _get_installed_offline_models(self, *, force_refresh: bool = False) -> list[str]:
         now = time.monotonic()
         cache = self._catalog_cache[_PROVIDER_OFFLINE]
@@ -544,7 +895,143 @@ class LLMProvider:
         except Exception:
             return False
 
+    # ------------------------------------------------------------------
+    # Ollama model management (pull / delete / info)
+    # ------------------------------------------------------------------
+
+    def pull_model(self, model_name: str) -> dict:
+        """Pull/download an Ollama model (blocking). Returns progress info."""
+        try:
+            resp = self._http_post(
+                f"{self.ollama_url}/api/pull",
+                json={"name": model_name, "stream": False},
+                timeout=600,
+            )
+            if resp.status_code == 200:
+                logger.info("Model pulled successfully: %s", model_name)
+                # Invalidate catalog cache so new model shows up immediately
+                self._catalog_cache[_PROVIDER_OFFLINE] = {"models": [], "installed": [], "ts": 0.0}
+                return {"ok": True, "model": model_name, "status": "downloaded"}
+            return {"ok": False, "error": resp.text[:200]}
+        except http_requests.exceptions.ConnectionError:
+            return {"ok": False, "error": f"Ollama not reachable at {self.ollama_url}"}
+        except http_requests.exceptions.Timeout:
+            return {"ok": False, "error": "Download timed out (>600s). Try a smaller model or retry."}
+        except Exception as exc:
+            logger.warning("Model pull failed (%s): %s", model_name, exc)
+            return {"ok": False, "error": str(exc)[:200]}
+
+    def pull_model_stream(self, model_name: str):
+        """Pull/download an Ollama model with streaming progress.
+
+        Yields NDJSON dicts with download progress:
+            {"status": "pulling ...", "digest": "...", "total": N, "completed": N}
+
+        The caller is responsible for formatting these as SSE events.
+        """
+        try:
+            resp = self._http_post(
+                f"{self.ollama_url}/api/pull",
+                json={"name": model_name, "stream": True},
+                timeout=600,
+                stream=True,
+            )
+            if resp.status_code != 200:
+                yield {"ok": False, "error": resp.text[:200]}
+                return
+
+            for line in resp.iter_lines(decode_unicode=True):
+                if not line:
+                    continue
+                try:
+                    data = json.loads(line)
+                    yield data
+                except json.JSONDecodeError:
+                    continue
+
+            # Invalidate catalog cache after successful pull
+            self._catalog_cache[_PROVIDER_OFFLINE] = {"models": [], "installed": [], "ts": 0.0}
+            logger.info("Model pull (streamed) completed: %s", model_name)
+
+        except http_requests.exceptions.ConnectionError:
+            yield {"ok": False, "error": f"Ollama not reachable at {self.ollama_url}"}
+        except http_requests.exceptions.Timeout:
+            yield {"ok": False, "error": "Download timed out (>600s). Try a smaller model or retry."}
+        except Exception as exc:
+            logger.warning("Model pull stream failed (%s): %s", model_name, exc)
+            yield {"ok": False, "error": str(exc)[:200]}
+
+    def delete_model(self, model_name: str) -> dict:
+        """Delete an Ollama model."""
+        try:
+            resp = self._http_delete(
+                f"{self.ollama_url}/api/delete",
+                json={"name": model_name},
+                timeout=30,
+            )
+            if resp.status_code == 200:
+                logger.info("Model deleted: %s", model_name)
+                self._catalog_cache[_PROVIDER_OFFLINE] = {"models": [], "installed": [], "ts": 0.0}
+                return {"ok": True, "model": model_name, "status": "deleted"}
+            return {"ok": False, "error": resp.text[:200]}
+        except http_requests.exceptions.ConnectionError:
+            return {"ok": False, "error": f"Ollama not reachable at {self.ollama_url}"}
+        except Exception as exc:
+            logger.warning("Model delete failed (%s): %s", model_name, exc)
+            return {"ok": False, "error": str(exc)[:200]}
+
+    def get_model_info(self, model_name: str) -> dict:
+        """Get detailed info about an Ollama model (size, quantization, etc.)."""
+        try:
+            resp = self._http_post(
+                f"{self.ollama_url}/api/show",
+                json={"name": model_name},
+                timeout=10,
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                # Extract key info for dashboard display
+                details = data.get("details", {})
+                model_info = data.get("model_info", {})
+                return {
+                    "ok": True,
+                    "model": model_name,
+                    "license": data.get("license", "")[:200],
+                    "modelfile": data.get("modelfile", "")[:500],
+                    "template": data.get("template", "")[:200],
+                    "parameters": data.get("parameters", "")[:200],
+                    "details": {
+                        "parent_model": details.get("parent_model", ""),
+                        "format": details.get("format", ""),
+                        "family": details.get("family", ""),
+                        "families": details.get("families", []),
+                        "parameter_size": details.get("parameter_size", ""),
+                        "quantization_level": details.get("quantization_level", ""),
+                    },
+                    "model_info": {
+                        k: v for k, v in model_info.items()
+                        if isinstance(v, (str, int, float, bool))
+                    } if model_info else {},
+                    "modified_at": data.get("modified_at", ""),
+                }
+            if resp.status_code == 404:
+                return {"ok": False, "error": f"Model '{model_name}' not found"}
+            return {"ok": False, "error": resp.text[:200]}
+        except http_requests.exceptions.ConnectionError:
+            return {"ok": False, "error": f"Ollama not reachable at {self.ollama_url}"}
+        except Exception as exc:
+            logger.warning("Model info failed (%s): %s", model_name, exc)
+            return {"ok": False, "error": str(exc)[:200]}
+
     def _try_ollama(self, messages, tools, model, temperature, max_tokens):
+        # Check circuit breaker before attempting
+        if self._ollama_breaker:
+            from copilot_core.circuit_breaker import CircuitOpenError
+            if self._ollama_breaker.state.value == "open":
+                self._last_ollama_issue = "circuit_open"
+                logger.info("Ollama circuit breaker OPEN — skipping")
+                return None
+
         requested_model = (model or self.ollama_model or "").strip()
         alias_models = {"", "pilotsuite", "default", "auto", "local", "ollama", "primary"}
         candidate_models: list[str] = []
@@ -589,11 +1076,14 @@ class LLMProvider:
             for attempt in range(_MAX_RETRIES + 1):
                 try:
                     resp = self._http_post(
-                        f"{self.ollama_url}/api/chat", json=payload, timeout=self.timeout,
+                        f"{self.ollama_url}/api/chat", json=payload, timeout=self.offline_timeout,
                     )
                     if resp.status_code == 200:
                         self._last_ollama_issue = ""
+                        if self._ollama_breaker:
+                            self._ollama_breaker._on_success()
                         msg = resp.json().get("message", {})
+                        self._track_usage(_PROVIDER_OFFLINE)
                         logger.info("LLM response via ollama/%s", candidate_model)
                         return {
                             "content": msg.get("content", ""),
@@ -609,12 +1099,17 @@ class LLMProvider:
                         break
 
                     self._last_ollama_issue = f"http_{resp.status_code}"
+                    if self._ollama_breaker:
+                        self._ollama_breaker._on_failure()
                     logger.warning("Ollama %s: %s", resp.status_code, body)
                     break
                 except http_requests.exceptions.ConnectionError:
                     self._last_ollama_issue = "unreachable"
+                    if self._ollama_breaker:
+                        self._ollama_breaker._on_failure()
                     if attempt < _MAX_RETRIES:
-                        delay = _RETRY_BASE_DELAY * (2 ** attempt)
+                        # Jittered exponential backoff
+                        delay = _RETRY_BASE_DELAY * (2 ** attempt) + random.uniform(0, 0.5)
                         logger.info(
                             "Ollama connection failed, retry %d/%d in %.1fs",
                             attempt + 1,
@@ -627,10 +1122,14 @@ class LLMProvider:
                     break
                 except http_requests.exceptions.Timeout:
                     self._last_ollama_issue = "timeout"
-                    logger.warning("Ollama timeout after %ds", self.timeout)
+                    if self._ollama_breaker:
+                        self._ollama_breaker._on_failure()
+                    logger.warning("Ollama timeout after %ds", self.offline_timeout)
                     break
                 except Exception:
                     self._last_ollama_issue = "error"
+                    if self._ollama_breaker:
+                        self._ollama_breaker._on_failure()
                     logger.exception("Ollama error")
                     break
 
@@ -709,6 +1208,13 @@ class LLMProvider:
         if not self.cloud_api_url or not self.cloud_api_key:
             return None
 
+        # Check circuit breaker before attempting
+        if self._cloud_breaker:
+            from copilot_core.circuit_breaker import CircuitOpenError
+            if self._cloud_breaker.state.value == "open":
+                logger.info("Cloud API circuit breaker OPEN — skipping")
+                return None
+
         base_url = self._normalize_cloud_base_url(self.cloud_api_url)
         if model:
             selected_model = model
@@ -735,24 +1241,54 @@ class LLMProvider:
         if not url.endswith("/chat/completions"):
             url = f"{url}/chat/completions"
 
-        try:
-            resp = self._http_post(url, json=payload, headers=headers, timeout=self.timeout)
-            if resp.status_code != 200:
-                # Sanitize: don't log full response which might echo the API key.
-                logger.warning("Cloud API %s (model=%s)", resp.status_code, selected_model)
+        for attempt in range(2):
+            try:
+                resp = self._http_post(url, json=payload, headers=headers, timeout=self.cloud_timeout)
+                if resp.status_code == 429:
+                    # Rate limited — wait and retry once
+                    if attempt == 0:
+                        delay = 2.0 + random.uniform(0, 1)
+                        logger.info("Cloud API rate limited, retry in %.1fs", delay)
+                        time.sleep(delay)
+                        continue
+                    if self._cloud_breaker:
+                        self._cloud_breaker._on_failure()
+                    logger.warning("Cloud API rate limited (model=%s)", selected_model)
+                    return None
+                if resp.status_code != 200:
+                    if self._cloud_breaker:
+                        self._cloud_breaker._on_failure()
+                    # Sanitize: don't log full response which might echo the API key.
+                    logger.warning("Cloud API %s (model=%s)", resp.status_code, selected_model)
+                    return None
+                data = resp.json()
+                choice = data.get("choices", [{}])[0]
+                msg = choice.get("message", {})
+                if self._cloud_breaker:
+                    self._cloud_breaker._on_success()
+
+                # Track usage (extract token count if available)
+                usage = data.get("usage", {})
+                total_tokens = usage.get("total_tokens", 0)
+                self._track_usage(_PROVIDER_CLOUD, tokens=total_tokens)
+
+                logger.info("LLM response via cloud/%s", selected_model)
+                return {
+                    "content": msg.get("content", ""),
+                    "tool_calls": msg.get("tool_calls"),
+                    "provider": "cloud",
+                }
+            except http_requests.exceptions.Timeout:
+                if self._cloud_breaker:
+                    self._cloud_breaker._on_failure()
+                logger.warning("Cloud API timeout after %ds (model=%s)", self.cloud_timeout, selected_model)
                 return None
-            data = resp.json()
-            choice = data.get("choices", [{}])[0]
-            msg = choice.get("message", {})
-            logger.info("LLM response via cloud/%s", selected_model)
-            return {
-                "content": msg.get("content", ""),
-                "tool_calls": msg.get("tool_calls"),
-                "provider": "cloud",
-            }
-        except Exception:
-            logger.exception("Cloud API error (url=%s)", url)
-            return None
+            except Exception:
+                if self._cloud_breaker:
+                    self._cloud_breaker._on_failure()
+                logger.exception("Cloud API error (url=%s)", url)
+                return None
+        return None
 
     def _offline_msg(self) -> str:
         issue = str(getattr(self, "_last_ollama_issue", "") or "")
@@ -761,6 +1297,8 @@ class LLMProvider:
             ollama_state = f"Ollama erreichbar, aber Modell '{model}' nicht installiert"
         elif issue == "timeout":
             ollama_state = f"Ollama ({self.ollama_url}) antwortet nicht rechtzeitig"
+        elif issue == "circuit_open":
+            ollama_state = f"Ollama ({self.ollama_url}) temporaer gesperrt (Circuit Breaker)"
         elif issue in ("unreachable", "error", "unknown"):
             ollama_state = f"Ollama ({self.ollama_url}) nicht erreichbar"
         elif issue.startswith("http_"):

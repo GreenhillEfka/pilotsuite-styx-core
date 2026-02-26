@@ -1,6 +1,6 @@
 # PilotSuite Core Add-on (Styx)
 
-Stand: **v8.11.0**
+Stand: **v9.0.0**
 
 ## Installation (Production)
 

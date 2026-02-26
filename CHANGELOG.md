@@ -1,5 +1,61 @@
 # Changelog - PilotSuite Core Add-on
 
+## [9.1.0] - 2026-02-26 — DEVICE REGISTRY + ENHANCED ENTITY SEARCH
+
+### Added
+- **Entity Search v2**: Device cache, manufacturer grouping, HA labels support.
+  - `GET /api/v1/entities/devices` — devices grouped by manufacturer.
+  - `GET /api/v1/entities/<entity_id>` — single entity detail endpoint.
+  - Search now supports `manufacturer` and `label` filters.
+  - Bulk import now accepts `devices` alongside entities+areas.
+  - Stats endpoint includes manufacturer_counts and device totals.
+- **Enhanced Role Patterns**: Added cover, vacuum, lock, alarm patterns (18 total, DE+EN).
+- **Enhanced Domain Icons**: Added notify, calendar, todo icons (36 total).
+
+### Changed
+- **entity_search.py**: Entity cache preserves device/area info across state updates (merge strategy).
+  - `update_entity_cache()` now merges with existing entries instead of overwriting.
+  - `_build_zone_suggestions()` uses area_name from cache for better zone matching.
+- **Version**: `config.yaml` → `9.1.0`. Paired with HA Integration `v9.1.0`.
+
+## [9.0.0] - 2026-02-26 — ARCHITECTURE OVERHAUL + EVENTBUS + ENTITY SEARCH
+
+### Added
+- **EventBus** (`event_bus.py`): Thread-safe pub/sub communication layer for all modules.
+  - Wildcard subscriptions (e.g. `zone.*`), bounded history (500 events), metrics.
+  - Singleton via `get_event_bus()`.
+- **Habitus Zones API** (`api/v1/habitus_zones.py`): Bidirectional HA-Core zone sync.
+  - `POST /api/v1/habitus/zones/sync` — full/delta sync from HA integration.
+  - `GET/PUT/DELETE /api/v1/habitus/zones/<id>` — CRUD per zone.
+  - JSON file persistence at `/data/habitus_zones.json`.
+- **EventBus Monitoring API** (`api/v1/event_bus_api.py`):
+  - `GET /api/v1/events/bus/history` — recent events with topic filter.
+  - `GET /api/v1/events/bus/metrics` — subscriber/publish counts.
+- **Entity Search API** (`api/v1/entity_search.py`): Searchable entity dropdowns for React backend.
+  - `GET /api/v1/entities/search?q=&domain=&area=&limit=` — fuzzy entity search.
+  - `GET /api/v1/entities/domains` — domain list with counts and icons.
+  - `GET /api/v1/entities/by-area` — entities grouped by HA area.
+  - Cache populated from HA event ingestion pipeline.
+- **Dashboard**: EventBus tab in history panel with color-coded event display.
+- **Neuron Pipeline**: 60s periodic evaluation via daemon thread, publishing `neuron.evaluated` to EventBus.
+- **Habitus Learning Loop**: `event.ingested` triggers pattern mining when batch >= 5 events.
+- **Brain Graph Wiring**: Zone changes update graph nodes; zone sync publishes `graph.updated`.
+- **Mood from Neurons**: `neuron.evaluated` events update mood service for all active zones.
+
+### Changed
+- **core_setup.py**: Removed ~1700 dead blueprint entries (fake modules). Clean EventBus wiring.
+- **conversation.py**: Enhanced brain graph context (top 5 relationships + active entities), neuron mood + habitus zone injection into LLM context.
+- **dashboard.html**: Added EventBus tab between Events and Logs in history panel.
+
+### Fixed
+- `test_habitus_zones.py`: Room count assertions changed to `>=` (engine auto-discovers additional rooms).
+
+### Version
+- `config.yaml` → `9.0.0`
+- `copilot_core/manifest.json` → `9.0.0`
+- `VERSION` → `9.0.0`
+- Paired with HA Integration `v9.0.0`.
+
 ## [8.12.1] - 2026-02-26 — HOMEKIT AUTO-SYNC + DIRECT RECOMMENDATION APPLY
 
 ### Added

@@ -2,11 +2,15 @@
 
 Provides endpoints for creating, listing, applying, and deleting zone scenes.
 Integrates with HA Supervisor API for scene creation and activation.
+
+Persistence: Scenes are stored in /data/scenes.json and loaded on startup.
 """
 
 from flask import Blueprint, request, jsonify
+import json
 import logging
 import os
+import threading
 import time
 import uuid
 
@@ -18,8 +22,54 @@ logger = logging.getLogger(__name__)
 
 scenes_bp = Blueprint("scenes", __name__, url_prefix="/api/v1/scenes")
 
-# In-memory scene cache (synced from HACS integration via /update endpoint)
+_SCENES_STORE_PATH = "/data/scenes.json"
 _scene_cache: dict[str, dict] = {}
+_scene_lock = threading.Lock()
+
+
+def _load_scenes_from_disk() -> dict[str, dict]:
+    """Load persisted scenes from /data/scenes.json."""
+    path = os.environ.get("SCENES_STORE_PATH", _SCENES_STORE_PATH)
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+        if isinstance(data, dict):
+            logger.info("Loaded %d scenes from %s", len(data), path)
+            return data
+        if isinstance(data, list):
+            result = {}
+            for s in data:
+                sid = s.get("scene_id")
+                if sid:
+                    result[sid] = s
+            logger.info("Loaded %d scenes (list format) from %s", len(result), path)
+            return result
+    except FileNotFoundError:
+        pass
+    except Exception:
+        logger.warning("Could not load scenes from %s", path, exc_info=True)
+    return {}
+
+
+def _save_scenes_to_disk() -> None:
+    """Persist current scene cache to /data/scenes.json."""
+    path = os.environ.get("SCENES_STORE_PATH", _SCENES_STORE_PATH)
+    try:
+        folder = os.path.dirname(path)
+        if folder:
+            os.makedirs(folder, exist_ok=True)
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump(_scene_cache, fh, ensure_ascii=False, indent=2, default=str)
+        logger.debug("Saved %d scenes to %s", len(_scene_cache), path)
+    except Exception:
+        logger.warning("Could not persist scenes to %s", path, exc_info=True)
+
+
+def init_scene_store():
+    """Initialize scene store — call on app startup."""
+    global _scene_cache
+    with _scene_lock:
+        _scene_cache = _load_scenes_from_disk()
 
 
 @scenes_bp.route("", methods=["GET"])
@@ -196,7 +246,9 @@ def create_scene():
     except Exception as exc:
         logger.warning("Failed to create HA scene: %s", exc)
 
-    _scene_cache[scene_id] = scene
+    with _scene_lock:
+        _scene_cache[scene_id] = scene
+        _save_scenes_to_disk()
     logger.info("Scene created: %s (%s) for zone %s", scene_id, name, zone_id)
 
     return jsonify({"success": True, "scene": scene}), 201
@@ -227,8 +279,10 @@ def apply_scene(scene_id):
                 headers=headers, timeout=10,
             )
             if resp.ok:
-                scene["applied_count"] = scene.get("applied_count", 0) + 1
-                scene["last_applied"] = time.time()
+                with _scene_lock:
+                    scene["applied_count"] = scene.get("applied_count", 0) + 1
+                    scene["last_applied"] = time.time()
+                    _save_scenes_to_disk()
                 return jsonify({"success": True, "method": "ha_scene", "scene": scene})
         except Exception:
             logger.debug("HA scene turn_on failed, falling back to manual apply")
@@ -241,8 +295,10 @@ def apply_scene(scene_id):
         except Exception as exc:
             errors.append(f"{eid}: {exc}")
 
-    scene["applied_count"] = scene.get("applied_count", 0) + 1
-    scene["last_applied"] = time.time()
+    with _scene_lock:
+        scene["applied_count"] = scene.get("applied_count", 0) + 1
+        scene["last_applied"] = time.time()
+        _save_scenes_to_disk()
 
     if errors:
         return jsonify({"success": True, "warnings": errors, "scene": scene})
@@ -253,9 +309,11 @@ def apply_scene(scene_id):
 @require_token
 def delete_scene(scene_id):
     """Delete a saved scene."""
-    if scene_id not in _scene_cache:
-        return jsonify({"error": f"Szene '{scene_id}' nicht gefunden"}), 404
-    del _scene_cache[scene_id]
+    with _scene_lock:
+        if scene_id not in _scene_cache:
+            return jsonify({"error": f"Szene '{scene_id}' nicht gefunden"}), 404
+        del _scene_cache[scene_id]
+        _save_scenes_to_disk()
     return jsonify({"success": True, "deleted": scene_id})
 
 
@@ -267,10 +325,13 @@ def update_scene_cache():
     if not data:
         return jsonify({"error": "No JSON body"}), 400
     scenes = data.get("scenes", [])
-    for s in scenes:
-        sid = s.get("scene_id")
-        if sid:
-            _scene_cache[sid] = s
+    with _scene_lock:
+        for s in scenes:
+            sid = s.get("scene_id")
+            if sid:
+                _scene_cache[sid] = s
+        if scenes:
+            _save_scenes_to_disk()
     return jsonify({"success": True, "synced": len(scenes)})
 
 

@@ -12,7 +12,7 @@ Die dazugehoerige **HACS-Integration** (Sensoren, Dashboard Cards, Module):
 
 ```
 Home Assistant
-+-- HACS Integration (ai_home_copilot)      <-- 94+ Sensoren, 28 Module, Dashboard
++-- HACS Integration (ai_home_copilot)      <-- 94+ Sensoren, 31 Module, Dashboard
 |     HTTP REST API (Token-Auth)
 |     v
 +-- Core Add-on (copilot_core) Port 8909    <-- Brain Graph, Habitus, Mood, LLM

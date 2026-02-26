@@ -123,10 +123,15 @@ ollama_breaker = CircuitBreaker(
     "ollama", failure_threshold=3, recovery_timeout=60
 )
 
+cloud_api_breaker = CircuitBreaker(
+    "cloud_api", failure_threshold=3, recovery_timeout=45
+)
+
 
 def get_all_breaker_status() -> list[dict]:
     """Return status of all global circuit breakers."""
     return [
         ha_supervisor_breaker.get_status(),
         ollama_breaker.get_status(),
+        cloud_api_breaker.get_status(),
     ]

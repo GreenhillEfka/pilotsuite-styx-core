@@ -119,7 +119,13 @@ a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
   0%,100%{opacity:.95;transform:scale(1)}
   50%{opacity:.45;transform:scale(1.18)}
 }
+@keyframes neuronCirclePulse{0%{r:8;opacity:1}50%{r:12;opacity:.7}100%{r:8;opacity:1}}
+@keyframes synapsePulse{0%{stroke-dashoffset:20;opacity:.4}100%{stroke-dashoffset:0;opacity:.8}}
+@keyframes neuronGlow{0%{filter:drop-shadow(0 0 2px currentColor)}50%{filter:drop-shadow(0 0 8px currentColor)}100%{filter:drop-shadow(0 0 2px currentColor)}}
 .brain-neuron-active{animation:neuronPulse 1.5s ease-in-out infinite;transform-origin:center}
+.neuron-active-circle{animation:neuronCirclePulse 1.5s ease-in-out infinite}
+.synapse-active{stroke-dasharray:5 5;animation:synapsePulse 1.2s linear infinite}
+.neuron-glow{animation:neuronGlow 2s ease-in-out infinite}
 .brain-module-node{filter:url(#glow)}
 
 /* Suggestions bar (legacy compat) */
@@ -251,6 +257,38 @@ a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
 .birthday-row{display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--border)}
 .birthday-row:last-child{border-bottom:none}
 
+/* Model Management */
+.model-mgmt-section{margin-top:14px}
+.model-mgmt-section h3{font-size:12px;font-weight:600;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
+.model-item{display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--surface);border:1px solid var(--border);border-radius:8px;margin-bottom:6px;transition:border-color .2s}
+.model-item:hover{border-color:var(--accent)}
+.model-item .model-name{flex:1;font-size:12px;font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.model-item .model-meta{display:flex;gap:4px;align-items:center;flex-shrink:0}
+.model-item .model-size{font-size:10px;color:var(--dim)}
+.model-item .model-actions{display:flex;gap:4px;flex-shrink:0}
+.model-btn{background:var(--surface);border:1px solid var(--border);color:var(--dim);border-radius:6px;padding:3px 8px;font-size:10px;cursor:pointer;transition:.2s;white-space:nowrap}
+.model-btn:hover{border-color:var(--accent);color:var(--text)}
+.model-btn-download{background:var(--accent);border-color:var(--accent);color:#fff}
+.model-btn-download:hover{background:#5b4cd4;border-color:#5b4cd4}
+.model-btn-delete{border-color:rgba(248,113,113,.3);color:var(--red)}
+.model-btn-delete:hover{background:rgba(248,113,113,.1);border-color:var(--red)}
+.model-btn-active{background:rgba(52,211,153,.12);border-color:var(--green);color:var(--green);cursor:default}
+.model-progress{width:100%;height:4px;background:var(--border);border-radius:2px;overflow:hidden;margin-top:4px}
+.model-progress-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--cyan));border-radius:2px;transition:width .3s;animation:modelPulse 1.5s ease-in-out infinite}
+@keyframes modelPulse{0%,100%{opacity:1}50%{opacity:.6}}
+.b-cloud{background:rgba(124,106,239,.15);color:var(--accent2);border:1px solid rgba(124,106,239,.3);padding:1px 6px;border-radius:4px;font-size:9px;font-weight:600}
+
+/* Chat Model Enhanced Selector */
+.chat-model-dropdown{position:relative;display:inline-block}
+.chat-model-list{position:absolute;top:100%;right:0;background:var(--card);border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 32px rgba(0,0,0,.6);z-index:500;min-width:280px;max-height:400px;overflow-y:auto;display:none}
+.chat-model-list.open{display:block}
+.chat-model-list .group-label{padding:6px 12px;font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border)}
+.chat-model-list .model-opt{display:flex;align-items:center;gap:8px;padding:8px 12px;cursor:pointer;font-size:12px;border-bottom:1px solid rgba(30,42,58,.3);transition:background .15s}
+.chat-model-list .model-opt:hover{background:rgba(124,106,239,.08)}
+.chat-model-list .model-opt.active{background:rgba(124,106,239,.12)}
+.chat-model-list .model-opt .opt-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chat-model-list .model-opt .opt-badges{display:flex;gap:3px;flex-shrink:0}
+
 /* Loading / Empty */
 .loading{display:flex;align-items:center;justify-content:center;padding:30px;color:var(--dim);font-size:12px}
 .spinner{width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .6s linear infinite;margin-right:8px}
@@ -356,6 +394,7 @@ a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
       <div class="history-tabs" id="history-tabs">
         <button class="active" data-tab="live" onclick="setHistoryTab('live')">Live</button>
         <button data-tab="events" onclick="setHistoryTab('events')">Events</button>
+        <button data-tab="bus" onclick="setHistoryTab('bus')">EventBus</button>
         <button data-tab="logs" onclick="setHistoryTab('logs')">Logs</button>
         <button data-tab="chat" onclick="setHistoryTab('chat')">Chat</button>
       </div>
@@ -553,6 +592,21 @@ a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
   <h2><span class="ic">&#x1f3e0;</span> Habitus-Zonen Status-Summary</h2>
   <div id="system-zones"><div class="loading"><div class="spinner"></div>Lade Zonenstatus...</div></div>
 </div>
+<div class="card" style="margin-top:14px">
+  <h2><span class="ic">&#x1f50d;</span> HA Entity Discovery</h2>
+  <p style="font-size:11px;color:var(--dim);margin-bottom:10px">
+    Liest alle Entitaeten, Raeume, Geraete, Etagen und Labels aus Home Assistant aus
+    (REST + WebSocket API). Ergebnis wird im Entity-Cache und unter
+    <code>/data/ha_discovery.json</code> gespeichert.
+  </p>
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+    <button class="btn-sm" onclick="runHaDiscovery()">&#x1f504; HA Discovery starten</button>
+    <button class="btn-sm" onclick="downloadHaDiscovery()">&#x1f4e5; Export herunterladen</button>
+    <button class="btn-sm" onclick="loadHaBridgeStatus()">&#x1f4ca; Status</button>
+    <span id="ha-discovery-status" style="font-size:11px;color:var(--dim)">--</span>
+  </div>
+  <div id="ha-discovery-result"></div>
+</div>
 </div>
 
 <!-- ========== HAUSHALT PAGE ========== -->
@@ -696,6 +750,11 @@ a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
   <div class="card">
     <h2><span class="ic">&#x1f916;</span> Empfohlene Modelle</h2>
     <div id="set-rec"><div class="loading"><div class="spinner"></div>Lade...</div></div>
+  </div>
+  <div class="card" style="grid-column:1/-1">
+    <h2><span class="ic">&#x1f4e5;</span> Modell-Verwaltung</h2>
+    <p style="font-size:11px;color:var(--dim);margin-bottom:10px">Installierte und verfuegbare Modelle verwalten. Modelle herunterladen, aktivieren oder loeschen.</p>
+    <div id="set-model-mgmt"><div class="loading"><div class="spinner"></div>Lade Modell-Verwaltung...</div></div>
   </div>
 </div>
 </div>
@@ -979,6 +1038,75 @@ function _parseConfigInput(input,field){
   }
   return String(input.value||'').trim();
 }
+/* ── HA Discovery Bridge ───────────────────────────────────────── */
+async function runHaDiscovery(){
+  const el=document.getElementById('ha-discovery-result');
+  const st=document.getElementById('ha-discovery-status');
+  el.innerHTML='<div class="loading"><div class="spinner"></div>HA Discovery laeuft... (REST + WebSocket)</div>';
+  st.textContent='laeuft...';
+  try{
+    const d=await api('/api/v1/ha/discover','POST');
+    if(!d){el.innerHTML='<div class="empty">Fehler: Keine Antwort vom Backend</div>';st.textContent='Fehler';return;}
+    const ok=d.ok;
+    let html='<table class="tbl"><tbody>';
+    html+=`<tr><td>Entitaeten</td><td><strong>${d.entities||0}</strong></td></tr>`;
+    html+=`<tr><td>Raeume (Areas)</td><td><strong>${d.areas||0}</strong></td></tr>`;
+    html+=`<tr><td>Geraete (Devices)</td><td><strong>${d.devices||0}</strong></td></tr>`;
+    if(d.rest){
+      if(d.rest.config)html+=`<tr><td>HA Version</td><td>${escapeHtml(d.rest.config.version||'--')}</td></tr>`;
+      if(d.rest.addons!==undefined)html+=`<tr><td>Add-ons</td><td>${d.rest.addons}</td></tr>`;
+      if(d.rest.services!==undefined)html+=`<tr><td>Service-Domains</td><td>${d.rest.services}</td></tr>`;
+    }
+    if(d.ws){
+      html+=`<tr><td>Entity Registry (WS)</td><td>${d.ws.entity_registry||0}</td></tr>`;
+      html+=`<tr><td>Device Registry (WS)</td><td>${d.ws.device_registry||0}</td></tr>`;
+      html+=`<tr><td>Area Registry (WS)</td><td>${d.ws.area_registry||0}</td></tr>`;
+      html+=`<tr><td>Floor Registry (WS)</td><td>${d.ws.floor_registry||0}</td></tr>`;
+      html+=`<tr><td>Label Registry (WS)</td><td>${d.ws.label_registry||0}</td></tr>`;
+    }
+    html+='</tbody></table>';
+    if(d.errors&&d.errors.length>0){
+      html+=`<p style="color:var(--warn);font-size:12px;margin-top:8px">Fehler: ${d.errors.map(escapeHtml).join(', ')}</p>`;
+    }
+    html+=`<p style="font-size:11px;color:var(--dim);margin-top:8px">Gespeichert unter: <code>/data/ha_discovery.json</code></p>`;
+    el.innerHTML=html;
+    st.textContent=ok?`${d.entities} Entitaeten geladen`:'mit Fehlern abgeschlossen';
+  }catch(e){
+    el.innerHTML=`<div class="empty">Fehler: ${escapeHtml(String(e))}</div>`;
+    st.textContent='Fehler';
+  }
+}
+async function downloadHaDiscovery(){
+  try{
+    const r=await fetch(API+'/api/v1/ha/export',withAuth({method:'GET'}));
+    if(!r.ok){alert('Export nicht verfuegbar. Zuerst Discovery starten.');return;}
+    const blob=await r.blob();
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url;a.download='ha_discovery.json';document.body.appendChild(a);a.click();
+    document.body.removeChild(a);URL.revokeObjectURL(url);
+  }catch(e){alert('Export fehlgeschlagen: '+e);}
+}
+async function loadHaBridgeStatus(){
+  const el=document.getElementById('ha-discovery-result');
+  const d=await api('/api/v1/ha/status');
+  if(!d){el.innerHTML='<div class="empty">Status nicht verfuegbar</div>';return;}
+  let html='<table class="tbl"><tbody>';
+  html+=`<tr><td>Token verfuegbar</td><td>${d.token_available?badge('Ja','green'):badge('Nein','red')}</td></tr>`;
+  html+=`<tr><td>Supervisor API</td><td><code>${escapeHtml(d.supervisor_api||'--')}</code></td></tr>`;
+  html+=`<tr><td>Externe HA API</td><td><code>${escapeHtml(d.external_ha_api||'--')}</code></td></tr>`;
+  if(d.last_discovery){
+    const ts=d.last_discovery.timestamp?new Date(d.last_discovery.timestamp*1000).toLocaleString():'nie';
+    html+=`<tr><td>Letzte Discovery</td><td>${escapeHtml(ts)}</td></tr>`;
+    html+=`<tr><td>Entitaeten</td><td>${d.last_discovery.entities||0}</td></tr>`;
+    html+=`<tr><td>Raeume</td><td>${d.last_discovery.areas||0}</td></tr>`;
+    html+=`<tr><td>Geraete</td><td>${d.last_discovery.devices||0}</td></tr>`;
+  }else{
+    html+='<tr><td>Letzte Discovery</td><td>noch nicht ausgefuehrt</td></tr>';
+  }
+  html+='</tbody></table>';
+  el.innerHTML=html;
+}
 function badge(t,c){return`<span class="b b-${c}">${escapeHtml(t)}</span>`}
 function el(tag,cls,html){const e=document.createElement(tag);if(cls)e.className=cls;if(html)e.innerHTML=html;return e}
 function _chatModelLabel(model){
@@ -990,13 +1118,32 @@ function _chatModelLabel(model){
   if(value.startsWith('cloud:'))return value.slice('cloud:'.length)+' (cloud)';
   return value;
 }
-function reloadDashboardFrontend(){
+async function reloadDashboardFrontend(){
   try{
-    const u=new URL(window.location.href);
-    u.searchParams.set('ui_reload',String(Date.now()));
-    window.location.assign(u.toString());
-  }catch(_err){
-    window.location.reload();
+    // Trigger HA dashboard YAML regeneration via Core API
+    const r=await fetch(API+'/api/v1/dashboard/refresh',withAuth({method:'POST'}));
+    const d=await r.json().catch(()=>null);
+    addHistory('Frontend Dashboard wird aktualisiert...');
+    // Reload the current page after a short delay
+    setTimeout(()=>{
+      try{
+        const u=new URL(window.location.href);
+        u.searchParams.set('ui_reload',String(Date.now()));
+        window.location.assign(u.toString());
+      }catch(_inner){
+        window.location.reload();
+      }
+    },1500);
+  }catch(e){
+    addHistory('Frontend Reload Fehler: '+escapeHtml(e.message));
+    // Fallback: reload directly
+    try{
+      const u=new URL(window.location.href);
+      u.searchParams.set('ui_reload',String(Date.now()));
+      window.location.assign(u.toString());
+    }catch(_err){
+      window.location.reload();
+    }
   }
 }
 function _num(v,def=0){
@@ -1071,11 +1218,36 @@ function _renderChatModelSelector(options,activeModel){
     return;
   }
   sel.disabled=false;
+  // Group options: routing, offline installed, offline available, cloud
+  const groups={routing:[],offline:[],cloud:[]};
   options.forEach((opt)=>{
     const value=String(opt?.value||'').trim();
     const label=String(opt?.label||value||'');
-    sel.appendChild(new Option(label,value,false,value===activeModel));
+    if(value==='primary'||value==='secondary'){groups.routing.push({value,label});}
+    else if(value.startsWith('offline:')){groups.offline.push({value,label});}
+    else if(value.startsWith('cloud:')){groups.cloud.push({value,label});}
+    else{groups.routing.push({value,label});}
   });
+  // Add optgroups for better organization
+  if(groups.routing.length){
+    const grp=document.createElement('optgroup');grp.label='Routing';
+    groups.routing.forEach((opt)=>{grp.appendChild(new Option(opt.label,opt.value,false,opt.value===activeModel));});
+    sel.appendChild(grp);
+  }
+  if(groups.offline.length){
+    const grp=document.createElement('optgroup');grp.label='Offline Modelle';
+    groups.offline.forEach((opt)=>{
+      const isCloud=opt.value.toLowerCase().includes(':cloud');
+      const displayLabel=isCloud?(opt.label+' \u2601'):opt.label;
+      grp.appendChild(new Option(displayLabel,opt.value,false,opt.value===activeModel));
+    });
+    sel.appendChild(grp);
+  }
+  if(groups.cloud.length){
+    const grp=document.createElement('optgroup');grp.label='\u2601 Cloud Modelle';
+    groups.cloud.forEach((opt)=>{grp.appendChild(new Option(opt.label,opt.value,false,opt.value===activeModel));});
+    sel.appendChild(grp);
+  }
 }
 
 // -- Real Module Health (cached 30s) --
@@ -1196,6 +1368,27 @@ function renderHistory(){
       const tail=state?` \u2192 ${state}`:'';
       return `<div class="hist-item"><span class="ht">${t}</span><span class="kind event">EVENT</span><span>${entity} <span style="color:var(--dim)">(${kind})</span>${tail}</span></div>`;
     }).join('');
+    return;
+  }
+  if(historyTab==='bus'){
+    // EventBus history tab
+    api('/api/v1/events/bus/history?limit=40').then(data=>{
+      const events=data?.events||[];
+      if(!events.length){
+        c.innerHTML='<div class="hist-item"><span class="ht">--</span><span>Keine EventBus-Events</span></div>';
+        return;
+      }
+      c.innerHTML=events.map(e=>{
+        const t=_fmtTime(e.timestamp);
+        const topic=escapeHtml(e.topic||'?');
+        const src=escapeHtml(e.source||'');
+        const preview=escapeHtml(JSON.stringify(e.data||{}).slice(0,80));
+        const topicClass=topic.startsWith('mood')?'b-p':topic.startsWith('zone')?'b-g':topic.startsWith('neuron')?'b-c':topic.startsWith('candidate')?'b-y':'b-b';
+        return `<div class="hist-item"><span class="ht">${t}</span><span class="b ${topicClass}" style="font-size:9px">${topic}</span><span style="color:var(--dim);font-size:11px">${src?'['+src+'] ':''}${preview}</span></div>`;
+      }).join('');
+    }).catch(()=>{
+      c.innerHTML='<div class="hist-item"><span class="ht">--</span><span>EventBus nicht erreichbar</span></div>';
+    });
     return;
   }
   if(historyTab==='logs'){
@@ -1396,19 +1589,29 @@ function renderEntityBrain(container,nodes,edges){
     });
   }
   let svg=`<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">`;
-  svg+=`<defs><filter id="glow"><feGaussianBlur stdDeviation="2" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>`;
+  svg+=`<defs><filter id="glow"><feGaussianBlur stdDeviation="2" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>`;
+  svg+=`<filter id="glow-entity"><feGaussianBlur stdDeviation="3" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>`;
+  // Draw edges with animation for high-weight connections
   edges.forEach(e=>{
     const s=nodeMap[e.source||e.from],t=nodeMap[e.target||e.to];
     if(!s||!t)return;
     const w=Math.max(.3,Math.min(2.5,(e.weight||.5)*3));
-    svg+=`<line x1="${s.x}" y1="${s.y}" x2="${t.x}" y2="${t.y}" stroke="#1e2a3a" stroke-width="${w}" stroke-opacity=".4"/>`;
+    const highWeight=(e.weight||0)>0.7;
+    const sDomain=(s.id||s.entity_id||'').split('.')[0];
+    const edgeColor=highWeight?(DOMAIN_COLORS[sDomain]||'#344255'):'#1e2a3a';
+    const cls=highWeight?'synapse-active':'';
+    svg+=`<line class="${cls}" x1="${s.x}" y1="${s.y}" x2="${t.x}" y2="${t.y}" stroke="${edgeColor}" stroke-width="${w}" stroke-opacity="${highWeight?'.6':'.4'}"${highWeight?' filter="url(#glow)"':''}/>`;
   });
+  // Draw nodes with domain color-coding and pulse for high-score nodes
   nodes.forEach(n=>{
     const domain=(n.id||n.entity_id||'').split('.')[0];
     const color=DOMAIN_COLORS[domain]||DOMAIN_COLORS.default;
     const r=4+Math.min(10,(n.score||.5)*7);
     const label=escapeHtml((n.id||n.entity_id||'').split('.').pop().replace(/_/g,' ').slice(0,18));
-    svg+=`<circle cx="${n.x}" cy="${n.y}" r="${r}" fill="${color}" opacity=".8" filter="url(#glow)"/>`;
+    const isActive=(n.score||0)>0.7;
+    const cls=isActive?'neuron-active-circle neuron-glow':'';
+    const filterAttr=isActive?'filter="url(#glow-entity)"':'filter="url(#glow)"';
+    svg+=`<circle class="${cls}" cx="${n.x}" cy="${n.y}" r="${r}" fill="${color}" opacity=".8" ${filterAttr}/>`;
     if(r>6)svg+=`<text x="${n.x}" y="${n.y+r+10}" text-anchor="middle" fill="#6b7a8d" font-size="7.5" font-family="Inter,sans-serif">${label}</text>`;
   });
   svg+='</svg>';
@@ -1552,25 +1755,40 @@ function renderNeuronBrain(container,neurons,synapses,automations,zoneActivity){
   });
 
   let svg=`<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">`;
-  svg+=`<defs><filter id="glow"><feGaussianBlur stdDeviation="2" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>`;
+  svg+=`<defs>`;
+  svg+=`<filter id="glow"><feGaussianBlur stdDeviation="2" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>`;
+  svg+=`<filter id="glow-strong"><feGaussianBlur stdDeviation="4" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>`;
+  svg+=`</defs>`;
+  // Draw synapse/edge connections with animation for active ones
   edges.forEach((e)=>{
     const s=moduleNodes[e.from],t=moduleNodes[e.to];
     if(!s||!t)return;
     const w=Math.min(4,1+Math.log2(1+e.weight));
-    svg+=`<line x1="${s.x}" y1="${s.y}" x2="${t.x}" y2="${t.y}" stroke="#344255" stroke-width="${w}" stroke-opacity=".72"/>`;
+    const isActive=(s.active||t.active)&&e.weight>1;
+    const hasSynapseSource=!!(e.sourceCounts&&e.sourceCounts.synapse);
+    const edgeColor=isActive?s.color:'#344255';
+    const edgeOpacity=isActive?'.65':'.45';
+    const cls=isActive?'synapse-active':'';
+    svg+=`<line class="${cls}" x1="${s.x}" y1="${s.y}" x2="${t.x}" y2="${t.y}" stroke="${edgeColor}" stroke-width="${w}" stroke-opacity="${edgeOpacity}"${hasSynapseSource?' filter="url(#glow)"':''}/>`;
   });
 
+  // Draw neuron points with module color-coding and pulse animation
   Object.values(neuronPoints).forEach((n)=>{
     const color=_moduleColor(n.module);
     const r=3+Math.min(5,Math.max(0,n.value||0)*5);
-    const pulse=((zoneActivity[n.module]||0)>0||(n.value||0)>0.75)?'brain-neuron-active':'';
-    svg+=`<circle class="${pulse}" cx="${n.x}" cy="${n.y}" r="${r}" fill="${color}" opacity=".9"/>`;
+    const isActive=((zoneActivity[n.module]||0)>0||(n.value||0)>0.75);
+    const pulse=isActive?'brain-neuron-active neuron-active-circle':'';
+    const glowFilter=isActive?' filter="url(#glow)"':'';
+    svg+=`<circle class="${pulse}" cx="${n.x}" cy="${n.y}" r="${r}" fill="${color}" opacity=".9"${glowFilter}/>`;
   });
 
+  // Draw module hub nodes with glow effects for active nodes
   Object.values(moduleNodes).forEach((m)=>{
     const size=13+(m.active?3:0);
     const stroke=m.active?'#fbbf24':'#1e2a3a';
-    svg+=`<circle class="brain-module-node ${m.active?'brain-neuron-active':''}" cx="${m.x}" cy="${m.y}" r="${size}" fill="${m.color}" stroke="${stroke}" stroke-width="2"/>`;
+    const activeFilter=m.active?' filter="url(#glow-strong)"':' filter="url(#glow)"';
+    const activeCls=m.active?'brain-neuron-active neuron-glow':'';
+    svg+=`<circle class="brain-module-node ${activeCls}" cx="${m.x}" cy="${m.y}" r="${size}" fill="${m.color}" stroke="${stroke}" stroke-width="2"${activeFilter}/>`;
     svg+=`<text x="${m.x}" y="${m.y+size+11}" text-anchor="middle" fill="#9aa7ba" font-size="8.5" font-family="Inter,sans-serif">${escapeHtml(m.id.replace(/_/g,' '))}</text>`;
   });
   svg+='</svg>';
@@ -3113,6 +3331,10 @@ function initModuleConfigSelect(){
   sel.onchange=()=>{
     _selectedModuleConfig=sel.value;
     loadSelectedModuleConfig(false);
+    // Also open as floating resizable panel for multi-panel workflow
+    if(_selectedModuleConfig){
+      openModuleConfigWindow(_selectedModuleConfig);
+    }
   };
 }
 function _moduleFieldHtml(moduleId,field,value,inputNs){
@@ -4468,6 +4690,162 @@ async function applyModulePreset(presetId){
     addHistory('\u26a0\ufe0f Modul-Preset fehlgeschlagen: '+escapeHtml(e.message||'unbekannt'));
   }
 }
+function _renderModelManagement(status){
+  const mc=$('set-model-mgmt');
+  if(!mc)return;
+  if(!status){
+    mc.innerHTML='<div class="empty">Modell-API nicht erreichbar</div>';
+    return;
+  }
+  const installedOffline=status?.model_catalog?.offline?.installed_models||status?.installed_models||[];
+  const allOffline=status?.model_catalog?.offline?.models||[];
+  const cloudModels=status?.model_catalog?.cloud?.models||status?.cloud_models||[];
+  const activeOffline=String(status?.model_catalog?.offline?.active_model||status?.model||'');
+  const activeCloud=String(status?.model_catalog?.cloud?.active_model||status?.cloud_model||'');
+  const primaryProvider=String(status?.primary_provider||'offline');
+  const secondaryProvider=String(status?.secondary_provider||'cloud');
+  const installedSet=new Set((installedOffline||[]).map((m)=>String(m||'')));
+  const availableOffline=allOffline.filter((m)=>!installedSet.has(String(m||'')));
+  const modelSizes=status?.model_catalog?.offline?.model_sizes||{};
+  let html='';
+  // Active model summary
+  html+=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">`;
+  html+=`<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px">
+    <div style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Primary (${escapeHtml(primaryProvider)})</div>
+    <div style="font-size:14px;font-weight:700;color:var(--green)">${escapeHtml(primaryProvider==='offline'?activeOffline:activeCloud)||'--'}</div>
+  </div>`;
+  html+=`<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px">
+    <div style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Secondary (${escapeHtml(secondaryProvider)})</div>
+    <div style="font-size:14px;font-weight:700;color:var(--yellow)">${escapeHtml(secondaryProvider==='cloud'?activeCloud:activeOffline)||'--'}</div>
+  </div>`;
+  html+=`</div>`;
+  // Installed offline models
+  html+=`<div class="model-mgmt-section"><h3>Installierte Offline-Modelle (${installedOffline.length})</h3>`;
+  if(!installedOffline.length){
+    html+=`<div class="empty">Keine Offline-Modelle installiert</div>`;
+  }else{
+    installedOffline.forEach((m)=>{
+      const v=String(m||'');
+      const ev=encodeURIComponent(v);
+      const isActive=v===activeOffline;
+      const size=modelSizes[v];
+      const sizeLabel=size?(typeof size==='number'?(size>=1024?(size/1024).toFixed(1)+' GB':size+' MB'):String(size)):'';
+      html+=`<div class="model-item">
+        <div class="model-name">${escapeHtml(v)}</div>
+        <div class="model-meta">
+          ${sizeLabel?'<span class="model-size">'+escapeHtml(sizeLabel)+'</span>':''}
+          ${badge('Installiert','g')}
+          ${isActive?badge('Aktiv','g'):''}
+        </div>
+        <div class="model-actions">
+          ${isActive?'<button class="model-btn model-btn-active" disabled>Aktiv</button>':'<button class="model-btn" onclick="quickApplyRoutingModel(\'offline\',decodeURIComponent(\''+ev+'\'))">Auswaehlen</button>'}
+        </div>
+      </div>`;
+    });
+  }
+  html+=`</div>`;
+  // Available (not yet installed) offline models
+  if(availableOffline.length){
+    html+=`<div class="model-mgmt-section"><h3>Verfuegbare Offline-Modelle (${availableOffline.length})</h3>`;
+    availableOffline.forEach((m)=>{
+      const v=String(m||'');
+      const ev=encodeURIComponent(v);
+      const size=modelSizes[v];
+      const sizeLabel=size?(typeof size==='number'?(size>=1024?(size/1024).toFixed(1)+' GB':size+' MB'):String(size)):'';
+      html+=`<div class="model-item" id="model-item-${ev}">
+        <div class="model-name">${escapeHtml(v)}</div>
+        <div class="model-meta">
+          ${sizeLabel?'<span class="model-size">'+escapeHtml(sizeLabel)+'</span>':''}
+          ${badge('Nicht installiert','y')}
+        </div>
+        <div class="model-actions">
+          <button class="model-btn model-btn-download" onclick="pullModelWithProgress(decodeURIComponent('${ev}'),this)">&#x2b07; Download</button>
+        </div>
+      </div>`;
+    });
+    html+=`</div>`;
+  }
+  // Cloud models
+  if(cloudModels.length){
+    html+=`<div class="model-mgmt-section"><h3>\u2601 Cloud-Modelle (${cloudModels.length})</h3>`;
+    cloudModels.forEach((m)=>{
+      const v=String(m||'');
+      const ev=encodeURIComponent(v);
+      const isActive=v===activeCloud;
+      const isCloudTag=v.toLowerCase().includes(':cloud');
+      html+=`<div class="model-item">
+        <div class="model-name">${escapeHtml(v)}</div>
+        <div class="model-meta">
+          ${badge('Cloud','p')}
+          ${isCloudTag?'<span class="b-cloud">:cloud</span>':''}
+          ${isActive?badge('Aktiv','g'):''}
+        </div>
+        <div class="model-actions">
+          ${isActive?'<button class="model-btn model-btn-active" disabled>Aktiv</button>':'<button class="model-btn" onclick="quickApplyRoutingModel(\'cloud\',decodeURIComponent(\''+ev+'\'))">Auswaehlen</button>'}
+        </div>
+      </div>`;
+    });
+    html+=`</div>`;
+  }
+  mc.innerHTML=html;
+}
+async function pullModelWithProgress(model,btn){
+  const selected=String(model||'').trim();
+  if(!selected)return;
+  const origText=btn.innerHTML;
+  btn.disabled=true;
+  btn.innerHTML='&#x23f3; Starte...';
+  // Add progress bar below the model item
+  const item=btn.closest('.model-item');
+  let progressDiv=item?item.querySelector('.model-progress'):null;
+  if(!progressDiv&&item){
+    progressDiv=document.createElement('div');
+    progressDiv.className='model-progress';
+    progressDiv.style.marginTop='6px';
+    progressDiv.innerHTML='<div class="model-progress-fill" style="width:0%"></div>';
+    item.appendChild(progressDiv);
+  }
+  try{
+    const r=await fetch(API+'/api/v1/agent/models/pull',withAuth({
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({model:selected}),
+    }));
+    let data={};
+    try{data=await r.json()}catch(_err){data={}}
+    if(!r.ok||data?.ok===false){
+      throw new Error(data?.error||data?.message||('HTTP '+r.status));
+    }
+    const status=String(data?.pull?.status||'started');
+    btn.innerHTML='&#x2b07; '+escapeHtml(status);
+    addHistory('Modell-Download gestartet: '+escapeHtml(selected));
+    // Simulate progress indicator; re-check status periodically
+    let progress=10;
+    const progressFill=progressDiv?progressDiv.querySelector('.model-progress-fill'):null;
+    const checkInterval=setInterval(async()=>{
+      progress=Math.min(90,progress+10);
+      if(progressFill)progressFill.style.width=progress+'%';
+      // Check if model is now installed
+      const checkStatus=await api('/chat/status');
+      const nowInstalled=(checkStatus?.model_catalog?.offline?.installed_models||checkStatus?.installed_models||[]);
+      if(nowInstalled.map((m)=>String(m||'')).includes(selected)){
+        clearInterval(checkInterval);
+        if(progressFill)progressFill.style.width='100%';
+        btn.innerHTML='&#x2713; Installiert';
+        btn.className='model-btn model-btn-active';
+        addHistory('Modell installiert: '+escapeHtml(selected));
+        setTimeout(()=>{loadSettings().catch(()=>{})},800);
+      }
+    },3000);
+    // Safety timeout: stop checking after 5 minutes
+    setTimeout(()=>{clearInterval(checkInterval);btn.disabled=false;btn.innerHTML=origText;},300000);
+  }catch(e){
+    btn.disabled=false;
+    btn.innerHTML=origText;
+    if(progressDiv&&progressDiv.parentNode)progressDiv.parentNode.removeChild(progressDiv);
+    addHistory('\u26a0\ufe0f Modell-Download fehlgeschlagen: '+(e.message||'unbekannt'));
+  }
+}
 async function loadSettings(){
   // Load all in parallel, resilient
   const settled=await Promise.allSettled([
@@ -4494,7 +4872,14 @@ async function loadSettings(){
       `<tr><td>Primary</td><td>${badge(_routingProviderLabel(status.primary_provider||'offline'),'g')} · ${escapeHtml(status.primary_model||'--')}</td></tr>`+
       `<tr><td>Secondary</td><td>${badge(_routingProviderLabel(status.secondary_provider||'cloud'),'y')} · ${escapeHtml(status.secondary_model||'--')}</td></tr>`+
       `<tr><td>Charakter</td><td>${escapeHtml(status.character||'copilot')}</td></tr>`+
-      `<tr><td>Anfragen/h</td><td>${status.calls_this_hour||0} / ${status.max_calls_per_hour||60}</td></tr>`;
+      `<tr><td>Anfragen/h</td><td>${status.calls_this_hour||0} / ${status.max_calls_per_hour||60}</td></tr>`+
+      `<tr><td>Timeouts</td><td>Offline: ${status.offline_timeout||120}s · Cloud: ${status.cloud_timeout||60}s</td></tr>`+
+      (status.circuit_breakers?
+        `<tr><td>Circuit Breaker</td><td>${Object.entries(status.circuit_breakers||{}).map(([k,v])=>`${escapeHtml(k)}: ${v.state==='closed'?badge('OK','g'):v.state==='open'?badge('OFFEN','r'):badge('Test','y')} (${v.failure_count}/${v.failure_threshold})`).join(' · ')}</td></tr>`
+        :'')+
+      (status.usage?
+        `<tr><td>Nutzung</td><td>Offline: ${(status.usage.offline||{}).requests||0} Anfr. · Cloud: ${(status.usage.cloud||{}).requests||0} Anfr. (${(status.usage.cloud||{}).tokens||0} Token)</td></tr>`
+        :'');
     _renderRoutingControls(status);
     // Models
     const models=status?.model_catalog?.offline?.models||status.installed_models||[];
@@ -4534,8 +4919,8 @@ async function loadSettings(){
       `<tr><td>API Route</td><td><code>${escapeHtml(API||'(direct)')}</code> ${badge(API_MODE==='ingress'?'Ingress':'Direct','b')}</td></tr>`+
       `<tr><td>System Health</td><td>${healthBadge}</td></tr>`+
       `<tr><td>CPU / RAM / Disk</td><td>${cpuPct>=0?cpuPct.toFixed(1)+'%':'--'} / ${memPct>=0?memPct.toFixed(1)+'%':'--'} / ${diskPct>=0?diskPct.toFixed(1)+'%':'--'}</td></tr>`+
-      `<tr><td>Ollama URL</td><td><code>${escapeHtml(status.ollama_url||'localhost:11434')}</code></td></tr>`+
-      `<tr><td>Cloud URL</td><td><code>${escapeHtml(status.cloud_api_url||'--')}</code></td></tr>`+
+      `<tr><td>Ollama URL</td><td><code>${escapeHtml(status.ollama_url||'localhost:11434')}</code> <button onclick="validateOllama()" style="margin-left:6px;background:var(--surface);border:1px solid var(--border);color:var(--dim);border-radius:4px;padding:2px 6px;font-size:9px;cursor:pointer">Testen</button></td></tr>`+
+      `<tr><td>Cloud URL</td><td><code>${escapeHtml(status.cloud_api_url||'--')}</code> ${status.cloud_configured?'<button onclick="validateCloud()" style="margin-left:6px;background:var(--surface);border:1px solid var(--border);color:var(--dim);border-radius:4px;padding:2px 6px;font-size:9px;cursor:pointer">Testen</button>':''}</td></tr>`+
       `<tr><td>Telegram</td><td>${tg?.running?badge('Aktiv','g'):badge('Aus','y')}</td></tr>`+
       `<tr><td>MCP Server</td><td>${mcpOk?badge('Aktiv','g'):badge('Offline','r')}</td></tr>`+
       `<tr><td>Onyx Bridge</td><td>${onyx?.ok?badge('Aktiv','g'):badge('Offline','r')} ${onyx?.ha_reachable?badge('HA erreichbar','b'):''}</td></tr>`+
@@ -4545,6 +4930,8 @@ async function loadSettings(){
     $('set-llm').innerHTML='<tr><td colspan="2" style="color:var(--red)">\u26a0\ufe0f Core API nicht erreichbar</td></tr>';
     _renderRoutingControls(null);
   }
+  // Model Management (full panel)
+  _renderModelManagement(status);
   // Memory
   const mc2=$('set-memory');
   if(mem&&mem.stats){
@@ -4918,6 +5305,32 @@ async function toggleHomeKit(zoneId,zoneName,entityIds){
       await loadHomeKitServers();
     }else{addHistory('HomeKit-Fehler: '+(d.error||'unbekannt'))}
   }catch(e){addHistory('HomeKit-Fehler: '+e.message)}
+}
+
+// ==================================================
+// PRE-FLIGHT VALIDATION
+// ==================================================
+async function validateOllama(){
+  addHistory('Teste Ollama-Verbindung...');
+  try{
+    const r=await api('/chat/validate/ollama');
+    if(r?.ok){
+      addHistory(`Ollama OK: ${r.models_installed||0} Modelle installiert, Aktiv: ${escapeHtml(r.active_model||'--')} (${r.active_model_installed?'installiert':'NICHT installiert'})`);
+    }else{
+      addHistory(`Ollama FEHLER: ${escapeHtml(r?.error||'Unbekannt')}`);
+    }
+  }catch(e){addHistory('Ollama-Test fehlgeschlagen: '+e.message)}
+}
+async function validateCloud(){
+  addHistory('Teste Cloud-API-Verbindung...');
+  try{
+    const r=await api('/chat/validate/cloud');
+    if(r?.ok){
+      addHistory(`Cloud API OK: Typ ${escapeHtml(r.provider_type||'--')}, ${r.models_available||0} Modelle, Aktiv: ${escapeHtml(r.active_model||'--')}`);
+    }else{
+      addHistory(`Cloud API FEHLER: ${escapeHtml(r?.error||'Unbekannt')}`);
+    }
+  }catch(e){addHistory('Cloud-Test fehlgeschlagen: '+e.message)}
 }
 
 // ==================================================
