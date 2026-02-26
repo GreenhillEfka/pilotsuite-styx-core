@@ -323,22 +323,46 @@ a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
 
 <!-- Navigation -->
 <div class="nav" id="nav">
-<button class="active" data-page="styx">Styx</button>
+<button class="active" data-page="styx">&#x1f3e0; Übersicht</button>
+<button data-page="chat">&#x1f4ac; Chat</button>
 <button data-page="habitus">Habitus</button>
-<button data-page="mood">Stimmung</button>
 <button data-page="modules">Module</button>
-<button data-page="system">System</button>
-<button data-page="haushalt">&#x1f3e0; Haushalt</button>
 <button data-page="settings">Einstellungen</button>
+<button data-page="haushalt">Haushalt</button>
+<button data-page="system">System</button>
 </div>
 
-<!-- ========== STYX PAGE: Brain + Chat + History ========== -->
+<!-- ========== OVERVIEW PAGE (Styx) ========== -->
 <div class="page active" id="page-styx">
 <!-- Module Pipelines -->
 <div class="pipelines" id="pipelines"></div>
-<!-- Main Layout -->
-<div class="styx-layout">
-  <!-- LEFT: Brain Graph -->
+<!-- Top Row: System Health + Mood -->
+<div class="grid g2" style="margin-bottom:14px">
+  <div class="card">
+    <h2><span class="ic">&#x1f3af;</span> System-Gesundheit</h2>
+    <div id="overview-health" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+      <div class="stat"><div class="v" id="overview-health-score">--</div><div class="l">Health Score</div></div>
+      <div style="flex:1;min-width:120px">
+        <div class="gauge"><div class="gauge-hd"><span>Pipeline</span><span class="gv" id="overview-pipeline-status">--</span></div><div class="gauge-bar"><div class="gauge-fill" id="overview-pipeline-bar" style="width:0;background:var(--green)"></div></div></div>
+        <div class="gauge"><div class="gauge-hd"><span>LLM</span><span class="gv" id="overview-llm-status">--</span></div><div class="gauge-bar"><div class="gauge-fill" id="overview-llm-bar" style="width:0;background:var(--blue)"></div></div></div>
+        <div class="gauge"><div class="gauge-hd"><span>Core API</span><span class="gv" id="overview-core-status">--</span></div><div class="gauge-bar"><div class="gauge-fill" id="overview-core-bar" style="width:0;background:var(--cyan)"></div></div></div>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <h2><span class="ic">&#x1f3b5;</span> Stimmung</h2>
+    <div id="overview-mood" style="text-align:center;padding:8px 0">
+      <div class="stat"><div class="v" id="overview-mood-value">--</div><div class="l">Aktuelle Stimmung</div></div>
+      <div style="display:flex;gap:8px;justify-content:center;margin-top:6px">
+        <span class="b b-g" id="overview-mood-comfort">Comfort: --</span>
+        <span class="b b-b" id="overview-mood-joy">Joy: --</span>
+        <span class="b b-c" id="overview-mood-frugality">Frugality: --</span>
+      </div>
+    </div>
+  </div>
+</div>
+<!-- Brain Graph -->
+<div class="styx-layout" style="height:auto;min-height:400px">
   <div class="styx-brain">
     <div class="brain-wrap" id="brain-canvas">
       <div class="brain-legend" id="brain-legend"></div>
@@ -365,31 +389,13 @@ a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
     <!-- Quick navigation -->
     <div class="suggest-bar">
       <span class="suggest-btn" onclick="navigateTo('habitus')">Habitus erkunden</span>
-      <span class="suggest-btn" onclick="navigateTo('mood')">Stimmung pruefen</span>
+      <span class="suggest-btn" onclick="navigateTo('chat')">Chat mit Styx</span>
       <span class="suggest-btn" onclick="navigateTo('modules')">Module verwalten</span>
     </div>
   </div>
-  <!-- RIGHT: Chat + History -->
+  <!-- RIGHT: History / Activity -->
   <div class="styx-right">
-    <!-- Chat -->
-    <div class="chat-panel">
-      <div class="chat-hd">
-        <span>&#x2726;</span>
-        <span id="assistant-name">Styx</span>
-        <span class="b b-p" id="chat-model">--</span>
-        <select id="chat-model-select" title="Chat-Modell waehlen"></select>
-        <button onclick="clearChatHistory()" title="Chatverlauf loeschen" style="margin-left:auto;background:transparent;border:1px solid var(--border);color:var(--dim);border-radius:6px;padding:2px 8px;cursor:pointer;font-size:11px">&#x1f5d1;</button>
-      </div>
-      <div class="chat-msgs" id="chat-msgs">
-        <div class="msg a" id="styx-greeting">Hallo! Ich bin <strong>Styx</strong>, dein PilotSuite Assistent. Ich verbinde dein Smart Home mit lokaler KI. Wie kann ich helfen?</div>
-      </div>
-      <div class="chat-in">
-        <input type="text" id="chat-input" placeholder="Frag Styx..." autocomplete="off">
-        <button id="chat-send" onclick="sendChat()">&#x2728;</button>
-      </div>
-    </div>
-    <!-- History -->
-    <div class="history-panel" id="history-panel">
+    <div class="history-panel" id="history-panel" style="max-height:100%;flex:1">
       <div class="hd">Verlauf &amp; Aktivitaet</div>
       <div class="history-tabs" id="history-tabs">
         <button class="active" data-tab="live" onclick="setHistoryTab('live')">Live</button>
@@ -399,6 +405,33 @@ a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
         <button data-tab="chat" onclick="setHistoryTab('chat')">Chat</button>
       </div>
       <div id="history-items"><div class="hist-item"><span class="ht">jetzt</span><span>PilotSuite gestartet</span></div></div>
+    </div>
+  </div>
+</div>
+<!-- Mood Trend (inline) -->
+<div class="card" style="margin-top:14px">
+  <h2><span class="ic">&#x1f4ca;</span> Mood Trend</h2>
+  <div class="trend-chart" id="overview-mood-trend"><canvas id="overview-mood-trend-canvas"></canvas></div>
+</div>
+</div>
+
+<!-- ========== CHAT PAGE ========== -->
+<div class="page" id="page-chat">
+<div style="display:grid;grid-template-columns:1fr;gap:14px;height:calc(100vh - 120px);min-height:500px">
+  <div class="chat-panel" style="height:100%">
+    <div class="chat-hd">
+      <span>&#x2726;</span>
+      <span id="assistant-name">Styx</span>
+      <span class="b b-p" id="chat-model">--</span>
+      <select id="chat-model-select" title="Chat-Modell waehlen"></select>
+      <button onclick="clearChatHistory()" title="Chatverlauf loeschen" style="margin-left:auto;background:transparent;border:1px solid var(--border);color:var(--dim);border-radius:6px;padding:2px 8px;cursor:pointer;font-size:11px">&#x1f5d1;</button>
+    </div>
+    <div class="chat-msgs" id="chat-msgs">
+      <div class="msg a" id="styx-greeting">Hallo! Ich bin <strong>Styx</strong>, dein PilotSuite Assistent. Ich verbinde dein Smart Home mit lokaler KI. Wie kann ich helfen?</div>
+    </div>
+    <div class="chat-in">
+      <input type="text" id="chat-input" placeholder="Frag Styx..." autocomplete="off">
+      <button id="chat-send" onclick="sendChat()">&#x2728;</button>
     </div>
   </div>
 </div>
@@ -498,16 +531,67 @@ a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
 
 <!-- ========== MODULES PAGE ========== -->
 <div class="page" id="page-modules">
+<!-- Tier Legend -->
 <div class="card" style="margin-bottom:14px">
-  <h2><span class="ic">&#x2699;&#xfe0f;</span> Neurale Pipeline</h2>
-  <p style="font-size:12px;color:var(--dim);margin-bottom:12px">Module steuern wie Styx dein Zuhause wahrnimmt. Toggles steuern den echten Backend-Zustand.</p>
-  <div style="display:flex;gap:8px;margin-top:6px">
-    <span class="b b-g">Aktiv = Auto-Apply (beide Module aktiv = doppelte Sicherheit)</span>
-    <span class="b b-y">Lernen = Vorschlaege zur manuellen Uebernahme</span>
-    <span class="b b-r">Aus = deaktiviert</span>
+  <h2><span class="ic">&#x2699;&#xfe0f;</span> Module &amp; Neurale Pipeline</h2>
+  <p style="font-size:12px;color:var(--dim);margin-bottom:12px">Module steuern wie Styx dein Zuhause wahrnimmt. Geordnet nach Tier: Kernel &rarr; Brain &rarr; Kontext &rarr; Erweiterungen.</p>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">
+    <span class="b b-p">Tier 0 — Kernel (immer aktiv)</span>
+    <span class="b b-b">Tier 1 — Brain (Intelligenz)</span>
+    <span class="b b-c">Tier 2 — Kontext (bedingt)</span>
+    <span class="b b-y">Tier 3 — Erweiterungen</span>
+  </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">
+    <span class="b b-g">Aktiv</span>
+    <span class="b b-y">Lernen</span>
+    <span class="b b-r">Aus/Fehler</span>
   </div>
 </div>
-<div class="grid g2" id="module-list"></div>
+<!-- System + Brain Modules (Tier 0+1) — always visible -->
+<div class="card" style="margin-bottom:14px">
+  <h2><span class="ic">&#x1f5a5;</span> System &amp; Brain (Tier 0 + 1)</h2>
+  <p style="font-size:11px;color:var(--dim);margin-bottom:10px">Kernel- und Brain-Module sind systemkritisch und immer aktiv.</p>
+  <div class="grid g2" id="module-list-system"></div>
+</div>
+<!-- Context Modules (Tier 2) — conditional -->
+<div class="card" style="margin-bottom:14px">
+  <h2><span class="ic">&#x1f50d;</span> Kontext-Module (Tier 2)</h2>
+  <p style="font-size:11px;color:var(--dim);margin-bottom:10px">Automatisch aktiviert wenn relevante HA-Entities vorhanden sind.</p>
+  <div class="grid g2" id="module-list-context"></div>
+</div>
+<!-- Extension Modules (Tier 3) — user-activated -->
+<div class="card" style="margin-bottom:14px">
+  <h2><span class="ic">&#x1f9e9;</span> Erweiterungen (Tier 3)</h2>
+  <p style="font-size:11px;color:var(--dim);margin-bottom:10px">Optionale Module — vom Benutzer explizit aktiviert.</p>
+  <div class="grid g2" id="module-list-extensions"></div>
+</div>
+<!-- Legacy all-modules list (hidden, used by JS) -->
+<div class="grid g2" id="module-list" style="display:none"></div>
+<!-- Neuron System -->
+<div class="card" style="margin-top:14px">
+  <h2><span class="ic">&#x1f9e0;</span> Neuronensystem</h2>
+  <p style="font-size:11px;color:var(--dim);margin-bottom:10px">Kontext-, Zustands- und Stimmungs-Neuronen mit Tag-basierter Auto-Zuordnung.</p>
+  <div id="neuron-system-panel">
+    <div class="grid g3" style="margin-bottom:10px">
+      <div class="card" style="border-left:3px solid var(--blue)">
+        <h2 style="color:var(--blue)">Kontext-Neuronen</h2>
+        <p style="font-size:10px;color:var(--dim)">Praesenz, Licht, Bewegung, Wetter</p>
+        <div id="neuron-context-list" style="font-size:11px;margin-top:6px"><span class="b b-b">Lade...</span></div>
+      </div>
+      <div class="card" style="border-left:3px solid var(--green)">
+        <h2 style="color:var(--green)">Zustands-Neuronen</h2>
+        <p style="font-size:10px;color:var(--dim)">Temperatur, Energie, Klima</p>
+        <div id="neuron-state-list" style="font-size:11px;margin-top:6px"><span class="b b-g">Lade...</span></div>
+      </div>
+      <div class="card" style="border-left:3px solid var(--orange)">
+        <h2 style="color:var(--orange)">Stimmungs-Neuronen</h2>
+        <p style="font-size:10px;color:var(--dim)">Media, Musik, Kalender</p>
+        <div id="neuron-mood-list" style="font-size:11px;margin-top:6px"><span class="b b-y">Lade...</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+<!-- Module Configuration -->
 <div class="card" style="margin-top:14px">
   <h2><span class="ic">&#9881;</span> Modul-Konfiguration</h2>
   <p style="font-size:11px;color:var(--dim);margin-bottom:10px">Runtime-Parameter fuer konfigurierbare Module. Quelle ist die Core-API.</p>
@@ -518,26 +602,13 @@ a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
   </div>
   <div id="module-config-body"><div class="empty">Waehle ein Modul.</div></div>
 </div>
+<!-- Media Zones -->
 <div class="card" style="margin-top:14px">
   <h2><span class="ic">&#x1f3b5;</span> Media Zonen &amp; Musikwolke</h2>
   <p style="font-size:11px;color:var(--dim);margin-bottom:10px">Zone-Player-Zuordnung und Musikwolke Smart Audio Follow</p>
   <div id="media-zones-panel"><div class="loading"><div class="spinner"></div>Lade Media Zonen...</div></div>
 </div>
-<div class="card" style="margin-top:14px">
-  <h2><span class="ic">&#x1f30d;</span> Web &amp; News</h2>
-  <p style="font-size:11px;color:var(--dim);margin-bottom:10px">Aktuelle Nachrichten und Warnungen im LLM-Kontext</p>
-  <div id="news-warnings-panel"><div class="loading"><div class="spinner"></div>Lade Nachrichten...</div></div>
-</div>
-<div class="card" style="margin-top:14px">
-  <h2><span class="ic">&#x267b;</span> Müllabfuhr</h2>
-  <p style="font-size:11px;color:var(--dim);margin-bottom:10px">Waste Collection Schedule + Erinnerungen mit TTS</p>
-  <div id="waste-panel"><div class="loading"><div class="spinner"></div>Lade Müllabfuhr...</div></div>
-</div>
-<div class="card" style="margin-top:14px">
-  <h2><span class="ic">&#x1f382;</span> Geburtstage</h2>
-  <p style="font-size:11px;color:var(--dim);margin-bottom:10px">Kalender-basierte Geburtstags-Erinnerungen</p>
-  <div id="birthday-panel"><div class="loading"><div class="spinner"></div>Lade Geburtstage...</div></div>
-</div>
+<!-- Automations -->
 <div class="card" style="margin-top:14px">
   <h2><span class="ic">&#x1f916;</span> Erstellte Automationen</h2>
   <p style="font-size:11px;color:var(--dim);margin-bottom:10px">Aus akzeptierten Vorschlaegen erstellte HA-Automationen</p>
@@ -1450,6 +1521,43 @@ function navigateTo(p){
 // ==================================================
 // STYX PAGE (Brain + Chat + History)
 // ==================================================
+async function loadOverviewHealth(){
+  try{
+    const status=await api('/api/v1/status');
+    if(status){
+      const hs=$('overview-health-score');
+      if(hs){
+        const score=status.health_score||status.score||'--';
+        hs.textContent=typeof score==='number'?score+'%':score;
+      }
+      const ps=$('overview-pipeline-status');
+      const pb=$('overview-pipeline-bar');
+      if(ps){ps.textContent=status.pipeline_status||'--';}
+      if(pb){pb.style.width=(status.pipeline_status==='healthy'?'100%':'40%');}
+      const ls=$('overview-llm-status');
+      const lb=$('overview-llm-bar');
+      if(ls){ls.textContent=status.llm_status||status.ollama_status||'--';}
+      if(lb){lb.style.width=(status.llm_status==='available'||status.ollama_status==='connected')?'100%':'30%';}
+      const cs=$('overview-core-status');
+      const cb=$('overview-core-bar');
+      if(cs){cs.textContent='online';}
+      if(cb){cb.style.width='100%';}
+    }
+    // Mood summary
+    const mood=await api('/api/v1/hub/mood/current');
+    if(mood){
+      const mv=$('overview-mood-value');
+      if(mv){mv.textContent=mood.label||mood.mood||'--';}
+      const mc=$('overview-mood-comfort');
+      if(mc){mc.textContent='Comfort: '+(mood.comfort!=null?Math.round(mood.comfort*100)+'%':'--');}
+      const mj=$('overview-mood-joy');
+      if(mj){mj.textContent='Joy: '+(mood.joy!=null?Math.round(mood.joy*100)+'%':'--');}
+      const mf=$('overview-mood-frugality');
+      if(mf){mf.textContent='Frugality: '+(mood.frugality!=null?Math.round(mood.frugality*100)+'%':'--');}
+    }
+  }catch(e){console.warn('Overview health load:',e);}
+}
+
 async function loadStyx(opts={}){
   const background=!!opts.background;
   try{
@@ -3631,6 +3739,21 @@ async function loadModules(){
     MODULE_DEFS_RUNTIME=[...merged.values()].sort((a,b)=>String(a.name||a.id).localeCompare(String(b.name||b.id),'de',{sensitivity:'base'}));
     initModuleConfigSelect();
     c.innerHTML='';
+
+    // Tier classification for module cards
+    const TIER_0_1=['legacy','coordinator_module','performance_scaling','events_forwarder','entity_tags',
+      'brain_graph_sync','knowledge_graph_sync','habitus_miner','candidate_poller','mood','mood_context',
+      'zone_sync','history_backfill','entity_discovery'];
+    const TIER_2=['energy_context','weather_context','media_zones','camera_context','network',
+      'ml_context','voice_context','person_tracking'];
+
+    const systemC=$('module-list-system');
+    const contextC=$('module-list-context');
+    const extC=$('module-list-extensions');
+    if(systemC)systemC.innerHTML='';
+    if(contextC)contextC.innerHTML='';
+    if(extC)extC.innerHTML='';
+
     MODULE_DEFS_RUNTIME.forEach(m=>{
       // Detected state from APIs
       const detected=health[m.id]||'unknown';
@@ -3639,9 +3762,14 @@ async function loadModules(){
       const toggleCls=st==='active'?'on':st==='learning'?'learn':'off';
       const badgeCls=st==='active'?'g':st==='learning'?'y':st==='off'?'r':'b';
       const stTitles={active:'Aktiv: Auto-Apply (wenn beide Module aktiv)',learning:'Learning: Vorschlaege zur manuellen Uebernahme',off:'Deaktiviert'};
+      // Determine tier
+      let tierLabel='T3';
+      let tierColor='var(--yellow)';
+      if(TIER_0_1.includes(m.id)){tierLabel='T0/1';tierColor='var(--accent2)';}
+      else if(TIER_2.includes(m.id)){tierLabel='T2';tierColor='var(--cyan)';}
       const card=el('div','mod-card',
         `<div class="mod-icon" style="background:${m.color}20;color:${m.color}">${m.icon}</div>
-        <div class="mod-info"><h3>${escapeHtml(m.name)}</h3><p>${escapeHtml(m.desc)}</p>
+        <div class="mod-info"><h3>${escapeHtml(m.name)} <span style="font-size:9px;color:${tierColor};border:1px solid ${tierColor};border-radius:4px;padding:0 4px;margin-left:4px">${tierLabel}</span></h3><p>${escapeHtml(m.desc)}</p>
         <div style="margin-top:4px">${badge(detail,badgeCls)}</div></div>
         <div class="mod-status">
           <button class="mod-toggle ${toggleCls}" data-mod="${m.id}" title="${stTitles[st]||st}"></button>
@@ -3657,7 +3785,15 @@ async function loadModules(){
         loadSelectedModuleConfig(false,'module-config-body',m.id);
         openModuleConfigWindow(m.id);
       });
-      c.appendChild(card);
+      // Append to tier container
+      if(TIER_0_1.includes(m.id)){
+        if(systemC)systemC.appendChild(card);
+      }else if(TIER_2.includes(m.id)){
+        if(contextC)contextC.appendChild(card);
+      }else{
+        if(extC)extC.appendChild(card);
+      }
+      c.appendChild(card.cloneNode(true));
     });
     loadSelectedModuleConfig(false,'module-config-body',_selectedModuleConfig);
   }catch(e){
@@ -5386,7 +5522,7 @@ async function validateCloud(){
 // ==================================================
 // PAGE LOADER — Resilient wrapper
 // ==================================================
-const _loaders={styx:loadStyx,habitus:async()=>{await loadHabitus();loadEntitySuggestions('hab-entity-suggestions');loadScenes();},mood:loadMood,modules:async()=>{await loadModules();loadAutomations();loadMediaZones();loadNewsWarnings();loadWastePanel();loadBirthdayPanel()},system:async()=>{await loadSystemOverview(false);await loadSelfRepairPanel(false);},haushalt:loadHaushalt,settings:loadSettings};
+const _loaders={styx:async()=>{await loadStyx();loadOverviewHealth();loadMood();},chat:async()=>{},habitus:async()=>{await loadHabitus();loadEntitySuggestions('hab-entity-suggestions');loadScenes();},mood:loadMood,modules:async()=>{await loadModules();loadAutomations();loadMediaZones();},system:async()=>{await loadSystemOverview(false);await loadSelfRepairPanel(false);},haushalt:loadHaushalt,settings:loadSettings};
 function loadPage(p){
   const fn=_loaders[p];
   if(!fn)return;
