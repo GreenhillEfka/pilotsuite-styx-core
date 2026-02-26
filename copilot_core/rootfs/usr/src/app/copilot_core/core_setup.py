@@ -273,6 +273,13 @@ def init_services(hass=None, config: dict = None):
             def _post_ingest_with_bus(events):
                 """Post-ingest callback: process events and publish to EventBus."""
                 event_processor.process_events(events)
+                # Feed entity data into searchable entity cache (v9.0.0)
+                try:
+                    from copilot_core.api.v1.entity_search import update_entity_cache
+                    if events:
+                        update_entity_cache(events)
+                except Exception:
+                    pass  # Non-critical: search cache is best-effort
                 # Publish to EventBus for other modules
                 event_bus.publish("event.ingested", {
                     "count": len(events) if events else 0,
@@ -1216,6 +1223,14 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         _LOGGER.info("Registered EventBus API (/api/v1/events/bus/*)")
     except Exception:
         _LOGGER.exception("Failed to register EventBus API")
+
+    # Register Entity Search API (v9.0.0 — searchable entity dropdowns for React backend)
+    try:
+        from copilot_core.api.v1.entity_search import entity_search_bp
+        app.register_blueprint(entity_search_bp)
+        _LOGGER.info("Registered Entity Search API (/api/v1/entities/search, /domains, /by-area)")
+    except Exception:
+        _LOGGER.exception("Failed to register Entity Search API")
 
     # Register Config Management API (v7.28.0)
     try:

@@ -3,6 +3,17 @@
 This file exists so Home Assistant can show an add-on changelog.
 For full history, see the repository-level `CHANGELOG.md`.
 
+## 9.0.0
+- **Architektur-Overhaul**: Zentraler EventBus fuer Inter-Modul-Kommunikation (pub/sub, Wildcards, History).
+- **Habitus Zones API**: Bidirektionale HA-Core Zonensynchronisation mit JSON-Persistenz.
+- **Entity Search API**: Suchbare Entity-Dropdowns fuer React-Backend (`/api/v1/entities/search`).
+- **EventBus Monitoring**: REST-API fuer EventBus-History und Metriken.
+- **Neuron Pipeline**: 60s periodische Auswertung mit EventBus-Anbindung.
+- **Habitus Learning Loop**: Automatische Pattern-Erkennung nach Event-Batches.
+- **Brain Graph**: Zone-Updates fliessen in Graph-Knoten; Chat erhaelt Beziehungen + aktive Entities.
+- **Dashboard**: Neuer EventBus-Tab im History-Panel (farbkodiert nach Topic-Typ).
+- **Cleanup**: ~1700 tote Blueprint-Eintraege entfernt, saubere Modulstruktur.
+
 ## 8.11.0
 - Neue `/api/v1/system/*` Observability-APIs fuer Gesamtzustand, Sensor-Layer und Zonen-Summary.
 - Dashboard erweitert um dedizierte **System**-Seite (CPU/RAM/Disk, Dienste, Module, Neuronen, Sensoren).

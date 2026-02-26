@@ -1,5 +1,78 @@
 # Release Notes - PilotSuite Core
 
+## [9.0.0] - 2026-02-26 — ARCHITECTURE OVERHAUL + EVENTBUS + ENTITY SEARCH
+
+### Highlights
+
+v9.0.0 is a major architecture overhaul introducing the EventBus communication layer, bidirectional Habitus zone sync, searchable entity dropdowns, and a clean module structure.
+
+### EventBus Architecture
+- Central thread-safe pub/sub EventBus for inter-module communication.
+- Topics: `zone.*`, `mood.*`, `neuron.*`, `candidate.*`, `graph.*`, `event.*`.
+- Wildcard subscriptions (e.g. `zone.*`), bounded history (500 events), metrics tracking.
+- REST monitoring: `/api/v1/events/bus/history`, `/api/v1/events/bus/metrics`.
+
+### Habitus Zones API
+- Bidirectional HA-Core zone synchronization.
+- `POST /api/v1/habitus/zones/sync` — full/delta sync from HA integration.
+- `GET/PUT/DELETE /api/v1/habitus/zones/<id>` — CRUD per zone.
+- JSON file persistence at `/data/habitus_zones.json`.
+- EventBus integration: publishes `zone.synced`, `zone.updated`, `zone.deleted`.
+
+### Entity Search API
+- Searchable entity dropdown data for React backend.
+- `GET /api/v1/entities/search?q=&domain=&area=&limit=` — fuzzy entity search.
+- `GET /api/v1/entities/domains` — domain list with counts and MDI icons.
+- `GET /api/v1/entities/by-area` — entities grouped by HA area.
+- Cache populated from HA event ingestion pipeline.
+
+### Neural Pipeline Live
+- 60-second periodic neuron evaluation via daemon thread.
+- Publishes `neuron.evaluated` events with dominant mood + confidence.
+- Mood service updates all active zones from neuron results.
+
+### Habitus Learning Loop
+- `event.ingested` triggers pattern mining when batch >= 5 events.
+- New patterns published as `habitus.pattern` events.
+
+### Brain Graph Context
+- Chat conversations now include top 5 entity relationships and active nodes.
+- Neuron mood summary and Habitus zone overview injected into LLM context.
+- Zone changes create graph nodes; sync publishes `graph.updated`.
+
+### Dashboard
+- New EventBus tab in history panel (color-coded by topic type).
+- Mood events: purple, Zone events: green, Neuron events: cyan, Candidate events: yellow.
+
+### Cleanup
+- Removed ~1700 dead blueprint entries from `core_setup.py`.
+- Clean module structure with fault-isolated service init.
+
+### New Files
+| File | Purpose |
+|------|---------|
+| `copilot_core/event_bus.py` | Thread-safe pub/sub EventBus |
+| `api/v1/habitus_zones.py` | Habitus Zones CRUD + sync API |
+| `api/v1/event_bus_api.py` | EventBus monitoring REST API |
+| `api/v1/entity_search.py` | Searchable entity dropdowns |
+
+### Version
+- `copilot_core/config.yaml` → `9.0.0`
+- `copilot_core/manifest.json` → `9.0.0`
+- `VERSION` → `9.0.0`
+- Paired with HA Integration `v9.0.0`
+
+### Validation
+```bash
+cd pilotsuite-styx-core
+export PYTHONPATH=$PWD/copilot_core/rootfs/usr/src/app
+python3 -m pytest tests/ -v --tb=short -x
+python3 -m py_compile copilot_core/rootfs/usr/src/app/copilot_core/core_setup.py
+python3 -m py_compile copilot_core/rootfs/usr/src/app/copilot_core/event_bus.py
+python3 -m py_compile copilot_core/rootfs/usr/src/app/copilot_core/api/v1/entity_search.py
+python3 -m py_compile copilot_core/rootfs/usr/src/app/copilot_core/api/v1/habitus_zones.py
+```
+
 ## [8.11.0] - 2026-02-25 — SYSTEM OVERVIEW + SENSOR/NEURON LAYER UX
 
 ### Added

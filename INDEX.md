@@ -4,7 +4,7 @@ Quick orientation for the Core add-on repository (`pilotsuite-styx-core`).
 
 ## Current Baseline
 
-- Version: `8.9.0`
+- Version: `9.0.0`
 - Runtime: Flask + Waitress on port `8909`
 - LLM mode: local-first (`qwen3:0.6b`) with optional cloud fallback (`https://ollama.com/v1`, default cloud model `qwen3.5:cloud`)
 - Companion integration: `pilotsuite-styx-ha`
