@@ -365,6 +365,15 @@ def _load_servers() -> list[dict[str, Any]]:
     return servers
 
 
+def sync_homekit_from_habitus_zones() -> dict[str, Any]:
+    """Public helper for other modules to trigger HomeKit sync."""
+    store = _load_store()
+    synced = _sync_servers_with_zones(store)
+    _save_store(synced)
+    servers = _load_servers()
+    return {"ok": True, "summary": _summary(servers), "server_count": len(servers)}
+
+
 def _set_server_config(zone_id: str, patch: dict[str, Any]) -> dict[str, Any] | None:
     store = _load_store()
     synced = _sync_servers_with_zones(store)

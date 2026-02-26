@@ -487,6 +487,128 @@ def _build_habitus_recommendations(states: list[dict]) -> list[dict]:
     return zones_out
 
 
+def _sync_homekit_servers() -> dict:
+    """Best-effort HomeKit sync after zone changes."""
+    try:
+        from copilot_core.api.v1.homekit import sync_homekit_from_habitus_zones
+
+        result = sync_homekit_from_habitus_zones()
+        return result if isinstance(result, dict) else {"ok": True}
+    except Exception:
+        logger.debug("HomeKit sync skipped", exc_info=True)
+        return {"ok": False, "error": "homekit_sync_unavailable"}
+
+
+def _apply_habitus_recommendations(
+    recommendations: list[dict],
+    *,
+    overwrite: bool = True,
+    only_zone_ids: list[str] | None = None,
+) -> dict:
+    """Create/update zones from recommendation payload."""
+    if not _zone_engine:
+        return {"ok": False, "error": "zone_engine_not_initialized"}
+
+    selected = {str(z).strip() for z in (only_zone_ids or []) if str(z).strip()}
+
+    zones_created = 0
+    zones_updated = 0
+    zone_results = []
+
+    for zone in recommendations:
+        zone_id = str(zone.get("zone_id", "")).strip()
+        if selected and zone_id not in selected:
+            continue
+
+        room_id = str(zone.get("room_id", "")).strip()
+        name = str(zone.get("name", zone_id))
+        entities = [str(e) for e in zone.get("recommended_entities", []) if str(e)]
+        roles = zone.get("entity_roles", {}) if isinstance(zone.get("entity_roles"), dict) else {}
+        room_candidates = zone.get("room_candidates", []) if isinstance(zone.get("room_candidates"), list) else []
+
+        if not zone_id or not room_id:
+            continue
+
+        room_ids: list[str] = []
+        for candidate in room_candidates:
+            if not isinstance(candidate, dict):
+                continue
+            candidate_room_id = str(candidate.get("room_id", "")).strip()
+            candidate_name = str(candidate.get("name") or candidate_room_id or name).strip() or name
+            candidate_entities = [str(e) for e in candidate.get("entities", []) if str(e)]
+            if not candidate_room_id:
+                continue
+            _zone_engine.register_room(
+                room_id=candidate_room_id,
+                name=candidate_name,
+                entities=candidate_entities or entities,
+            )
+            if candidate_room_id not in room_ids:
+                room_ids.append(candidate_room_id)
+
+        if not room_ids:
+            _zone_engine.register_room(room_id=room_id, name=name, entities=entities)
+            room_ids = [room_id]
+
+        existing = _zone_engine.get_zone(zone_id)
+        if existing and overwrite:
+            _zone_engine.delete_zone(zone_id)
+            existing = None
+
+        if existing:
+            zones_updated += 1
+            created = False
+            for rid in room_ids:
+                _zone_engine.add_room_to_zone(zone_id, rid)
+        else:
+            _zone_engine.create_zone(zone_id=zone_id, name=name, room_ids=room_ids, icon="mdi:home-floor-1")
+            zones_created += 1
+            created = True
+
+        _zone_engine.set_zone_settings(
+            zone_id,
+            {
+                "entity_roles": roles,
+                "recommended_room_ids": room_ids,
+                "room_candidates": [
+                    {
+                        "room_id": str(candidate.get("room_id", "")),
+                        "name": str(candidate.get("name", "")),
+                        "entity_count": int(candidate.get("entity_count", 0)),
+                    }
+                    for candidate in room_candidates
+                    if isinstance(candidate, dict)
+                ],
+                "ux_defaults": {
+                    "standard_metrics": ["motion", "brightness", "noise", "humidity", "heating", "co2", "camera"],
+                    "show_suggestions": True,
+                },
+            },
+        )
+        zone_results.append(
+            {
+                "zone_id": zone_id,
+                "name": name,
+                "created": created,
+                "entity_count": len(entities),
+                "room_id": room_ids[0] if room_ids else room_id,
+                "room_ids": room_ids,
+                "room_count": len(room_ids),
+            }
+        )
+
+    homekit_sync = _sync_homekit_servers() if zone_results else {"ok": False, "error": "no_zone_changes"}
+
+    return {
+        "ok": True,
+        "created": zones_created,
+        "updated": zones_updated,
+        "zone_count": len(zone_results),
+        "zones": zone_results,
+        "homekit_sync": homekit_sync,
+    }
+
+
 def _get_module_registry():
     """Best-effort access to persistent module settings storage."""
     try:
@@ -1006,7 +1128,15 @@ def create_zone():
         icon=body.get("icon", "mdi:home-floor-1"),
         priority=body.get("priority", 0),
     )
-    return jsonify({"ok": True, "zone_id": zone.zone_id, "entity_count": len(zone.entities)})
+    homekit_sync = _sync_homekit_servers()
+    return jsonify(
+        {
+            "ok": True,
+            "zone_id": zone.zone_id,
+            "entity_count": len(zone.entities),
+            "homekit_sync": homekit_sync,
+        }
+    )
 
 
 @hub_bp.route("/zones/<zone_id>", methods=["DELETE"])
@@ -1016,7 +1146,8 @@ def delete_zone_endpoint(zone_id):
     if not _zone_engine:
         return jsonify({"error": "Zone engine not initialized"}), 503
     result = _zone_engine.delete_zone(zone_id)
-    return jsonify({"ok": result})
+    homekit_sync = _sync_homekit_servers() if result else {"ok": False, "error": "zone_not_deleted"}
+    return jsonify({"ok": result, "homekit_sync": homekit_sync})
 
 
 @hub_bp.route("/zones/<zone_id>/settings", methods=["GET"])
@@ -1073,7 +1204,8 @@ def add_room_to_zone_endpoint(zone_id):
         return jsonify({"error": "Zone engine not initialized"}), 503
     body = request.get_json(silent=True) or {}
     result = _zone_engine.add_room_to_zone(zone_id, body.get("room_id", ""))
-    return jsonify({"ok": result})
+    homekit_sync = _sync_homekit_servers() if result else {"ok": False, "error": "room_not_added"}
+    return jsonify({"ok": result, "homekit_sync": homekit_sync})
 
 
 @hub_bp.route("/zones/<zone_id>/room/<room_id>", methods=["DELETE"])
@@ -1083,7 +1215,8 @@ def remove_room_from_zone_endpoint(zone_id, room_id):
     if not _zone_engine:
         return jsonify({"error": "Zone engine not initialized"}), 503
     result = _zone_engine.remove_room_from_zone(zone_id, room_id)
-    return jsonify({"ok": result})
+    homekit_sync = _sync_homekit_servers() if result else {"ok": False, "error": "room_not_removed"}
+    return jsonify({"ok": result, "homekit_sync": homekit_sync})
 
 
 @hub_bp.route("/zones/rooms", methods=["GET"])
@@ -1183,98 +1316,39 @@ def bootstrap_habitus_zones():
     if not states:
         return jsonify({"ok": False, "error": "recommendations_unavailable"}), 503
     recommendations = _build_habitus_recommendations(states)
+    result = _apply_habitus_recommendations(recommendations, overwrite=overwrite)
+    return jsonify(result)
 
-    zones_created = 0
-    zones_updated = 0
-    zone_results = []
 
-    for zone in recommendations:
-        zone_id = str(zone.get("zone_id", "")).strip()
-        room_id = str(zone.get("room_id", "")).strip()
-        name = str(zone.get("name", zone_id))
-        entities = [str(e) for e in zone.get("recommended_entities", []) if str(e)]
-        roles = zone.get("entity_roles", {}) if isinstance(zone.get("entity_roles"), dict) else {}
-        room_candidates = zone.get("room_candidates", []) if isinstance(zone.get("room_candidates"), list) else []
+@hub_bp.route("/habitus/management/apply_zone", methods=["POST"])
+@require_token
+def apply_habitus_management_zone():
+    """Apply one or multiple recommended habitus zones directly."""
+    if not _zone_engine:
+        return jsonify({"ok": False, "error": "zone_engine_not_initialized"}), 503
 
-        if not zone_id or not room_id:
-            continue
+    body = request.get_json(silent=True) or {}
+    overwrite = bool(body.get("overwrite", True))
+    zone_id = str(body.get("zone_id", "")).strip()
+    zone_ids = [str(z).strip() for z in (body.get("zone_ids") or []) if str(z).strip()]
+    if zone_id and zone_id not in zone_ids:
+        zone_ids.append(zone_id)
+    if not zone_ids:
+        return jsonify({"ok": False, "error": "zone_id_required"}), 400
 
-        room_ids: list[str] = []
-        for candidate in room_candidates:
-            if not isinstance(candidate, dict):
-                continue
-            candidate_room_id = str(candidate.get("room_id", "")).strip()
-            candidate_name = str(candidate.get("name") or candidate_room_id or name).strip() or name
-            candidate_entities = [str(e) for e in candidate.get("entities", []) if str(e)]
-            if not candidate_room_id:
-                continue
-            _zone_engine.register_room(
-                room_id=candidate_room_id,
-                name=candidate_name,
-                entities=candidate_entities or entities,
-            )
-            if candidate_room_id not in room_ids:
-                room_ids.append(candidate_room_id)
-
-        if not room_ids:
-            _zone_engine.register_room(room_id=room_id, name=name, entities=entities)
-            room_ids = [room_id]
-
-        existing = _zone_engine.get_zone(zone_id)
-        if existing and overwrite:
-            _zone_engine.delete_zone(zone_id)
-            existing = None
-
-        if existing:
-            zones_updated += 1
-            created = False
-            for rid in room_ids:
-                _zone_engine.add_room_to_zone(zone_id, rid)
-        else:
-            _zone_engine.create_zone(zone_id=zone_id, name=name, room_ids=room_ids, icon="mdi:home-floor-1")
-            zones_created += 1
-            created = True
-
-        _zone_engine.set_zone_settings(
-            zone_id,
-            {
-                "entity_roles": roles,
-                "recommended_room_ids": room_ids,
-                "room_candidates": [
-                    {
-                        "room_id": str(candidate.get("room_id", "")),
-                        "name": str(candidate.get("name", "")),
-                        "entity_count": int(candidate.get("entity_count", 0)),
-                    }
-                    for candidate in room_candidates
-                    if isinstance(candidate, dict)
-                ],
-                "ux_defaults": {
-                    "standard_metrics": ["motion", "brightness", "noise", "humidity", "heating", "co2", "camera"],
-                    "show_suggestions": True,
-                },
-            },
-        )
-        zone_results.append(
-            {
-                "zone_id": zone_id,
-                "name": name,
-                "created": created,
-                "entity_count": len(entities),
-                "room_id": room_ids[0] if room_ids else room_id,
-                "room_ids": room_ids,
-                "room_count": len(room_ids),
-            }
-        )
-
-    return jsonify(
-        {
-            "ok": True,
-            "created": zones_created,
-            "updated": zones_updated,
-            "zones": zone_results,
-        }
+    states = _fetch_supervisor_states()
+    if not states:
+        return jsonify({"ok": False, "error": "recommendations_unavailable"}), 503
+    recommendations = _build_habitus_recommendations(states)
+    result = _apply_habitus_recommendations(
+        recommendations,
+        overwrite=overwrite,
+        only_zone_ids=zone_ids,
     )
+    if not result.get("zone_count"):
+        return jsonify({"ok": False, "error": "zone_recommendation_not_found", "zone_ids": zone_ids}), 404
+    result["selected_zone_ids"] = zone_ids
+    return jsonify(result)
 
 
 @hub_bp.route("/habitus/dependencies", methods=["GET"])

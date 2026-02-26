@@ -28,6 +28,7 @@ def test_register_blueprints_keeps_core_and_hub_routes_available():
     assert "/api/v1/hub/scenes/config" in routes
     assert "/api/v1/hub/habitus/management/recommendations" in routes
     assert "/api/v1/hub/habitus/management/bootstrap_zones" in routes
+    assert "/api/v1/hub/habitus/management/apply_zone" in routes
     assert "/api/v1/hub/habitus/dependencies" in routes
     assert "/api/v1/hub/habitus/automation/suggestions" in routes
     assert "/api/v1/hub/habitus/automation/apply" in routes

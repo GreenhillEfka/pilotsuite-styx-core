@@ -2238,8 +2238,9 @@ async function bootstrapHabitusZones(){
     }
     const created=Number(data?.created||0);
     const updated=Number(data?.updated||0);
+    const hk=data?.homekit_sync?.summary||{};
     if(statusEl)statusEl.textContent=`Fertig: ${created} erstellt, ${updated} aktualisiert`;
-    addHistory(`Habitus-Bootstrap: ${created} erstellt, ${updated} aktualisiert`);
+    addHistory(`Habitus-Bootstrap: ${created} erstellt, ${updated} aktualisiert · HomeKit ${hk.total_servers||0} Server`);
     await loadHabitus();
     await loadEntitySuggestions('hab-entity-suggestions');
   }catch(e){
@@ -2355,6 +2356,7 @@ function renderHabitusZoneRecommendations(recData){
       <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:6px">${metricBadges}</div>
       <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
         <button class="btn-sm" onclick="applyZoneRecommendation('${escapeHtml(zid)}')">&#x2795; Ins Formular übernehmen</button>
+        <button class="btn-sm" onclick="createZoneFromRecommendation('${escapeHtml(zid)}')">&#x2713; Direkt erstellen/aktualisieren</button>
       </div>
     </div>`;
   });
@@ -2417,6 +2419,28 @@ async function applyZoneRecommendation(zoneId){
   const cancel=$('zone-cancel-btn');
   if(cancel)cancel.style.display='none';
   addHistory('Empfehlung übernommen: '+escapeHtml(name)+' ('+escapeHtml(zid)+')');
+}
+
+async function createZoneFromRecommendation(zoneId){
+  const zid=String(zoneId||'').trim();
+  if(!zid)return;
+  try{
+    const r=await fetch(API+'/api/v1/hub/habitus/management/apply_zone',withAuth({
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({zone_id:zid,overwrite:true}),
+    }));
+    const data=await r.json().catch(()=>null);
+    if(!r.ok||data?.ok===false){
+      throw new Error(data?.error||('HTTP '+r.status));
+    }
+    const created=Number(data?.created||0),updated=Number(data?.updated||0);
+    const hk=data?.homekit_sync?.summary||{};
+    addHistory(`Zone aus Empfehlung angewendet: ${escapeHtml(zid)} · erstellt ${created}, aktualisiert ${updated} · HomeKit ${hk.total_servers||0} Server`);
+    await loadHabitus();
+  }catch(e){
+    addHistory('⚠️ Empfehlung konnte nicht angewendet werden: '+escapeHtml(e.message||'unbekannt'));
+  }
 }
 
 async function loadHabitus(){

@@ -107,7 +107,9 @@ def test_dashboard_template_exposes_habitus_zone_recommendation_panel() -> None:
     assert 'id="hab-zone-recommendations"' in text
     assert "renderHabitusZoneRecommendations(" in text
     assert "applyZoneRecommendation(" in text
+    assert "createZoneFromRecommendation(" in text
     assert "/api/v1/hub/habitus/management/recommendations" in text
+    assert "/api/v1/hub/habitus/management/apply_zone" in text
 
 
 def test_dashboard_template_has_resizable_module_config_windows() -> None:

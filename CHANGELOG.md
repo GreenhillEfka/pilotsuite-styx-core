@@ -1,5 +1,30 @@
 # Changelog - PilotSuite Core Add-on
 
+## [8.12.1] - 2026-02-26 — HOMEKIT AUTO-SYNC + DIRECT RECOMMENDATION APPLY
+
+### Added
+- New Habitus management endpoint:
+  - `POST /api/v1/hub/habitus/management/apply_zone`
+  - applies one or multiple recommended zones directly from current HA state snapshot.
+- Public HomeKit sync helper for cross-module use:
+  - `sync_homekit_from_habitus_zones()` in `api/v1/homekit.py`.
+- Dashboard recommendation cards now support:
+  - one-click direct create/update (`Direkt erstellen/aktualisieren`)
+  - existing form-prefill flow remains available.
+
+### Changed
+- HomeKit servers now auto-sync after zone lifecycle operations:
+  - create zone
+  - delete zone
+  - add/remove room in zone
+  - recommendation bootstrap/apply flows.
+- Bootstrap response now includes HomeKit sync status payload for transparent UX/logging.
+
+### Validation
+- `pytest -q tests/test_habitus_management_api_helpers.py tests/test_dashboard_template_habitus.py tests/test_bootstrap_routes.py` passed.
+- Additional regression checks passed:
+  `tests/test_self_repair_api.py tests/test_system_overview_api.py tests/test_dashboard_endpoints.py tests/test_homekit_api.py`.
+
 ## [8.12.0] - 2026-02-26 — HABITUS ROOM CANDIDATES + RECOMMENDATION UX
 
 ### Added
