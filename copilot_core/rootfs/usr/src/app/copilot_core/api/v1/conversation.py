@@ -405,28 +405,94 @@ def _get_user_context() -> str:
                 f"{hh.get('children', 0)} Kinder"
             )
 
-        # Brain graph quick stats
+        # Brain graph: enhanced context with relationships and active nodes
         bg_svc = services.get("brain_graph_service")
         if bg_svc:
-            stats = bg_svc.get_stats()
-            if stats.get("node_count", 0) > 0:
-                context_parts.append(
-                    f"Brain Graph: {stats['node_count']} Nodes, "
-                    f"{stats.get('edge_count', 0)} Edges"
-                )
+            try:
+                stats = bg_svc.get_stats()
+                bg_parts = []
+                if stats.get("node_count", 0) > 0:
+                    bg_parts.append(
+                        f"Brain Graph: {stats['node_count']} Nodes, "
+                        f"{stats.get('edge_count', 0)} Edges"
+                    )
+                # Active entity relationships (top scored edges)
+                try:
+                    export = bg_svc.export_state()
+                    edges = export.get("edges", [])
+                    if edges:
+                        top_edges = sorted(edges, key=lambda e: e.get("weight", 0), reverse=True)[:5]
+                        edge_lines = []
+                        for e in top_edges:
+                            edge_lines.append(
+                                f"  {e.get('source', '?')} --[{e.get('relation', '?')}]--> "
+                                f"{e.get('target', '?')} (w={e.get('weight', 0):.2f})"
+                            )
+                        bg_parts.append("Aktive Beziehungen:\n" + "\n".join(edge_lines))
+                    # High-score nodes (most active entities)
+                    nodes = export.get("nodes", [])
+                    if nodes:
+                        top_nodes = sorted(nodes, key=lambda n: n.get("score", 0), reverse=True)[:5]
+                        node_lines = [
+                            f"  {n.get('entity_id', n.get('id', '?'))}: {n.get('state', '?')} "
+                            f"(score={n.get('score', 0):.2f})"
+                            for n in top_nodes
+                        ]
+                        bg_parts.append("Aktive Entities:\n" + "\n".join(node_lines))
+                except Exception:
+                    pass
+                if bg_parts:
+                    context_parts.extend(bg_parts)
+            except Exception:
+                pass
+
+        # Neuron pipeline: inject current mood and neuron states into context
+        neuron_mgr = services.get("neuron_manager")
+        if neuron_mgr:
+            try:
+                mood_summary = neuron_mgr.get_mood_summary()
+                if mood_summary.get("mood") and mood_summary["mood"] != "unknown":
+                    mood_str = (
+                        f"Neuronale Stimmung: {mood_summary['mood']} "
+                        f"(Konfidenz: {mood_summary.get('confidence', 0):.0%})"
+                    )
+                    mood_values = mood_summary.get("mood_values", {})
+                    if mood_values:
+                        top_moods = sorted(mood_values.items(), key=lambda x: x[1], reverse=True)[:3]
+                        mood_str += " | " + ", ".join(f"{m}={v:.0%}" for m, v in top_moods)
+                    context_parts.append(mood_str)
+            except Exception:
+                pass
 
         # Habitus patterns (recent discoveries)
         habitus_svc = services.get("habitus_service")
         if habitus_svc:
-            recent = habitus_svc.list_recent_patterns(limit=3)
-            if recent:
-                pattern_lines = []
-                for p in recent:
-                    meta = p.get("metadata", {})
-                    ant = meta.get("antecedent", {}).get("full", "?")
-                    cons = meta.get("consequent", {}).get("full", "?")
-                    pattern_lines.append(f"{ant} -> {cons}")
-                context_parts.append("Erkannte Muster: " + "; ".join(pattern_lines))
+            try:
+                recent = habitus_svc.list_recent_patterns(limit=3)
+                if recent:
+                    pattern_lines = []
+                    for p in recent:
+                        meta = p.get("metadata", {})
+                        ant = meta.get("antecedent", {}).get("full", "?")
+                        cons = meta.get("consequent", {}).get("full", "?")
+                        pattern_lines.append(f"{ant} -> {cons}")
+                    context_parts.append("Erkannte Muster: " + "; ".join(pattern_lines))
+            except Exception:
+                pass
+
+        # Habitus zones: inject active zone summaries
+        try:
+            from copilot_core.api.v1.habitus_zones import get_all_zones
+            zones = get_all_zones()
+            if zones:
+                zone_summary = ", ".join(
+                    f"{z.get('name', z.get('zone_id', '?'))} "
+                    f"({len(z.get('entity_ids', []))} Entities)"
+                    for z in zones[:6]
+                )
+                context_parts.append(f"Habituszonen: {zone_summary}")
+        except Exception:
+            pass
 
         # Conversation memory: learned preferences
         conv_memory = services.get("conversation_memory")

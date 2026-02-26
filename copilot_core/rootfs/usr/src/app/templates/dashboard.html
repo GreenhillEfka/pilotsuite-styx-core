@@ -394,6 +394,7 @@ a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
       <div class="history-tabs" id="history-tabs">
         <button class="active" data-tab="live" onclick="setHistoryTab('live')">Live</button>
         <button data-tab="events" onclick="setHistoryTab('events')">Events</button>
+        <button data-tab="bus" onclick="setHistoryTab('bus')">EventBus</button>
         <button data-tab="logs" onclick="setHistoryTab('logs')">Logs</button>
         <button data-tab="chat" onclick="setHistoryTab('chat')">Chat</button>
       </div>
@@ -1283,6 +1284,27 @@ function renderHistory(){
       const tail=state?` \u2192 ${state}`:'';
       return `<div class="hist-item"><span class="ht">${t}</span><span class="kind event">EVENT</span><span>${entity} <span style="color:var(--dim)">(${kind})</span>${tail}</span></div>`;
     }).join('');
+    return;
+  }
+  if(historyTab==='bus'){
+    // EventBus history tab
+    api('/api/v1/events/bus/history?limit=40').then(data=>{
+      const events=data?.events||[];
+      if(!events.length){
+        c.innerHTML='<div class="hist-item"><span class="ht">--</span><span>Keine EventBus-Events</span></div>';
+        return;
+      }
+      c.innerHTML=events.map(e=>{
+        const t=_fmtTime(e.timestamp);
+        const topic=escapeHtml(e.topic||'?');
+        const src=escapeHtml(e.source||'');
+        const preview=escapeHtml(JSON.stringify(e.data||{}).slice(0,80));
+        const topicClass=topic.startsWith('mood')?'b-p':topic.startsWith('zone')?'b-g':topic.startsWith('neuron')?'b-c':topic.startsWith('candidate')?'b-y':'b-b';
+        return `<div class="hist-item"><span class="ht">${t}</span><span class="b ${topicClass}" style="font-size:9px">${topic}</span><span style="color:var(--dim);font-size:11px">${src?'['+src+'] ':''}${preview}</span></div>`;
+      }).join('');
+    }).catch(()=>{
+      c.innerHTML='<div class="hist-item"><span class="ht">--</span><span>EventBus nicht erreichbar</span></div>';
+    });
     return;
   }
   if(historyTab==='logs'){
