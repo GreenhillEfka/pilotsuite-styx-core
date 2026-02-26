@@ -444,6 +444,67 @@ def version():
     })
 
 
+@app.post("/api/v1/config/services")
+@require_token
+def config_services():
+    """Update Ollama/SearXNG runtime config from HA integration.
+
+    Body: {"ollama_url": "http://localhost:11435", "searxng_enabled": true,
+           "searxng_base_url": "http://192.168.30.18:4041"}
+    """
+    body = request.get_json(silent=True) or {}
+    updated = {}
+
+    ollama_url = str(body.get("ollama_url", "") or "").strip()
+    if ollama_url:
+        os.environ["OLLAMA_URL"] = ollama_url
+        updated["ollama_url"] = ollama_url
+
+    searxng_enabled = body.get("searxng_enabled")
+    if searxng_enabled is not None:
+        os.environ["SEARXNG_ENABLED"] = "true" if searxng_enabled else "false"
+        updated["searxng_enabled"] = bool(searxng_enabled)
+
+    searxng_url = str(body.get("searxng_base_url", "") or "").strip()
+    if searxng_url:
+        os.environ["SEARXNG_BASE_URL"] = searxng_url
+        updated["searxng_base_url"] = searxng_url
+
+    # Reload LLM provider to pick up new Ollama URL
+    services = app.config.get("COPILOT_SERVICES", {})
+    llm_provider = services.get("llm_provider")
+    if llm_provider and updated:
+        try:
+            llm_provider.reload_config()
+            updated["llm_reloaded"] = True
+        except Exception:
+            updated["llm_reloaded"] = False
+
+    # Persist to options.json for next restart
+    if updated:
+        try:
+            opts_path = "/data/options.json"
+            opts = {}
+            try:
+                with open(opts_path, "r", encoding="utf-8") as fh:
+                    opts = json.load(fh) or {}
+            except FileNotFoundError:
+                pass
+            if ollama_url:
+                opts["conversation_ollama_url"] = ollama_url
+            if searxng_enabled is not None:
+                opts["searxng_enabled"] = bool(searxng_enabled)
+            if searxng_url:
+                opts["searxng_base_url"] = searxng_url
+            with open(opts_path, "w", encoding="utf-8") as fh:
+                json.dump(opts, fh, ensure_ascii=False, indent=2)
+            updated["persisted"] = True
+        except Exception:
+            updated["persisted"] = False
+
+    return jsonify({"ok": True, "updated": updated, "time": _now_iso()})
+
+
 @app.get("/api/v1/status")
 @require_token
 def api_status():

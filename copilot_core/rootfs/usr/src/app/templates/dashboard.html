@@ -4648,11 +4648,13 @@ async function quickApplyRoutingModel(provider,model){
     addHistory('\u26a0\ufe0f Modellwahl fehlgeschlagen: '+(e.message||'unbekannt'));
   }
 }
-async function pullOfflineModel(model){
+async function pullOfflineModel(model,btn){
   const selected=String(model||'').trim();
   if(!selected)return;
+  if(btn){btn.disabled=true;btn.textContent='\u23f3 Starte...';}
   try{
-    const r=await fetch(API+'/api/v1/agent/models/pull',withAuth({
+    // Try streaming endpoint first, fallback to blocking
+    const r=await fetch(API+'/chat/models/pull',withAuth({
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({model:selected}),
@@ -4662,11 +4664,41 @@ async function pullOfflineModel(model){
     if(!r.ok||data?.ok===false){
       throw new Error(data?.error||data?.message||('HTTP '+r.status));
     }
-    const status=String(data?.pull?.status||'started');
-    addHistory(`Offline Modell ${selected}: ${status}`);
-    setTimeout(()=>{loadSettings().catch(()=>{});},1200);
+    const status=String(data?.status||data?.pull?.status||'started');
+    if(btn){btn.textContent='\u2713 '+status;btn.className='model-btn model-btn-active';}
+    addHistory('\u2705 Modell-Download: '+escapeHtml(selected)+' — '+escapeHtml(status));
+    setTimeout(()=>{loadSettings().catch(()=>{});},1500);
   }catch(e){
+    if(btn){btn.disabled=false;btn.textContent='\u2b07 Download';}
     addHistory('\u26a0\ufe0f Modell-Download fehlgeschlagen: '+(e.message||'unbekannt'));
+  }
+}
+async function pullManualModel(){
+  const input=document.getElementById('manual-model-input');
+  const statusEl=document.getElementById('manual-model-status');
+  if(!input)return;
+  const model=String(input.value||'').trim();
+  if(!model){if(statusEl)statusEl.innerHTML=badge('Modellname eingeben','y');return;}
+  if(statusEl)statusEl.innerHTML=badge('\u23f3 Download laeuft...','b');
+  try{
+    const r=await fetch(API+'/chat/models/pull',withAuth({
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({model:model}),
+    }));
+    let data={};
+    try{data=await r.json()}catch(_err){data={}}
+    if(!r.ok||data?.ok===false){
+      throw new Error(data?.error||data?.message||('HTTP '+r.status));
+    }
+    const status=String(data?.status||data?.pull?.status||'success');
+    if(statusEl)statusEl.innerHTML=badge('\u2713 '+status,'g');
+    addHistory('\u2705 Manueller Modell-Download: '+escapeHtml(model)+' — '+escapeHtml(status));
+    input.value='';
+    setTimeout(()=>{loadSettings().catch(()=>{});},1500);
+  }catch(e){
+    if(statusEl)statusEl.innerHTML=badge('\u26a0 '+String(e.message||'Fehler').slice(0,60),'r');
+    addHistory('\u26a0\ufe0f Manueller Modell-Download fehlgeschlagen: '+(e.message||'unbekannt'));
   }
 }
 async function applyModulePreset(presetId){
@@ -4806,7 +4838,7 @@ async function pullModelWithProgress(model,btn){
     item.appendChild(progressDiv);
   }
   try{
-    const r=await fetch(API+'/api/v1/agent/models/pull',withAuth({
+    const r=await fetch(API+'/chat/models/pull',withAuth({
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({model:selected}),
@@ -4816,9 +4848,9 @@ async function pullModelWithProgress(model,btn){
     if(!r.ok||data?.ok===false){
       throw new Error(data?.error||data?.message||('HTTP '+r.status));
     }
-    const status=String(data?.pull?.status||'started');
+    const status=String(data?.status||data?.pull?.status||'started');
     btn.innerHTML='&#x2b07; '+escapeHtml(status);
-    addHistory('Modell-Download gestartet: '+escapeHtml(selected));
+    addHistory('\u2705 Modell-Download gestartet: '+escapeHtml(selected));
     // Simulate progress indicator; re-check status periodically
     let progress=10;
     const progressFill=progressDiv?progressDiv.querySelector('.model-progress-fill'):null;
@@ -4987,21 +5019,39 @@ async function loadSettings(){
   if(rec&&rec.models){
     rc.innerHTML='';
     rec.models.forEach(m=>{
+      const mid=String(m.id||m.name||'');
+      const ev=encodeURIComponent(mid);
       const mbadges=[m.installed?badge('Installiert','g'):badge((m.size_mb||'?')+'MB','y')];
       if(m.active)mbadges.push(badge('Aktiv','p'));
       if(m.supports_tools)mbadges.push(badge('Tools','b'));
       mbadges.push(badge('Offline','b'));
+      const dlBtn=m.installed
+        ?`<button class="model-btn" onclick="quickApplyRoutingModel('offline',decodeURIComponent('${ev}'))" style="margin-left:6px;background:var(--surface);border:1px solid var(--border);color:var(--dim);border-radius:6px;padding:3px 7px;font-size:10px;cursor:pointer">Auswaehlen</button>`
+        :`<button class="model-btn model-btn-download" onclick="pullOfflineModel(decodeURIComponent('${ev}'),this)" style="margin-left:6px;font-size:10px;padding:3px 7px;border-radius:6px;cursor:pointer">&#x2b07; Download</button>`;
       rc.appendChild(el('div','pat',
         `<div><strong>${escapeHtml(m.name||'')}</strong><br><span style="font-size:10px;color:var(--dim)">${escapeHtml(m.description||'')}</span></div>
-        <div class="meta">${mbadges.join(' ')}</div>`));
+        <div class="meta">${mbadges.join(' ')}${dlBtn}</div>`));
     });
     (rec.cloud_models||[]).forEach(m=>{
+      const mid=String(m.id||m.name||'');
+      const ev=encodeURIComponent(mid);
       const mbadges=[badge('Cloud','p')];
       if(m.active)mbadges.push(badge('Aktiv','g'));
+      const selectBtn=`<button class="model-btn" onclick="quickApplyRoutingModel('cloud',decodeURIComponent('${ev}'))" style="margin-left:6px;background:var(--surface);border:1px solid var(--border);color:var(--dim);border-radius:6px;padding:3px 7px;font-size:10px;cursor:pointer">Auswaehlen</button>`;
       rc.appendChild(el('div','pat',
         `<div><strong>${escapeHtml(m.name||m.id||'')}</strong><br><span style="font-size:10px;color:var(--dim)">${escapeHtml(m.description||'Cloud fallback Modell')}</span></div>
-        <div class="meta">${mbadges.join(' ')}</div>`));
+        <div class="meta">${mbadges.join(' ')}${selectBtn}</div>`));
     });
+    // Manual model entry
+    const manualDiv=document.createElement('div');
+    manualDiv.style.cssText='margin-top:12px;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--surface)';
+    manualDiv.innerHTML=`<div style="font-size:11px;color:var(--dim);margin-bottom:6px"><strong>Manuelles Modell</strong> — beliebigen Ollama-Modellnamen eingeben</div>
+      <div style="display:flex;gap:6px;align-items:center">
+        <input id="manual-model-input" type="text" placeholder="z.B. phi3:mini, gemma2:2b, ..." style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--fg);font-size:12px;font-family:inherit" onkeydown="if(event.key==='Enter')pullManualModel()">
+        <button onclick="pullManualModel()" style="background:var(--accent);border:none;color:#fff;border-radius:6px;padding:6px 12px;font-size:11px;cursor:pointer;white-space:nowrap">&#x2b07; Download</button>
+      </div>
+      <div id="manual-model-status" style="margin-top:4px;font-size:10px"></div>`;
+    rc.appendChild(manualDiv);
   }else{rc.innerHTML='<div class="empty">Keine Empfehlungen verfuegbar</div>'}
 }
 
