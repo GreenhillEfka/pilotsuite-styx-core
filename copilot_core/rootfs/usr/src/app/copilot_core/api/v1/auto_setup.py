@@ -5,9 +5,13 @@ Provides endpoints for:
 - Auto-tagging entities by device class
 - Setup status and summary
 """
-from flask import Blueprint, request, jsonify
+from datetime import datetime, timezone
+
 import logging
-from datetime import datetime
+
+from flask import Blueprint, request, jsonify
+
+from ..security import validate_token
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -34,6 +38,10 @@ def suggest_zones():
 
     Returns zone suggestions with entity role assignments.
     """
+    auth_error = validate_token(request)
+    if auth_error:
+        return auth_error
+
     data = request.get_json(silent=True) or {}
     areas = data.get("areas", [])
     entities = data.get("entities", [])
@@ -154,6 +162,10 @@ def auto_tag_entities():
 
     Returns tagging results.
     """
+    auth_error = validate_token(request)
+    if auth_error:
+        return auth_error
+
     data = request.get_json(silent=True) or {}
     entities = data.get("entities", [])
 
@@ -225,7 +237,7 @@ def auto_tag_entities():
 
     # Record setup history
     _setup_history.append({
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "action": "auto_tag",
         "tags_created": len(tags_created),
         "assignments": len(assignments),
@@ -242,6 +254,10 @@ def auto_tag_entities():
 @auto_setup_bp.route("/api/v1/auto-setup/status", methods=["GET"])
 def auto_setup_status():
     """Return auto-setup history and status."""
+    auth_error = validate_token(request)
+    if auth_error:
+        return auth_error
+
     return jsonify({
         "history": _setup_history[-10:],  # Last 10 entries
         "total_runs": len(_setup_history),

@@ -103,9 +103,9 @@ class NeuronManager:
         # Evaluation context
         self._context: Dict[str, Any] = {}
         
-        # Callbacks
-        self._on_mood_change: Optional[Callable[[str, float], None]] = None
-        self._on_suggestion: Optional[Callable[[Dict], None]] = None
+        # Callbacks (multi-listener pattern)
+        self._on_mood_change_callbacks: List[Callable[[str, float], None]] = []
+        self._on_suggestion_callbacks: List[Callable[[Dict], None]] = []
         
         # Last result
         self._last_result: Optional[NeuralPipelineResult] = None
@@ -478,10 +478,13 @@ class NeuronManager:
         if self._last_result and self._last_result.dominant_mood != dominant_mood:
             self._on_mood_changed(dominant_mood, confidence)
         
-        # Vorschlags-Callbacks ausfuehren
+        # Vorschlags-Callbacks ausfuehren (alle registrierten Listener)
         for suggestion in suggestions:
-            if self._on_suggestion:
-                self._on_suggestion(suggestion)
+            for cb in self._on_suggestion_callbacks:
+                try:
+                    cb(suggestion)
+                except Exception as e:
+                    _LOGGER.error("Suggestion callback error: %s", e)
         
         self._last_result = result
         self._mood_history.append(mood_values)
@@ -760,19 +763,21 @@ class NeuronManager:
     # -------------------------------------------------------------------------
     
     def on_mood_change(self, callback: Callable[[str, float], None]) -> None:
-        """Register callback for mood changes."""
-        self._on_mood_change = callback
-    
+        """Register callback for mood changes (supports multiple listeners)."""
+        if callback not in self._on_mood_change_callbacks:
+            self._on_mood_change_callbacks.append(callback)
+
     def on_suggestion(self, callback: Callable[[Dict], None]) -> None:
-        """Register callback for suggestions."""
-        self._on_suggestion = callback
-    
+        """Register callback for suggestions (supports multiple listeners)."""
+        if callback not in self._on_suggestion_callbacks:
+            self._on_suggestion_callbacks.append(callback)
+
     def _on_mood_changed(self, new_mood: str, confidence: float) -> None:
-        """Handle mood change."""
+        """Handle mood change — notify all registered listeners."""
         _LOGGER.info("Mood changed to: %s (%.2f)", new_mood, confidence)
-        if self._on_mood_change:
+        for cb in self._on_mood_change_callbacks:
             try:
-                self._on_mood_change(new_mood, confidence)
+                cb(new_mood, confidence)
             except Exception as e:
                 _LOGGER.error("Mood change callback error: %s", e)
     
