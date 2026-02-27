@@ -321,17 +321,16 @@ a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
 <button class="btn-reload" onclick="reloadDashboardFrontend()" title="Frontend hart neu laden">&#x21bb; UI Reload</button>
 </div>
 
-<!-- Navigation -->
+<!-- Navigation — consolidated tabs with icons -->
 <div class="nav" id="nav">
 <button class="active" data-page="styx">&#x1f3e0; Übersicht</button>
-<button data-page="chat">&#x1f4ac; Chat</button>
-<button data-page="habitus">Habitus</button>
-<button data-page="modules">Module</button>
-<button data-page="zones">Zonen</button>
-<button data-page="weather">Wetter</button>
-<button data-page="settings">Einstellungen</button>
-<button data-page="haushalt">Haushalt</button>
-<button data-page="system">System</button>
+<button data-page="chat">&#x1f9e0; Styx</button>
+<button data-page="habitus">&#x1f4cd; Habitus</button>
+<button data-page="zones">&#x1f3d7; Zonen</button>
+<button data-page="haushalt">&#x1f46a; Haushalt</button>
+<button data-page="modules">&#x1f9e9; Module</button>
+<button data-page="settings">&#x2699;&#xfe0f; Einstellungen</button>
+<button data-page="system">&#x1f6e0; System</button>
 </div>
 
 <!-- ========== OVERVIEW PAGE (Styx) ========== -->
@@ -673,6 +672,24 @@ a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
   <div id="self-repair-errors"><div class="loading"><div class="spinner"></div>Lade Fehler...</div></div>
   <div id="self-repair-jobs" style="margin-top:10px"><div class="empty">Keine Jobs</div></div>
 </div>
+<div class="grid g2" style="margin-bottom:14px">
+  <!-- GitHub Connect -->
+  <div class="card">
+    <h2><span class="ic">&#x1f517;</span> GitHub Connect</h2>
+    <p style="font-size:11px;color:var(--dim);margin-bottom:10px">Repository-Status und Download der verwendeten Version als Basis fuer Self-Repair.</p>
+    <div id="github-connect-status"><div class="loading"><div class="spinner"></div>Lade...</div></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+      <button class="btn-sm" onclick="checkGitHubStatus()">&#x1f504; Status pruefen</button>
+      <button class="btn-sm" onclick="downloadRepoVersion()">&#x1f4e5; Repo herunterladen</button>
+    </div>
+  </div>
+  <!-- Netzwerk-Info -->
+  <div class="card">
+    <h2><span class="ic">&#x1f4f6;</span> Netzwerk</h2>
+    <p style="font-size:11px;color:var(--dim);margin-bottom:10px">Netzwerkqualitaet, Verbindungsstatus und WLAN-Info (UniFi falls vorhanden).</p>
+    <div id="system-network-info"><div class="loading"><div class="spinner"></div>Lade Netzwerk...</div></div>
+  </div>
+</div>
 <div class="grid g2">
   <div class="card">
     <h2><span class="ic">&#x1f4bb;</span> Host Ressourcen</h2>
@@ -719,6 +736,12 @@ a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
 
 <!-- ========== HAUSHALT PAGE ========== -->
 <div class="page" id="page-haushalt">
+<!-- Haushaltsmitglieder: Wer ist zuhause? -->
+<div class="card" style="margin-bottom:14px">
+  <h2><span class="ic">&#x1f465;</span> Haushaltsmitglieder</h2>
+  <p style="font-size:11px;color:var(--dim);margin-bottom:10px">Personen, Anwesenheit, Geofencing und Location aus Home Assistant.</p>
+  <div id="haushalt-presence"><div class="loading"><div class="spinner"></div>Lade Anwesenheit...</div></div>
+</div>
 <div class="grid g2" style="margin-bottom:14px">
   <!-- Müllabfuhr Card -->
   <div class="card">
@@ -740,46 +763,16 @@ a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
   </div>
 </div>
 <div class="grid g2" style="margin-bottom:14px">
-  <div class="card">
-    <h2><span class="ic">&#x1f4df;</span> Hauszustand</h2>
-    <div id="haushalt-house-status"><div class="loading"><div class="spinner"></div>Lade Hauszustand...</div></div>
-  </div>
-  <div class="card">
-    <h2><span class="ic">&#x26c5;</span> Regionales Wetter</h2>
-    <div id="haushalt-weather"><div class="loading"><div class="spinner"></div>Lade Wetter...</div></div>
-  </div>
-</div>
-<div class="card" style="margin-bottom:14px">
-  <h2><span class="ic">&#x1f4f0;</span> Nachrichten &amp; Warnungen</h2>
-  <div id="haushalt-news"><div class="loading"><div class="spinner"></div>Lade Nachrichten...</div></div>
-</div>
-<!-- Entity Suggestions Card -->
-<div class="card" style="margin-bottom:14px">
-  <h2><span class="ic">&#x1f4a1;</span> Entitäts-Zuordnungsvorschläge</h2>
-  <p style="font-size:11px;color:var(--dim);margin-bottom:10px">Erkannte Entitätsgruppen nach Raumname — Vorschläge für Habitus-Zonen. Entitäten ohne Zone werden hier angezeigt.</p>
-  <div id="haushalt-suggestions"><div class="loading"><div class="spinner"></div>Analysiere Entitäten...</div></div>
-</div>
-<!-- Presence Card: Wer ist zuhause? -->
-<div class="grid g2" style="margin-bottom:14px">
-  <div class="card">
-    <h2><span class="ic">&#x1f465;</span> Wer ist zuhause?</h2>
-    <div id="haushalt-presence"><div class="loading"><div class="spinner"></div>Lade Anwesenheit...</div></div>
-  </div>
-  <div class="card">
-    <h2><span class="ic">&#x1f4f9;</span> Kamera-Ereignisse</h2>
-    <div id="haushalt-camera-events"><div class="empty">Keine Kamera-Ereignisse</div></div>
-  </div>
-</div>
-<!-- Calendar + Shopping + Reminders (v3.5.0) -->
-<div class="grid g2" style="margin-bottom:14px">
+  <!-- Kalender -->
   <div class="card">
     <h2><span class="ic">&#x1f4c5;</span> Kalender</h2>
     <p style="font-size:11px;color:var(--dim);margin-bottom:10px">Termine aus allen HA-Kalendern</p>
     <div id="haushalt-calendar"><div class="loading"><div class="spinner"></div>Lade Kalender...</div></div>
   </div>
+  <!-- Einkaufsliste -->
   <div class="card">
     <h2><span class="ic">&#x1f6d2;</span> Einkaufsliste</h2>
-    <p style="font-size:11px;color:var(--dim);margin-bottom:10px">Artikel verwalten — oder sage Styx: "Milch auf die Liste"</p>
+    <p style="font-size:11px;color:var(--dim);margin-bottom:10px">Artikel verwalten — oder sage Styx: &quot;Milch auf die Liste&quot;</p>
     <div id="haushalt-shopping"><div class="loading"><div class="spinner"></div>Lade...</div></div>
     <div style="margin-top:10px;display:flex;gap:6px">
       <input type="text" id="shop-input" placeholder="Artikel hinzufuegen..." style="flex:1;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--fg);font-size:13px">
@@ -787,13 +780,38 @@ a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
     </div>
   </div>
 </div>
+<div class="grid g2" style="margin-bottom:14px">
+  <!-- Hauszustand -->
+  <div class="card">
+    <h2><span class="ic">&#x1f4df;</span> Hauszustand</h2>
+    <div id="haushalt-house-status"><div class="loading"><div class="spinner"></div>Lade Hauszustand...</div></div>
+  </div>
+  <!-- Wetter (integriert, kein separater Tab mehr) -->
+  <div class="card">
+    <h2><span class="ic">&#x26c5;</span> Wetter &amp; Warnungen</h2>
+    <div id="haushalt-weather"><div class="loading"><div class="spinner"></div>Lade Wetter...</div></div>
+    <div id="weather-warnings-inline" style="margin-top:8px"></div>
+  </div>
+</div>
 <div class="card" style="margin-bottom:14px">
-  <h2><span class="ic">&#x23f0;</span> Erinnerungen</h2>
-  <p style="font-size:11px;color:var(--dim);margin-bottom:10px">Aktive Erinnerungen — oder sage Styx: "Erinnere mich an..."</p>
-  <div id="haushalt-reminders"><div class="loading"><div class="spinner"></div>Lade...</div></div>
-  <div style="margin-top:10px;display:flex;gap:6px">
-    <input type="text" id="rem-input" placeholder="Neue Erinnerung..." style="flex:1;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--fg);font-size:13px">
-    <button class="btn-sm" onclick="addReminderFromInput()">+</button>
+  <h2><span class="ic">&#x1f4f0;</span> Nachrichten &amp; Warnungen</h2>
+  <div id="haushalt-news"><div class="loading"><div class="spinner"></div>Lade Nachrichten...</div></div>
+</div>
+<div class="grid g2" style="margin-bottom:14px">
+  <!-- Erinnerungen -->
+  <div class="card">
+    <h2><span class="ic">&#x23f0;</span> Erinnerungen</h2>
+    <p style="font-size:11px;color:var(--dim);margin-bottom:10px">Aktive Erinnerungen — oder sage Styx: &quot;Erinnere mich an...&quot;</p>
+    <div id="haushalt-reminders"><div class="loading"><div class="spinner"></div>Lade...</div></div>
+    <div style="margin-top:10px;display:flex;gap:6px">
+      <input type="text" id="rem-input" placeholder="Neue Erinnerung..." style="flex:1;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--fg);font-size:13px">
+      <button class="btn-sm" onclick="addReminderFromInput()">+</button>
+    </div>
+  </div>
+  <!-- Kamera-Ereignisse -->
+  <div class="card">
+    <h2><span class="ic">&#x1f4f9;</span> Kamera-Ereignisse</h2>
+    <div id="haushalt-camera-events"><div class="empty">Keine Kamera-Ereignisse</div></div>
   </div>
 </div>
 </div>
@@ -833,44 +851,41 @@ a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
 </div>
 </div>
 
-<!-- ========== WEATHER PAGE ========== -->
-<div class="page" id="page-weather">
-<div class="grid g2" style="margin-bottom:14px">
-  <div class="card">
-    <h2><span class="ic">&#x26c5;</span> Aktuelles Wetter</h2>
-    <div id="weather-current"><div class="loading"><div class="spinner"></div>Lade Wetter...</div></div>
-  </div>
-  <div class="card">
-    <h2><span class="ic">&#x1f321;</span> Standort</h2>
-    <div id="weather-location"><div class="loading"><div class="spinner"></div>Lade...</div></div>
-  </div>
-</div>
-<div class="card" style="margin-bottom:14px">
-  <h2><span class="ic">&#x1f4c5;</span> Vorhersage</h2>
-  <div id="weather-forecast"><div class="loading"><div class="spinner"></div>Lade Vorhersage...</div></div>
-</div>
-<div class="grid g2">
-  <div class="card">
-    <h2><span class="ic">&#x2600;</span> Solar/PV Empfehlungen</h2>
-    <div id="weather-pv"><div class="loading"><div class="spinner"></div>Lade...</div></div>
-  </div>
-  <div class="card">
-    <h2><span class="ic">&#x26a0;</span> Wetterwarnungen</h2>
-    <div id="weather-warnings"><div class="loading"><div class="spinner"></div>Lade...</div></div>
-  </div>
-</div>
-</div>
-
 <!-- ========== SETTINGS PAGE ========== -->
 <div class="page" id="page-settings">
-<div class="grid g2">
-  <div class="card">
-    <h2><span class="ic">&#x1f9e0;</span> LLM &amp; KI</h2>
-    <table class="tbl" id="set-llm"></table>
+<!-- Version Info & Update -->
+<div class="card" style="margin-bottom:14px;border-left:3px solid var(--accent)">
+  <h2><span class="ic">&#x1f4e6;</span> Versionshinweise &amp; Updates</h2>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+    <div>
+      <div style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px">HA Integration</div>
+      <div style="font-size:18px;font-weight:700;color:var(--accent2)" id="version-ha">--</div>
+    </div>
+    <div>
+      <div style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px">Core Add-on</div>
+      <div style="font-size:18px;font-weight:700;color:var(--cyan)" id="version-core">--</div>
+    </div>
   </div>
-  <div class="card">
-    <h2><span class="ic">&#9881;</span> LLM Routing</h2>
-    <div id="set-routing"><div class="loading"><div class="spinner"></div>Lade...</div></div>
+  <div id="version-update-hint" style="font-size:11px;color:var(--dim);margin-bottom:8px">Versionen werden geprueft...</div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <button class="btn-sm" onclick="checkForUpdates()" title="Auf neue Versionen pruefen">&#x1f504; Auf Updates pruefen</button>
+    <button class="btn-sm" id="btn-update-core" onclick="triggerCoreUpdate()" style="display:none;background:var(--accent);color:#fff;border-color:var(--accent)">&#x2b06; Core aktualisieren</button>
+    <button class="btn-sm" onclick="openGitHubRepo()" title="GitHub Repo oeffnen">&#x1f517; GitHub</button>
+  </div>
+</div>
+<div class="grid g2">
+  <!-- Ollama Configuration (consolidated) -->
+  <div class="card" style="grid-column:1/-1">
+    <h2><span class="ic">&#x1f9e0;</span> Ollama &amp; KI-Konfiguration</h2>
+    <p style="font-size:11px;color:var(--dim);margin-bottom:10px">Zentrale Konfiguration fuer lokale und Cloud-KI. Modelle, Routing und Verbindung.</p>
+    <div class="grid g2">
+      <div>
+        <table class="tbl" id="set-llm"></table>
+      </div>
+      <div>
+        <div id="set-routing"><div class="loading"><div class="spinner"></div>Lade...</div></div>
+      </div>
+    </div>
   </div>
   <div class="card">
     <h2><span class="ic">&#x2699;</span> Modul Presets</h2>
@@ -6005,8 +6020,153 @@ function loadPage(p){
   });
 }
 
+// ═══ VERSION CHECK & UPDATE ═══
+async function checkForUpdates(){
+  const haEl=$('version-ha');
+  const coreEl=$('version-core');
+  const hint=$('version-update-hint');
+  const btnUpd=$('btn-update-core');
+  hint.textContent='Pruefe Versionen...';
+  try{
+    const status=await api('/api/v1/status');
+    const ver=status?.version||'--';
+    coreEl.textContent=ver;
+    // HA version from webhook data or status
+    const haVer=status?.ha_integration_version||ver;
+    haEl.textContent=haVer;
+    // Check GitHub for latest release
+    const gh=await api('/api/v1/system/check-update');
+    if(gh&&gh.latest_version){
+      const latest=gh.latest_version;
+      if(latest!==ver){
+        hint.innerHTML=`<span class="b b-y">Update verfuegbar: ${escapeHtml(latest)}</span> <span style="color:var(--dim)">(aktuell: ${escapeHtml(ver)})</span>`;
+        btnUpd.style.display='inline-block';
+        btnUpd.textContent='\u2b06 Auf '+escapeHtml(latest)+' aktualisieren';
+      }else{
+        hint.innerHTML=`<span class="b b-g">Aktuell</span> Version ${escapeHtml(ver)} ist die neueste.`;
+        btnUpd.style.display='none';
+      }
+    }else{
+      hint.textContent=`Core: ${ver} | Update-Check nicht verfuegbar`;
+    }
+  }catch(e){
+    hint.textContent='Fehler beim Versionscheck: '+e;
+  }
+}
+async function triggerCoreUpdate(){
+  if(!confirm('Core Add-on aktualisieren? Das Add-on wird neu gestartet.'))return;
+  const hint=$('version-update-hint');
+  hint.textContent='Update wird ausgefuehrt...';
+  const r=await api('/api/v1/system/update','POST');
+  if(r&&r.ok){
+    hint.innerHTML='<span class="b b-g">Update gestartet</span> — Add-on wird neu gestartet...';
+  }else{
+    hint.innerHTML='<span class="b b-r">Fehler</span> Update konnte nicht gestartet werden.';
+  }
+}
+function openGitHubRepo(){
+  window.open('https://github.com/GreenhillEfka/pilotsuite-styx-core','_blank');
+}
+
+// ═══ GITHUB CONNECT ═══
+async function checkGitHubStatus(){
+  const el=$('github-connect-status');
+  el.innerHTML='<div class="loading"><div class="spinner"></div>Pruefe...</div>';
+  const d=await api('/api/v1/system/github-status');
+  if(!d){el.innerHTML='<div class="empty">GitHub-Status nicht verfuegbar</div>';return;}
+  let html='<table class="tbl"><tbody>';
+  html+=`<tr><td>Repository</td><td>${escapeHtml(d.repo||'--')}</td></tr>`;
+  html+=`<tr><td>Aktuelle Version</td><td>${escapeHtml(d.current_version||'--')}</td></tr>`;
+  html+=`<tr><td>Letzte Version (GitHub)</td><td>${escapeHtml(d.latest_version||'--')}</td></tr>`;
+  html+=`<tr><td>Status</td><td>${d.up_to_date?badge('Aktuell','g'):badge('Update verfuegbar','y')}</td></tr>`;
+  html+='</tbody></table>';
+  el.innerHTML=html;
+}
+async function downloadRepoVersion(){
+  const hint=$('github-connect-status');
+  hint.innerHTML+='<p style="font-size:11px;color:var(--dim);margin-top:6px">Download wird vorbereitet...</p>';
+  const d=await api('/api/v1/system/download-version','POST');
+  if(d&&d.ok){
+    hint.innerHTML+='<p style="font-size:11px;color:var(--green);margin-top:4px">Download abgeschlossen: '+escapeHtml(d.path||'/data/repo')+'</p>';
+  }else{
+    hint.innerHTML+='<p style="font-size:11px;color:var(--red);margin-top:4px">Download fehlgeschlagen</p>';
+  }
+}
+
+// ═══ NETWORK MODULE ═══
+async function loadNetworkInfo(){
+  const el=$('system-network-info');
+  if(!el)return;
+  const d=await apiTry(['/api/v1/hub/network/status','/api/v1/network/status']);
+  if(!d){
+    el.innerHTML='<table class="tbl"><tbody>'+
+      '<tr><td>Status</td><td>'+badge('Kein Netzwerkmodul aktiv','y')+'</td></tr>'+
+      '<tr><td>Hinweis</td><td style="font-size:11px;color:var(--dim)">Standardmaessig wird UniFi benoetigt. Netzwerkstatus ist ohne Controller nicht verfuegbar.</td></tr>'+
+      '</tbody></table>';
+    return;
+  }
+  const net=d.data;
+  let html='<table class="tbl"><tbody>';
+  html+=`<tr><td>WLAN-Status</td><td>${net.wifi_connected?badge('Verbunden','g'):badge('Nicht verbunden','r')}</td></tr>`;
+  if(net.ssid)html+=`<tr><td>SSID</td><td>${escapeHtml(net.ssid)}</td></tr>`;
+  if(net.signal_strength!==undefined)html+=`<tr><td>Signal</td><td>${net.signal_strength} dBm</td></tr>`;
+  if(net.download_speed!==undefined)html+=`<tr><td>Download</td><td>${net.download_speed} Mbit/s</td></tr>`;
+  if(net.upload_speed!==undefined)html+=`<tr><td>Upload</td><td>${net.upload_speed} Mbit/s</td></tr>`;
+  if(net.clients!==undefined)html+=`<tr><td>Clients</td><td>${net.clients}</td></tr>`;
+  if(net.gateway)html+=`<tr><td>Gateway</td><td>${escapeHtml(net.gateway)}</td></tr>`;
+  html+='</tbody></table>';
+  el.innerHTML=html;
+}
+
+// ═══ AUTOMATION SUGGESTIONS (communication pipeline) ═══
+async function loadAutomationSuggestions(){
+  const el=$('zone-mgmt-auto-suggestions');
+  if(!el)return;
+  const d=await apiTry(['/api/v1/hub/automations/suggestions','/api/v1/automations/suggestions']);
+  if(!d){
+    el.innerHTML='<div class="empty">Keine Automatisierungsvorschlaege verfuegbar. Habitus Miner muss erst Muster erkennen.</div>';
+    return;
+  }
+  const suggestions=d.data.suggestions||d.data||[];
+  if(!suggestions.length){
+    el.innerHTML='<div class="empty">Noch keine Vorschlaege. Der Habitus Miner analysiert Muster — Vorschlaege erscheinen nach genuegend Daten.</div>';
+    return;
+  }
+  let html='';
+  for(const s of suggestions){
+    const conf=typeof s.confidence==='number'?Math.round(s.confidence*100)+'%':'--';
+    const src=s.source||'habitus_miner';
+    const reason=s.reasoning||s.description||'';
+    html+=`<div class="pat">`;
+    html+=`<span class="b b-${s.type==='repair'?'r':s.type==='optimization'?'y':'b'}">${escapeHtml(s.type||'suggestion')}</span>`;
+    html+=`<span style="flex:1;font-size:12px">${escapeHtml(reason)}</span>`;
+    html+=`<span class="meta">${escapeHtml(conf)} | ${escapeHtml(src)}</span>`;
+    html+=`<button class="btn-sm" onclick="acceptAutomationSuggestion('${escapeHtml(s.id||'')}')" style="margin-left:6px">Uebernehmen</button>`;
+    html+=`</div>`;
+  }
+  el.innerHTML=html;
+}
+async function acceptAutomationSuggestion(id){
+  if(!id)return;
+  const r=await api('/api/v1/automations/suggestions/'+encodeURIComponent(id)+'/accept','POST');
+  if(r&&r.ok){
+    loadAutomationSuggestions();
+  }else{
+    alert('Vorschlag konnte nicht uebernommen werden.');
+  }
+}
+
 // Boot — resilient startup
 loadStyx().catch(e=>console.error('Boot error:',e));
+// Load version info on settings page visit
+document.querySelectorAll('.nav button').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    const page=btn.dataset.page;
+    if(page==='settings')checkForUpdates();
+    if(page==='system'){loadNetworkInfo();checkGitHubStatus();}
+    if(page==='zones')loadAutomationSuggestions();
+  });
+});
 // Auto-refresh Styx every 30s
 let _styxAutoRefreshInFlight=false;
 setInterval(()=>{
