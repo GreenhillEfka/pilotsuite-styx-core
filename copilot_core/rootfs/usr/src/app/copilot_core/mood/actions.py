@@ -7,9 +7,9 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 
-from .engine import MoodState, MoodResult
+from .models import MoodState, ZoneMoodProfile
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -134,37 +134,38 @@ class ActionEngine:
     def generate_actions(
         self,
         zone_name: str,
-        mood_result: MoodResult,
+        mood_result: ZoneMoodProfile,
         zone_config: ZoneActionConfig,
         current_states: Dict[str, Any],
         cooldown_seconds: int = 120
     ) -> ActionResult:
         """Generate service calls for a mood transition."""
-        
+
         # Check cooldown
         last_action = self._action_cooldowns.get(zone_name)
         if last_action:
             cooldown_remaining = (
-                (last_action + timedelta(seconds=cooldown_seconds)) - 
+                (last_action + timedelta(seconds=cooldown_seconds)) -
                 datetime.now(timezone.utc)
             ).total_seconds()
-            
+
             if cooldown_remaining > 0:
                 return ActionResult(
                     success=False,
                     errors=[f"Action cooldown active: {cooldown_remaining:.1f}s remaining"]
                 )
-        
+
         service_calls = []
         errors = []
-        
-        # Get mood configuration
-        mood_config = zone_config.moods.get(mood_result.mood)
+
+        # Get mood configuration using the canonical .state attribute
+        mood_state = mood_result.state
+        mood_config = zone_config.moods.get(mood_state)
         if not mood_config:
-            mood_config = self._default_mood_actions.get(mood_result.mood)
-        
+            mood_config = self._default_mood_actions.get(mood_state)
+
         if not mood_config:
-            errors.append(f"No action configuration for mood: {mood_result.mood.value}")
+            errors.append(f"No action configuration for mood: {mood_state.value}")
             return ActionResult(success=False, errors=errors)
         
         # Generate light actions
@@ -259,16 +260,14 @@ class ActionEngine:
         zone_name: str
     ) -> List[Dict[str, Any]]:
         """Generate media player service calls."""
-        
+
         calls = []
-        
-        # Check for user-initiated media (protection)
+
         for entity_id in entities:
+            # Skip entities with user-initiated media (protection)
             if self._is_user_initiated_media(entity_id, current_states, zone_name):
                 _LOGGER.debug("Skipping media action for %s - user initiated", entity_id)
                 continue
-        
-        for entity_id in entities:
             if media_action.action == "pause":
                 calls.append({
                     "domain": "media_player",
@@ -384,10 +383,10 @@ class ActionEngine:
         """Create a zone action configuration."""
         
         moods = custom_moods.copy() if custom_moods else {}
-        
+
         # Fill in missing moods with defaults
         for mood_state in MoodState:
-            if mood_state not in moods:
+            if mood_state not in moods and mood_state in self._default_mood_actions:
                 moods[mood_state] = self._default_mood_actions[mood_state]
         
         return ZoneActionConfig(

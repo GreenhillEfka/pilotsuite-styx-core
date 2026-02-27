@@ -11,7 +11,8 @@ from copilot_core.hub.brain_activity import (
 
 
 @pytest.fixture
-def engine():
+def engine(tmp_path, monkeypatch):
+    monkeypatch.setenv("BRAIN_ACTIVITY_STORE", str(tmp_path / "brain_test.json"))
     return BrainActivityEngine(idle_timeout=2, sleep_timeout=10)
 
 
@@ -59,10 +60,11 @@ class TestIdleCheck:
         result = engine.check_idle()
         assert result == "idle"
 
-    def test_check_idle_transitions_to_sleep(self):
-        engine = BrainActivityEngine(idle_timeout=0, sleep_timeout=10)
-        engine.wake()
-        result = engine.check_idle()
+    def test_check_idle_transitions_to_sleep(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("BRAIN_ACTIVITY_STORE", str(tmp_path / "idle_test.json"))
+        eng = BrainActivityEngine(idle_timeout=0, sleep_timeout=10)
+        eng.wake()
+        result = eng.check_idle()
         assert result == "sleeping"
 
     def test_check_idle_sleeping_stays_sleeping(self, engine):
@@ -112,12 +114,13 @@ class TestPulses:
         assert len(recent) == 3
         assert recent[0].reason == "test_4"  # most recent first
 
-    def test_pulse_history_capped(self):
-        engine = BrainActivityEngine()
+    def test_pulse_history_capped(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("BRAIN_ACTIVITY_STORE", str(tmp_path / "cap_test.json"))
+        eng = BrainActivityEngine()
         for i in range(600):
-            engine.start_pulse(f"test_{i}")
-            engine.end_pulse()
-        assert len(engine._pulses) == 500
+            eng.start_pulse(f"test_{i}")
+            eng.end_pulse()
+        assert len(eng._pulses) == 500
 
 
 # ── Chat Tests ───────────────────────────────────────────────────────────────
@@ -161,11 +164,12 @@ class TestChat:
         engine.add_chat_message("user", "Wake up!")
         assert engine.state != BrainState.SLEEPING
 
-    def test_chat_history_capped(self):
-        engine = BrainActivityEngine()
+    def test_chat_history_capped(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("BRAIN_ACTIVITY_STORE", str(tmp_path / "chat_cap.json"))
+        eng = BrainActivityEngine()
         for i in range(250):
-            engine.add_chat_message("user", f"msg_{i}")
-        assert len(engine._chat_history) == 200
+            eng.add_chat_message("user", f"msg_{i}")
+        assert len(eng._chat_history) == 200
 
     def test_chat_message_metadata(self, engine):
         msg = engine.add_chat_message("user", "Test", {"source": "telegram"})

@@ -4,13 +4,13 @@ Main entry point for the mood_module v0.1 implementation.
 """
 from __future__ import annotations
 
-import asyncio
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Callable
 
-from .engine import MoodEngine, MoodConfig, ZoneConfig, MoodResult
+from .models import MoodSystemConfig, ZoneConfig, ZoneMoodProfile
+from .engine import UnifiedMoodEngine
 from .actions import ActionEngine, ZoneActionConfig, ActionResult
 
 _LOGGER = logging.getLogger(__name__)
@@ -19,9 +19,9 @@ _LOGGER = logging.getLogger(__name__)
 @dataclass
 class MoodOrchestrationResult:
     """Result of a complete mood orchestration cycle."""
-    
+
     zone_name: str
-    mood_result: MoodResult
+    mood_result: ZoneMoodProfile
     action_result: Optional[ActionResult] = None
     skipped_reason: Optional[str] = None
     timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
@@ -49,21 +49,21 @@ class MoodOrchestrationResult:
 
 class MoodOrchestrator:
     """Main orchestrator for mood-based automation."""
-    
+
     def __init__(
         self,
-        mood_config: MoodConfig,
+        mood_config: MoodSystemConfig,
         get_sensor_data: Callable[[List[str]], Dict[str, Any]],
         execute_service_calls: Optional[Callable[[List[Dict[str, Any]]], bool]] = None
     ):
-        self.mood_engine = MoodEngine(mood_config)
+        self.mood_engine = UnifiedMoodEngine(mood_config)
         self.action_engine = ActionEngine()
         self.get_sensor_data = get_sensor_data
         self.execute_service_calls = execute_service_calls
-        
+
         self._zone_action_configs: Dict[str, ZoneActionConfig] = {}
         self._last_orchestration: Dict[str, MoodOrchestrationResult] = {}
-        
+
         # Auto-create basic action configs for zones
         for zone_name, zone_config in mood_config.zones.items():
             self._zone_action_configs[zone_name] = self.action_engine.create_zone_config(
@@ -107,34 +107,32 @@ class MoodOrchestrator:
             sensor_data = self.get_sensor_data(required_entities)
         except Exception as e:
             _LOGGER.error("Failed to get sensor data for zone %s: %s", zone_name, e)
-            # Return error result
-            dummy_features = self.mood_engine.compute_zone_features(zone_name, {})
-            dummy_mood = self.mood_engine.infer_mood(zone_name, dummy_features)
+            # Return error result with neutral profile from empty sensor data
+            fallback_profile = self.mood_engine.infer_zone(zone_name, {})
             return MoodOrchestrationResult(
                 zone_name=zone_name,
-                mood_result=dummy_mood,
+                mood_result=fallback_profile,
                 skipped_reason=f"Sensor data unavailable: {e}"
             )
+
+        # Infer mood from sensor data
+        mood_result = self.mood_engine.infer_zone(zone_name, sensor_data)
         
-        # Compute features and infer mood
-        features = self.mood_engine.compute_zone_features(zone_name, sensor_data)
-        mood_result = self.mood_engine.infer_mood(zone_name, features)
-        
-        _LOGGER.debug("Zone %s mood inference: %s (confidence: %.2f)", 
-                     zone_name, mood_result.mood.value, mood_result.confidence)
-        
+        _LOGGER.debug("Zone %s mood inference: %s (confidence: %.2f)",
+                     zone_name, mood_result.state.value, mood_result.confidence)
+
         # Check if actions should be executed
         action_result = None
         skipped_reason = None
-        
-        if features.user_override:
+
+        if mood_result.user_override:
             skipped_reason = "User manual override active"
-        
+
         elif not force_actions:
             # Check if mood actually changed
             last_result = self._last_orchestration.get(zone_name)
-            if (last_result and 
-                last_result.mood_result.mood == mood_result.mood and
+            if (last_result and
+                last_result.mood_result.state == mood_result.state and
                 last_result.action_result and
                 last_result.action_result.success):
                 skipped_reason = "Mood unchanged and actions already applied"
@@ -155,8 +153,8 @@ class MoodOrchestrator:
                     # Execute service calls if not dry run
                     if not dry_run and action_result.success and self.execute_service_calls:
                         if action_result.service_calls:
-                            _LOGGER.info("Executing %d service calls for zone %s mood %s", 
-                                       len(action_result.service_calls), zone_name, mood_result.mood.value)
+                            _LOGGER.info("Executing %d service calls for zone %s mood %s",
+                                       len(action_result.service_calls), zone_name, mood_result.state.value)
                             
                             try:
                                 success = self.execute_service_calls(action_result.service_calls)
@@ -202,12 +200,11 @@ class MoodOrchestrator:
                 results.append(result)
             except Exception as e:
                 _LOGGER.error("Orchestration failed for zone %s: %s", zone_name, e)
-                # Create error result
-                dummy_features = self.mood_engine.compute_zone_features(zone_name, {})
-                dummy_mood = self.mood_engine.infer_mood(zone_name, dummy_features)
+                # Create error result with neutral fallback profile
+                fallback_profile = ZoneMoodProfile(zone_id=zone_name)
                 results.append(MoodOrchestrationResult(
                     zone_name=zone_name,
-                    mood_result=dummy_mood,
+                    mood_result=fallback_profile,
                     skipped_reason=f"Orchestration error: {e}"
                 ))
         
@@ -222,15 +219,15 @@ class MoodOrchestrator:
         
         return {
             "zone_name": zone_name,
-            "current_mood": last_result.mood_result.mood.value,
+            "current_mood": last_result.mood_result.state.value,
             "confidence": last_result.mood_result.confidence,
             "last_update": last_result.timestamp.isoformat(),
             "last_action_success": (
-                last_result.action_result.success 
-                if last_result.action_result 
+                last_result.action_result.success
+                if last_result.action_result
                 else None
             ),
-            "features": last_result.mood_result.features.__dict__
+            "profile": last_result.mood_result.to_dict(),
         }
     
     def get_all_zones_status(self) -> List[Dict[str, Any]]:
@@ -277,9 +274,9 @@ class MoodOrchestrator:
             return False
 
 
-def create_default_config() -> MoodConfig:
+def create_default_config() -> MoodSystemConfig:
     """Create a default mood configuration for testing."""
-    
+
     # This would typically be loaded from configuration
     wohnbereich = ZoneConfig(
         name="wohnbereich",
@@ -288,7 +285,7 @@ def create_default_config() -> MoodConfig:
         media_entities=["media_player.wohnbereich"],
         illuminance_entity="sensor.illuminance_wohnzimmer"
     )
-    
+
     schlafbereich = ZoneConfig(
         name="schlafbereich",
         motion_entities=["binary_sensor.motion_schlafzimmer"],
@@ -296,8 +293,8 @@ def create_default_config() -> MoodConfig:
         media_entities=["media_player.schlafbereich"],
         illuminance_entity=None  # fallback to time-based
     )
-    
-    return MoodConfig(
+
+    return MoodSystemConfig(
         zones={
             "wohnbereich": wohnbereich,
             "schlafbereich": schlafbereich

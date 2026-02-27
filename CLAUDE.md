@@ -73,12 +73,17 @@ HA Events --> Event Ingest --> Brain Graph --> Habitus Miner --> Candidates
 - Confidence-Scoring und Feedback-Loop
 - Zeitbasierte, Trigger-basierte, sequenzielle und kontextuelle Muster
 
-### Mood Engine
+### Unified Mood Engine v3.0
 
-- 3D-Bewertung: Comfort, Joy, Frugality (je 0.0-1.0)
-- Zone-spezifische Mood-Snapshots
-- Exponential Smoothing fuer stabile Werte
-- Suggestion-Suppression basierend auf Stimmung
+- **6 diskrete Zustaende:** relax, focus, active, night, away, neutral (Softmax + EMA Hysterese)
+- **5 kontinuierliche Dimensionen:** comfort, frugality, joy, energy, stress (je 0.0-1.0)
+- **Entity Dependencies:** Formale Zuordnung von Entities zu Mood-Dimensionen mit Rollen (motion, illuminance, media, climate, presence, energy_meter)
+- **Sigmoid-Aktivierungsfunktionen** fuer Feature-Extraktion (Lux, Temperatur, Motion-Decay)
+- **Gaussian Comfort Curves** fuer Temperatur-basierte Comfort-Berechnung
+- **SQLite WAL-Mode Persistenz:** 30-Tage Rolling Window, throttled Writes (max 1/min pro Zone)
+- **Zone-basierte Profile:** `ZoneMoodProfile` mit Zustand + Dimensionen + Konfidenz + Kontextdaten
+- Suggestion-Suppression und Relevance-Multiplier basierend auf Stimmungsprofil
+- REST API: GET/POST `/api/v1/mood/*` fuer Abfrage und Update
 
 ---
 
@@ -167,16 +172,16 @@ copilot_core/
 
 ## Aktueller Stand
 
-### Version v9.5.0
+### Version v10.2.0
 
-- **Tests:** 2207 passed, 1 skipped
-- **Python-Dateien:** 1092
-- 22+ Services via init_services(), alle mit Error Boundary
-- 50+ API Endpoints (40+ Flask Blueprints)
+- **Tests:** 2228 passed, 1 skipped
+- **Python-Dateien:** 1100+
+- 24+ Services via init_services(), alle mit Error Boundary
+- 55+ API Endpoints (45+ Flask Blueprints)
+- **Unified Mood Engine v3.0:** 6 diskrete Zustaende + 5 kontinuierliche Dimensionen + Entity Dependencies
 - NeuronManager mit context→state→mood Pipeline + /api/v1/dashboard/neuron-layers
 - Brain Graph mit SQLite Persistenz, Decay, Pruning, vis.js-Format Export
 - Habitus Miner mit Zone Mining und Association Rules
-- Mood Engine mit 3D-Scoring (Comfort/Joy/Frugality)
 - Event Ingest mit Deduplication und Idempotency + EventBus
 - Candidate Management mit State Machine
 - RAG Pipeline (VectorStore + EmbeddingEngine)
