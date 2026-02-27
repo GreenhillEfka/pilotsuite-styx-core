@@ -1,8 +1,8 @@
 # MCP Phase 2 RFC — Erweiterte Skills für AI-Clients
 
-> **Status**: *In Arbeit*  
-> **Branch**: `dev`  
-> **Ziel**: Phase 2 Implementierung bis zum nächsten Release (v7.27.0)
+> **Status**: Phase 1 abgeschlossen, Phase 2 teilweise umgesetzt
+> **Baseline**: v10.4.0
+> **Urspruenglich geplant fuer**: v7.27.0 (ueberholt durch Architektur-Ueberarbeitung v9.0+)
 
 ---
 
@@ -26,6 +26,11 @@ Styx MCP Server bietet bereits **10 Tools** an:
 ---
 
 ## Phase 2 — geplante Erweiterungen
+
+> **Hinweis (2026-02-27):** Durch die Architektur-Ueberarbeitung in v9.0-v10.4 wurden einige Phase-2-Konzepte
+> in andere Module integriert. Scene Automation ist teilweise durch zone_automation und auto_setup abgedeckt.
+> Multi-Zone Audio ist durch media_zones implementiert. Dieses RFC dient als Referenz fuer verbleibende
+> Erweiterungen.
 
 ### 1. **Scene Automation Skills** (HIGH PRIORITY)
 AI-Clients sollen Szenen nicht nur abfragen, sondern auch erstellen/bearbeiten können — basierend auf Nutzerverhalten.

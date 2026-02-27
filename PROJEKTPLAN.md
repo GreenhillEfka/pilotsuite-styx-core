@@ -2,12 +2,14 @@
 
 ## Release v10.4.0 — Consolidation & Auto-Setup
 
+> **Status: ABGESCHLOSSEN** (Released 2026-02-27)
+
 ### Ziele
-1. **Setup Flow** verbessern — Zero-Config mit Auto-Zone-Erstellung und Auto-Tagging
-2. **Dashboard** konsolidieren — einheitliches Sidebar-Panel
-3. **Zonen & Auto-Tagging** — ML-basierte Entity-Klassifikation und Zone-Vorschläge
-4. **Core Backend** erweitern — neue API-Endpoints für Auto-Setup
-5. **Dokumentation** erstellen — Vision, Projektplan, Handbuch
+1. ✅ **Setup Flow** verbessern — Zero-Config mit Auto-Zone-Erstellung und Auto-Tagging
+2. ✅ **Dashboard** konsolidieren — einheitliches Sidebar-Panel
+3. ✅ **Zonen & Auto-Tagging** — ML-basierte Entity-Klassifikation und Zone-Vorschläge
+4. ✅ **Core Backend** erweitern — neue API-Endpoints für Auto-Setup
+5. ✅ **Dokumentation** erstellen — Vision, Projektplan, Handbuch
 
 ---
 
@@ -153,3 +155,21 @@ lights, presence, brightness, temperature, humidity, co2, noise, media, climate,
 - [x] PR erstellen (beide Repos)
 - [x] vision.md, projektplan.md, handbuch.md committed
 - [x] GitHub Release erstellt (v10.4.0)
+
+---
+
+## Naechster Schritt: v10.5.0
+
+### Geplante Features
+- **Multi-Turn Conversation**: Persistente Chat-Historie mit Brain Graph Kontext
+- **Voice-First**: Optimierte HA Conversation Agent Integration
+- **WebSocket Updates**: Echtzeit-Dashboard-Updates ohne Polling
+- **Tag-Editor**: Visueller Tag-Editor im Dashboard (Drag & Drop)
+- **Entity-Caching**: Optimierte Zonen-Aggregate bei Zustandsaenderungen
+
+### Voraussetzungen
+- v10.4.0 stabil im Produktivbetrieb
+- HASSFest-Validierung reaktiviert (KeyError codeowners fixen)
+- Auto-Setup E2E-Tests bestanden
+
+Siehe [VISION.md](VISION.md) und [ROADMAP.md](docs/ROADMAP.md) fuer die vollstaendige Planung.
