@@ -1,3 +1,4 @@
+import math
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
@@ -5,6 +6,10 @@ from typing import Any
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _now_ts() -> float:
+    return datetime.now(timezone.utc).timestamp()
 
 
 @dataclass
@@ -52,11 +57,28 @@ _EVENT_WEIGHTS: dict[str, float] = {
 }
 
 
-class MoodScorer:
-    """Mood scoring from conversation and HA events.
+def _exponential_decay_weight(age_seconds: float, half_life_seconds: float) -> float:
+    """Exponential decay: w(t) = exp(-ln(2) * t / half_life).
 
-    Uses weighted event type mapping with configurable weights and
-    normalized scoring.
+    At t=0: weight=1.0
+    At t=half_life: weight=0.5
+    At t=2*half_life: weight=0.25
+    """
+    if age_seconds <= 0:
+        return 1.0
+    if half_life_seconds <= 0:
+        return 0.0
+    lam = math.log(2) / half_life_seconds
+    return math.exp(-lam * age_seconds)
+
+
+class MoodScorer:
+    """Mood scoring from conversation and HA events (v2.0).
+
+    Improvements over v1.0:
+    - Temporal decay: recent events weighted more heavily via exponential decay
+    - Tanh normalization: smooth, bounded output without hard clipping
+    - Confidence estimation: based on event density and signal strength
     """
 
     def __init__(
@@ -65,13 +87,23 @@ class MoodScorer:
         window_seconds: int = 3600,
         event_weights: dict[str, float] | None = None,
         neutral_threshold: float = 0.15,
+        half_life_seconds: float = 900.0,
     ):
         self.window_seconds = window_seconds
         self.weights = {**_EVENT_WEIGHTS, **(event_weights or {})}
         self.neutral_threshold = max(0.01, min(0.5, neutral_threshold))
+        self.half_life_seconds = half_life_seconds
 
     def score_from_events(self, events: list[dict[str, Any]]) -> MoodScore:
-        """Score mood from a list of events using weighted sentiment analysis."""
+        """Score mood using temporally-weighted sentiment analysis.
+
+        Each event's contribution is weighted by:
+        1. Its sentiment weight (from _EVENT_WEIGHTS)
+        2. Its temporal decay (exponential, based on age)
+
+        Final score uses tanh normalization for smooth [-1, +1] output
+        instead of hard clipping.
+        """
         if not events:
             return MoodScore(
                 ts=_now_iso(),
@@ -81,30 +113,58 @@ class MoodScorer:
                 signals={"pos": 0, "neg": 0, "n_events": 0, "weighted": True},
             )
 
+        now = _now_ts()
         weighted_sum = 0.0
-        weight_total = 0.0
+        decay_weight_total = 0.0
         pos_count = 0
         neg_count = 0
 
         for event in events:
             event_type = str(event.get("type", ""))
-            w = self.weights.get(event_type, 0.0)
+            sentiment_w = self.weights.get(event_type, 0.0)
 
-            if w > 0:
+            if sentiment_w > 0:
                 pos_count += 1
-            elif w < 0:
+            elif sentiment_w < 0:
                 neg_count += 1
 
-            weighted_sum += w
-            weight_total += abs(w) if w != 0.0 else 0.0
+            # Temporal decay based on event timestamp
+            event_ts = event.get("timestamp")
+            if event_ts:
+                if isinstance(event_ts, str):
+                    try:
+                        event_dt = datetime.fromisoformat(event_ts.replace("Z", "+00:00"))
+                        age_seconds = max(0.0, now - event_dt.timestamp())
+                    except (ValueError, TypeError):
+                        age_seconds = 0.0
+                elif isinstance(event_ts, (int, float)):
+                    age_seconds = max(0.0, now - event_ts)
+                else:
+                    age_seconds = 0.0
+            else:
+                age_seconds = 0.0
 
-        # Normalize to -1..+1 range
-        if weight_total > 0:
-            raw = weighted_sum / weight_total
+            decay_w = _exponential_decay_weight(age_seconds, self.half_life_seconds)
+
+            # Combined weight: sentiment * temporal decay
+            weighted_sum += sentiment_w * decay_w
+            decay_weight_total += abs(sentiment_w) * decay_w if sentiment_w != 0.0 else 0.0
+
+        # Tanh normalization: smooth, bounded [-1, +1] without hard clipping
+        # tanh(x) naturally compresses extreme values
+        if decay_weight_total > 0:
+            raw = weighted_sum / decay_weight_total
         else:
             raw = 0.0
 
-        score = max(-1.0, min(1.0, float(raw)))
+        # Scale factor controls sensitivity (higher = more responsive to mild signals)
+        scale = 2.0
+        score = math.tanh(raw * scale)
+
+        # Confidence: based on total decayed signal strength
+        # More events + stronger signals + more recent = higher confidence
+        # Sigmoid: maps (0, inf) → (0, 1) with midpoint at ~3 weighted events
+        confidence = 1.0 / (1.0 + math.exp(-0.5 * (decay_weight_total - 3.0)))
 
         # Label with configurable threshold
         if score > self.neutral_threshold:
@@ -117,13 +177,15 @@ class MoodScorer:
         return MoodScore(
             ts=_now_iso(),
             window_seconds=self.window_seconds,
-            score=score,
+            score=round(score, 3),
             label=label,
             signals={
                 "pos": pos_count,
                 "neg": neg_count,
                 "n_events": len(events),
                 "weighted": True,
-                "weight_total": round(weight_total, 3),
+                "decay_weight_total": round(decay_weight_total, 3),
+                "confidence": round(confidence, 3),
+                "half_life_seconds": self.half_life_seconds,
             },
         )

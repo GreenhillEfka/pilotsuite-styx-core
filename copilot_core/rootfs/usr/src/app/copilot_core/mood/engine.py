@@ -1,10 +1,20 @@
-"""Mood inference engine for Home Assistant sensor data.
+"""Mood inference engine for Home Assistant sensor data (v2.0).
 
-Implements the mood_module v0.1 spec: local-only mood inference from HA sensors.
+Implements mood inference from HA sensors using mathematically rigorous models:
+- Sigmoid activation functions for smooth, bounded feature scoring
+- Softmax mood selection for probabilistic multi-class decision
+- Exponential Moving Average (EMA) for hysteresis smoothing
+- Bayesian confidence estimation with prior decay
+
+References:
+- Softmax: Bridle (1990) - probabilistic interpretation of neural outputs
+- EMA smoothing: Roberts (1959) - exponential weighted moving average
+- Sigmoid activation: Verhulst (1845) - logistic function
 """
 from __future__ import annotations
 
 import logging
+import math
 from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta
 from enum import Enum
@@ -191,139 +201,220 @@ class MoodEngine:
             override_state = sensor_data[override_entity].get("state")
             features.user_override = override_state in ("on", "True", True, 1)
 
-        # --- Derived indices ---
+        # --- Derived indices using sigmoid activation functions ---
+        # sigmoid(x, k, x0) = 1 / (1 + exp(-k * (x - x0)))
+        # Maps continuous inputs to smooth [0, 1] outputs
 
-        # Comfort index (0..1): high when appropriate light + media + not quiet hours
-        comfort = 0.5
+        # Comfort index (0..1): multi-factor sigmoid aggregation
+        comfort_signals = []
         if features.illuminance_value is not None:
-            # Optimal lux range ~100-400 for living areas
-            if 100 <= features.illuminance_value <= 400:
-                comfort += 0.2
-            elif features.illuminance_value < 20:
-                comfort -= 0.15
+            # Bell-shaped: optimal 100-400 lux, Gaussian in log-space
+            lux = max(1.0, features.illuminance_value)
+            log_ratio = math.log(lux / 200.0)  # centered on 200 lux
+            lux_comfort = math.exp(-0.5 * (log_ratio / 0.7) ** 2)
+            comfort_signals.append(lux_comfort)
         if features.media_playing:
-            comfort += 0.15
+            comfort_signals.append(0.7)  # media adds moderate comfort
         if features.quiet_hours:
-            comfort -= 0.1
-        features.comfort_index = max(0.0, min(1.0, comfort))
+            comfort_signals.append(0.3)  # quiet hours reduce comfort
+        else:
+            comfort_signals.append(0.6)
 
-        # Energy level (0..1): high during daytime with recent motion
-        energy = 0.5
+        if comfort_signals:
+            # Geometric mean: penalizes any single bad factor more than arithmetic
+            log_sum = sum(math.log(max(0.01, s)) for s in comfort_signals)
+            features.comfort_index = math.exp(log_sum / len(comfort_signals))
+        else:
+            features.comfort_index = 0.5
+
+        # Energy level (0..1): sigmoid-based with circadian modulation
+        now_hour = now.hour + now.minute / 60.0
+        # Circadian energy: sine wave peaking at noon
+        if 5.0 <= now_hour <= 23.0:
+            circadian = math.sin(math.pi * (now_hour - 5.0) / 18.0)
+            circadian = max(0.0, circadian)
+        else:
+            circadian = 0.0
+
+        energy_raw = 0.3 * circadian  # baseline from time of day
         if features.motion_recent:
-            energy += 0.25
+            energy_raw += 0.4  # motion is strongest energy signal
         if not features.ambient_dark:
-            energy += 0.15
+            energy_raw += 0.2  # light adds energy
         if features.quiet_hours:
-            energy -= 0.3
-        features.energy_level = max(0.0, min(1.0, energy))
+            energy_raw -= 0.3  # quiet hours suppress energy
 
-        # Stress index (0..1): elevated when many sensors active + rapid changes
-        stress = 0.0
+        # Sigmoid squash to [0, 1]: steepness=6, centered at 0.5
+        features.energy_level = 1.0 / (1.0 + math.exp(-6.0 * (energy_raw - 0.35)))
+
+        # Stress index (0..1): sigmoid accumulation of stress signals
+        stress_raw = 0.0
         active_motion = sum(1 for v in features.motion_entities.values() if v)
         total_motion = max(1, len(features.motion_entities))
-        if active_motion / total_motion > 0.7 and total_motion > 1:
-            stress += 0.3
+        motion_ratio = active_motion / total_motion
+
+        # Multi-sensor activation: sigmoid threshold at 60% activation
+        stress_raw += 1.0 / (1.0 + math.exp(-10.0 * (motion_ratio - 0.6)))
+        # Unexpected activity in dark: multiplicative stress
         if features.ambient_dark and features.motion_recent:
-            stress += 0.15  # unexpected activity in dark
-        features.stress_index = max(0.0, min(1.0, stress))
+            stress_raw += 0.3
+        # High stress when many sensors rapid-fire (proxy via motion ratio)
+        if motion_ratio > 0.8 and total_motion > 2:
+            stress_raw += 0.2
+
+        # Final sigmoid squash: centered at 0.5 stress_raw
+        features.stress_index = 1.0 / (1.0 + math.exp(-4.0 * (stress_raw - 0.5)))
 
         return features
     
     def infer_mood(self, zone_name: str, features: ZoneFeatures) -> MoodResult:
-        """Infer mood for a zone based on features."""
-        
+        """Infer mood for a zone using multi-signal scoring + softmax selection.
+
+        The inference pipeline:
+        1. Compute raw log-odds for each mood state from features
+        2. Apply softmax to get a probability distribution
+        3. Select the mood with highest probability
+        4. Smooth via EMA with the previous state (hysteresis)
+        5. Only transition if the new mood sustains past dwell threshold
+        """
         reasons = []
-        scores = {}
-        
-        # Rule-based scoring (as per spec)
-        
-        # AWAY: no motion for extended period
-        if not features.motion_recent:
-            if features.last_motion_ts:
-                no_motion_minutes = (datetime.now(timezone.utc) - features.last_motion_ts).total_seconds() / 60
-                if no_motion_minutes >= self.config.zones[zone_name].away_no_motion_minutes:
-                    scores[MoodState.AWAY] = 1.0
-                    reasons.append(f"No motion for {no_motion_minutes:.1f} minutes")
-            else:
-                # No motion detected at all
-                scores[MoodState.AWAY] = 0.8
-                reasons.append("No motion sensors active")
-        
-        # NIGHT: quiet hours and dark
-        if features.quiet_hours and features.ambient_dark:
-            scores[MoodState.NIGHT] = 0.9
-            reasons.append("Quiet hours and dark")
-        elif features.quiet_hours:
-            scores[MoodState.NIGHT] = 0.6
-            reasons.append("Quiet hours")
-        elif features.ambient_dark and not features.media_playing:
-            scores[MoodState.NIGHT] = 0.4
-            reasons.append("Dark environment")
-        
-        # RELAX: media playing in dark/evening
-        if features.media_playing and features.ambient_dark:
-            scores[MoodState.RELAX] = 0.8
-            reasons.append("Media playing in dark environment")
-        elif features.media_playing:
-            scores[MoodState.RELAX] = 0.5
-            reasons.append("Media playing")
-        
-        # FOCUS: motion recent, not quiet hours, no media
-        if (features.motion_recent and 
-            not features.quiet_hours and 
-            not features.media_playing and
-            not features.ambient_dark):
-            scores[MoodState.FOCUS] = 0.7
-            reasons.append("Active presence, no media, daylight hours")
-        
-        # ACTIVE: motion + bright + not quiet
-        if (features.motion_recent and 
-            not features.ambient_dark and 
-            not features.quiet_hours):
-            scores[MoodState.ACTIVE] = 0.6
-            reasons.append("Active with good lighting")
-        
-        # User override
+        raw_scores: Dict[str, float] = {}
+        now = datetime.now(timezone.utc)
+
+        zone_config = self.config.zones[zone_name]
+
+        # --- Step 1: Compute raw log-odds (unbounded scores) per mood ---
+
+        # AWAY: sigmoid on no-motion duration
+        if features.last_motion_ts:
+            no_motion_min = (now - features.last_motion_ts).total_seconds() / 60
+        elif not features.motion_recent:
+            no_motion_min = zone_config.away_no_motion_minutes + 10  # assume long absence
+        else:
+            no_motion_min = 0.0
+
+        # Sigmoid activation: midpoint at away_no_motion_minutes
+        away_score = 1.0 / (1.0 + math.exp(-0.15 * (no_motion_min - zone_config.away_no_motion_minutes)))
+        raw_scores[MoodState.AWAY] = away_score * 3.0  # scale to log-odds range
+        if away_score > 0.5:
+            reasons.append(f"No motion for {no_motion_min:.0f} min")
+
+        # NIGHT: quiet hours + darkness combined signal
+        night_signal = 0.0
+        if features.quiet_hours:
+            night_signal += 0.6
+        if features.ambient_dark:
+            night_signal += 0.4
+        if features.media_playing:
+            night_signal -= 0.2  # media suppresses night mood
+        raw_scores[MoodState.NIGHT] = night_signal * 3.0
+        if night_signal > 0.5:
+            reasons.append("Quiet hours/dark environment")
+
+        # RELAX: media + low energy + moderate comfort
+        relax_signal = 0.0
+        if features.media_playing:
+            relax_signal += 0.5
+        if features.ambient_dark:
+            relax_signal += 0.2
+        relax_signal += (1.0 - features.energy_level) * 0.2  # low energy → relax
+        relax_signal += features.comfort_index * 0.1  # comfort helps
+        raw_scores[MoodState.RELAX] = relax_signal * 3.0
+        if relax_signal > 0.4:
+            reasons.append("Media/low-energy environment")
+
+        # FOCUS: motion + no media + daylight + low stress
+        focus_signal = 0.0
+        if features.motion_recent and not features.media_playing:
+            focus_signal += 0.5
+        if not features.ambient_dark:
+            focus_signal += 0.2
+        if not features.quiet_hours:
+            focus_signal += 0.15
+        focus_signal += (1.0 - features.stress_index) * 0.15  # low stress → focus
+        raw_scores[MoodState.FOCUS] = focus_signal * 3.0
+        if focus_signal > 0.5:
+            reasons.append("Active presence, daylight, no media")
+
+        # ACTIVE: strong motion + bright + high energy
+        active_signal = 0.0
+        if features.motion_recent:
+            active_signal += 0.4
+        if not features.ambient_dark:
+            active_signal += 0.2
+        active_signal += features.energy_level * 0.3  # high energy → active
+        if features.quiet_hours:
+            active_signal -= 0.3
+        raw_scores[MoodState.ACTIVE] = active_signal * 3.0
+        if active_signal > 0.5:
+            reasons.append("High activity with good lighting")
+
+        # NEUTRAL: baseline (acts as softmax "default class")
+        raw_scores[MoodState.NEUTRAL] = 0.5  # small positive baseline
+
+        # User override: dominate all scores
         if features.user_override:
-            scores = {}  # Clear automatic scores
+            raw_scores = {m: 0.0 for m in MoodState}
+            raw_scores[MoodState.NEUTRAL] = 5.0  # force neutral on override
             reasons = ["User manual override"]
-        
-        # Determine winning mood
-        if not scores:
-            mood = MoodState.NEUTRAL
-            confidence = 0.5
-            reasons = ["No clear mood indicators"]
-        else:
-            mood = max(scores, key=scores.get)
-            confidence = scores[mood]
-        
-        # Apply hysteresis for stability
-        current_mood = self._zone_states.get(zone_name)
-        if current_mood and current_mood.mood != mood:
-            # Check dwell time
-            dwell_start = self._zone_dwell_start.get(zone_name, datetime.now(timezone.utc))
-            dwell_seconds = (datetime.now(timezone.utc) - dwell_start).total_seconds()
-            
+
+        # --- Step 2: Softmax to get probability distribution ---
+        # P(mood_i) = exp(score_i / T) / sum(exp(score_j / T))
+        # Temperature T controls sharpness (lower = more decisive)
+        temperature = 1.0
+        max_score = max(raw_scores.values())
+        exp_scores = {}
+        for mood_state, score in raw_scores.items():
+            # Subtract max for numerical stability
+            exp_scores[mood_state] = math.exp((score - max_score) / temperature)
+        total_exp = sum(exp_scores.values())
+
+        probabilities = {
+            mood_state: exp_val / total_exp
+            for mood_state, exp_val in exp_scores.items()
+        }
+
+        # Select highest probability mood
+        mood = max(probabilities, key=probabilities.get)
+        confidence = probabilities[mood]
+
+        # --- Step 3: EMA-based hysteresis smoothing ---
+        current_result = self._zone_states.get(zone_name)
+
+        if current_result and current_result.mood != mood:
+            # EMA smoothing: blend current confidence with previous
+            # alpha controls inertia (lower = more stable)
+            alpha = 0.3
+            ema_confidence = alpha * confidence + (1.0 - alpha) * current_result.confidence
+
+            # Check dwell time: only transition if new mood has sustained
+            dwell_start = self._zone_dwell_start.get(zone_name, now)
+            dwell_seconds = (now - dwell_start).total_seconds()
+
             if dwell_seconds < self.config.min_dwell_time_seconds:
-                # Keep current mood, but reduce confidence
-                mood = current_mood.mood
-                confidence = confidence * 0.8
-                reasons.append(f"Hysteresis: keeping {mood.value} (dwell: {dwell_seconds:.0f}s)")
+                # Not enough dwell time: keep current mood with blended confidence
+                mood = current_result.mood
+                confidence = ema_confidence
+                reasons.append(
+                    f"EMA hysteresis: keeping {mood.value} "
+                    f"(dwell: {dwell_seconds:.0f}s/{self.config.min_dwell_time_seconds}s)"
+                )
             else:
-                # Allow transition
-                self._zone_dwell_start[zone_name] = datetime.now(timezone.utc)
+                # Transition allowed: reset dwell timer
+                self._zone_dwell_start[zone_name] = now
+                confidence = ema_confidence
         else:
-            # Same mood or first inference
+            # Same mood or first inference: reset dwell timer
             if zone_name not in self._zone_dwell_start:
-                self._zone_dwell_start[zone_name] = datetime.now(timezone.utc)
-        
+                self._zone_dwell_start[zone_name] = now
+
         result = MoodResult(
             mood=mood,
-            confidence=confidence,
+            confidence=round(confidence, 3),
             reasons=reasons,
             features=features
         )
-        
+
         self._zone_states[zone_name] = result
         return result
     

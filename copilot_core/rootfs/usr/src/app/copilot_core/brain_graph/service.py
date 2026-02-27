@@ -528,51 +528,113 @@ class BrainGraphService:
             )
     
     def infer_patterns(self) -> Dict[str, Any]:
-        """Infer common patterns from the current graph state."""
+        """Infer common patterns using influence propagation.
+
+        Uses a simplified PageRank-inspired approach:
+        1. Seed entity scores from direct interactions
+        2. Propagate influence along edges (1-hop weighted sum)
+        3. Combine direct + propagated scores for ranking
+
+        This discovers entities that are important not just because
+        they are directly controlled, but because they are connected
+        to many other important entities (hub detection).
+        """
+        import math
+
         now_ms = int(time.time() * 1000)
-        
-        # Get all nodes and edges
+
         all_nodes = self.store.get_nodes(limit=None)
         all_edges = self.store.get_edges()
-        
+
         patterns = {
             "frequently_controlled_entities": [],
             "zone_activity_hubs": [],
             "service_usage_patterns": [],
-            "trigger_chains": []
+            "trigger_chains": [],
+            "influence_hubs": [],
         }
-        
-        # Pattern 1: Most controlled entities (high service call correlation)
+
+        # Build adjacency and compute direct scores
+        node_scores = {}
+        for node in all_nodes:
+            node_scores[node.id] = node.effective_score(now_ms, self.node_half_life_hours)
+
+        # Outgoing edge weights per node (for weight normalization)
+        out_weights: Dict[str, float] = {}
+        adjacency: Dict[str, List[Tuple[str, float]]] = {}
+        for edge in all_edges:
+            w = edge.effective_weight(now_ms, self.edge_half_life_hours)
+            out_weights[edge.from_node] = out_weights.get(edge.from_node, 0.0) + w
+            if edge.from_node not in adjacency:
+                adjacency[edge.from_node] = []
+            adjacency[edge.from_node].append((edge.to_node, w))
+
+        # 1-hop influence propagation (simplified PageRank step)
+        # propagated_score(v) = sum(score(u) * w(u,v) / out_weight(u))
+        propagated = {}
+        damping = 0.3  # how much influence flows (lower = more local)
+        for source_id, targets in adjacency.items():
+            source_score = node_scores.get(source_id, 0.0)
+            out_w = out_weights.get(source_id, 1.0)
+            if out_w <= 0:
+                continue
+            for target_id, edge_w in targets:
+                influence = damping * source_score * (edge_w / out_w)
+                propagated[target_id] = propagated.get(target_id, 0.0) + influence
+
+        # Combined score: direct + propagated
+        combined = {}
+        for node_id in node_scores:
+            combined[node_id] = node_scores[node_id] + propagated.get(node_id, 0.0)
+
+        # Pattern 1: Most controlled entities (service → entity edges)
         entity_control_scores = {}
         for edge in all_edges:
-            if (edge.edge_type == "affects" and 
-                edge.from_node.startswith("ha.service:") and 
-                edge.to_node.startswith("ha.entity:")):
-                
+            if (edge.edge_type == "affects" and
+                    edge.from_node.startswith("ha.service:") and
+                    edge.to_node.startswith("ha.entity:")):
                 entity_id = edge.to_node
                 score = edge.effective_weight(now_ms, self.edge_half_life_hours)
                 entity_control_scores[entity_id] = entity_control_scores.get(entity_id, 0) + score
-        
+
         top_controlled = sorted(entity_control_scores.items(), key=lambda x: x[1], reverse=True)[:5]
         patterns["frequently_controlled_entities"] = [
-            {"entity_id": entity_id.replace("ha.entity:", ""), "control_score": score}
-            for entity_id, score in top_controlled
+            {"entity_id": eid.replace("ha.entity:", ""), "control_score": round(sc, 2)}
+            for eid, sc in top_controlled
         ]
-        
-        # Pattern 2: Zone activity (entities + triggers in zones)
+
+        # Pattern 2: Zone activity hubs (entity → zone + propagated influence)
         zone_activity = {}
         for edge in all_edges:
             if edge.edge_type == "in_zone" and edge.to_node.startswith("zone:"):
                 zone_id = edge.to_node
+                # Use combined score of the entity linking to this zone
+                entity_combined = combined.get(edge.from_node, 0.0)
                 weight = edge.effective_weight(now_ms, self.edge_half_life_hours)
-                zone_activity[zone_id] = zone_activity.get(zone_id, 0) + weight
-        
+                zone_activity[zone_id] = zone_activity.get(zone_id, 0) + weight + entity_combined * 0.1
+
         top_zones = sorted(zone_activity.items(), key=lambda x: x[1], reverse=True)[:3]
         patterns["zone_activity_hubs"] = [
-            {"zone_id": zone_id.replace("zone:", ""), "activity_score": score}
-            for zone_id, score in top_zones
+            {"zone_id": zid.replace("zone:", ""), "activity_score": round(sc, 2)}
+            for zid, sc in top_zones
         ]
-        
+
+        # Pattern 3: Influence hubs — nodes with highest combined (direct + propagated) score
+        entity_nodes = [
+            (nid, sc) for nid, sc in combined.items()
+            if nid.startswith("ha.entity:") and sc > 0
+        ]
+        top_influence = sorted(entity_nodes, key=lambda x: x[1], reverse=True)[:5]
+        patterns["influence_hubs"] = [
+            {
+                "entity_id": nid.replace("ha.entity:", ""),
+                "direct_score": round(node_scores.get(nid, 0.0), 2),
+                "propagated_score": round(propagated.get(nid, 0.0), 2),
+                "combined_score": round(sc, 2),
+            }
+            for nid, sc in top_influence
+        ]
+
         return patterns
     
     def get_zone_entities(self, zone_id: str) -> Dict[str, Any]:
