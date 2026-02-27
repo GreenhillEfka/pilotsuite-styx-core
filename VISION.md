@@ -79,7 +79,7 @@ Core subsystems:
 - Vector/memory/knowledge: semantic recall and explainability context.
 - Hub engines: advanced domain-specific orchestration surfaces.
 
-HA integration runtime modules (31 active) are grouped as:
+HA integration runtime modules (40 active, 4 tiers) are grouped as:
 - Core plumbing: `legacy`, `events_forwarder`, `candidate_poller`, `history_backfill`, `dev_surface`.
 - Intelligence/context: `habitus_miner`, `brain_graph_sync`, `mood`, `mood_context`, `ml_context`, `knowledge_graph_sync`.
 - Domain context: `energy_context`, `weather_context`, `media_zones`, `network`, `camera_context`.

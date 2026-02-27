@@ -112,17 +112,22 @@ Beim Auto-Setup werden automatisch Tags erstellt:
 
 | Tag | Beschreibung | Farbe |
 |-----|-------------|-------|
-| Licht | Alle light.* Entities | Gelb |
-| Bewegung | motion/presence Sensoren | Rot |
-| Temperatur | Temperatursensoren | Orange |
-| Helligkeit | Illuminance Sensoren | Gold |
-| Feuchtigkeit | Humidity Sensoren | Cyan |
-| Energie | Power/Energy Sensoren | Grün |
-| Media | Media Player | Lila |
-| Klima | Climate Entities | Türkis |
-| Kamera | Kameras | Pink |
-| Tür | Türkontakte | Violett |
-| Fenster | Fensterkontakte | Blau |
+| Licht | Alle light.* Entities | Gelb (#fbbf24) |
+| Bewegung | motion/presence Sensoren | Rot (#f87171) |
+| Temperatur | Temperatursensoren | Orange (#f97316) |
+| Helligkeit | Illuminance Sensoren | Gold (#eab308) |
+| Feuchtigkeit | Humidity Sensoren | Cyan (#06b6d4) |
+| Energie | Power/Energy Sensoren | Grün (#22c55e) |
+| Media | Media Player | Lila (#a78bfa) |
+| Klima | Climate Entities | Türkis (#34d399) |
+| Beschattung | Cover/Rollläden | Orange (#fb923c) |
+| Schalter | Switch Entities | Indigo (#6366f1) |
+| Kamera | Kameras | Pink (#f472b6) |
+| Person | Person Entities | Lila (#a78bfa) |
+| Tür | Türkontakte | Violett (#8b5cf6) |
+| Fenster | Fensterkontakte | Blau (#0ea5e9) |
+| Sicherheit | Rauchmelder/Gas | Rot (#ef4444) |
+| Batterie | Batterie-Sensoren | Lime (#84cc16) |
 
 ### Manual Override
 - Tags können jederzeit manuell bearbeitet werden

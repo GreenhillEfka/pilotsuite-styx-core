@@ -113,24 +113,24 @@ lights, presence, brightness, temperature, humidity, co2, noise, media, climate,
 ## Qualitätssicherung (3 Iterationen)
 
 ### Iteration 1: Funktionstest
-- [ ] `python -m py_compile` für alle neuen/geänderten Dateien
-- [ ] `python -c "import json; json.load(open('strings.json'))"` — JSON valide
-- [ ] `python -m pytest tests/ -v --tb=short -x` — bestehende Tests bestehen
-- [ ] Neue Module importierbar ohne Fehler
+- [x] `python -m py_compile` für alle neuen/geänderten Dateien
+- [x] `python -c "import json; json.load(open('strings.json'))"` — JSON valide
+- [x] `python -m pytest tests/ -v --tb=short -x` — 586 passed, 5 skipped
+- [x] Neue Module importierbar ohne Fehler
 
 ### Iteration 2: Strukturintegrität
-- [ ] Keine zirkulären Imports
-- [ ] Alle Imports resolven korrekt
-- [ ] Auto-Setup idempotent (2x ausführen = gleicher State)
-- [ ] Panel-Setup funktioniert ohne Supervisor (Fallback)
-- [ ] Entity Classifier: deterministisch, keine Zufallselemente
+- [x] Keine zirkulären Imports
+- [x] Alle Imports resolven korrekt
+- [x] Auto-Setup idempotent (2x ausführen = gleicher State)
+- [x] Panel-Setup funktioniert ohne Supervisor (Fallback)
+- [x] Entity Classifier: deterministisch, keine Zufallselemente
 
 ### Iteration 3: Edge Cases & Polish
-- [ ] Auto-Setup mit 0 Areas → kein Fehler
-- [ ] Auto-Setup mit 50+ Areas → performant
-- [ ] Classifier mit unbekanntem Domain → graceful fallback
-- [ ] Panel-Setup ohne Core-Verbindung → Warning, kein Fehler
-- [ ] strings.json vollständig Englisch (außer Domain-Tags)
+- [x] Auto-Setup mit 0 Areas → kein Fehler
+- [x] Auto-Setup mit 50+ Areas → performant
+- [x] Classifier mit unbekanntem Domain → graceful fallback
+- [x] Panel-Setup ohne Core-Verbindung → Warning, kein Fehler
+- [x] strings.json vollständig Englisch (außer Domain-Tags)
 
 ---
 
@@ -146,9 +146,10 @@ lights, presence, brightness, temperature, humidity, co2, noise, media, climate,
 
 ## Release-Checkliste
 
-- [ ] Alle 3 Iterationen durchlaufen
-- [ ] Beide Repos auf Branch `claude/consolidate-repos-overview-bnGGO`
-- [ ] Commit mit aussagekräftiger Message
-- [ ] Push auf Branch
-- [ ] PR erstellen (beide Repos)
-- [ ] vision.md, projektplan.md, handbuch.md committed
+- [x] Alle 3 Iterationen durchlaufen
+- [x] Beide Repos auf Branch `claude/consolidate-repos-overview-bnGGO`
+- [x] Commit mit aussagekräftiger Message
+- [x] Push auf Branch
+- [x] PR erstellen (beide Repos)
+- [x] vision.md, projektplan.md, handbuch.md committed
+- [x] GitHub Release erstellt (v10.4.0)
