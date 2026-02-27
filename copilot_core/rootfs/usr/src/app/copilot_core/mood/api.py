@@ -97,6 +97,8 @@ def get_zone_history(zone_id: str) -> Response:
     try:
         hours = request.args.get("hours", 24, type=int)
         limit = request.args.get("limit", 500, type=int)
+        hours = max(1, min(hours or 24, 8760))
+        limit = max(1, min(limit or 500, 10_000))
         service = get_service()
         history = service.get_mood_history(zone_id, hours=hours, limit=limit)
         return jsonify({
@@ -116,6 +118,7 @@ def get_zone_distribution(zone_id: str) -> Response:
     """Get mood state distribution for a zone."""
     try:
         hours = request.args.get("hours", 24, type=int)
+        hours = max(1, min(hours or 24, 8760))
         service = get_service()
         dist = service.get_state_distribution(zone_id, hours=hours)
         return jsonify({"status": "success", "zone_id": zone_id, "distribution": dist})
@@ -191,7 +194,7 @@ def get_zone_dependencies(zone_id: str) -> Response:
 def update_from_media() -> Response:
     """Update moods from MediaContext snapshot."""
     try:
-        data = request.get_json() or {}
+        data = request.get_json(silent=True) or {}
         service = get_service()
         service.update_from_media_context(data)
         return jsonify({"status": "success", "message": "Moods updated from MediaContext"})
@@ -205,7 +208,7 @@ def update_from_media() -> Response:
 def update_from_habitus() -> Response:
     """Update moods from Habitus context."""
     try:
-        data = request.get_json() or {}
+        data = request.get_json(silent=True) or {}
         service = get_service()
         service.update_from_habitus(data)
         return jsonify({"status": "success", "message": "Moods updated from Habitus"})
@@ -219,7 +222,9 @@ def update_from_habitus() -> Response:
 def update_zone(zone_id: str) -> Response:
     """Partial update for a zone's mood (from HA integration or neurons)."""
     try:
-        data = request.get_json() or {}
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            return jsonify({"status": "error", "error": "JSON object required"}), 400
         service = get_service()
         service.update_zone_mood(zone_id, data)
         profile = service.get_zone_profile(zone_id)
