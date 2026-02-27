@@ -81,6 +81,14 @@ class ZoneBrightnessState:
 class BrightnessManager:
     """Per-zone brightness tracking and artificial light need calculation.
 
+    Features:
+        - EMA-smoothed indoor/outdoor lux tracking
+        - Relative brightness (indoor/outdoor ratio) mode
+        - Sun occlusion transient filter: ignores brief outdoor brightness
+          drops (e.g. cloud passing over the sun) shorter than
+          ``sun_filter_seconds`` to avoid flickering lights on/off.
+        - Configurable brightness threshold slider (0-100%)
+
     Usage:
         mgr = BrightnessManager()
         mgr.configure_zone("kitchen", target_lux=400.0,
@@ -92,9 +100,16 @@ class BrightnessManager:
         # result.suggested_brightness_pct => e.g. 55
     """
 
-    def __init__(self, ema_alpha: float = _DEFAULT_EMA_ALPHA) -> None:
+    def __init__(
+        self,
+        ema_alpha: float = _DEFAULT_EMA_ALPHA,
+        sun_filter_seconds: float = 120.0,
+        use_relative_brightness: bool = True,
+    ) -> None:
         self._lock = threading.Lock()
         self._ema_alpha = max(0.01, min(1.0, ema_alpha))
+        self._sun_filter_seconds = max(0.0, sun_filter_seconds)
+        self._use_relative_brightness = use_relative_brightness
 
         # zone_id -> { entity_id -> BrightnessSensorReading }
         self._indoor_sensors: dict[str, dict[str, BrightnessSensorReading]] = {}
@@ -111,7 +126,16 @@ class BrightnessManager:
         # zone_id -> ZoneBrightnessState (cached)
         self._zone_states: dict[str, ZoneBrightnessState] = {}
 
-        _LOGGER.info("BrightnessManager initialized (ema_alpha=%.2f)", self._ema_alpha)
+        # Sun occlusion filter: track outdoor brightness dips per sensor.
+        # entity_id -> {"dip_start_ts": float, "pre_dip_lux": float}
+        self._outdoor_dip_state: dict[str, dict[str, float]] = {}
+
+        _LOGGER.info(
+            "BrightnessManager initialized (ema_alpha=%.2f, sun_filter=%ds, relative=%s)",
+            self._ema_alpha,
+            int(self._sun_filter_seconds),
+            self._use_relative_brightness,
+        )
 
     # ---- Zone configuration ------------------------------------------------
 
@@ -217,10 +241,14 @@ class BrightnessManager:
             reading.last_update_ts = now
 
     def update_outdoor(self, entity_id: str, lux: float) -> None:
-        """Push a new outdoor lux reading.
+        """Push a new outdoor lux reading with sun occlusion transient filter.
 
-        Outdoor sensors are shared -- one reading updates all zones that
-        reference this sensor.
+        The filter suppresses brief outdoor brightness drops (cloud passing
+        over the sun). If the outdoor lux drops by more than 30% from the
+        smoothed value and the drop is shorter than ``sun_filter_seconds``,
+        the smoothed value is held at the pre-dip level instead of following
+        the dip downward. Once the dip lasts longer than the filter window,
+        the sensor is allowed to track the new lower value normally.
 
         Parameters
         ----------
@@ -239,18 +267,50 @@ class BrightnessManager:
                 )
 
             reading = self._outdoor_sensors[entity_id]
+            prev_smoothed = reading.smoothed_lux
             reading.raw_lux = lux
             reading.sample_count += 1
 
             if reading.sample_count == 1:
                 reading.smoothed_lux = lux
-            else:
-                elapsed = now - reading.last_update_ts if reading.last_update_ts > 0 else 0
-                alpha = self._ema_alpha
-                if elapsed > _STALE_THRESHOLD_S:
-                    alpha = min(1.0, alpha * 3.0)
-                reading.smoothed_lux = alpha * lux + (1.0 - alpha) * reading.smoothed_lux
+                reading.last_update_ts = now
+                return
 
+            elapsed = now - reading.last_update_ts if reading.last_update_ts > 0 else 0
+            alpha = self._ema_alpha
+            if elapsed > _STALE_THRESHOLD_S:
+                alpha = min(1.0, alpha * 3.0)
+
+            # ── Sun occlusion transient filter ──────────────────────
+            dip_state = self._outdoor_dip_state.get(entity_id)
+            dip_threshold_ratio = 0.70  # 30% drop = dip detected
+
+            if prev_smoothed > 50 and lux < prev_smoothed * dip_threshold_ratio:
+                # Outdoor brightness dropped significantly
+                if dip_state is None:
+                    # Start tracking the dip
+                    self._outdoor_dip_state[entity_id] = {
+                        "dip_start_ts": now,
+                        "pre_dip_lux": prev_smoothed,
+                    }
+                    dip_state = self._outdoor_dip_state[entity_id]
+
+                dip_duration = now - dip_state["dip_start_ts"]
+                if self._sun_filter_seconds > 0 and dip_duration < self._sun_filter_seconds:
+                    # Dip is still within the filter window -- hold smoothed
+                    # at pre-dip level (ignore the transient drop)
+                    reading.smoothed_lux = dip_state["pre_dip_lux"]
+                    reading.last_update_ts = now
+                    return
+                else:
+                    # Dip lasted longer than filter -- treat as real drop
+                    self._outdoor_dip_state.pop(entity_id, None)
+            else:
+                # No dip or lux recovered -- clear dip state
+                self._outdoor_dip_state.pop(entity_id, None)
+
+            # Normal EMA update
+            reading.smoothed_lux = alpha * lux + (1.0 - alpha) * reading.smoothed_lux
             reading.last_update_ts = now
 
     def update_sensor(
@@ -319,8 +379,31 @@ class BrightnessManager:
             # Deficit: how much more light is needed
             deficit_lux = max(0.0, target_lux - indoor_avg)
 
-            # Determine if artificial light is needed
-            if indoor_avg >= target_lux:
+            # Determine if artificial light is needed.
+            # Two modes:
+            #   1. Absolute: compare indoor_avg against target_lux directly.
+            #   2. Relative: use the indoor/outdoor brightness ratio. If the
+            #      ratio is stable (even when absolute values drop due to
+            #      clouds), we don't trigger artificial light. This prevents
+            #      false triggers during brief weather changes.
+            if self._use_relative_brightness and outdoor_lux > 50:
+                # Relative mode: a stable ratio means natural light is
+                # proportionally reaching indoors even if absolute values
+                # changed. Only trigger lights when the ratio indicates
+                # insufficient natural light penetration.
+                expected_indoor = outdoor_lux * max(brightness_ratio, 0.01)
+                if expected_indoor >= target_lux:
+                    artificial_needed = False
+                    suggested_pct = 0
+                elif indoor_avg >= target_lux:
+                    artificial_needed = False
+                    suggested_pct = 0
+                else:
+                    artificial_needed = True
+                    ratio = deficit_lux / target_lux
+                    suggested_pct = int(math.sqrt(ratio) * 100)
+                    suggested_pct = max(5, min(100, suggested_pct))
+            elif indoor_avg >= target_lux:
                 artificial_needed = False
                 suggested_pct = 0
             elif indoor_avg <= 0:

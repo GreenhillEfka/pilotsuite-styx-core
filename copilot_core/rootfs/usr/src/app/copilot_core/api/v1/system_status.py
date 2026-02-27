@@ -973,3 +973,157 @@ def get_config():
         "searxng_enabled": config.get("searxng_enabled"),
     }
     return jsonify({"ok": True, "config": safe_config})
+
+
+# ── Version Check & Update ───────────────────────────────────────
+_GITHUB_REPOS = {
+    "core": "GreenhillEfka/pilotsuite-styx-core",
+    "ha": "GreenhillEfka/pilotsuite-styx-ha",
+}
+
+
+def _get_current_version() -> str:
+    """Read version from config.yaml."""
+    import yaml  # noqa: PLC0415
+
+    for path in ["/data/options.json", "config.yaml"]:
+        try:
+            if path.endswith(".json"):
+                import json  # noqa: PLC0415
+
+                with open(path, encoding="utf-8") as fh:
+                    data = json.load(fh)
+                    if isinstance(data, dict) and data.get("version"):
+                        return str(data["version"])
+            else:
+                with open(path, encoding="utf-8") as fh:
+                    data = yaml.safe_load(fh) or {}
+                    if isinstance(data, dict) and data.get("version"):
+                        return str(data["version"])
+        except Exception:
+            continue
+    services = current_app.config.get("COPILOT_SERVICES", {})
+    return str(services.get("config", {}).get("version", "unknown"))
+
+
+def _fetch_latest_github_release(repo: str) -> dict | None:
+    """Fetch latest release from GitHub API (best-effort, no auth required)."""
+    import urllib.request  # noqa: PLC0415
+
+    url = f"https://api.github.com/repos/{repo}/releases/latest"
+    try:
+        req = urllib.request.Request(url, headers={"Accept": "application/vnd.github+json"})
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            import json  # noqa: PLC0415
+
+            data = json.loads(resp.read().decode())
+            return {
+                "tag_name": data.get("tag_name", ""),
+                "name": data.get("name", ""),
+                "published_at": data.get("published_at", ""),
+                "html_url": data.get("html_url", ""),
+                "body": (data.get("body") or "")[:500],
+            }
+    except Exception as exc:
+        logger.debug("GitHub release check failed for %s: %s", repo, exc)
+        return None
+
+
+@system_status_bp.route("/check-update", methods=["GET"])
+@require_token
+def check_update():
+    """Check GitHub for latest release and compare with current version."""
+    current = _get_current_version()
+    core_release = _fetch_latest_github_release(_GITHUB_REPOS["core"])
+    ha_release = _fetch_latest_github_release(_GITHUB_REPOS["ha"])
+
+    latest_core = (core_release or {}).get("tag_name", "").lstrip("v") if core_release else None
+    latest_ha = (ha_release or {}).get("tag_name", "").lstrip("v") if ha_release else None
+    latest = latest_core or latest_ha or current
+
+    return jsonify({
+        "ok": True,
+        "current_version": current,
+        "latest_version": latest,
+        "update_available": latest != current,
+        "core_release": core_release,
+        "ha_release": ha_release,
+    })
+
+
+@system_status_bp.route("/update", methods=["POST"])
+@require_token
+def trigger_update():
+    """Trigger HA Supervisor add-on update (if running under Supervisor)."""
+    import urllib.request  # noqa: PLC0415
+
+    supervisor_token = os.environ.get("SUPERVISOR_TOKEN", "")
+    if not supervisor_token:
+        return jsonify({"ok": False, "error": "No SUPERVISOR_TOKEN — not running under HA Supervisor"}), 400
+
+    slug = os.environ.get("HOSTNAME", "local_pilotsuite_styx_core")
+    url = f"http://supervisor/addons/{slug}/update"
+    try:
+        req = urllib.request.Request(
+            url,
+            method="POST",
+            headers={
+                "Authorization": f"Bearer {supervisor_token}",
+                "Content-Type": "application/json",
+            },
+            data=b"{}",
+        )
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            return jsonify({"ok": True, "status": resp.status, "message": "Update triggered"})
+    except Exception as exc:
+        logger.exception("Update trigger failed")
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+@system_status_bp.route("/github-status", methods=["GET"])
+@require_token
+def github_status():
+    """Check GitHub repo status and compare versions."""
+    current = _get_current_version()
+    core_release = _fetch_latest_github_release(_GITHUB_REPOS["core"])
+    latest = (core_release or {}).get("tag_name", "").lstrip("v") if core_release else current
+
+    return jsonify({
+        "ok": True,
+        "repo": _GITHUB_REPOS["core"],
+        "current_version": current,
+        "latest_version": latest,
+        "up_to_date": current == latest,
+        "release_notes": (core_release or {}).get("body", ""),
+        "release_url": (core_release or {}).get("html_url", ""),
+    })
+
+
+@system_status_bp.route("/download-version", methods=["POST"])
+@require_token
+def download_version():
+    """Download current version source from GitHub for self-repair reference."""
+    import subprocess  # noqa: PLC0415
+
+    current = _get_current_version()
+    repo = _GITHUB_REPOS["core"]
+    target_dir = "/data/repo_reference"
+
+    try:
+        os.makedirs(target_dir, exist_ok=True)
+        tag = f"v{current}"
+        tarball_url = f"https://github.com/{repo}/archive/refs/tags/{tag}.tar.gz"
+        result = subprocess.run(
+            ["wget", "-qO-", tarball_url],
+            capture_output=True,
+            timeout=60,
+        )
+        if result.returncode == 0:
+            tar_path = os.path.join(target_dir, f"{tag}.tar.gz")
+            with open(tar_path, "wb") as fh:
+                fh.write(result.stdout)
+            return jsonify({"ok": True, "path": tar_path, "version": current})
+
+        return jsonify({"ok": False, "error": "Download failed", "stderr": result.stderr.decode()[:200]}), 500
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
