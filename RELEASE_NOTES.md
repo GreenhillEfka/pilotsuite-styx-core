@@ -1,5 +1,16 @@
 # Release Notes - PilotSuite Core
 
+## [10.1.4] - 2026-02-27 — DASHBOARD DATA FIXES (CALENDAR/WEATHER)
+
+- Calendar API for Haushalt tab:
+  - `GET /api/v1/calendar/entities`
+  - `GET /api/v1/calendar/events/today`
+- Weather API wiring repaired:
+  - correct prefix `/api/v1/weather/*`
+  - HA weather fetch + Open‑Meteo fallback via Supervisor proxy
+- Haushalt overview uses the shared weather snapshot helper (no more empty weather blocks).
+- Paired Release mit HA Integration `v10.1.4`.
+
 ## [10.1.3] - 2026-02-26 — PAIRED RELEASE (COMPAT GUARDRAILS)
 
 - Paired Release mit HA Integration `v10.1.3` (Versionschutz + Contract-Tests in HA).

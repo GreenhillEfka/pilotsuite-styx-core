@@ -1,6 +1,6 @@
-# PilotSuite Module Inventory (2026-02-26)
+# PilotSuite Module Inventory (2026-02-27)
 
-This inventory reflects the production-ready dual-repo baseline at `v10.1.3`.
+This inventory reflects the production-ready dual-repo baseline at `v10.1.4`.
 
 ## Scope
 - Core add-on backend: `pilotsuite-styx-core`

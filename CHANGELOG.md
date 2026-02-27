@@ -1,5 +1,18 @@
 # Changelog - PilotSuite Core Add-on
 
+## [10.1.4] - 2026-02-27 — DASHBOARD DATA FIXES (CALENDAR/WEATHER)
+
+### Added
+- Calendar API:
+  - `GET /api/v1/calendar/entities`
+  - `GET /api/v1/calendar/events/today` (used by Core dashboard Haushalt tab)
+
+### Fixed
+- Weather API wiring:
+  - Corrected blueprint prefix to `/api/v1/weather/*` (dashboard health checks now work).
+  - Added robust HA-weather fetch + Open‑Meteo fallback (uses HA lat/lon via Supervisor proxy).
+- Haushalt overview now uses the shared weather snapshot helper (prevents empty/404 weather blocks).
+
 ## [10.1.3] - 2026-02-26 — PAIRED RELEASE (COMPAT GUARDRAILS)
 
 ### Changed

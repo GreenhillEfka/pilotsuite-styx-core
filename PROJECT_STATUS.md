@@ -1,10 +1,10 @@
-# PilotSuite - Production Status (2026-02-26)
+# PilotSuite - Production Status (2026-02-27)
 
 Scope: dual-repo production audit (`pilotsuite-styx-core` + `pilotsuite-styx-ha`).
 
 Release baseline for this status:
-- Core add-on target: `10.1.3`
-- HA integration target: `10.1.3`
+- Core add-on target: `10.1.4`
+- HA integration target: `10.1.4`
 
 ## Executive summary
 System is release-ready once CI gates are green (Core add-on validation + HA HACS validation) and versions/docs are synchronized.

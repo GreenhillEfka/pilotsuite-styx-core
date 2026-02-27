@@ -13,12 +13,10 @@ This repository contains the PilotSuite Styx Core add-on and API backend.
 This repo is tightly coupled with `pilotsuite-styx-ha`; endpoint, payload, and auth changes must stay integration-compatible.
 
 ## Build, Test, and Development Commands
-- Run targeted Core tests (recommended local loop):  
-  `cd /Users/andreas/pilotsuite-styx-core/copilot_core/rootfs/usr/src/app && pytest -q tests/test_api_endpoints.py`
-- Dashboard/API regression tests:  
-  `pytest -q tests/test_dashboard_endpoints.py tests/test_llm_provider_fallback.py`
-- Single test file:  
-  `pytest -q tests/test_dashboard_template_habitus.py`
+- From the app dir: `cd copilot_core/rootfs/usr/src/app`
+- Targeted Core loop: `pytest -q tests/test_api_endpoints.py`
+- Dashboard/API regression: `pytest -q tests/test_dashboard_endpoints.py tests/test_llm_provider_fallback.py`
+- Single test file: `pytest -q tests/test_dashboard_template_habitus.py`
 
 Prefer targeted suites first; run broader suites before release/tag creation.
 
@@ -39,8 +37,8 @@ Prefer targeted suites first; run broader suites before release/tag creation.
 - Ensure new behavior is covered before tagging releases.
 
 ## Commit & Pull Request Guidelines
-- Commit style: imperative, scope-first.  
-  Example: `fix dashboard habitus zone flow and room selector`
+- Commit style mirrors this repo’s history:
+  `feat: ...`, `fix: ...`, `chore: ...`, and release commits like `v10.1.3: ...`.
 - Include version/changelog updates in release commits.
 - PR/release notes should include impact, files changed, and passing test evidence.
 

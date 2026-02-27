@@ -28,29 +28,16 @@ _network_cache: dict[str, object] = {
     "warnings": {"warnings": [], "error": "not_initialized"},
 }
 
-
 def _first_weather_snapshot() -> dict:
-    """Return best-effort weather snapshot from HA weather entities."""
-    try:
-        from homeassistant.core import HomeAssistant
+    """Return best-effort weather snapshot from HA weather entities.
 
-        hass = HomeAssistant.get()
-        if not hass:
-            return {}
-        weather_entities = [st for st in hass.states.async_all() if st.domain == "weather"]
-        if not weather_entities:
-            return {}
-        state = weather_entities[0]
-        forecast = state.attributes.get("forecast") or []
-        return {
-            "entity_id": state.entity_id,
-            "friendly_name": state.attributes.get("friendly_name"),
-            "state": state.state,
-            "temperature": state.attributes.get("temperature"),
-            "humidity": state.attributes.get("humidity"),
-            "wind_speed": state.attributes.get("wind_speed"),
-            "forecast": forecast[:5] if isinstance(forecast, list) else [],
-        }
+    Delegates to the Weather API helper which supports HA weather entities
+    and an Open‑Meteo fallback using HA's latitude/longitude.
+    """
+    try:
+        from copilot_core.api.v1.weather import get_weather_ui_snapshot
+        snap = get_weather_ui_snapshot()
+        return snap if isinstance(snap, dict) else {}
     except Exception:
         return {}
 
