@@ -410,6 +410,7 @@ def readiness():
 
 
 @app.get("/api/v1/health/deep")
+@require_token
 def deep_health():
     """Deep health check — tests all services and external dependencies."""
     import requests as http_req
@@ -494,6 +495,7 @@ def deep_health():
 
 
 @app.get("/api/v1/health/metrics")
+@require_token
 def request_metrics():
     """Request timing metrics — endpoint latencies, slow requests, error rates."""
     with _METRICS_LOCK:
@@ -848,15 +850,15 @@ def hub_dashboard():
             "alerts_count": overview.alerts_count,
         })
     except Exception as e:
-        # Return minimal fallback
+        _main_logger.debug("Hub dashboard fallback: %s", e)
         return jsonify({
-            "ok": True,
+            "ok": False,
             "layout": {"name": "default", "columns": 3},
             "widgets_count": 0,
             "summary": {},
             "alerts_count": 0,
             "fallback": True,
-            "error": str(e)[:100],
+            "error": str(e)[:200],
         })
 
 
