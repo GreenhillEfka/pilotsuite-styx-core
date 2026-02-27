@@ -1,5 +1,14 @@
 # Release Notes - PilotSuite Core
 
+## [10.1.5] - 2026-02-27 — HABITUS MINER + SHOPPING LIST + NETWORK T0
+
+- Habitus Miner: konfigurierbar + mining loop repariert (`/api/v1/habitus/config`).
+- Shopping List: bindet an HA Todo (`todo.shopping_list`) via Services (mit local fallback).
+- Network (T0): Baseline Health ohne UniFi (`/api/v1/network/health`).
+- Dashboard Dropdowns: `GET /api/v1/entities` list endpoint (kompatibel zu Legacy Calls).
+- Chat-History: persistiert ueber Neustarts (`/data/brain_activity.json`).
+- Paired Release mit HA Integration `v10.1.5`.
+
 ## [10.1.4] - 2026-02-27 — DASHBOARD DATA FIXES (CALENDAR/WEATHER)
 
 - Calendar API for Haushalt tab:

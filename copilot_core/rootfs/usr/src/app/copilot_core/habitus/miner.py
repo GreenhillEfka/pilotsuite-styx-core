@@ -72,7 +72,9 @@ class HabitusMiner:
     def mine_patterns(
         self, 
         lookback_hours: int = 72,
-        zone: Optional[str] = None
+        zone: Optional[str] = None,
+        *,
+        edge_types: Optional[Set[str]] = None,
     ) -> Dict[str, Dict[str, Any]]:
         """
         Mine A→B automation patterns from recent brain graph activity.
@@ -89,7 +91,7 @@ class HabitusMiner:
         logger.info(f"Starting habitus mining with {lookback_hours}h lookback, zone={zone}")
         
         # Extract action sequences from brain graph
-        sequences = self._extract_action_sequences(lookback_hours, zone=zone)
+        sequences = self._extract_action_sequences(lookback_hours, zone=zone, edge_types=edge_types)
         
         if not sequences:
             logger.info("No action sequences found for pattern mining")
@@ -126,7 +128,9 @@ class HabitusMiner:
     def _extract_action_sequences(
         self, 
         lookback_hours: int,
-        zone: Optional[str] = None
+        zone: Optional[str] = None,
+        *,
+        edge_types: Optional[Set[str]] = None,
     ) -> List[List[Dict[str, Any]]]:
         """Extract time-ordered action sequences from brain graph.
         
@@ -138,10 +142,11 @@ class HabitusMiner:
         cutoff_ms = int((time.time() - lookback_hours * 3600) * 1000)
         
         # Get all service call edges (intentional actions) within time window
+        allowed_edge_types = set(edge_types or {"affects", "targets"})
         all_edges = self.brain_service.store.get_edges()
         service_edges = [
             edge for edge in all_edges 
-            if (edge.edge_type == "affects" and 
+            if (edge.edge_type in allowed_edge_types and
                 edge.from_node.startswith("ha.service:") and
                 edge.updated_at_ms >= cutoff_ms)
         ]

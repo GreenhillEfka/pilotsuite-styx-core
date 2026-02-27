@@ -1971,24 +1971,20 @@ def _execute_calendar_events(args: dict) -> dict:
 def _execute_shopping_list(args: dict) -> dict:
     """Manage shopping list items."""
     try:
-        from copilot_core.api.v1.shopping import _get_conn, _lock
+        from copilot_core.api.v1.shopping import (
+            shopping_list_add_item,
+            shopping_list_clear_completed,
+            shopping_list_list_items,
+            shopping_list_set_completed,
+        )
         action = args.get("action", "list")
 
         if action == "list":
-            with _lock:
-                conn = _get_conn()
-                try:
-                    rows = conn.execute(
-                        "SELECT id, name, quantity, category FROM shopping_items "
-                        "WHERE completed = 0 ORDER BY created_at DESC LIMIT 30"
-                    ).fetchall()
-                    items = [dict(r) for r in rows]
-                    return {"items": items, "count": len(items)}
-                finally:
-                    conn.close()
+            result = shopping_list_list_items(completed=False, limit=30)
+            items = result.get("items", []) if isinstance(result, dict) else []
+            return {"items": items, "count": len(items), "provider": result.get("provider")}
 
         elif action == "add":
-            import uuid as _uuid
             items_to_add = args.get("items", [])
             if not items_to_add:
                 name = args.get("name", "").strip()
@@ -1997,50 +1993,31 @@ def _execute_shopping_list(args: dict) -> dict:
                 items_to_add = [{"name": name, "quantity": args.get("quantity", "")}]
 
             added = []
-            with _lock:
-                conn = _get_conn()
-                try:
-                    for item in items_to_add:
-                        n = item.get("name", "").strip()
-                        if not n:
-                            continue
-                        item_id = f"shop_{_uuid.uuid4().hex[:8]}"
-                        conn.execute(
-                            "INSERT INTO shopping_items (id, name, quantity, category, created_at) "
-                            "VALUES (?, ?, ?, ?, ?)",
-                            (item_id, n, item.get("quantity", ""), item.get("category", ""), time.time()),
-                        )
-                        added.append(n)
-                    conn.commit()
-                    return {"success": True, "added": added, "message": f"{len(added)} Artikel hinzugefuegt"}
-                finally:
-                    conn.close()
+            for item in items_to_add:
+                n = str(item.get("name", "")).strip()
+                if not n:
+                    continue
+                resp = shopping_list_add_item(
+                    name=n,
+                    quantity=str(item.get("quantity", "") or "").strip(),
+                    category=str(item.get("category", "") or "").strip(),
+                    source="conversation",
+                    created_by="conversation",
+                )
+                if isinstance(resp, dict) and resp.get("ok"):
+                    added.append(n)
+            return {"success": True, "added": added, "message": f"{len(added)} Artikel hinzugefuegt"}
 
         elif action == "complete":
             item_id = args.get("item_id", "")
             if not item_id:
                 return {"error": "item_id is required"}
-            with _lock:
-                conn = _get_conn()
-                try:
-                    cursor = conn.execute(
-                        "UPDATE shopping_items SET completed = 1, completed_at = ? WHERE id = ?",
-                        (time.time(), item_id),
-                    )
-                    conn.commit()
-                    return {"success": cursor.rowcount > 0}
-                finally:
-                    conn.close()
+            resp = shopping_list_set_completed(item_id=item_id, completed=True)
+            return {"success": bool(isinstance(resp, dict) and resp.get("ok"))}
 
         elif action == "clear_completed":
-            with _lock:
-                conn = _get_conn()
-                try:
-                    cursor = conn.execute("DELETE FROM shopping_items WHERE completed = 1")
-                    conn.commit()
-                    return {"success": True, "deleted": cursor.rowcount}
-                finally:
-                    conn.close()
+            resp = shopping_list_clear_completed(limit=500)
+            return {"success": bool(isinstance(resp, dict) and resp.get("ok")), "deleted": int(resp.get("deleted", 0) or 0)}
 
         return {"error": f"Unknown action: {action}"}
     except Exception as exc:

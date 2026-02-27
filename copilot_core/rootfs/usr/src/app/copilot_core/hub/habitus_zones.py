@@ -430,6 +430,8 @@ class HabitusZoneEngine:
         if not zone:
             return False
         zone.settings.update(settings)
+        # Settings may influence entity composition (e.g. extra_entities).
+        self._refresh_zone_entities(zone)
         self._persist_state()
         return True
 
@@ -560,6 +562,7 @@ class HabitusZoneEngine:
                 "enabled": zone.enabled,
                 "room_count": len(zone.rooms),
                 "entity_count": len(zone.entities),
+                "entities": list(zone.entities),
             })
 
         unassigned = [rid for rid in self._rooms if rid not in assigned_rooms]
@@ -599,6 +602,25 @@ class HabitusZoneEngine:
             room = self._rooms.get(rid)
             if room:
                 entities.extend(room.entities)
+        # Optional explicit exclusions (e.g. when an entity is "moved" to another zone).
+        exclude_set: set[str] = set()
+        if isinstance(zone.settings, dict):
+            raw_exclude = zone.settings.get("exclude_entities", [])
+            if isinstance(raw_exclude, list):
+                exclude_set = {str(e) for e in raw_exclude if str(e)}
+            elif isinstance(raw_exclude, str) and raw_exclude.strip():
+                exclude_set = {s.strip() for s in raw_exclude.split(",") if s.strip()}
+        if exclude_set:
+            entities = [e for e in entities if e not in exclude_set]
+        # Optional explicit entities that are not tied to a room (zone UX assignments).
+        extra = []
+        if isinstance(zone.settings, dict):
+            raw_extra = zone.settings.get("extra_entities", [])
+            if isinstance(raw_extra, list):
+                extra = [str(e) for e in raw_extra if str(e)]
+            elif isinstance(raw_extra, str) and raw_extra.strip():
+                extra = [s.strip() for s in raw_extra.split(",") if s.strip()]
+        entities.extend(extra)
         zone.entities = list(dict.fromkeys(entities))  # deduplicate preserving order
 
     def _find_zone_for_room(self, room_id: str) -> str | None:

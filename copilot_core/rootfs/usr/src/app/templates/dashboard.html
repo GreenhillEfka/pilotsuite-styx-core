@@ -929,17 +929,18 @@ const MODULE_CONFIG_SPECS={
     postPath:'/api/v1/habitus/config',
     parseGet:(raw)=>raw?.config||null,
     fields:[
-      {key:'min_support_A',label:'Min Support A',type:'number',step:'0.001',min:0,max:1},
-      {key:'min_support_B',label:'Min Support B',type:'number',step:'0.001',min:0,max:1},
-      {key:'min_hits',label:'Min Hits',type:'number',step:'1',min:1,max:10000},
+      {key:'enabled',label:'Aktiv',type:'boolean'},
+      {key:'lookback_hours',label:'Lookback (h)',type:'number',step:'1',min:1,max:168},
       {key:'min_confidence',label:'Min Confidence',type:'number',step:'0.01',min:0,max:1},
+      {key:'min_support',label:'Min Support',type:'number',step:'0.01',min:0,max:1},
       {key:'min_lift',label:'Min Lift',type:'number',step:'0.1',min:0,max:100},
-      {key:'max_rules',label:'Max Rules',type:'number',step:'1',min:1,max:5000},
-      {key:'default_cooldown',label:'Default Cooldown (s)',type:'number',step:'1',min:0,max:86400},
-      {key:'include_domains',label:'Include Domains (CSV)',type:'array'},
-      {key:'exclude_domains',label:'Exclude Domains (CSV)',type:'array'},
-      {key:'exclude_same_entity',label:'Exclude Same Entity',type:'boolean'},
-      {key:'anonymize_entity_ids',label:'Anonymize Entity IDs',type:'boolean'},
+      {key:'delta_window_minutes',label:'Delta Window (min)',type:'number',step:'1',min:1,max:240},
+      {key:'debounce_minutes',label:'Debounce (min)',type:'number',step:'1',min:0,max:240},
+      {key:'mine_on_event_ingest',label:'Mining bei Event-Ingest',type:'boolean'},
+      {key:'min_events_per_batch',label:'Min Events pro Batch',type:'number',step:'1',min:1,max:5000},
+      {key:'min_interval_minutes',label:'Min Intervall (min)',type:'number',step:'1',min:1,max:1440},
+      {key:'edge_types',label:'Edge-Typen (CSV)',type:'array'},
+      {key:'max_new_candidates_per_run',label:'Max neue Kandidaten pro Run',type:'number',step:'1',min:1,max:500},
     ],
   },
   brain_graph:{
@@ -1369,7 +1370,7 @@ async function fetchModuleHealth(){
     api('/chat/memory'),                                 // [5]
     api('/api/v1/energy/health'),                        // [6]
     api('/api/v1/weather/health'),                       // [7]
-    api('/api/v1/unifi/health'),                         // [8]
+    apiTry(['/api/v1/network/health','/api/v1/network']), // [8]
     api('/telegram/status'),                             // [9]
     api('/api/v1/capabilities'),                         // [10]
     api('/api/v1/media/zones'),                          // [11]
@@ -1381,10 +1382,11 @@ async function fetchModuleHealth(){
     api('/api/v1/hub/scenes'),                           // [17]
   ]);
   const v=r=>r.status==='fulfilled'?r.value:null;
-  const [gr,hrWrap,mrWrap,sr,nrWrap,memr,er,wr,ur,tgr,capr,mzr,mkr,wastr,bdayr,lightHub,mediaHub,scenesHub]=settled.map(v);
+  const [gr,hrWrap,mrWrap,sr,nrWrap,memr,er,wr,netWrap,tgr,capr,mzr,mkr,wastr,bdayr,lightHub,mediaHub,scenesHub]=settled.map(v);
   const hr=hrWrap?.data||null;
   const mr=mrWrap?.data||null;
   const nr=nrWrap?.data||null;
+  const net=netWrap?.data||null;
   const caps=capr?.capabilities||[];
   const feats=capr?.features||{};
   const neuronCount=(nr?.neurons?.length)||(nr?.total_pulses)||0;
@@ -1404,7 +1406,7 @@ async function fetchModuleHealth(){
     scene_intelligence: scenesHub?.ok?(scenesHub?.total_scenes>0?'active':'learning'):'off',
     energy_context:er?.status==='ok'||er?.ok?'active':er?'learning':'off',
     weather_context:wr?.status==='ok'||wr?.ok?'active':wr?'learning':'off',
-    network:      ur?.status==='healthy'?'active':ur?.status==='degraded'?'learning':'off',
+    network:      net?.status==='healthy'?'active':net?.status==='degraded'?'learning':'off',
     camera_context:caps.includes('camera')||caps.includes('events')?'learning':'off',
     user_preferences:caps.includes('user_preferences')||feats.multi_user_learning?'active':'learning',
     proactive:    'learning',  // Always learning until user promotes
@@ -1424,7 +1426,7 @@ async function fetchModuleHealth(){
       scene_intelligence:scenesHub?.ok?`${scenesHub?.total_scenes||0} Szenen, ${(scenesHub?.learned_patterns||0)} Muster`:'Nicht gestartet',
       energy_context:er?.status==='ok'?'Online':(er?'Degradiert':'Nicht konfiguriert'),
       weather_context:wr?.status==='ok'?'Online':(wr?'Degradiert':'Nicht konfiguriert'),
-      network:      ur?.status||'Nicht konfiguriert',
+      network:      net?.status||'Nicht konfiguriert',
       camera_context:'Bewegungserkennung',
       user_preferences:'Multi-User Learning',
       proactive:    'Kontext-Vorschlaege bei Zone-Eintritt',

@@ -40,6 +40,8 @@ Prefer targeted suites first; run broader suites before release/tag creation.
 - Commit style mirrors this repo’s history:
   `feat: ...`, `fix: ...`, `chore: ...`, and release commits like `v10.1.3: ...`.
 - Include version/changelog updates in release commits.
+- Paired releases: keep versions aligned with `pilotsuite-styx-ha` and tag both repos with the same `vX.Y.Z`.
+  - Core version must match in `copilot_core/config.yaml` and `copilot_core/rootfs/usr/src/app/VERSION`.
 - PR/release notes should include impact, files changed, and passing test evidence.
 
 ## Security & Configuration Tips

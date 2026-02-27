@@ -150,6 +150,57 @@ def _suggest_zone(entity_id: str, friendly_name: str, area_name: str) -> str:
 # REST Endpoints
 # ---------------------------------------------------------------------------
 
+@entity_search_bp.route("", methods=["GET"])
+@require_token
+def list_entities():
+    """List cached entities (v2).
+
+    This endpoint intentionally mirrors the legacy ``/api/v1/entities`` list API
+    that the dashboard expects, but it is backed by the HA discovery cache.
+
+    Query params:
+      domain: Filter by domain (e.g., 'light', 'media_player')
+      state:  Filter by state (e.g., 'on', 'off', 'unavailable')
+      area:   Filter by area_id
+      role:   Filter by inferred role
+      label:  Filter by HA label
+      limit:  Max results (default 2000, max 5000)
+    """
+    domain_filter = request.args.get("domain", "").strip().lower()
+    state_filter = request.args.get("state", "").strip().lower()
+    area_filter = request.args.get("area", "").strip()
+    role_filter = request.args.get("role", "").strip().lower()
+    label_filter = request.args.get("label", "").strip().lower()
+    limit = min(int(request.args.get("limit", 2000)), 5000)
+
+    results: list[dict[str, Any]] = []
+    for entity in _entity_cache.values():
+        if domain_filter and entity.get("domain") != domain_filter:
+            continue
+        if state_filter and str(entity.get("state", "")).lower() != state_filter:
+            continue
+        if area_filter and entity.get("area_id") != area_filter:
+            continue
+        if role_filter and role_filter not in entity.get("roles", []):
+            continue
+        if label_filter:
+            entity_labels = [l.lower() for l in entity.get("labels", [])]
+            if label_filter not in entity_labels:
+                continue
+        results.append(entity)
+        if len(results) >= limit:
+            break
+
+    results.sort(key=lambda e: e.get("friendly_name", e.get("entity_id", "")).lower())
+
+    return jsonify({
+        "ok": True,
+        "entities": results,
+        "count": len(results),
+        "total_cached": len(_entity_cache),
+    })
+
+
 @entity_search_bp.route("/search", methods=["GET"])
 @require_token
 def search_entities():

@@ -14,10 +14,14 @@ The frontend reads the activity state to animate the brain:
 
 from __future__ import annotations
 
+import json
 import logging
+import os
+import threading
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
+from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -83,6 +87,9 @@ class BrainActivityEngine:
     """Tracks brain activity state, pulses, and chat history."""
 
     def __init__(self, idle_timeout: int = 300, sleep_timeout: int = 1800) -> None:
+        self._lock = threading.RLock()
+        self._store_path = Path(os.environ.get("BRAIN_ACTIVITY_STORE", "/data/brain_activity.json"))
+
         self._state = BrainState.IDLE
         self._boot_time = datetime.now(tz=timezone.utc)
         self._last_active: datetime | None = None
@@ -100,6 +107,70 @@ class BrainActivityEngine:
         self._chat_history: list[ChatMessage] = []
         self._chat_counter = 0
 
+        # Best-effort persistence (chat + counters). Never fail init.
+        self._load_state()
+
+    # ── Persistence ────────────────────────────────────────────────────
+
+    def _load_state(self) -> None:
+        try:
+            path = self._store_path
+            if not path.exists():
+                return
+            raw = json.loads(path.read_text(encoding="utf-8") or "{}")
+            if not isinstance(raw, dict):
+                return
+            counter = raw.get("chat_counter")
+            if isinstance(counter, int) and counter >= 0:
+                self._chat_counter = counter
+            items = raw.get("chat_history")
+            if isinstance(items, list):
+                restored: list[ChatMessage] = []
+                for item in items[-200:]:
+                    if not isinstance(item, dict):
+                        continue
+                    role = str(item.get("role") or "user")
+                    content = str(item.get("content") or "")
+                    if not content:
+                        continue
+                    restored.append(
+                        ChatMessage(
+                            message_id=str(item.get("message_id") or ""),
+                            role=role,
+                            content=content,
+                            timestamp=str(item.get("timestamp") or ""),
+                            metadata=item.get("metadata") if isinstance(item.get("metadata"), dict) else {},
+                        )
+                    )
+                self._chat_history = restored
+        except Exception:
+            return
+
+    def _persist_state(self) -> None:
+        try:
+            path = self._store_path
+            path.parent.mkdir(parents=True, exist_ok=True)
+            payload = {
+                "version": 1,
+                "saved_at": datetime.now(tz=timezone.utc).isoformat(),
+                "chat_counter": self._chat_counter,
+                "chat_history": [
+                    {
+                        "message_id": m.message_id,
+                        "role": m.role,
+                        "content": m.content,
+                        "timestamp": m.timestamp,
+                        "metadata": m.metadata,
+                    }
+                    for m in self._chat_history[-200:]
+                ],
+            }
+            tmp = path.with_suffix(".tmp")
+            tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+            tmp.replace(path)
+        except Exception:
+            return
+
     # ── State management ──────────────────────────────────────────────────
 
     @property
@@ -108,169 +179,183 @@ class BrainActivityEngine:
 
     def wake(self) -> str:
         """Wake the brain from sleeping or idle."""
-        if self._state == BrainState.SLEEPING and self._sleep_start:
-            elapsed = (datetime.now(tz=timezone.utc) - self._sleep_start).total_seconds()
-            self._total_sleep_seconds += int(elapsed)
-            self._sleep_start = None
-        self._state = BrainState.IDLE
-        self._last_active = datetime.now(tz=timezone.utc)
-        logger.info("Brain: woke up → idle")
-        return self._state.value
+        with self._lock:
+            if self._state == BrainState.SLEEPING and self._sleep_start:
+                elapsed = (datetime.now(tz=timezone.utc) - self._sleep_start).total_seconds()
+                self._total_sleep_seconds += int(elapsed)
+                self._sleep_start = None
+            self._state = BrainState.IDLE
+            self._last_active = datetime.now(tz=timezone.utc)
+            logger.info("Brain: woke up → idle")
+            return self._state.value
 
     def sleep(self) -> str:
         """Put the brain to sleep (resource saving mode)."""
-        if self._active_pulse:
-            self.end_pulse()
-        self._state = BrainState.SLEEPING
-        self._last_sleep = datetime.now(tz=timezone.utc)
-        self._sleep_start = datetime.now(tz=timezone.utc)
-        logger.info("Brain: going to sleep 💤")
-        return self._state.value
+        with self._lock:
+            if self._active_pulse:
+                self.end_pulse()
+            self._state = BrainState.SLEEPING
+            self._last_sleep = datetime.now(tz=timezone.utc)
+            self._sleep_start = datetime.now(tz=timezone.utc)
+            logger.info("Brain: going to sleep 💤")
+            return self._state.value
 
     def check_idle(self) -> str:
         """Check if brain should transition to sleeping based on idle timeout.
 
         Returns the current state after check.
         """
-        if self._state != BrainState.IDLE:
-            return self._state.value
+        with self._lock:
+            if self._state != BrainState.IDLE:
+                return self._state.value
 
-        if self._last_active:
-            elapsed = (datetime.now(tz=timezone.utc) - self._last_active).total_seconds()
-            if elapsed >= self._idle_timeout:
-                self.sleep()
-        return self._state.value
+            if self._last_active:
+                elapsed = (datetime.now(tz=timezone.utc) - self._last_active).total_seconds()
+                if elapsed >= self._idle_timeout:
+                    self.sleep()
+            return self._state.value
 
     # ── Pulse tracking ────────────────────────────────────────────────────
 
     def start_pulse(self, reason: str = "api_request") -> ActivityPulse:
         """Start a new activity pulse — brain becomes active."""
-        if self._state == BrainState.SLEEPING:
-            self.wake()
+        with self._lock:
+            if self._state == BrainState.SLEEPING:
+                self.wake()
 
-        self._state = BrainState.ACTIVE
-        self._last_active = datetime.now(tz=timezone.utc)
-        self._pulse_counter += 1
+            self._state = BrainState.ACTIVE
+            self._last_active = datetime.now(tz=timezone.utc)
+            self._pulse_counter += 1
 
-        pulse = ActivityPulse(
-            pulse_id=f"pulse_{self._pulse_counter:05d}",
-            reason=reason,
-            started=datetime.now(tz=timezone.utc).isoformat(),
-        )
-        self._active_pulse = pulse
-        return pulse
+            pulse = ActivityPulse(
+                pulse_id=f"pulse_{self._pulse_counter:05d}",
+                reason=reason,
+                started=datetime.now(tz=timezone.utc).isoformat(),
+            )
+            self._active_pulse = pulse
+            return pulse
 
     def end_pulse(self) -> ActivityPulse | None:
         """End the current pulse — brain returns to idle."""
-        if not self._active_pulse:
-            return None
+        with self._lock:
+            if not self._active_pulse:
+                return None
 
-        pulse = self._active_pulse
-        now = datetime.now(tz=timezone.utc)
-        pulse.ended = now.isoformat()
+            pulse = self._active_pulse
+            now = datetime.now(tz=timezone.utc)
+            pulse.ended = now.isoformat()
 
-        start_dt = datetime.fromisoformat(pulse.started)
-        pulse.duration_ms = int((now - start_dt).total_seconds() * 1000)
+            start_dt = datetime.fromisoformat(pulse.started)
+            pulse.duration_ms = int((now - start_dt).total_seconds() * 1000)
 
-        self._pulses.append(pulse)
-        self._pulses = self._pulses[-500:]  # cap history
-        self._active_pulse = None
-        self._state = BrainState.IDLE
-        self._last_active = now
-        return pulse
+            self._pulses.append(pulse)
+            self._pulses = self._pulses[-500:]  # cap history
+            self._active_pulse = None
+            self._state = BrainState.IDLE
+            self._last_active = now
+            return pulse
 
     def get_recent_pulses(self, limit: int = 10) -> list[ActivityPulse]:
-        return list(reversed(self._pulses[-limit:]))
+        with self._lock:
+            return list(reversed(self._pulses[-limit:]))
 
     # ── Chat history ──────────────────────────────────────────────────────
 
     def add_chat_message(self, role: str, content: str,
                          metadata: dict[str, Any] | None = None) -> ChatMessage:
         """Add a message to the chat history. Auto-pulses when assistant responds."""
-        self._chat_counter += 1
-        msg = ChatMessage(
-            message_id=f"msg_{self._chat_counter:05d}",
-            role=role,
-            content=content,
-            timestamp=datetime.now(tz=timezone.utc).isoformat(),
-            metadata=metadata or {},
-        )
-        self._chat_history.append(msg)
-        self._chat_history = self._chat_history[-200:]  # cap
+        with self._lock:
+            self._chat_counter += 1
+            msg = ChatMessage(
+                message_id=f"msg_{self._chat_counter:05d}",
+                role=role,
+                content=content,
+                timestamp=datetime.now(tz=timezone.utc).isoformat(),
+                metadata=metadata or {},
+            )
+            self._chat_history.append(msg)
+            self._chat_history = self._chat_history[-200:]  # cap
 
-        # Auto-pulse on assistant message
-        if role == "assistant":
-            pulse = self.start_pulse(reason="chat")
-            self.end_pulse()
+            # Auto-pulse on assistant message
+            if role == "assistant":
+                self.start_pulse(reason="chat")
+                self.end_pulse()
 
-        # Keep brain awake on any chat activity
-        if self._state == BrainState.SLEEPING:
-            self.wake()
-        self._last_active = datetime.now(tz=timezone.utc)
+            # Keep brain awake on any chat activity
+            if self._state == BrainState.SLEEPING:
+                self.wake()
+            self._last_active = datetime.now(tz=timezone.utc)
 
-        return msg
+            self._persist_state()
+            return msg
 
     def get_chat_history(self, limit: int = 50) -> list[ChatMessage]:
-        return list(reversed(self._chat_history[-limit:]))
+        with self._lock:
+            return list(reversed(self._chat_history[-limit:]))
 
     def clear_chat_history(self) -> int:
-        count = len(self._chat_history)
-        self._chat_history.clear()
-        return count
+        with self._lock:
+            count = len(self._chat_history)
+            self._chat_history.clear()
+            self._persist_state()
+            return count
 
     # ── Configuration ─────────────────────────────────────────────────────
 
     def set_idle_timeout(self, seconds: int) -> int:
-        self._idle_timeout = max(30, min(3600, seconds))
-        return self._idle_timeout
+        with self._lock:
+            self._idle_timeout = max(30, min(3600, seconds))
+            return self._idle_timeout
 
     def set_sleep_timeout(self, seconds: int) -> int:
-        self._sleep_timeout = max(60, min(86400, seconds))
-        return self._sleep_timeout
+        with self._lock:
+            self._sleep_timeout = max(60, min(86400, seconds))
+            return self._sleep_timeout
 
     # ── Status ────────────────────────────────────────────────────────────
 
     def get_status(self) -> BrainActivityStatus:
-        now = datetime.now(tz=timezone.utc)
-        uptime = int((now - self._boot_time).total_seconds())
+        with self._lock:
+            now = datetime.now(tz=timezone.utc)
+            uptime = int((now - self._boot_time).total_seconds())
 
-        sleep_secs = self._total_sleep_seconds
-        if self._state == BrainState.SLEEPING and self._sleep_start:
-            sleep_secs += int((now - self._sleep_start).total_seconds())
+            sleep_secs = self._total_sleep_seconds
+            if self._state == BrainState.SLEEPING and self._sleep_start:
+                sleep_secs += int((now - self._sleep_start).total_seconds())
 
-        recent_pulses = [
-            {
-                "pulse_id": p.pulse_id,
-                "reason": p.reason,
-                "started": p.started,
-                "duration_ms": p.duration_ms,
-            }
-            for p in self.get_recent_pulses(5)
-        ]
+            recent_pulses = [
+                {
+                    "pulse_id": p.pulse_id,
+                    "reason": p.reason,
+                    "started": p.started,
+                    "duration_ms": p.duration_ms,
+                }
+                for p in self.get_recent_pulses(5)
+            ]
 
-        recent_chat = [
-            {
-                "message_id": m.message_id,
-                "role": m.role,
-                "content": m.content[:200],
-                "timestamp": m.timestamp,
-            }
-            for m in self.get_chat_history(5)
-        ]
+            recent_chat = [
+                {
+                    "message_id": m.message_id,
+                    "role": m.role,
+                    "content": m.content[:200],
+                    "timestamp": m.timestamp,
+                }
+                for m in self.get_chat_history(5)
+            ]
 
-        return BrainActivityStatus(
-            state=self._state.value,
-            last_active=self._last_active.isoformat() if self._last_active else "",
-            last_sleep=self._last_sleep.isoformat() if self._last_sleep else "",
-            total_pulses=len(self._pulses),
-            total_chat_messages=len(self._chat_history),
-            uptime_seconds=uptime,
-            sleep_seconds=sleep_secs,
-            idle_timeout_seconds=self._idle_timeout,
-            sleep_timeout_seconds=self._sleep_timeout,
-            recent_pulses=recent_pulses,
-            recent_chat=recent_chat,
-        )
+            return BrainActivityStatus(
+                state=self._state.value,
+                last_active=self._last_active.isoformat() if self._last_active else "",
+                last_sleep=self._last_sleep.isoformat() if self._last_sleep else "",
+                total_pulses=len(self._pulses),
+                total_chat_messages=len(self._chat_history),
+                uptime_seconds=uptime,
+                sleep_seconds=sleep_secs,
+                idle_timeout_seconds=self._idle_timeout,
+                sleep_timeout_seconds=self._sleep_timeout,
+                recent_pulses=recent_pulses,
+                recent_chat=recent_chat,
+            )
 
     def get_dashboard(self) -> dict[str, Any]:
         """Full activity dashboard for API."""

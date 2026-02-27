@@ -1,5 +1,22 @@
 # Changelog - PilotSuite Core Add-on
 
+## [10.1.5] - 2026-02-27 — HABITUS MINER + SHOPPING LIST + NETWORK T0
+
+### Added
+- Entities list endpoint (dashboard dropdowns):
+  - `GET /api/v1/entities` (filters: `domain`, `area`, `state`, `label`, `role`, `limit`)
+- Habitus Miner configuration API:
+  - `GET /api/v1/habitus/config`
+  - `POST /api/v1/habitus/config`
+- Network Tier-0 health endpoints (no UniFi required):
+  - `GET /api/v1/network`
+  - `GET /api/v1/network/health`
+
+### Changed
+- Shopping list now binds to Home Assistant native Todo list when available (`todo.shopping_list`), with local fallback.
+- Habitus mining loop is config-driven (throttling, support/lift thresholds, edge-type selection).
+- Chat history persists across restarts (stored in `/data/brain_activity.json`).
+
 ## [10.1.4] - 2026-02-27 — DASHBOARD DATA FIXES (CALENDAR/WEATHER)
 
 ### Added

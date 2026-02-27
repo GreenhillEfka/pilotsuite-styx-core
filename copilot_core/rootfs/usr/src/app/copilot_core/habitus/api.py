@@ -5,6 +5,8 @@ Provides HTTP API for habitus pattern discovery and candidate management:
 - POST /api/v1/habitus/mine - Trigger pattern mining
 - GET /api/v1/habitus/stats - Mining statistics  
 - GET /api/v1/habitus/patterns - Recent patterns
+- GET  /api/v1/habitus/config - Read persisted miner configuration
+- POST /api/v1/habitus/config - Update persisted miner configuration
 """
 import time
 import logging
@@ -128,6 +130,28 @@ def init_habitus_api(service: HabitusService, brain_service: Optional[BrainGraph
     global _habitus_service, _brain_graph_service
     _habitus_service = service
     _brain_graph_service = brain_service
+
+
+@habitus_bp.route('/config', methods=['GET'])
+@require_api_key
+def get_config() -> Response:
+    """Get persisted Habitus Miner configuration."""
+    if not _habitus_service:
+        return jsonify({"ok": False, "error": "Habitus service not initialized"}), 503
+    return jsonify({"ok": True, "config": _habitus_service.get_config()})
+
+
+@habitus_bp.route('/config', methods=['POST'])
+@require_api_key
+def set_config() -> Response:
+    """Update persisted Habitus Miner configuration (partial merge)."""
+    if not _habitus_service:
+        return jsonify({"ok": False, "error": "Habitus service not initialized"}), 503
+    body = request.get_json(silent=True) or {}
+    if not isinstance(body, dict):
+        return jsonify({"ok": False, "error": "invalid_json"}), 400
+    cfg = _habitus_service.set_config(body)
+    return jsonify({"ok": True, "config": cfg})
 
 @habitus_bp.route('/mine', methods=['POST'])
 @require_api_key

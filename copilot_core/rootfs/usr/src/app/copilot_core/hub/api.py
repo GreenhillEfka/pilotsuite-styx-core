@@ -1179,6 +1179,164 @@ def set_zone_settings_endpoint(zone_id):
     return jsonify({"ok": True, "zone_id": zone_id, "settings": (zone or {}).get("settings", {})})
 
 
+@hub_bp.route("/zones/assign-entity", methods=["POST"])
+@require_token
+def assign_entity_to_zone_endpoint():
+    """Assign (or unassign) an entity to a zone via settings overrides.
+
+    This is the backend counterpart for the Core dashboard "Zonenmanagement"
+    dropdowns.
+
+    JSON body:
+      {
+        "entity_id": "light.kitchen",
+        "zone_id": "zone:kuechenbereich" | ""   # empty = unassign override
+        "exclusive": true                       # default true
+      }
+    """
+    if not _zone_engine:
+        return jsonify({"ok": False, "error": "zone_engine_not_initialized"}), 503
+
+    body = request.get_json(silent=True) or {}
+    entity_id = str(body.get("entity_id", "")).strip()
+    zone_id = str(body.get("zone_id", "")).strip()
+    exclusive = bool(body.get("exclusive", True))
+
+    if not entity_id or "." not in entity_id:
+        return jsonify({"ok": False, "error": "entity_id_required"}), 400
+
+    # Validate target zone if provided.
+    if zone_id:
+        if not _zone_engine.get_zone(zone_id):
+            return jsonify({"ok": False, "error": "zone_not_found", "zone_id": zone_id}), 404
+
+    overview = _zone_engine.get_overview()
+    zones = overview.zones if hasattr(overview, "zones") else []
+    changed: list[str] = []
+
+    def _list_from_settings(val: object) -> list[str]:
+        if isinstance(val, list):
+            return [str(v) for v in val if str(v)]
+        if isinstance(val, str) and val.strip():
+            return [s.strip() for s in val.split(",") if s.strip()]
+        return []
+
+    for z in zones:
+        zid = str(z.get("zone_id", "")).strip() if isinstance(z, dict) else ""
+        if not zid:
+            continue
+        detail = _zone_engine.get_zone(zid) or {}
+        settings = detail.get("settings", {}) if isinstance(detail.get("settings"), dict) else {}
+        extra = _list_from_settings(settings.get("extra_entities"))
+        exclude = _list_from_settings(settings.get("exclude_entities"))
+
+        before_extra = set(extra)
+        before_exclude = set(exclude)
+
+        # Exclusive assignment means: only the target zone keeps extra_entities,
+        # and all other zones explicitly exclude the entity from room-derived membership.
+        if exclusive:
+            if entity_id in extra and zid != zone_id:
+                extra = [e for e in extra if e != entity_id]
+            if zid != zone_id:
+                if entity_id not in exclude:
+                    exclude.append(entity_id)
+            else:
+                exclude = [e for e in exclude if e != entity_id]
+
+        # If unassigning (zone_id empty), clear overrides everywhere.
+        if not zone_id:
+            extra = [e for e in extra if e != entity_id]
+            exclude = [e for e in exclude if e != entity_id]
+
+        # If assigning to target zone, ensure it's explicitly included.
+        if zone_id and zid == zone_id:
+            if entity_id not in extra:
+                extra.append(entity_id)
+            exclude = [e for e in exclude if e != entity_id]
+
+        if set(extra) != before_extra or set(exclude) != before_exclude:
+            _zone_engine.set_zone_settings(zid, {"extra_entities": extra, "exclude_entities": exclude})
+            changed.append(zid)
+
+    return jsonify(
+        {
+            "ok": True,
+            "entity_id": entity_id,
+            "zone_id": zone_id,
+            "exclusive": exclusive,
+            "changed_zones": changed,
+        }
+    )
+
+
+@hub_bp.route("/zones/entity-assignments", methods=["GET"])
+@require_token
+def get_entity_assignments_endpoint():
+    """Return current entity→zone assignment view used by the dashboard."""
+    if not _zone_engine:
+        return jsonify({"ok": False, "error": "zone_engine_not_initialized"}), 503
+
+    overview = _zone_engine.get_overview()
+    zones = overview.zones if hasattr(overview, "zones") else []
+    zone_meta: list[dict] = []
+    entity_to_zones: dict[str, list[str]] = {}
+    explicit_primary: dict[str, str] = {}
+
+    def _list(val: object) -> list[str]:
+        if isinstance(val, list):
+            return [str(v) for v in val if str(v)]
+        if isinstance(val, str) and val.strip():
+            return [s.strip() for s in val.split(",") if s.strip()]
+        return []
+
+    for z in zones:
+        zid = str(z.get("zone_id", "")).strip() if isinstance(z, dict) else ""
+        if not zid:
+            continue
+        detail = _zone_engine.get_zone(zid) or {}
+        settings = detail.get("settings", {}) if isinstance(detail.get("settings"), dict) else {}
+        extra = _list(settings.get("extra_entities"))
+        exclude = _list(settings.get("exclude_entities"))
+        zone_meta.append(
+            {
+                "zone_id": zid,
+                "name": detail.get("name") or z.get("name") or zid,
+                "priority": int(detail.get("priority") or 0),
+                "extra_entities": extra,
+                "exclude_entities": exclude,
+                "entity_count": int(detail.get("entity_count") or len(detail.get("entities") or [])),
+            }
+        )
+
+        # Compute explicit primary assignments (extra_entities wins).
+        for eid in extra:
+            # Prefer higher priority if entity is assigned to multiple zones.
+            if eid not in explicit_primary:
+                explicit_primary[eid] = zid
+            else:
+                current = next((m for m in zone_meta if m["zone_id"] == explicit_primary[eid]), None)
+                if current and int(current.get("priority") or 0) < int(detail.get("priority") or 0):
+                    explicit_primary[eid] = zid
+
+        for eid in detail.get("entities", []) if isinstance(detail.get("entities"), list) else []:
+            eid = str(eid)
+            if not eid:
+                continue
+            entity_to_zones.setdefault(eid, [])
+            if zid not in entity_to_zones[eid]:
+                entity_to_zones[eid].append(zid)
+
+    return jsonify(
+        {
+            "ok": True,
+            "zones": sorted(zone_meta, key=lambda x: (-int(x.get("priority") or 0), str(x.get("name") or ""))),
+            "entity_to_zones": entity_to_zones,
+            "explicit_primary": explicit_primary,
+        }
+    )
+
+
 @hub_bp.route("/zones/<zone_id>/mode", methods=["POST"])
 @require_token
 def set_zone_mode_endpoint(zone_id):

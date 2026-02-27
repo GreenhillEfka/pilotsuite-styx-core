@@ -3,6 +3,13 @@
 This file exists so Home Assistant can show an add-on changelog.
 For full history, see the repository-level `CHANGELOG.md`.
 
+## 10.1.5
+- Habitus Miner ist jetzt konfigurierbar (API + persistente Defaults) und mined wieder Kandidaten.
+- Shopping List nutzt native HA Todo (`todo.shopping_list`) wenn verfuegbar (sonst local fallback).
+- Network Tier-0 Health: Baseline-Checks ohne UniFi (`/api/v1/network/health`).
+- Dashboard Dropdowns: `GET /api/v1/entities` (liste + filter).
+- Chat-History wird persistiert (ueber Neustarts).
+
 ## 10.1.3
 - Paired Release zur HA Integration `v10.1.3` (Core/HA Versionschutz + Contract-Tests in HA).
 

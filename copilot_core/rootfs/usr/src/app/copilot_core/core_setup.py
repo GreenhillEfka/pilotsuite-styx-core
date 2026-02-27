@@ -228,7 +228,7 @@ def init_services(hass=None, config: dict = None):
         if services["brain_graph_service"] and services["candidate_store"]:
             habitus_service = HabitusService(services["brain_graph_service"], services["candidate_store"])
             services["habitus_service"] = habitus_service
-            init_habitus_api(habitus_service)
+            init_habitus_api(habitus_service, services["brain_graph_service"])
     except Exception:
         _LOGGER.exception("Failed to init HabitusService")
 
@@ -296,17 +296,43 @@ def init_services(hass=None, config: dict = None):
             if habitus_svc:
                 def _trigger_habitus_learning(topic: str, data: dict) -> None:
                     """Trigger habitus pattern mining after events are ingested."""
-                    count = data.get("count", 0)
-                    if count >= 5:  # Only mine when enough events accumulated
+                    try:
+                        cfg = habitus_svc.get_config() if hasattr(habitus_svc, "get_config") else {}
+                        if not cfg or not isinstance(cfg, dict):
+                            cfg = {}
+                        if not cfg.get("mine_on_event_ingest", True):
+                            return
+
+                        # Respect module off-state if ModuleRegistry exists.
                         try:
-                            result = habitus_svc.run_mining()
-                            if result and result.get("new_patterns", 0) > 0:
-                                event_bus.publish("habitus.pattern", {
-                                    "new_patterns": result["new_patterns"],
-                                    "total_rules": result.get("total_rules", 0),
-                                }, source="habitus_service")
+                            from copilot_core.module_registry import ModuleRegistry
+                            if ModuleRegistry.get_instance().is_off("habitus_miner"):
+                                return
                         except Exception:
-                            _LOGGER.debug("Habitus mining after event batch failed")
+                            pass
+
+                        count = int(data.get("count", 0) or 0)
+                        min_events = int(cfg.get("min_events_per_batch", 5) or 5)
+                        if count < min_events:
+                            return
+
+                        lookback = int(cfg.get("lookback_hours", 72) or 72)
+                        result = habitus_svc.mine_and_create_candidates(
+                            lookback_hours=lookback,
+                            force=False,
+                        )
+                        new_candidates = int(result.get("candidates_created", 0) or 0) if isinstance(result, dict) else 0
+                        if new_candidates > 0:
+                            event_bus.publish(
+                                "habitus.pattern",
+                                {
+                                    "new_patterns": new_candidates,
+                                    "patterns_found": result.get("patterns_found", 0) if isinstance(result, dict) else 0,
+                                },
+                                source="habitus_service",
+                            )
+                    except Exception:
+                        _LOGGER.debug("Habitus mining after event batch failed")
 
                 event_bus.subscribe("event.ingested", _trigger_habitus_learning)
                 _LOGGER.info("Habitus learning loop wired to EventBus")
@@ -1101,13 +1127,9 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
     except Exception:
         _LOGGER.exception("Failed to register Self-Repair API")
 
-    # Register Entity Management API (v7.13.0)
-    try:
-        from copilot_core.api.v1.entities import entities_bp
-        app.register_blueprint(entities_bp)
-        _LOGGER.info("Registered Entity Management API (/api/v1/entities/*)")
-    except Exception:
-        _LOGGER.exception("Failed to register Entity Management API")
+    # NOTE: Entity API is provided by Entity Search API v2 (/api/v1/entities/*).
+    # The legacy entity-management blueprint depended on HA internals and caused
+    # route collisions with the cache-backed search API. Keep it unregistered.
 
     # Register Automation Webhook API (v7.13.0)
     try:
