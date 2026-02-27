@@ -77,6 +77,16 @@ class ZoneAutomationConfig:
     media_players: list[str] = field(default_factory=list)
     media_follow_presence: bool = True
 
+    # Climate/Heating
+    climate_entities: list[str] = field(default_factory=list)
+    heating_mode: str = "presence"  # presence, schedule, manual, off
+    heating_comfort_temp_c: float = 21.0
+    heating_eco_temp_c: float = 17.0
+    heating_boost_temp_c: float = 23.0
+
+    # Brightness threshold (0-100, 0=ignore brightness, 100=always lights on)
+    brightness_threshold_pct: int = 50
+
     # Tags (auto-generated from entity domains)
     auto_tags: dict[str, list[str]] = field(default_factory=dict)
 
@@ -429,6 +439,7 @@ class ZoneAutomationController:
             + config.light_entities
             + config.indoor_brightness_sensors
             + config.media_players
+            + config.climate_entities
         )
         if config.outdoor_brightness_sensor:
             all_entities.append(config.outdoor_brightness_sensor)
@@ -616,10 +627,10 @@ class ZoneAutomationController:
         media_action = self._compute_media_action(config, presence)
 
         # ---- Step 5: Heating/Climate decision ----
-        heating_action, heating_target = self._compute_heating_action(config)
+        heating_action, heating_target = self._compute_heating_action(config, presence)
 
-        # Collect climate entities from auto_tags
-        climate_entities = config.auto_tags.get("climate", [])
+        # Collect climate entities from config (with fallback to auto_tags)
+        climate_entities = config.climate_entities or config.auto_tags.get("climate", [])
 
         # Build evaluation
         evaluation = ZoneEvaluation(
@@ -800,18 +811,33 @@ class ZoneAutomationController:
     def _compute_heating_action(
         self,
         config: ZoneAutomationConfig,
+        presence: ZonePresenceState | None = None,
     ) -> tuple[str, float]:
-        """Compute heating action from override mode consequences.
+        """Compute heating action based on presence and config.
 
         Returns (action, target_temp_c).
         """
+        # Check override modes first
         consequences = self._get_zone_consequences(config.zone_id)
-        if not consequences:
+        if consequences:
+            target = consequences.get("heating_target_temp_c", 0)
+            if target and float(target) > 0:
+                return "set_temp", float(target)
+
+        if config.heating_mode == "off" or not config.climate_entities:
             return "none", 0.0
 
-        target = consequences.get("heating_target_temp_c", 0)
-        if target and float(target) > 0:
-            return "set_temp", float(target)
+        if config.heating_mode == "manual":
+            return "none", 0.0
+
+        # Presence-based heating
+        if config.heating_mode == "presence" and presence is not None:
+            if presence.occupied:
+                return "set_temp", config.heating_comfort_temp_c
+            elif presence.state == "grace_period":
+                return "set_temp", config.heating_comfort_temp_c
+            else:
+                return "set_temp", config.heating_eco_temp_c
 
         return "none", 0.0
 
@@ -860,6 +886,7 @@ class ZoneAutomationController:
             light_entities: list[str] = []
             brightness_sensors: list[str] = []
             media_players: list[str] = []
+            climate_entities: list[str] = []
 
             for eid in entities:
                 if not isinstance(eid, str) or "." not in eid:
@@ -883,6 +910,8 @@ class ZoneAutomationController:
                         presence_sensors.append(eid)
                 elif domain == "media_player":
                     media_players.append(eid)
+                elif domain == "climate":
+                    climate_entities.append(eid)
 
             config_data = {
                 "zone_id": zone_id,
@@ -891,6 +920,7 @@ class ZoneAutomationController:
                 "light_entities": light_entities,
                 "indoor_brightness_sensors": brightness_sensors,
                 "media_players": media_players,
+                "climate_entities": climate_entities,
             }
 
             with self._lock:

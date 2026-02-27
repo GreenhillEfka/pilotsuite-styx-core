@@ -1,5 +1,21 @@
 # Changelog - PilotSuite Core Add-on
 
+## [10.1.6] - 2026-02-27 — ZONE MANAGEMENT DASHBOARD + CLIMATE HEATING + ANOMALY DETECTION
+
+### Added
+- Dashboard: Zonenmanagement page (device class tagging, entity assignment, brightness/presence thresholds per zone).
+- Dashboard: Weather page (current weather, forecast, PV recommendations, weather warnings, location info).
+- Habitus Miner: Pattern/trend tracking with `get_patterns_and_trends()` method and 3 new API endpoints:
+  - `GET /api/v1/habitus/patterns/trends` (patterns, top rules, trend data)
+  - `GET /api/v1/habitus/zones/statistics` (per-zone mining stats)
+  - `GET /api/v1/habitus/anomalies` (anomaly detection: pattern drops, confidence shifts)
+- Network T0: `GET /api/v1/network/devices` (HA device tracker counts), `GET /api/v1/network/interfaces` (local network info).
+
+### Changed
+- Zone Automation Controller: Presence-based heating (comfort/eco/boost temps), climate entity auto-detection from habitus zones, brightness threshold (0-100%) per zone.
+- `ZoneAutomationConfig` dataclass: new fields `climate_entities`, `heating_mode`, `heating_comfort_temp_c`, `heating_eco_temp_c`, `heating_boost_temp_c`, `brightness_threshold_pct`.
+- Habitus Service: exposed miner data (zone statistics, anomaly detection, pattern history).
+
 ## [10.1.5] - 2026-02-27 — HABITUS MINER + SHOPPING LIST + NETWORK T0
 
 ### Added

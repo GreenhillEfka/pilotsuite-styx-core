@@ -12,6 +12,7 @@ import os
 import threading
 import time
 import logging
+from collections import Counter
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 
@@ -365,6 +366,180 @@ class HabitusService:
         
         return self.candidate_store.get_candidate(candidate_id)
         
+    def get_patterns_and_trends(self) -> Dict[str, Any]:
+        """Return miner patterns, top rules, and trend data.
+
+        Delegates to the miner's ``get_patterns_and_trends`` method and
+        enriches the response with service-level metadata (last mining run,
+        mining config, candidate counts).
+        """
+        miner_data = self.miner.get_patterns_and_trends()
+
+        # Enrich with service-level stats
+        all_candidates = self.candidate_store.list_candidates()
+        pattern_candidate_count = sum(
+            1 for c in all_candidates if c.pattern_id
+        )
+        states: Dict[str, int] = {}
+        for c in all_candidates:
+            states[c.state] = states.get(c.state, 0) + 1
+
+        miner_data["last_mining_run"] = int(self.last_mining_run)
+        miner_data["candidates_total"] = len(all_candidates)
+        miner_data["candidates_with_pattern"] = pattern_candidate_count
+        miner_data["candidates_by_state"] = states
+        miner_data["mining_config"] = {
+            "min_confidence": self.miner.min_confidence,
+            "min_support": self.miner.min_support,
+            "min_lift": self.miner.min_lift,
+            "delta_window_minutes": self.miner.delta_window_ms // (60 * 1000),
+            "debounce_minutes": self.miner.debounce_ms // (60 * 1000),
+        }
+
+        return miner_data
+
+    def get_zone_statistics(self, zone: Optional[str] = None) -> Dict[str, Any]:
+        """Return zone-level mining statistics.
+
+        If *zone* is provided, returns stats for that zone only.
+        Otherwise, returns stats for all zones that have patterns.
+
+        The statistics include:
+        - Number of patterns discovered per zone
+        - Top patterns per zone
+        - Presence history (from brain graph zone edges)
+        """
+        # Gather zone info from brain graph
+        graph_stats = self.brain_service.get_stats()
+        zone_nodes = []
+        try:
+            all_nodes = self.brain_service.store.get_nodes()
+            zone_nodes = [n for n in all_nodes if n.node_id.startswith("zone:")]
+        except Exception:
+            pass
+
+        zones_result: Dict[str, Any] = {}
+        for zn in zone_nodes:
+            zid = zn.node_id
+            zone_name = zid.replace("zone:", "")
+
+            if zone and zone_name != zone and zid != zone:
+                continue
+
+            # Get entities in zone
+            zone_info = self.brain_service.get_zone_entities(zid)
+            entity_count = len(zone_info.get("entities", [])) if "error" not in zone_info else 0
+
+            # Mine patterns for this zone (lightweight: use last run data if available)
+            zone_patterns = {}
+            for pid, pdata in self.miner._last_patterns.items():
+                ant = pdata.get("antecedent", "")
+                cons = pdata.get("consequent", "")
+                # Check if either entity belongs to this zone
+                zone_entities_set = set()
+                if "error" not in zone_info:
+                    for ent in zone_info.get("entities", []):
+                        zone_entities_set.add(ent.get("id", ""))
+                for entity_ref in zone_entities_set:
+                    if entity_ref in ant or entity_ref in cons:
+                        zone_patterns[pid] = pdata
+                        break
+
+            zones_result[zone_name] = {
+                "zone_id": zid,
+                "entity_count": entity_count,
+                "pattern_count": len(zone_patterns),
+                "top_patterns": sorted(
+                    zone_patterns.values(),
+                    key=lambda p: p.get("evidence", {}).get("confidence", 0),
+                    reverse=True,
+                )[:5],
+                "node_score": round(getattr(zn, "score", 0.0), 3),
+            }
+
+        return {
+            "zones": zones_result,
+            "total_zones": len(zone_nodes),
+            "graph_nodes": graph_stats.get("node_count", 0),
+            "graph_edges": graph_stats.get("edge_count", 0),
+        }
+
+    def detect_anomalies(self, lookback_hours: int = 24) -> Dict[str, Any]:
+        """Basic anomaly detection based on pattern deviations.
+
+        Compares the most recent mining results against the historical
+        trend snapshots to flag sudden changes in pattern confidence or
+        the appearance/disappearance of previously stable patterns.
+
+        Returns a dict with:
+          - anomalies: list of detected anomaly descriptions
+          - stats: summary counters
+        """
+        anomalies: List[Dict[str, Any]] = []
+        trends = self.miner._trend_snapshots
+
+        if len(trends) < 2:
+            return {
+                "anomalies": [],
+                "stats": {"total": 0, "reason": "insufficient_trend_data"},
+            }
+
+        latest = trends[-1]
+        previous = trends[-2]
+
+        # 1. Sudden drop in pattern count
+        if previous.total_patterns > 0 and latest.total_patterns == 0:
+            anomalies.append({
+                "type": "pattern_drop",
+                "severity": "warning",
+                "message": f"All {previous.total_patterns} patterns disappeared",
+                "timestamp": latest.timestamp,
+            })
+        elif previous.total_patterns > 0:
+            drop_ratio = 1.0 - (latest.total_patterns / previous.total_patterns)
+            if drop_ratio > 0.5:
+                anomalies.append({
+                    "type": "pattern_drop",
+                    "severity": "info",
+                    "message": f"Pattern count dropped by {int(drop_ratio * 100)}% "
+                               f"({previous.total_patterns} -> {latest.total_patterns})",
+                    "timestamp": latest.timestamp,
+                })
+
+        # 2. Significant confidence shift
+        if previous.avg_confidence > 0 and latest.avg_confidence > 0:
+            conf_delta = abs(latest.avg_confidence - previous.avg_confidence)
+            if conf_delta > 0.2:
+                direction = "increased" if latest.avg_confidence > previous.avg_confidence else "decreased"
+                anomalies.append({
+                    "type": "confidence_shift",
+                    "severity": "info",
+                    "message": f"Average confidence {direction} by {conf_delta:.2f} "
+                               f"({previous.avg_confidence:.2f} -> {latest.avg_confidence:.2f})",
+                    "timestamp": latest.timestamp,
+                })
+
+        # 3. New patterns that never appeared before
+        for pid in self.miner._last_patterns:
+            history = self.miner._pattern_history.get(pid, [])
+            if len(history) == 1:
+                anomalies.append({
+                    "type": "new_pattern",
+                    "severity": "info",
+                    "message": f"New pattern discovered: {pid}",
+                    "pattern_id": pid,
+                    "timestamp": latest.timestamp,
+                })
+
+        return {
+            "anomalies": anomalies,
+            "stats": {
+                "total": len(anomalies),
+                "by_type": dict(Counter(a["type"] for a in anomalies)),
+                "latest_trend": latest.to_dict() if latest else {},
+            },
+        }
+
     def list_recent_patterns(self, limit: int = 10) -> List[Dict[str, Any]]:
         """Get recently discovered patterns from candidates."""
         all_candidates = self.candidate_store.list_candidates()

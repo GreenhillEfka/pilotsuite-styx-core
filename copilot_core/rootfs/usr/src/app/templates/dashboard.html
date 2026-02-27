@@ -327,6 +327,8 @@ a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
 <button data-page="chat">&#x1f4ac; Chat</button>
 <button data-page="habitus">Habitus</button>
 <button data-page="modules">Module</button>
+<button data-page="zones">Zonen</button>
+<button data-page="weather">Wetter</button>
 <button data-page="settings">Einstellungen</button>
 <button data-page="haushalt">Haushalt</button>
 <button data-page="system">System</button>
@@ -792,6 +794,69 @@ a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
   <div style="margin-top:10px;display:flex;gap:6px">
     <input type="text" id="rem-input" placeholder="Neue Erinnerung..." style="flex:1;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--fg);font-size:13px">
     <button class="btn-sm" onclick="addReminderFromInput()">+</button>
+  </div>
+</div>
+</div>
+
+<!-- ========== ZONE MANAGEMENT PAGE ========== -->
+<div class="page" id="page-zones">
+<div class="grid g2" style="margin-bottom:14px">
+  <div class="card">
+    <h2><span class="ic">&#x1f3d8;</span> Zonenmanagement</h2>
+    <p style="font-size:11px;color:var(--dim);margin-bottom:10px">Geraeteklassen und deren Zuordnung zu Habituszonen. Tags werden automatisch aus der Geraeteklasse erstellt.</p>
+    <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+      <button class="btn-sm" onclick="loadZoneManagementData()" title="Daten aktualisieren">&#x21bb; Aktualisieren</button>
+      <button class="btn-sm" onclick="autoTagAllEntities()" title="Auto-Tags fuer alle Entitaeten generieren" style="background:var(--accent);color:#fff;border-color:var(--accent)">&#x1f3f7; Auto-Tag</button>
+    </div>
+    <div id="zone-mgmt-device-classes"><div class="loading"><div class="spinner"></div>Lade Geraeteklassen...</div></div>
+  </div>
+  <div class="card">
+    <h2><span class="ic">&#x2699;&#xfe0f;</span> Schwellwerte &amp; Praesenz</h2>
+    <p style="font-size:11px;color:var(--dim);margin-bottom:10px">Globale Einstellungen fuer Helligkeitsschwellwert und Praesenz-Timeout pro Zone.</p>
+    <div id="zone-mgmt-thresholds"><div class="loading"><div class="spinner"></div>Lade...</div></div>
+  </div>
+</div>
+<div class="card" style="margin-bottom:14px">
+  <h2><span class="ic">&#x1f4cb;</span> Entitaeten nach Geraeteklasse</h2>
+  <p style="font-size:11px;color:var(--dim);margin-bottom:10px">Alle erkannten Entitaeten gruppiert nach Geraeteklasse. Klicke auf einen Tag um ihn zu aendern.</p>
+  <div id="zone-mgmt-entities"><div class="loading"><div class="spinner"></div>Lade Entitaeten...</div></div>
+</div>
+<div class="card" style="margin-bottom:14px">
+  <h2><span class="ic">&#x1f916;</span> Automatisierungsvorschlaege</h2>
+  <p style="font-size:11px;color:var(--dim);margin-bottom:10px">Basierend auf erkannten Mustern und Zoneneinstellungen. Vorschlaege koennen direkt als HA-Automation uebernommen werden.</p>
+  <div id="zone-mgmt-auto-suggestions"><div class="loading"><div class="spinner"></div>Analysiere...</div></div>
+</div>
+<div class="card">
+  <h2><span class="ic">&#x1f4ca;</span> Zonen-Automation Status</h2>
+  <p style="font-size:11px;color:var(--dim);margin-bottom:10px">Live-Status der automatischen Zonensteuerung inkl. Praesenz, Helligkeit und Heizung.</p>
+  <div id="zone-mgmt-auto-status"><div class="loading"><div class="spinner"></div>Lade...</div></div>
+</div>
+</div>
+
+<!-- ========== WEATHER PAGE ========== -->
+<div class="page" id="page-weather">
+<div class="grid g2" style="margin-bottom:14px">
+  <div class="card">
+    <h2><span class="ic">&#x26c5;</span> Aktuelles Wetter</h2>
+    <div id="weather-current"><div class="loading"><div class="spinner"></div>Lade Wetter...</div></div>
+  </div>
+  <div class="card">
+    <h2><span class="ic">&#x1f321;</span> Standort</h2>
+    <div id="weather-location"><div class="loading"><div class="spinner"></div>Lade...</div></div>
+  </div>
+</div>
+<div class="card" style="margin-bottom:14px">
+  <h2><span class="ic">&#x1f4c5;</span> Vorhersage</h2>
+  <div id="weather-forecast"><div class="loading"><div class="spinner"></div>Lade Vorhersage...</div></div>
+</div>
+<div class="grid g2">
+  <div class="card">
+    <h2><span class="ic">&#x2600;</span> Solar/PV Empfehlungen</h2>
+    <div id="weather-pv"><div class="loading"><div class="spinner"></div>Lade...</div></div>
+  </div>
+  <div class="card">
+    <h2><span class="ic">&#x26a0;</span> Wetterwarnungen</h2>
+    <div id="weather-warnings"><div class="loading"><div class="spinner"></div>Lade...</div></div>
   </div>
 </div>
 </div>
@@ -3132,6 +3197,259 @@ function _relTime(ts){
 function copyZoneSuggestion(hint,zoneId){
   try{navigator.clipboard.writeText(zoneId);addHistory('Zone-ID kopiert: '+zoneId)}
   catch(e){addHistory('Zone-ID: '+zoneId)}
+}
+
+// ==================================================
+// ZONE MANAGEMENT PAGE
+// ==================================================
+async function loadZoneManagement(){
+  await Promise.allSettled([loadZoneManagementData(), loadZoneAutoStatus(), loadZoneAutomationSuggestions()]);
+}
+
+async function loadZoneManagementData(){
+  const dc=$('zone-mgmt-device-classes');
+  const ents=$('zone-mgmt-entities');
+  const thresh=$('zone-mgmt-thresholds');
+  try{
+    const [tagsData, zonesData, zaData]=await Promise.all([
+      api('/api/v1/tags'),
+      api('/api/v1/hub/zones'),
+      api('/api/v1/zone-automation/config'),
+    ]);
+    // Device classes
+    const tags=tagsData?.tags||tagsData?.data?.tags||[];
+    const DEVICE_CLASS_MAP={
+      light:'Licht',brightness:'Helligkeit',temperature:'Temperatur',
+      humidity:'Luftfeuchtigkeit',heating:'Heizung',climate:'Klima',
+      noise:'Laerm',co2:'CO2',energy:'Energie',power:'Leistung',
+      motion:'Bewegung',presence:'Praesenz',door:'Tuer',window:'Fenster',
+      camera:'Kamera',media_player:'Medien',switch:'Schalter',cover:'Abdeckung',
+    };
+    const classGroups={};
+    tags.forEach(t=>{
+      const cls=t.device_class||t.category||t.tag_type||'other';
+      if(!classGroups[cls])classGroups[cls]={label:DEVICE_CLASS_MAP[cls]||cls,entities:[],tag:t.tag||cls};
+      (t.entities||[]).forEach(e=>classGroups[cls].entities.push(e));
+    });
+    let dcHtml='';
+    Object.entries(classGroups).sort((a,b)=>b[1].entities.length-a[1].entities.length).forEach(([cls,group])=>{
+      dcHtml+=`<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)">
+        <div><span class="b b-c">${escapeHtml(group.label)}</span> <span style="font-size:10px;color:var(--dim)">Tag: ${escapeHtml(group.tag)}</span></div>
+        <span style="font-size:11px;color:var(--dim)">${group.entities.length} Entitaeten</span>
+      </div>`;
+    });
+    dc.innerHTML=dcHtml||'<div class="empty">Keine Tags vorhanden. Klicke "Auto-Tag" zum Starten.</div>';
+
+    // Entities grouped by device class
+    const zones=zonesData?.zones||[];
+    const zoneMap=new Map();
+    zones.forEach(z=>{
+      const zid=String(z.zone_id||'');
+      if(zid)zoneMap.set(zid,z);
+    });
+    let entHtml='';
+    Object.entries(classGroups).sort((a,b)=>a[0].localeCompare(b[0])).forEach(([cls,group])=>{
+      entHtml+=`<div style="margin-bottom:12px"><h3 style="font-size:12px;color:var(--accent2);margin-bottom:6px">${escapeHtml(group.label)} (${group.entities.length})</h3>`;
+      group.entities.slice(0,20).forEach(e=>{
+        const eid=typeof e==='string'?e:(e.entity_id||e.id||'');
+        entHtml+=`<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;font-size:11px">
+          <span>${escapeHtml(eid)}</span>
+          <select onchange="updateEntityTag('${escapeHtml(eid)}',this.value)" style="background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:10px;padding:2px 4px">
+            <option value="${escapeHtml(group.tag)}" selected>${escapeHtml(group.label)}</option>
+            ${Object.entries(DEVICE_CLASS_MAP).filter(([k])=>k!==cls).map(([k,v])=>`<option value="${k}">${v}</option>`).join('')}
+          </select>
+        </div>`;
+      });
+      if(group.entities.length>20)entHtml+=`<div style="font-size:10px;color:var(--dim)">+${group.entities.length-20} weitere</div>`;
+      entHtml+='</div>';
+    });
+    ents.innerHTML=entHtml||'<div class="empty">Keine Entitaeten gefunden.</div>';
+
+    // Thresholds
+    const zaConfigs=zaData?.configs||zaData?.zones||[];
+    let tHtml='';
+    if(!zaConfigs.length){
+      tHtml='<div class="empty">Keine Zonen-Automation konfiguriert. Erstelle Habituszonen um Schwellwerte zu setzen.</div>';
+    }else{
+      zaConfigs.forEach(c=>{
+        const zid=c.zone_id||'';
+        const bright=c.brightness_threshold_pct||50;
+        const grace=c.presence_grace_s||300;
+        tHtml+=`<div style="padding:8px 0;border-bottom:1px solid var(--border)">
+          <div style="font-size:12px;font-weight:600;margin-bottom:6px">${escapeHtml(zid)}</div>
+          <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+            <label style="font-size:10px;color:var(--dim)">Helligkeit: <input type="range" min="0" max="100" value="${bright}" onchange="updateZoneThreshold('${escapeHtml(zid)}','brightness_threshold_pct',this.value)" style="width:100px"> <span>${bright}%</span></label>
+            <label style="font-size:10px;color:var(--dim)">Praesenz-Timeout: <input type="number" min="30" max="3600" value="${grace}" onchange="updateZoneThreshold('${escapeHtml(zid)}','presence_grace_s',this.value)" style="width:60px;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:11px;padding:2px 4px">s</label>
+          </div>
+        </div>`;
+      });
+    }
+    thresh.innerHTML=tHtml;
+  }catch(e){
+    dc.innerHTML='<div class="empty">Zonenmanagement-Daten nicht ladbar</div>';
+    ents.innerHTML='<div class="empty">Entitaeten nicht ladbar</div>';
+    thresh.innerHTML='<div class="empty">Schwellwerte nicht ladbar</div>';
+  }
+}
+
+async function autoTagAllEntities(){
+  try{
+    const r=await api('/api/v1/tags/auto-generate','POST');
+    addHistory('Auto-Tags generiert: '+(r?.count||0)+' Tags');
+    await loadZoneManagementData();
+  }catch(e){addHistory('Auto-Tag Fehler: '+e.message)}
+}
+
+async function updateEntityTag(entityId,newTag){
+  try{
+    await api('/api/v1/tags/entity','POST',{entity_id:entityId,tag:newTag});
+    addHistory('Tag geaendert: '+entityId+' -> '+newTag);
+  }catch(e){addHistory('Tag-Aenderung fehlgeschlagen: '+e.message)}
+}
+
+async function updateZoneThreshold(zoneId,field,value){
+  try{
+    const payload={};payload[field]=Number(value);
+    await api('/api/v1/zone-automation/config/'+encodeURIComponent(zoneId),'POST',payload);
+    addHistory('Schwellwert geaendert: '+zoneId+' '+field+'='+value);
+  }catch(e){addHistory('Schwellwert-Aenderung fehlgeschlagen: '+e.message)}
+}
+
+async function loadZoneAutoStatus(){
+  const c=$('zone-mgmt-auto-status');if(!c)return;
+  try{
+    const d=await api('/api/v1/zone-automation/status');
+    const zones=d?.zones||d?.data?.zones||[];
+    if(!zones.length){c.innerHTML='<div class="empty">Keine Zonen-Automationsdaten verfuegbar.</div>';return}
+    let h='<table class="tbl"><tr><th>Zone</th><th>Praesenz</th><th>Licht</th><th>Heizung</th><th>Helligkeit</th></tr>';
+    zones.forEach(z=>{
+      const le=z.last_evaluation||{};
+      const pres=le.presence_state||'--';
+      const light=le.light_action||'--';
+      const heat=le.heating_action||'--';
+      const lux=le.indoor_lux!==undefined?Math.round(le.indoor_lux)+' lux':'--';
+      const presColor=pres==='occupied'?'var(--green)':(pres==='grace_period'?'var(--yellow)':'var(--dim)');
+      h+=`<tr><td>${escapeHtml(z.zone_id||'')}</td><td style="color:${presColor}">${escapeHtml(pres)}</td><td>${escapeHtml(light)}</td><td>${escapeHtml(heat)}</td><td>${lux}</td></tr>`;
+    });
+    h+='</table>';
+    c.innerHTML=h;
+  }catch(e){c.innerHTML='<div class="empty">Zonen-Status nicht ladbar</div>'}
+}
+
+async function loadZoneAutomationSuggestions(){
+  const c=$('zone-mgmt-auto-suggestions');if(!c)return;
+  try{
+    const d=await api('/api/v1/automations/suggestions');
+    const items=d?.suggestions||d?.data||[];
+    if(!items.length){c.innerHTML='<div class="empty">Noch keine Automatisierungsvorschlaege. PilotSuite lernt aus Verhaltensmustern.</div>';return}
+    let h='';
+    items.slice(0,10).forEach(s=>{
+      const title=escapeHtml(s.title||s.description||'Vorschlag');
+      const reason=escapeHtml(s.reason||s.source||'');
+      const conf=s.confidence?Math.round(s.confidence*100)+'%':'';
+      h+=`<div class="pat"><span>${title}</span>${reason?`<span class="meta">${reason}</span>`:''}${conf?`<span class="meta">${conf}</span>`:''}</div>`;
+    });
+    c.innerHTML=h;
+  }catch(e){c.innerHTML='<div class="empty">Vorschlaege nicht ladbar</div>'}
+}
+
+// ==================================================
+// WEATHER PAGE
+// ==================================================
+async function loadWeatherPage(){
+  await Promise.allSettled([loadWeatherCurrent(), loadWeatherForecast(), loadWeatherPV(), loadWeatherWarnings(), loadWeatherLocation()]);
+}
+
+async function loadWeatherCurrent(){
+  const c=$('weather-current');if(!c)return;
+  try{
+    const d=await api('/api/v1/weather');
+    const snap=d?.data||d||{};
+    const WEATHER_ICONS={sunny:'&#x2600;',partly_cloudy:'&#x26c5;',cloudy:'&#x2601;',rainy:'&#x1f327;',snowy:'&#x2744;',stormy:'&#x26c8;',foggy:'&#x1f32b;',drizzle:'&#x1f326;',unknown:'&#x2753;'};
+    const icon=WEATHER_ICONS[snap.condition]||WEATHER_ICONS.unknown;
+    c.innerHTML=`<div style="text-align:center;padding:12px 0">
+      <div style="font-size:48px;margin-bottom:8px">${icon}</div>
+      <div style="font-size:28px;font-weight:800">${snap.temperature_c!==undefined?snap.temperature_c+'°C':'--'}</div>
+      <div style="font-size:14px;color:var(--dim);text-transform:capitalize">${escapeHtml(String(snap.condition||'unbekannt'))}</div>
+      <div style="display:flex;gap:16px;justify-content:center;margin-top:10px;font-size:12px;color:var(--dim)">
+        ${snap.humidity_percent?`<span>&#x1f4a7; ${snap.humidity_percent}%</span>`:''}
+        ${snap.cloud_cover_percent?`<span>&#x2601; ${snap.cloud_cover_percent}%</span>`:''}
+        ${snap.uv_index?`<span>UV ${snap.uv_index}</span>`:''}
+        ${snap.wind_speed?`<span>&#x1f32c; ${snap.wind_speed} km/h</span>`:''}
+      </div>
+      <div style="margin-top:8px;font-size:11px;color:var(--dim)">
+        ${snap.sunrise?`&#x1f305; ${snap.sunrise.slice(11,16)||snap.sunrise}`:''}
+        ${snap.sunset?` · &#x1f307; ${snap.sunset.slice(11,16)||snap.sunset}`:''}
+      </div>
+      <div style="margin-top:4px;font-size:10px;color:var(--dim)">Provider: ${escapeHtml(String(snap.provider||'--'))}</div>
+    </div>`;
+  }catch(e){c.innerHTML='<div class="empty">Wetter nicht verfuegbar</div>'}
+}
+
+async function loadWeatherLocation(){
+  const c=$('weather-location');if(!c)return;
+  try{
+    const d=await api('/api/v1/weather');
+    const snap=d?.data||d||{};
+    c.innerHTML=`<div style="padding:8px 0">
+      <div style="font-size:12px;margin-bottom:6px">Standort wird aus der Home Assistant Konfiguration gelesen.</div>
+      <div style="font-size:11px;color:var(--dim)">Provider: ${escapeHtml(String(snap.provider||'--'))}</div>
+      <div style="font-size:11px;color:var(--dim);margin-top:4px">Aenderbar unter: HA &gt; Einstellungen &gt; Allgemein &gt; Standort</div>
+    </div>`;
+  }catch(e){c.innerHTML='<div class="empty">Standort-Info nicht ladbar</div>'}
+}
+
+async function loadWeatherForecast(){
+  const c=$('weather-forecast');if(!c)return;
+  try{
+    const d=await api('/api/v1/weather/forecast?days=5');
+    const fc=d?.data?.forecast||[];
+    if(!fc.length){c.innerHTML='<div class="empty">Keine Vorhersage verfuegbar</div>';return}
+    const WEATHER_ICONS={sunny:'&#x2600;',partly_cloudy:'&#x26c5;',cloudy:'&#x2601;',rainy:'&#x1f327;',snowy:'&#x2744;',stormy:'&#x26c8;',foggy:'&#x1f32b;',drizzle:'&#x1f326;',unknown:'&#x2753;'};
+    let h='<div style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center">';
+    fc.slice(0,5).forEach(f=>{
+      const day=String(f.timestamp||'').slice(0,10);
+      const icon=WEATHER_ICONS[f.condition]||WEATHER_ICONS.unknown;
+      h+=`<div style="text-align:center;padding:10px;background:var(--surface);border-radius:8px;min-width:100px">
+        <div style="font-size:11px;color:var(--dim);margin-bottom:4px">${escapeHtml(day)}</div>
+        <div style="font-size:28px">${icon}</div>
+        <div style="font-size:13px;font-weight:700;margin-top:4px">${f.temperature_high_c!==undefined?f.temperature_high_c+'°':'--'}/<span style="color:var(--dim)">${f.temperature_low_c!==undefined?f.temperature_low_c+'°':'--'}</span></div>
+        <div style="font-size:10px;color:var(--dim);margin-top:2px">${escapeHtml(String(f.condition||''))}</div>
+      </div>`;
+    });
+    h+='</div>';
+    c.innerHTML=h;
+  }catch(e){c.innerHTML='<div class="empty">Vorhersage nicht ladbar</div>'}
+}
+
+async function loadWeatherPV(){
+  const c=$('weather-pv');if(!c)return;
+  try{
+    const d=await api('/api/v1/weather/pv-recommendations');
+    const recs=d?.data?.recommendations||[];
+    if(!recs.length){c.innerHTML='<div class="empty">Keine PV-Empfehlungen verfuegbar. Energiemodul konfigurieren.</div>';return}
+    let h='';
+    recs.forEach(r=>{h+=`<div class="pat">${escapeHtml(r.text||r.recommendation||'?')}</div>`});
+    c.innerHTML=h;
+  }catch(e){c.innerHTML='<div class="empty">PV-Daten nicht ladbar</div>'}
+}
+
+async function loadWeatherWarnings(){
+  const c=$('weather-warnings');if(!c)return;
+  try{
+    const hd=await api('/api/v1/haushalt/overview');
+    const warns=[...(hd?.warnings?.nina_warnings||[]),...(hd?.warnings?.dwd_warnings||[])];
+    if(!warns.length){c.innerHTML='<div class="empty">Keine aktiven Wetterwarnungen.</div>';return}
+    let h='';
+    warns.forEach(w=>{
+      const title=escapeHtml(String(w.title||w.headline||w.event||'Warnung'));
+      h+=`<div style="padding:6px 0;border-bottom:1px solid var(--border);display:flex;gap:8px;align-items:center">
+        <span style="color:var(--red);font-size:16px">&#x26a0;</span>
+        <span style="font-size:12px">${title}</span>
+      </div>`;
+    });
+    c.innerHTML=h;
+  }catch(e){c.innerHTML='<div class="empty">Warnungen nicht ladbar</div>'}
 }
 
 // ==================================================
@@ -5670,7 +5988,7 @@ async function validateCloud(){
 // ==================================================
 // PAGE LOADER — Resilient wrapper
 // ==================================================
-const _loaders={styx:async()=>{await loadStyx();loadOverviewHealth();loadMood();},chat:async()=>{},habitus:async()=>{await loadHabitus();loadEntitySuggestions('hab-entity-suggestions');loadScenes();},mood:loadMood,modules:async()=>{await loadModules();loadAutomations();loadMediaZones();loadNeuronLayer();loadTaggedNotInZone();},system:async()=>{await loadSystemOverview(false);await loadSelfRepairPanel(false);},haushalt:loadHaushalt,settings:loadSettings};
+const _loaders={styx:async()=>{await loadStyx();loadOverviewHealth();loadMood();},chat:async()=>{},habitus:async()=>{await loadHabitus();loadEntitySuggestions('hab-entity-suggestions');loadScenes();},mood:loadMood,modules:async()=>{await loadModules();loadAutomations();loadMediaZones();loadNeuronLayer();loadTaggedNotInZone();},system:async()=>{await loadSystemOverview(false);await loadSelfRepairPanel(false);},haushalt:loadHaushalt,zones:loadZoneManagement,weather:loadWeatherPage,settings:loadSettings};
 function loadPage(p){
   const fn=_loaders[p];
   if(!fn)return;

@@ -398,6 +398,69 @@ def get_dashboard_card_rules() -> Response:
         }
     )
 
+@habitus_bp.route('/patterns/trends', methods=['GET'])
+@require_api_key
+def get_patterns_and_trends() -> Response:
+    """Return miner patterns, top rules, trend data, and candidate stats.
+
+    This is the primary endpoint for the Habitus dashboard panel showing
+    pattern discovery over time, top rules with confidence scores, and
+    per-pattern evidence history.
+    """
+    if not _habitus_service:
+        return jsonify({"error": "Habitus service not initialized"}), 503
+
+    try:
+        data = _habitus_service.get_patterns_and_trends()
+        data["timestamp"] = int(time.time() * 1000)
+        return jsonify(data)
+    except Exception as e:
+        logger.error("patterns/trends endpoint error: %s", e)
+        return jsonify({"error": f"Internal error: {str(e)}"}), 500
+
+
+@habitus_bp.route('/zones/statistics', methods=['GET'])
+@require_api_key
+def get_zone_statistics() -> Response:
+    """Return zone-level mining statistics with entity and pattern counts.
+
+    Query parameters:
+      - zone: optional zone name to filter (e.g. "kitchen")
+    """
+    if not _habitus_service:
+        return jsonify({"error": "Habitus service not initialized"}), 503
+
+    try:
+        zone = request.args.get("zone")
+        data = _habitus_service.get_zone_statistics(zone=zone)
+        data["timestamp"] = int(time.time() * 1000)
+        return jsonify(data)
+    except Exception as e:
+        logger.error("zone statistics endpoint error: %s", e)
+        return jsonify({"error": f"Internal error: {str(e)}"}), 500
+
+
+@habitus_bp.route('/anomalies', methods=['GET'])
+@require_api_key
+def get_anomalies() -> Response:
+    """Basic anomaly detection based on pattern deviation over time.
+
+    Query parameters:
+      - lookback_hours: time window for analysis (default 24)
+    """
+    if not _habitus_service:
+        return jsonify({"error": "Habitus service not initialized"}), 503
+
+    try:
+        lookback = _as_int(request.args.get("lookback_hours"), 24)
+        data = _habitus_service.detect_anomalies(lookback_hours=lookback)
+        data["timestamp"] = int(time.time() * 1000)
+        return jsonify(data)
+    except Exception as e:
+        logger.error("anomalies endpoint error: %s", e)
+        return jsonify({"error": f"Internal error: {str(e)}"}), 500
+
+
 @habitus_bp.route('/health', methods=['GET'])
 @require_api_key
 def health_check() -> Response:

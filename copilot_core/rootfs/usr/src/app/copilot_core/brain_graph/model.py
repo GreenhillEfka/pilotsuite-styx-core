@@ -90,18 +90,31 @@ class GraphNode:
         return sanitized
     
     def effective_score(self, now_ms: Optional[int] = None, half_life_hours: float = 24.0) -> float:
-        """Calculate current score with exponential decay."""
+        """Calculate current score with exponential decay and memory floor.
+
+        Uses: score * exp(-ln(2) * age / half_life)
+
+        The memory floor prevents high-importance nodes from decaying
+        to zero too quickly, preserving long-term knowledge of
+        frequently-used entities (e.g., a kitchen light with score=20
+        never drops below 1.0 even after days of inactivity).
+
+        floor = base_score * 0.05 (5% retention minimum)
+        """
         if now_ms is None:
             now_ms = int(time.time() * 1000)
-            
+
         age_hours = (now_ms - self.updated_at_ms) / (1000 * 3600)
         if age_hours <= 0:
             return self.score
-            
-        # Exponential decay: score * exp(-λ * t), where λ = ln(2) / half_life
+
         import math
         decay_lambda = math.log(2) / half_life_hours
-        return self.score * math.exp(-decay_lambda * age_hours)
+        decayed = self.score * math.exp(-decay_lambda * age_hours)
+
+        # Memory floor: high-score nodes retain a minimum relevance
+        floor = self.score * 0.05
+        return max(decayed, floor)
 
 @dataclass  
 class GraphEdge:
@@ -173,17 +186,26 @@ class GraphEdge:
         return sanitized
     
     def effective_weight(self, now_ms: Optional[int] = None, half_life_hours: float = 12.0) -> float:
-        """Calculate current weight with exponential decay."""
+        """Calculate current weight with exponential decay and memory floor.
+
+        Edges decay faster than nodes (12h vs 24h default half-life)
+        because relationships are more temporal than entity existence.
+
+        Memory floor: 5% of base weight retained for established connections.
+        """
         if now_ms is None:
             now_ms = int(time.time() * 1000)
-            
+
         age_hours = (now_ms - self.updated_at_ms) / (1000 * 3600)
         if age_hours <= 0:
             return self.weight
-            
+
         import math
         decay_lambda = math.log(2) / half_life_hours
-        return self.weight * math.exp(-decay_lambda * age_hours)
+        decayed = self.weight * math.exp(-decay_lambda * age_hours)
+
+        floor = self.weight * 0.05
+        return max(decayed, floor)
     
     @classmethod
     def create_id(cls, from_node: str, edge_type: str, to_node: str) -> str:

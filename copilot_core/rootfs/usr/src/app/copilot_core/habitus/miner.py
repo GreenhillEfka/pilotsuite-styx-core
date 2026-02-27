@@ -3,15 +3,16 @@ Habitus Miner - Discover A→B patterns from brain graph temporal sequences.
 
 This module implements the core pattern discovery algorithm:
 1. Analyze time-ordered sequences of actions/states in brain graph
-2. Apply delta-time windows to find potential correlations  
+2. Apply delta-time windows to find potential correlations
 3. Calculate statistical evidence (support/confidence/lift)
 4. Filter patterns with debounce logic to reduce noise
+5. Track patterns and trends over time for dashboard display
 
 Based on association rule mining but adapted for home automation scenarios.
 """
 import time
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Set, Tuple, Any
 from collections import defaultdict, Counter
 
@@ -41,10 +42,36 @@ class PatternEvidence:
         }
 
 
+@dataclass
+class TrendSnapshot:
+    """A point-in-time snapshot of pattern statistics for trend tracking."""
+    timestamp: float
+    total_patterns: int
+    avg_confidence: float
+    avg_support: float
+    avg_lift: float
+    top_pattern_id: str = ""
+    top_pattern_confidence: float = 0.0
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "timestamp": int(self.timestamp),
+            "total_patterns": self.total_patterns,
+            "avg_confidence": round(self.avg_confidence, 3),
+            "avg_support": round(self.avg_support, 3),
+            "avg_lift": round(self.avg_lift, 3),
+            "top_pattern_id": self.top_pattern_id,
+            "top_pattern_confidence": round(self.top_pattern_confidence, 3),
+        }
+
+
 class HabitusMiner:
     """Core pattern discovery engine."""
-    
-    def __init__(self, 
+
+    # Maximum number of trend snapshots to retain in memory
+    _MAX_TREND_SNAPSHOTS = 100
+
+    def __init__(self,
                  brain_service: BrainGraphService,
                  min_confidence: float = 0.6,
                  min_support: float = 0.1,
@@ -53,11 +80,11 @@ class HabitusMiner:
                  debounce_minutes: int = 5):
         """
         Initialize the habitus miner.
-        
+
         Args:
             brain_service: Brain graph service for data access
             min_confidence: Minimum confidence threshold for patterns
-            min_support: Minimum support threshold for patterns  
+            min_support: Minimum support threshold for patterns
             min_lift: Minimum lift threshold for patterns
             delta_window_minutes: Time window to consider A→B sequences
             debounce_minutes: Minimum gap between same action to count as separate
@@ -68,6 +95,13 @@ class HabitusMiner:
         self.min_lift = min_lift
         self.delta_window_ms = delta_window_minutes * 60 * 1000
         self.debounce_ms = debounce_minutes * 60 * 1000
+
+        # Pattern history: pattern_id -> list of PatternEvidence snapshots
+        self._pattern_history: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+        # Trend snapshots over time
+        self._trend_snapshots: List[TrendSnapshot] = []
+        # Last discovered patterns (from most recent mining run)
+        self._last_patterns: Dict[str, Dict[str, Any]] = {}
         
     def mine_patterns(
         self, 
@@ -122,6 +156,11 @@ class HabitusMiner:
                     "discovered_at": int(time.time() * 1000)
                 }
                 
+        # Record pattern history and trend snapshot
+        self._last_patterns = evidence_patterns
+        self._record_pattern_history(evidence_patterns)
+        self._record_trend_snapshot(evidence_patterns)
+
         logger.info(f"Found {len(evidence_patterns)} qualifying patterns")
         return evidence_patterns
         
@@ -244,6 +283,101 @@ class HabitusMiner:
                     
         return patterns
         
+    def _record_pattern_history(self, patterns: Dict[str, Dict[str, Any]]) -> None:
+        """Record each pattern's evidence into history for trend analysis."""
+        now = time.time()
+        for pattern_id, pdata in patterns.items():
+            evidence = pdata.get("evidence", {})
+            self._pattern_history[pattern_id].append({
+                "timestamp": now,
+                "confidence": evidence.get("confidence", 0),
+                "support": evidence.get("support", 0),
+                "lift": evidence.get("lift", 0),
+                "count": evidence.get("count", 0),
+            })
+            # Keep bounded history per pattern
+            if len(self._pattern_history[pattern_id]) > self._MAX_TREND_SNAPSHOTS:
+                self._pattern_history[pattern_id] = self._pattern_history[pattern_id][-self._MAX_TREND_SNAPSHOTS:]
+
+    def _record_trend_snapshot(self, patterns: Dict[str, Dict[str, Any]]) -> None:
+        """Record an aggregate trend snapshot for the current mining run."""
+        now = time.time()
+        if not patterns:
+            self._trend_snapshots.append(TrendSnapshot(
+                timestamp=now, total_patterns=0,
+                avg_confidence=0.0, avg_support=0.0, avg_lift=0.0,
+            ))
+        else:
+            confidences = []
+            supports = []
+            lifts = []
+            top_id = ""
+            top_conf = 0.0
+            for pid, pdata in patterns.items():
+                ev = pdata.get("evidence", {})
+                c = ev.get("confidence", 0)
+                confidences.append(c)
+                supports.append(ev.get("support", 0))
+                lifts.append(ev.get("lift", 0))
+                if c > top_conf:
+                    top_conf = c
+                    top_id = pid
+
+            self._trend_snapshots.append(TrendSnapshot(
+                timestamp=now,
+                total_patterns=len(patterns),
+                avg_confidence=sum(confidences) / len(confidences),
+                avg_support=sum(supports) / len(supports),
+                avg_lift=sum(lifts) / len(lifts),
+                top_pattern_id=top_id,
+                top_pattern_confidence=top_conf,
+            ))
+
+        # Trim to max
+        if len(self._trend_snapshots) > self._MAX_TREND_SNAPSHOTS:
+            self._trend_snapshots = self._trend_snapshots[-self._MAX_TREND_SNAPSHOTS:]
+
+    def get_patterns_and_trends(self) -> Dict[str, Any]:
+        """Return current patterns, top rules, and trend data.
+
+        Returns a dict with:
+          - patterns: the most recently discovered patterns with evidence
+          - top_rules: patterns sorted by confidence (descending), top 20
+          - trends: time-series of aggregate trend snapshots
+          - pattern_history: per-pattern evidence history
+        """
+        # Top rules: sort last patterns by confidence descending
+        sorted_patterns = sorted(
+            self._last_patterns.values(),
+            key=lambda p: p.get("evidence", {}).get("confidence", 0),
+            reverse=True,
+        )
+        top_rules = []
+        for p in sorted_patterns[:20]:
+            top_rules.append({
+                "pattern_id": p.get("pattern_id", ""),
+                "antecedent": p.get("antecedent", ""),
+                "consequent": p.get("consequent", ""),
+                "confidence": p.get("evidence", {}).get("confidence", 0),
+                "support": p.get("evidence", {}).get("support", 0),
+                "lift": p.get("evidence", {}).get("lift", 0),
+                "count": p.get("evidence", {}).get("count", 0),
+            })
+
+        # Build per-pattern history (trimmed)
+        pattern_hist: Dict[str, List[Dict[str, Any]]] = {}
+        for pid, snapshots in self._pattern_history.items():
+            pattern_hist[pid] = snapshots[-20:]  # last 20 data points per pattern
+
+        return {
+            "patterns": self._last_patterns,
+            "top_rules": top_rules,
+            "trends": [s.to_dict() for s in self._trend_snapshots],
+            "pattern_history": pattern_hist,
+            "total_patterns_discovered": len(self._last_patterns),
+            "total_unique_patterns_ever": len(self._pattern_history),
+        }
+
     def _calculate_evidence(self, pattern_data: Dict[str, Any], all_sessions: List[List[Dict[str, Any]]]) -> PatternEvidence:
         """Calculate statistical evidence for a pattern."""
         total_sessions = len(all_sessions)

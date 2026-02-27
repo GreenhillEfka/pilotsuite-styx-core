@@ -28,6 +28,8 @@ from copilot_core.habitus.api import habitus_bp, init_habitus_api
 from copilot_core.habitus.service import HabitusService
 from copilot_core.mood.api import mood_bp, init_mood_api
 from copilot_core.mood.service import MoodService
+from copilot_core.mood.engine import UnifiedMoodEngine
+from copilot_core.mood.models import MoodSystemConfig
 from copilot_core.system_health.api import system_health_bp
 from copilot_core.system_health.service import SystemHealthService
 from copilot_core.unifi.api import unifi_bp, set_unifi_service
@@ -98,6 +100,7 @@ def init_services(hass=None, config: dict = None):
         "candidate_store": None,
         "habitus_service": None,
         "mood_service": None,
+        "mood_engine": None,
         "event_processor": None,
         "tag_registry": None,
         "webhook_pusher": None,
@@ -232,9 +235,16 @@ def init_services(hass=None, config: dict = None):
     except Exception:
         _LOGGER.exception("Failed to init HabitusService")
 
-    # Initialize mood service and API
+    # Initialize mood service, engine, and API
     try:
-        mood_service = MoodService()
+        mood_config_raw = config.get("mood", {}) if config else {}
+        mood_system_config = MoodSystemConfig.from_dict(mood_config_raw) if mood_config_raw else MoodSystemConfig()
+
+        mood_engine = UnifiedMoodEngine(mood_system_config)
+        services["mood_engine"] = mood_engine
+        _LOGGER.info("UnifiedMoodEngine initialized (%d zones)", len(mood_system_config.zones))
+
+        mood_service = MoodService(config=mood_system_config)
         services["mood_service"] = mood_service
         init_mood_api(mood_service)
 
@@ -855,6 +865,9 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
     app.register_blueprint(candidates_bp)
     app.register_blueprint(habitus_bp)
     app.register_blueprint(mood_bp)
+    # Expose UnifiedMoodEngine on Flask config for mood API /dependencies endpoint
+    if services and services.get("mood_engine"):
+        app.config["MOOD_ENGINE"] = services["mood_engine"]
     app.register_blueprint(system_health_bp)
     app.register_blueprint(unifi_bp)
     app.register_blueprint(energy_bp)

@@ -1,18 +1,22 @@
-"""
-Mood API endpoints — REST interface for mood scoring.
+"""Mood API v3.0 — REST endpoints for unified mood system.
 
 Endpoints:
-    GET  /api/v1/mood                     - Get all zone moods
-    GET  /api/v1/mood/{zone_id}           - Get specific zone mood
-    GET  /api/v1/mood/summary             - Aggregated mood stats
-    POST /api/v1/mood/update-media        - Update moods from MediaContext
-    POST /api/v1/mood/update-habitus      - Update moods from Habitus
-    GET  /api/v1/mood/{zone_id}/suppress-energy-saving  - Check if energy-saving should be suppressed
+    GET  /api/v1/mood                          → All zone moods
+    GET  /api/v1/mood/summary                  → Aggregated stats
+    GET  /api/v1/mood/<zone_id>                → Single zone mood
+    GET  /api/v1/mood/<zone_id>/history        → Zone mood history
+    GET  /api/v1/mood/<zone_id>/distribution   → State distribution
+    GET  /api/v1/mood/<zone_id>/suppress-energy-saving
+    GET  /api/v1/mood/<zone_id>/relevance/<type>
+    GET  /api/v1/mood/<zone_id>/dependencies   → Entity dependencies
+    POST /api/v1/mood/update-media             → MediaContext update
+    POST /api/v1/mood/update-habitus           → Habitus update
+    POST /api/v1/mood/<zone_id>/update         → Partial zone update
 """
-
 from __future__ import annotations
 
 import logging
+import threading
 from flask import Blueprint, request, jsonify, Response
 
 from .service import MoodService
@@ -20,189 +24,214 @@ from ..api.security import require_api_key
 
 logger = logging.getLogger(__name__)
 
-# Create blueprint
-mood_bp = Blueprint('mood_svc', __name__, url_prefix='/api/v1/mood')
+mood_bp = Blueprint("mood_svc", __name__, url_prefix="/api/v1/mood")
 
-# Global service instance (will be initialized in main.py)
-_mood_service: MoodService = None
+_mood_service: MoodService | None = None
+_service_lock = threading.Lock()
 
 
-def init_mood_api(service: MoodService):
+def init_mood_api(service: MoodService) -> None:
     """Initialize the mood API with service instance."""
     global _mood_service
     _mood_service = service
 
 
 def get_service() -> MoodService:
-    """Get or create the global mood service."""
     global _mood_service
     if _mood_service is None:
-        _mood_service = MoodService()
+        with _service_lock:
+            if _mood_service is None:
+                _mood_service = MoodService()
     return _mood_service
 
 
-@mood_bp.route('', methods=['GET'])
+@mood_bp.route("", methods=["GET"])
 @require_api_key
 def get_all_moods() -> Response:
     """Get all zone moods."""
     try:
         service = get_service()
-        moods = service.get_all_zone_moods()
-        
+        profiles = service.get_all_zone_profiles()
         return jsonify({
             "status": "success",
-            "moods": {
-                zone_id: mood.to_dict()
-                for zone_id, mood in moods.items()
-            },
-            "zone_count": len(moods)
+            "moods": {zid: p.to_dict() for zid, p in profiles.items()},
+            "zone_count": len(profiles),
         })
-    
     except Exception as e:
-        logger.error(f"Error getting all moods: {e}")
-        return jsonify({
-            "status": "error",
-            "error": str(e)
-        }), 500
+        logger.exception("Error getting all moods")
+        return jsonify({"status": "error", "error": str(e)}), 500
 
 
-@mood_bp.route('/<zone_id>', methods=['GET'])
-@require_api_key
-def get_zone_mood(zone_id: str) -> Response:
-    """Get mood for a specific zone."""
-    try:
-        service = get_service()
-        mood = service.get_zone_mood(zone_id)
-        
-        if not mood:
-            return jsonify({
-                "status": "error",
-                "error": f"No mood data for zone {zone_id}"
-            }), 404
-        
-        return jsonify({
-            "status": "success",
-            "mood": mood.to_dict()
-        })
-    
-    except Exception as e:
-        logger.error(f"Error getting mood for {zone_id}: {e}")
-        return jsonify({
-            "status": "error",
-            "error": str(e)
-        }), 500
-
-
-@mood_bp.route('/summary', methods=['GET'])
+@mood_bp.route("/summary", methods=["GET"])
 @require_api_key
 def get_mood_summary() -> Response:
     """Get aggregated mood statistics."""
     try:
         service = get_service()
         summary = service.get_summary()
-        
-        return jsonify({
-            "status": "success",
-            "summary": summary
-        })
-    
+        return jsonify({"status": "success", "summary": summary})
     except Exception as e:
-        logger.error(f"Error getting mood summary: {e}")
-        return jsonify({
-            "status": "error",
-            "error": str(e)
-        }), 500
+        logger.exception("Error getting mood summary")
+        return jsonify({"status": "error", "error": str(e)}), 500
 
 
-@mood_bp.route('/update-media', methods=['POST'])
+@mood_bp.route("/<zone_id>", methods=["GET"])
 @require_api_key
-def update_from_media() -> Response:
-    """Update moods based on MediaContext snapshot."""
+def get_zone_mood(zone_id: str) -> Response:
+    """Get mood for a specific zone."""
     try:
-        data = request.get_json() or {}
         service = get_service()
-        
-        # data = MediaContext snapshot
-        service.update_from_media_context(data)
-        
-        return jsonify({
-            "status": "success",
-            "message": "Moods updated from MediaContext"
-        })
-    
+        profile = service.get_zone_profile(zone_id)
+        if not profile:
+            return jsonify({"status": "error", "error": f"No mood data for zone {zone_id}"}), 404
+        return jsonify({"status": "success", "mood": profile.to_dict()})
     except Exception as e:
-        logger.error(f"Error updating from media context: {e}")
-        return jsonify({
-            "status": "error",
-            "error": str(e)
-        }), 500
+        logger.exception("Error getting mood for %s", zone_id)
+        return jsonify({"status": "error", "error": str(e)}), 500
 
 
-@mood_bp.route('/update-habitus', methods=['POST'])
+@mood_bp.route("/<zone_id>/history", methods=["GET"])
 @require_api_key
-def update_from_habitus() -> Response:
-    """Update moods based on Habitus context."""
+def get_zone_history(zone_id: str) -> Response:
+    """Get mood history for a zone."""
     try:
-        data = request.get_json() or {}
+        hours = request.args.get("hours", 24, type=int)
+        limit = request.args.get("limit", 500, type=int)
+        hours = max(1, min(hours or 24, 8760))
+        limit = max(1, min(limit or 500, 10_000))
         service = get_service()
-        
-        # data = Habitus context snapshot
-        service.update_from_habitus(data)
-        
+        history = service.get_mood_history(zone_id, hours=hours, limit=limit)
         return jsonify({
             "status": "success",
-            "message": "Moods updated from Habitus"
+            "zone_id": zone_id,
+            "history": history,
+            "count": len(history),
         })
-    
     except Exception as e:
-        logger.error(f"Error updating from habitus: {e}")
-        return jsonify({
-            "status": "error",
-            "error": str(e)
-        }), 500
+        logger.exception("Error getting history for %s", zone_id)
+        return jsonify({"status": "error", "error": str(e)}), 500
 
 
-@mood_bp.route('/<zone_id>/suppress-energy-saving', methods=['GET'])
+@mood_bp.route("/<zone_id>/distribution", methods=["GET"])
+@require_api_key
+def get_zone_distribution(zone_id: str) -> Response:
+    """Get mood state distribution for a zone."""
+    try:
+        hours = request.args.get("hours", 24, type=int)
+        hours = max(1, min(hours or 24, 8760))
+        service = get_service()
+        dist = service.get_state_distribution(zone_id, hours=hours)
+        return jsonify({"status": "success", "zone_id": zone_id, "distribution": dist})
+    except Exception as e:
+        logger.exception("Error getting distribution for %s", zone_id)
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
+@mood_bp.route("/<zone_id>/suppress-energy-saving", methods=["GET"])
 @require_api_key
 def check_suppress_energy_saving(zone_id: str) -> Response:
-    """Check if energy-saving suggestions should be suppressed in this zone."""
+    """Check if energy-saving should be suppressed in this zone."""
     try:
         service = get_service()
         suppress = service.should_suppress_energy_saving(zone_id)
-        
         return jsonify({
             "status": "success",
             "zone_id": zone_id,
             "suppress_energy_saving": suppress,
-            "reason": "User is likely enjoying entertainment" if suppress else "Suppression not needed"
+            "reason": "Entertainment/comfort active" if suppress else "Normal mode",
         })
-    
     except Exception as e:
-        logger.error(f"Error checking suppress for {zone_id}: {e}")
-        return jsonify({
-            "status": "error",
-            "error": str(e)
-        }), 500
+        logger.exception("Error checking suppress for %s", zone_id)
+        return jsonify({"status": "error", "error": str(e)}), 500
 
 
-@mood_bp.route('/<zone_id>/relevance/<suggestion_type>', methods=['GET'])
+@mood_bp.route("/<zone_id>/relevance/<suggestion_type>", methods=["GET"])
 @require_api_key
 def get_suggestion_relevance(zone_id: str, suggestion_type: str) -> Response:
-    """Get suggestion relevance multiplier for a given zone + suggestion type."""
+    """Get suggestion relevance multiplier for zone + type."""
     try:
         service = get_service()
         multiplier = service.get_suggestion_relevance_multiplier(zone_id, suggestion_type)
-        
         return jsonify({
             "status": "success",
             "zone_id": zone_id,
             "suggestion_type": suggestion_type,
-            "relevance_multiplier": round(multiplier, 2)
+            "relevance_multiplier": round(multiplier, 2),
         })
-    
     except Exception as e:
-        logger.error(f"Error getting relevance for {zone_id}/{suggestion_type}: {e}")
+        logger.exception("Error getting relevance for %s/%s", zone_id, suggestion_type)
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
+@mood_bp.route("/<zone_id>/dependencies", methods=["GET"])
+@require_api_key
+def get_zone_dependencies(zone_id: str) -> Response:
+    """Get entity dependencies for a zone's mood inference."""
+    try:
+        from .engine import UnifiedMoodEngine
+
+        engine = None
+        try:
+            from flask import current_app
+            engine = current_app.config.get("MOOD_ENGINE")
+        except Exception:
+            pass
+
+        deps = engine.get_entity_dependencies(zone_id) if engine else []
         return jsonify({
-            "status": "error",
-            "error": str(e)
-        }), 500
+            "status": "success",
+            "zone_id": zone_id,
+            "dependencies": [d.to_dict() for d in deps],
+            "count": len(deps),
+        })
+    except Exception as e:
+        logger.exception("Error getting dependencies for %s", zone_id)
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
+@mood_bp.route("/update-media", methods=["POST"])
+@require_api_key
+def update_from_media() -> Response:
+    """Update moods from MediaContext snapshot."""
+    try:
+        data = request.get_json(silent=True) or {}
+        service = get_service()
+        service.update_from_media_context(data)
+        return jsonify({"status": "success", "message": "Moods updated from MediaContext"})
+    except Exception as e:
+        logger.exception("Error updating from media context")
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
+@mood_bp.route("/update-habitus", methods=["POST"])
+@require_api_key
+def update_from_habitus() -> Response:
+    """Update moods from Habitus context."""
+    try:
+        data = request.get_json(silent=True) or {}
+        service = get_service()
+        service.update_from_habitus(data)
+        return jsonify({"status": "success", "message": "Moods updated from Habitus"})
+    except Exception as e:
+        logger.exception("Error updating from habitus")
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+
+@mood_bp.route("/<zone_id>/update", methods=["POST"])
+@require_api_key
+def update_zone(zone_id: str) -> Response:
+    """Partial update for a zone's mood (from HA integration or neurons)."""
+    try:
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            return jsonify({"status": "error", "error": "JSON object required"}), 400
+        service = get_service()
+        service.update_zone_mood(zone_id, data)
+        profile = service.get_zone_profile(zone_id)
+        return jsonify({
+            "status": "success",
+            "mood": profile.to_dict() if profile else None,
+        })
+    except Exception as e:
+        logger.exception("Error updating zone %s", zone_id)
+        return jsonify({"status": "error", "error": str(e)}), 500
