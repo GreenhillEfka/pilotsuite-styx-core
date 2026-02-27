@@ -35,6 +35,9 @@ from copilot_core.api.v1.scene_patterns import scene_patterns_bp
 from copilot_core.api.v1.routine_patterns import routine_patterns_bp
 from copilot_core.api.v1.push_notifications import push_notifications_bp
 
+# Auto-setup API (v10.3.0 — zone suggestions + auto-tagging)
+from copilot_core.api.v1.auto_setup import auto_setup_bp
+
 api_v1 = Blueprint("api_v1", __name__, url_prefix="/api/v1")
 
 # Register sub-blueprints with relative url_prefix (e.g. /neurons, /kg)
@@ -78,5 +81,6 @@ api_v1.register_blueprint(push_notifications_bp)
 # Note: Standalone blueprints with absolute prefixes (/api/v1/...)
 # are registered directly on the app via core_setup.register_blueprints():
 # - energy_bp, unifi_bp, system_health_bp, tags_bp,
-#   brain_graph_bp, habitus_bp, candidates_bp, mood_bp, dev_surface_bp
+#   brain_graph_bp, habitus_bp, candidates_bp, mood_bp, dev_surface_bp,
+#   auto_setup_bp
 # They must NOT be nested under api_v1 to avoid double /api/v1/api/v1/ prefixes.
