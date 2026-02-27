@@ -39,6 +39,8 @@ from copilot_core.energy.service import EnergyService
 # Tag System v0.2 (Decision Matrix 2026-02-14)
 from copilot_core.tags import TagRegistry, create_tag_service
 from copilot_core.tags.api import init_tags_api as setup_tag_api
+# Auto-setup API (v10.3.0 — zone suggestions + auto-tagging)
+from copilot_core.api.v1.auto_setup import auto_setup_bp, init_auto_setup_api
 from copilot_core.webhook_pusher import WebhookPusher
 from copilot_core.household import HouseholdProfile
 from copilot_core.neurons.manager import NeuronManager
@@ -919,6 +921,15 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         setup_tag_api(services["tag_registry"])
     from copilot_core.tags.api import bp as tags_bp
     app.register_blueprint(tags_bp)
+
+    # Register Auto-Setup API (v10.3.0 — zone suggestions + auto-tagging)
+    try:
+        tag_registry = services.get("tag_registry") if services else None
+        init_auto_setup_api(tag_service=tag_registry)
+        app.register_blueprint(auto_setup_bp)
+        _LOGGER.info("Registered Auto-Setup API (/api/v1/auto-setup/*)")
+    except Exception:
+        _LOGGER.exception("Failed to register Auto-Setup API")
 
     # Register Telegram Bot API
     from copilot_core.telegram.api import telegram_bp, init_telegram_api
