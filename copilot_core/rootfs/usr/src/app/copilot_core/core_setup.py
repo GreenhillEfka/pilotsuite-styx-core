@@ -183,11 +183,6 @@ def init_services(hass=None, config: dict = None):
         services["graph_renderer"] = GraphRenderer()
         init_brain_graph_api(brain_graph_service, services["graph_renderer"])
 
-        # Wire EventBus: publish graph updates for inter-module communication
-        def _on_graph_operation(topic: str, data: dict) -> None:
-            """Forward graph updates to brain graph service for live tracking."""
-            pass  # Brain graph already handles its own events
-
         # Subscribe to zone changes to update graph nodes
         def _on_zone_change(topic: str, data: dict) -> None:
             """Update brain graph when zones change."""
@@ -1047,29 +1042,64 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
     except Exception:
         _LOGGER.exception("Failed to register Reminders API")
 
-    # Register Haushalt Dashboard API (v3.2.2)
-    try:
-        from copilot_core.api.v1.haushalt import haushalt_bp
-        app.register_blueprint(haushalt_bp)
-        _LOGGER.info("Registered Haushalt API (/api/v1/haushalt/*)")
-    except Exception:
-        _LOGGER.exception("Failed to register Haushalt API")
+    # ---- Simple blueprints (data-driven registration) ----
+    # Each entry: (module_path, blueprint_attr, log_label)
+    # These blueprints need no init_* call or special setup — just import + register.
+    import importlib as _importlib
 
-    # Register Entity Assignment Suggestions API (v3.2.2)
-    try:
-        from copilot_core.api.v1.entity_assignment import entity_assignment_bp
-        app.register_blueprint(entity_assignment_bp)
-        _LOGGER.info("Registered Entity Assignment API (/api/v1/entity-assignment/*)")
-    except Exception:
-        _LOGGER.exception("Failed to register Entity Assignment API")
+    _SIMPLE_BLUEPRINTS: list[tuple[str, str, str]] = [
+        ("copilot_core.api.v1.haushalt", "haushalt_bp", "Haushalt API"),
+        ("copilot_core.api.v1.entity_assignment", "entity_assignment_bp", "Entity Assignment API"),
+        ("copilot_core.api.v1.presence", "presence_bp", "Presence API"),
+        ("copilot_core.api.v1.scene_patterns", "scene_patterns_bp", "Scene Patterns API"),
+        ("copilot_core.api.v1.routine_patterns", "routine_patterns_bp", "Routine Patterns API"),
+        ("copilot_core.api.v1.push_notifications", "push_notifications_bp", "Push Notifications API"),
+        ("copilot_core.api.v1.system_status", "system_status_bp", "System Status API"),
+        ("copilot_core.api.v1.self_repair", "self_repair_bp", "Self-Repair API"),
+        ("copilot_core.api.v1.automation_webhook", "automation_webhook_bp", "Automation Webhook API"),
+        ("copilot_core.api.v1.service_calls", "services_bp", "Service Calls API"),
+        ("copilot_core.api.v1.sensors", "sensors_bp", "Sensors API"),
+        ("copilot_core.api.v1.lights", "lights_bp", "Lights API"),
+        ("copilot_core.api.v1.climate", "climate_bp", "Climate API"),
+        ("copilot_core.api.v1.switches", "switches_bp", "Switches API"),
+        ("copilot_core.api.v1.media_players", "media_bp", "Media Players API"),
+        ("copilot_core.api.v1.groups", "groups_bp", "Groups API"),
+        ("copilot_core.api.v1.input_select", "input_select_bp", "Input Select API"),
+        ("copilot_core.api.v1.scenes_v2", "scenes_v2_bp", "Scenes v2 API"),
+        ("copilot_core.api.v1.covers", "covers_bp", "Covers API"),
+        ("copilot_core.api.v1.fans", "fans_bp", "Fans API"),
+        ("copilot_core.api.v1.webhooks", "webhooks_bp", "Webhooks API"),
+        ("copilot_core.api.v1.summary", "summary_bp", "Summary API"),
+        ("copilot_core.api.v1.history", "history_bp", "History API"),
+        ("copilot_core.api.v1.locks", "locks_bp", "Locks API"),
+        ("copilot_core.api.v1.alerts", "alerts_bp", "Alerts API"),
+        ("copilot_core.api.v1.weather", "weather_bp", "Weather API"),
+        ("copilot_core.api.v1.homekit", "homekit_bp", "HomeKit API"),
+        ("copilot_core.api.v1.calendar", "calendar_bp", "Calendar API"),
+        ("copilot_core.api.v1.shopping", "shopping_bp", "Shopping + Reminders API"),
+        ("copilot_core.api.v1.input_number", "input_number_bp", "Input Number API"),
+        ("copilot_core.api.v1.zones", "zones_bp", "Zones API"),
+        ("copilot_core.api.v1.event_bus_api", "event_bus_api_bp", "EventBus API"),
+        ("copilot_core.api.v1.entity_search", "entity_search_bp", "Entity Search API"),
+        ("copilot_core.api.v1.config_management", "config_bp", "Config Management API"),
+        ("copilot_core.api.v1.templates", "templates_bp", "Templates API"),
+        ("copilot_core.api.v1.logbook", "logbook_bp", "Logbook API"),
+        ("copilot_core.api.v1.repairs", "repairs_bp", "Repairs API"),
+    ]
 
-    # Register Presence Tracking API (v3.3.0)
-    try:
-        from copilot_core.api.v1.presence import presence_bp
-        app.register_blueprint(presence_bp)
-        _LOGGER.info("Registered Presence API (/api/v1/presence/*)")
-    except Exception:
-        _LOGGER.exception("Failed to register Presence API")
+    _simple_ok = 0
+    for _mod_path, _bp_attr, _label in _SIMPLE_BLUEPRINTS:
+        try:
+            _mod = _importlib.import_module(_mod_path)
+            _bp = getattr(_mod, _bp_attr)
+            app.register_blueprint(_bp)
+            _simple_ok += 1
+        except Exception:
+            _LOGGER.exception("Failed to register %s", _label)
+
+    _LOGGER.info("Simple blueprints: %d/%d registered", _simple_ok, len(_SIMPLE_BLUEPRINTS))
+
+    # ---- Complex blueprints (require init_* calls or special setup) ----
 
     # Register Adaptive Light Module API (v1.0.0)
     try:
@@ -1100,236 +1130,11 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
     except Exception:
         _LOGGER.exception("Failed to register Scenes API")
 
-    # Register Scene Pattern Extraction API (v7.11.0)
-    try:
-        from copilot_core.api.v1.scene_patterns import scene_patterns_bp
-        app.register_blueprint(scene_patterns_bp)
-        _LOGGER.info("Registered Scene Patterns API (/api/v1/scenes/patterns/*)")
-    except Exception:
-        _LOGGER.exception("Failed to register Scene Patterns API")
-
-    # Register Routine Pattern Extraction API (v7.11.0)
-    try:
-        from copilot_core.api.v1.routine_patterns import routine_patterns_bp
-        app.register_blueprint(routine_patterns_bp)
-        _LOGGER.info("Registered Routine Patterns API (/api/v1/routines/*)")
-    except Exception:
-        _LOGGER.exception("Failed to register Routine Patterns API")
-
-    # Register Push Notifications API (v7.12.0)
-    try:
-        from copilot_core.api.v1.push_notifications import push_notifications_bp
-        app.register_blueprint(push_notifications_bp)
-        _LOGGER.info("Registered Push Notifications API (/api/v1/notifications/*)")
-    except Exception:
-        _LOGGER.exception("Failed to register Push Notifications API")
-
-    # Register System Status API (v7.12.0)
-    try:
-        from copilot_core.api.v1.system_status import system_status_bp
-        app.register_blueprint(system_status_bp)
-        _LOGGER.info("Registered System Status API (/api/v1/system/*)")
-    except Exception:
-        _LOGGER.exception("Failed to register System Status API")
-
-    # Register Self-Repair API (v8.12.0)
-    try:
-        from copilot_core.api.v1.self_repair import self_repair_bp
-        app.register_blueprint(self_repair_bp)
-        _LOGGER.info("Registered Self-Repair API (/api/v1/self-repair/*)")
-    except Exception:
-        _LOGGER.exception("Failed to register Self-Repair API")
-
     # NOTE: Entity API is provided by Entity Search API v2 (/api/v1/entities/*).
     # The legacy entity-management blueprint depended on HA internals and caused
     # route collisions with the cache-backed search API. Keep it unregistered.
 
-    # Register Automation Webhook API (v7.13.0)
-    try:
-        from copilot_core.api.v1.automation_webhook import automation_webhook_bp
-        app.register_blueprint(automation_webhook_bp)
-        _LOGGER.info("Registered Automation Webhook API (/api/v1/automation/*)")
-    except Exception:
-        _LOGGER.exception("Failed to register Automation Webhook API")
-
-    # Register Service Calls API (v7.14.0)
-    try:
-        from copilot_core.api.v1.service_calls import services_bp
-        app.register_blueprint(services_bp)
-        _LOGGER.info("Registered Service Calls API (/api/v1/services/*)")
-    except Exception:
-        _LOGGER.exception("Failed to register Service Calls API")
-
-    # Register Sensors API (v7.14.0)
-    try:
-        from copilot_core.api.v1.sensors import sensors_bp
-        app.register_blueprint(sensors_bp)
-        _LOGGER.info("Registered Sensors API (/api/v1/sensors/*)")
-    except Exception:
-        _LOGGER.exception("Failed to register Sensors API")
-
-    # Register Lights API (v7.15.0)
-    try:
-        from copilot_core.api.v1.lights import lights_bp
-        app.register_blueprint(lights_bp)
-        _LOGGER.info("Registered Lights API (/api/v1/lights/*)")
-    except Exception:
-        _LOGGER.exception("Failed to register Lights API")
-
-    # Register Climate API (v7.15.0)
-    try:
-        from copilot_core.api.v1.climate import climate_bp
-        app.register_blueprint(climate_bp)
-        _LOGGER.info("Registered Climate API (/api/v1/climate/*)")
-    except Exception:
-        _LOGGER.exception("Failed to register Climate API")
-
-    # Register Switches API (v7.15.0)
-    try:
-        from copilot_core.api.v1.switches import switches_bp
-        app.register_blueprint(switches_bp)
-        _LOGGER.info("Registered Switches API (/api/v1/switches/*)")
-    except Exception:
-        _LOGGER.exception("Failed to register Switches API")
-
-    # Register Media Players API (v7.16.0)
-    try:
-        from copilot_core.api.v1.media_players import media_bp
-        app.register_blueprint(media_bp)
-        _LOGGER.info("Registered Media Players API (/api/v1/media/*)")
-    except Exception:
-        _LOGGER.exception("Failed to register Media Players API")
-
-    # Register Groups API (v7.16.0)
-    try:
-        from copilot_core.api.v1.groups import groups_bp
-        app.register_blueprint(groups_bp)
-        _LOGGER.info("Registered Groups API (/api/v1/groups/*)")
-    except Exception:
-        _LOGGER.exception("Failed to register Groups API")
-
-    # Register Input Select API (v7.17.0)
-    try:
-        from copilot_core.api.v1.input_select import input_select_bp
-        app.register_blueprint(input_select_bp)
-        _LOGGER.info("Registered Input Select API (/api/v1/input_select/*)")
-    except Exception:
-        _LOGGER.exception("Failed to register Input Select API")
-
-    # Register Scenes v2 API (v7.17.0)
-    try:
-        from copilot_core.api.v1.scenes_v2 import scenes_v2_bp
-        app.register_blueprint(scenes_v2_bp)
-        _LOGGER.info("Registered Scenes v2 API (/api/v1/scenes/v2/*)")
-    except Exception:
-        _LOGGER.exception("Failed to register Scenes v2 API")
-
-    # Register Covers API (v7.18.0)
-    try:
-        from copilot_core.api.v1.covers import covers_bp
-        app.register_blueprint(covers_bp)
-        _LOGGER.info("Registered Covers API (/api/v1/covers/*)")
-    except Exception:
-        _LOGGER.exception("Failed to register Covers API")
-
-    # Register Fans API (v7.18.0)
-    try:
-        from copilot_core.api.v1.fans import fans_bp
-        app.register_blueprint(fans_bp)
-        _LOGGER.info("Registered Fans API (/api/v1/fans/*)")
-    except Exception:
-        _LOGGER.exception("Failed to register Fans API")
-
-    # Register Webhooks API (v7.19.0)
-    try:
-        from copilot_core.api.v1.webhooks import webhooks_bp
-        app.register_blueprint(webhooks_bp)
-        _LOGGER.info("Registered Webhooks API (/api/v1/webhooks/*)")
-    except Exception:
-        _LOGGER.exception("Failed to register Webhooks API")
-
-    # Register Summary API (v7.19.0)
-    try:
-        from copilot_core.api.v1.summary import summary_bp
-        app.register_blueprint(summary_bp)
-        _LOGGER.info("Registered Summary API (/api/v1/summary/*)")
-    except Exception:
-        _LOGGER.exception("Failed to register Summary API")
-
-    # Register History API (v7.20.0)
-    try:
-        from copilot_core.api.v1.history import history_bp
-        app.register_blueprint(history_bp)
-        _LOGGER.info("Registered History API (/api/v1/history/*)")
-    except Exception:
-        _LOGGER.exception("Failed to register History API")
-
-    # Register Locks API (v7.21.0)
-    try:
-        from copilot_core.api.v1.locks import locks_bp
-        app.register_blueprint(locks_bp)
-        _LOGGER.info("Registered Locks API (/api/v1/locks/*)")
-    except Exception:
-        _LOGGER.exception("Failed to register Locks API")
-
-    # Register Alerts API (v7.22.0)
-    try:
-        from copilot_core.api.v1.alerts import alerts_bp
-        app.register_blueprint(alerts_bp)
-        _LOGGER.info("Registered Alerts API (/api/v1/alerts/*)")
-    except Exception:
-        _LOGGER.exception("Failed to register Alerts API")
-
-    # Register Weather API (v7.23.0)
-    try:
-        from copilot_core.api.v1.weather import weather_bp
-        app.register_blueprint(weather_bp)
-        _LOGGER.info("Registered Weather API (/api/v1/weather/*)")
-    except Exception:
-        _LOGGER.exception("Failed to register Weather API")
-
-    # Register HomeKit Bridge API (v3.4.0)
-    try:
-        from copilot_core.api.v1.homekit import homekit_bp
-        app.register_blueprint(homekit_bp)
-        _LOGGER.info("Registered HomeKit API (/api/v1/homekit/*)")
-    except Exception:
-        _LOGGER.exception("Failed to register HomeKit API")
-
-    # Register Calendar API (v3.5.0)
-    try:
-        from copilot_core.api.v1.calendar import calendar_bp
-        app.register_blueprint(calendar_bp)
-        _LOGGER.info("Registered Calendar API (/api/v1/calendar/*)")
-    except Exception:
-        _LOGGER.exception("Failed to register Calendar API")
-
-    # Register Shopping List & Reminders API (v8.4.x)
-    try:
-        from copilot_core.api.v1.shopping import shopping_bp
-        app.register_blueprint(shopping_bp)
-        _LOGGER.info("Registered Shopping + Reminders API (/api/v1/shopping/*, /api/v1/reminders/*)")
-    except Exception:
-        _LOGGER.exception("Failed to register Shopping + Reminders API")
-
-
-    # Register Input Number API (v7.25.0)
-    try:
-        from copilot_core.api.v1.input_number import input_number_bp
-        app.register_blueprint(input_number_bp)
-        _LOGGER.info("Registered Input Number API (/api/v1/input_number/*)")
-    except Exception:
-        _LOGGER.exception("Failed to register Input Number API")
-
-    # Register Zones API (v7.25.0)
-    try:
-        from copilot_core.api.v1.zones import zones_bp
-        app.register_blueprint(zones_bp)
-        _LOGGER.info("Registered Zones API (/api/v1/zones/*)")
-    except Exception:
-        _LOGGER.exception("Failed to register Zones API")
-
-    # Register Habitus Zones API (v9.0.0 — bidirectional HA↔Core zone sync)
+    # Register Habitus Zones API (v9.0.0 — bidirectional HA<->Core zone sync)
     try:
         from copilot_core.api.v1.habitus_zones import habitus_zones_bp, init_habitus_zones_api
         event_bus_ref = services.get("event_bus") if services else None
@@ -1338,22 +1143,6 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         _LOGGER.info("Registered Habitus Zones API (/api/v1/habitus/zones/*)")
     except Exception:
         _LOGGER.exception("Failed to register Habitus Zones API")
-
-    # Register EventBus API (v9.0.0 — inter-module event monitoring)
-    try:
-        from copilot_core.api.v1.event_bus_api import event_bus_api_bp
-        app.register_blueprint(event_bus_api_bp)
-        _LOGGER.info("Registered EventBus API (/api/v1/events/bus/*)")
-    except Exception:
-        _LOGGER.exception("Failed to register EventBus API")
-
-    # Register Entity Search API (v9.0.0 — searchable entity dropdowns for React backend)
-    try:
-        from copilot_core.api.v1.entity_search import entity_search_bp
-        app.register_blueprint(entity_search_bp)
-        _LOGGER.info("Registered Entity Search API (/api/v1/entities/search, /domains, /by-area)")
-    except Exception:
-        _LOGGER.exception("Failed to register Entity Search API")
 
     # Register HA Bridge API (v9.1.0 — discover HA data from within add-on)
     try:
@@ -1364,38 +1153,6 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
         auto_discover_on_startup()
     except Exception:
         _LOGGER.exception("Failed to register HA Bridge API")
-
-    # Register Config Management API (v7.28.0)
-    try:
-        from copilot_core.api.v1.config_management import config_bp
-        app.register_blueprint(config_bp)
-        _LOGGER.info("Registered Config Management API (/api/v1/config/*)")
-    except Exception:
-        _LOGGER.exception("Failed to register Config Management API")
-
-    # Register Templates API (v7.28.0)
-    try:
-        from copilot_core.api.v1.templates import templates_bp
-        app.register_blueprint(templates_bp)
-        _LOGGER.info("Registered Templates API (/api/v1/templates/*)")
-    except Exception:
-        _LOGGER.exception("Failed to register Templates API")
-
-    # Register Logbook API (v7.29.0)
-    try:
-        from copilot_core.api.v1.logbook import logbook_bp
-        app.register_blueprint(logbook_bp)
-        _LOGGER.info("Registered Logbook API (/api/v1/logbook/*)")
-    except Exception:
-        _LOGGER.exception("Failed to register Logbook API")
-
-    # Register Repairs API (v7.30.0)
-    try:
-        from copilot_core.api.v1.repairs import repairs_bp
-        app.register_blueprint(repairs_bp)
-        _LOGGER.info("Registered Repairs API (/api/v1/repairs/*)")
-    except Exception:
-        _LOGGER.exception("Failed to register Repairs API")
 
     # Register legacy System Health API only if not already present.
     # The primary SystemHealth blueprint is registered above and already
@@ -1416,20 +1173,3 @@ def register_blueprints(app: Flask, services: dict = None) -> None:
             )
     except Exception:
         _LOGGER.exception("Failed to register System Health API")
-
-
-    # ---- Optional blueprints (data-driven, deduplicated) ----
-    # Only register blueprints for modules that actually exist in the codebase.
-    # Cleaned up v9.0.0: removed ~1700 hypothetical entries.
-    import importlib as _importlib
-
-    _OPTIONAL_BLUEPRINTS: list = []
-
-    for _mod_name, _bp_attr in _OPTIONAL_BLUEPRINTS:
-        try:
-            _mod = _importlib.import_module(f"copilot_core.api.v1.{_mod_name}")
-            _bp = getattr(_mod, _bp_attr)
-            if _bp.name not in app.blueprints:
-                app.register_blueprint(_bp)
-        except Exception:
-            _LOGGER.debug("Optional blueprint %s.%s not available", _mod_name, _bp_attr)
