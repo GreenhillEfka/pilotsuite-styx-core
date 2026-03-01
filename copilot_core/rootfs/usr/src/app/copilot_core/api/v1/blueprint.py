@@ -28,6 +28,9 @@ from copilot_core.api.v1.conversation import conversation_bp
 from copilot_core.sharing.api import sharing_bp
 from copilot_core.collective_intelligence.api import federated_bp
 
+# Phase 7: RAG Hybrid Search
+from copilot_core.api.v1.rag import bp as rag_bp
+
 api_v1 = Blueprint("api_v1", __name__, url_prefix="/api/v1")
 
 # Register sub-blueprints with relative url_prefix (e.g. /neurons, /kg)
@@ -60,6 +63,9 @@ api_v1.register_blueprint(conversation_bp)
 # Register Phase 5 APIs
 api_v1.register_blueprint(sharing_bp)
 api_v1.register_blueprint(federated_bp)
+
+# Register Phase 7 RAG API
+api_v1.register_blueprint(rag_bp)
 
 # Note: Standalone blueprints with absolute prefixes (/api/v1/...)
 # are registered directly on the app via core_setup.register_blueprints():

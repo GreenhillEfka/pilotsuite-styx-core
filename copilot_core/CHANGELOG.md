@@ -3,6 +3,22 @@
 This file exists so Home Assistant can show an add-on changelog.
 For full history, see the repository-level `CHANGELOG.md`.
 
+## 7.8.9
+- **Phase 7: RAG Hybrid Search API** – Neue hybride Suchfunktionalität kombiniert BM25 und Vector Search:
+  - **BM25 + Vector Search Kombination**: Lexikalische und semantische Suche in einer API
+  - **Multi-Query Support**: Parallele Ausführung mehrerer Suchanfragen für bessere Recall-Rate
+  - **Reciprocal Rank Fusion (RRF)**: Intelligentes Re-Ranking der kombinierten Ergebnisse
+  - **Performance-optimiert**: Antwortzeiten <100ms durch Caching und parallele Ausführung
+  - **Neue Endpunkte**:
+    - `POST /api/v1/rag/search` – Hybride Suche mit optionaler Multi-Query-Unterstützung
+    - `POST /api/v1/rag/search/multi` – Explizite Multi-Query-Suche
+    - `POST /api/v1/rag/documents` – Dokumente zum Index hinzufügen
+    - `DELETE /api/v1/rag/documents/<id>` – Dokumente entfernen
+    - `GET /api/v1/rag/stats` – Suchmaschinen-Statistiken
+    - `GET /api/v1/rag/health` – Health-Check für RAG-Service
+  - **Neue Module**: `copilot_core/rag/hybrid_search.py` mit BM25Index, RRF-Fusion und HybridSearchEngine
+  - **Tests**: Umfassende Testabdeckung in `tests/test_rag_hybrid_search.py` (22 Tests, alle grün)
+
 ## 7.8.8
 - LLM-Routing erweitert: Primary/Secondary Provider (`offline`/`cloud`) mit robustem Fallback.
 - Neue API-Endpunkte fuer Routing/Katalog:
