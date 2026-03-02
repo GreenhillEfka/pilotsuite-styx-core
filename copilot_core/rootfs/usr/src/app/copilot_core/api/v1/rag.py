@@ -14,6 +14,7 @@ Endpoints:
 
 from __future__ import annotations
 
+import asyncio
 import importlib
 import logging
 import os
@@ -22,13 +23,81 @@ import time
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
+import re
 from flask import Blueprint, jsonify, request
 
 from copilot_core.api.security import validate_token
+from copilot_core.security.rate_limiter import get_rate_limiter, rate_limit
 from copilot_core.rag.bm25 import BM25Config, BM25Document, BM25Hit, BM25SqliteIndex
 from copilot_core.rag.hybrid_search import FusedHit, RankedHit, reciprocal_rank_fusion
 from copilot_core.rag.searxng_client import SearXNGClient, SearXNGResult, get_searxng_client
 from copilot_core.rag.query_router import classify_query, QueryType
+from copilot_core.cache import get_rag_cache
+
+# Rate limiting config for RAG endpoints: 15 req/min, burst 5
+_RAG_RATE_LIMIT_CAPACITY = 5
+_RAG_RATE_LIMIT_REFILL_RATE = 15.0 / 60.0  # 15 requests per minute
+
+# Namespace validation regex: alphanumeric, underscore, hyphen only
+_NAMESPACE_PATTERN = re.compile(r'^[a-zA-Z0-9_-]+$')
+
+
+def _validate_namespace(namespace: str) -> bool:
+    """Validate namespace parameter against injection attacks.
+    
+    Args:
+        namespace: Namespace string to validate
+        
+    Returns:
+        True if valid, False otherwise
+    """
+    if not namespace:
+        return False
+    # Max length check (prevent DoS)
+    if len(namespace) > 128:
+        return False
+    return bool(_NAMESPACE_PATTERN.match(namespace))
+
+
+def _rate_limit_rag():
+    """Apply rate limiting to RAG endpoints.
+    
+    Returns:
+        None if allowed, or (response, status_code) tuple if rate limited
+    """
+    limiter = get_rate_limiter()
+    client_key = limiter.get_client_key()
+    endpoint = request.path
+    
+    # Set endpoint-specific limit if not already set
+    if endpoint not in limiter._endpoint_limits:
+        limiter.set_endpoint_limit(endpoint, 15)
+    
+    allowed, info = limiter.is_allowed(client_key, endpoint)
+    
+    if not allowed:
+        from flask import g
+        g.rate_limit_info = info
+        
+        # Log security event
+        from copilot_core.security.security_logs import get_security_logger
+        sec_logger = get_security_logger()
+        sec_logger.log_rate_limit_exceeded(client_key, endpoint)
+        
+        response = jsonify({
+            "ok": False,
+            "error": "rate_limit_exceeded",
+            "message": "Too many requests. Please try again later.",
+            "rate_limit": info,
+        })
+        response.status_code = 429
+        response.headers["X-RateLimit-Limit"] = str(info["limit"])
+        response.headers["X-RateLimit-Remaining"] = str(info["remaining"])
+        response.headers["X-RateLimit-Reset"] = str(info["reset"])
+        response.headers["Retry-After"] = str(info["reset"] - int(time.time()))
+        return response
+    
+    return None
 
 logger = logging.getLogger(__name__)
 
@@ -116,6 +185,38 @@ class _Metrics:
 
 
 _metrics = _Metrics()
+
+# ── Cache Integration ─────────────────────────────────────────────────
+
+_rag_cache = None
+
+
+def _get_rag_cache():
+    """Get or create RAG cache instance (lazy initialization)."""
+    global _rag_cache
+    if _rag_cache is None:
+        _rag_cache = get_rag_cache()
+        logger.info("RAG cache initialized (TTL=600s, local_size=1000)")
+    return _rag_cache
+
+
+def _generate_cache_key(namespace: str, query: str, top_k: int, mode: str = "hybrid") -> str:
+    """Generate cache key for RAG search results.
+    
+    Args:
+        namespace: Document namespace
+        query: Search query
+        top_k: Number of results
+        mode: Search mode (hybrid, bm25, semantic)
+    
+    Returns:
+        Cache key string
+    """
+    import hashlib
+    key_base = f"{mode}:{namespace}:{query}:{top_k}"
+    key_hash = hashlib.md5(key_base.encode()).hexdigest()[:12]
+    return f"rag:{mode}:{namespace}:{key_hash}"
+
 
 # ── Singletons (double-checked locking) ────────────────────────────────
 
@@ -372,14 +473,29 @@ def _build_result_entry(
 
 @bp.route("/search", methods=["POST"])
 def rag_search() -> Tuple[Any, int] | Any:
-    """Hybrid search combining BM25 lexical and semantic results via RRF."""
+    """Hybrid search combining BM25 lexical and semantic results via RRF.
+    
+    Results are cached with TTL=600s (10 min) for improved performance.
+    Cache hit rate target: >80% for frequently accessed queries.
+    """
+    # Rate limiting check
+    rate_limit_response = _rate_limit_rag()
+    if rate_limit_response is not None:
+        return rate_limit_response
+    
     started = time.monotonic()
     warnings: List[str] = []
     ok = False
+    cache_hit = False
 
     try:
         data: Dict[str, Any] = request.get_json(silent=True) or {}
         namespace = str(data.get("namespace", "default") or "default")
+        
+        # Namespace validation
+        if not _validate_namespace(namespace):
+            return jsonify({"error": "invalid namespace format"}), 400
+        
         query = str(data.get("query", "")).strip()
 
         if not query:
@@ -396,6 +512,38 @@ def rag_search() -> Tuple[Any, int] | Any:
 
         if not use_lexical and not use_semantic:
             return jsonify({"error": "at least one of use_lexical/use_semantic must be true"}), 400
+
+        # Determine search mode for cache key
+        if use_lexical and use_semantic:
+            mode = "hybrid_rrf"
+        elif use_lexical:
+            mode = "bm25"
+        else:
+            mode = "semantic"
+        
+        # Generate cache key
+        cache_key = _generate_cache_key(namespace, query, top_k, mode)
+        
+        # Try cache first (only for hybrid and bm25 modes with default weights)
+        use_cache = (
+            mode in ("hybrid_rrf", "bm25") and
+            rrf_k == 60 and
+            lexical_weight == 1.0 and
+            semantic_weight == 1.0
+        )
+        
+        if use_cache:
+            cache = _get_rag_cache()
+            cached_result = cache.get(cache_key)
+            if cached_result is not None:
+                cache_hit = True
+                logger.debug("RAG cache HIT: %s", cache_key)
+                took_ms = (time.monotonic() - started) * 1000.0
+                return jsonify({
+                    **cached_result,
+                    "cache_hit": True,
+                    "took_ms": round(took_ms, 3),
+                })
 
         bm25 = _get_bm25()
 
@@ -460,7 +608,8 @@ def rag_search() -> Tuple[Any, int] | Any:
 
         ok = True
         took_ms = (time.monotonic() - started) * 1000.0
-        return jsonify({
+        
+        response_data = {
             "namespace": namespace,
             "query": query,
             "mode": mode,
@@ -468,7 +617,29 @@ def rag_search() -> Tuple[Any, int] | Any:
             "result_count": len(results),
             "warnings": warnings,
             "took_ms": round(took_ms, 3),
-        })
+            "cache_hit": cache_hit,
+        }
+        
+        # Cache result (only for cacheable queries, not on cache hit)
+        if use_cache and not cache_hit:
+            try:
+                cache = _get_rag_cache()
+                # Store cacheable subset of data (exclude took_ms which varies)
+                cache_data = {
+                    "namespace": namespace,
+                    "query": query,
+                    "mode": mode,
+                    "results": results,
+                    "result_count": len(results),
+                    "warnings": warnings,
+                }
+                # Use TTL from cache config (default 600s)
+                asyncio.run(cache.set(cache_key, cache_data))
+                logger.debug("RAG cache SET: %s", cache_key)
+            except Exception as e:
+                logger.warning("Failed to cache RAG result: %s", e)
+        
+        return jsonify(response_data)
 
     except ValueError as exc:
         _metrics.record_error(str(exc))
@@ -489,12 +660,22 @@ def rag_search() -> Tuple[Any, int] | Any:
 @bp.route("/search/bm25", methods=["POST"])
 def rag_search_bm25() -> Tuple[Any, int] | Any:
     """BM25 lexical search only."""
+    # Rate limiting check
+    rate_limit_response = _rate_limit_rag()
+    if rate_limit_response is not None:
+        return rate_limit_response
+    
     started = time.monotonic()
     ok = False
 
     try:
         data: Dict[str, Any] = request.get_json(silent=True) or {}
         namespace = str(data.get("namespace", "default") or "default")
+        
+        # Namespace validation
+        if not _validate_namespace(namespace):
+            return jsonify({"error": "invalid namespace format"}), 400
+        
         query = str(data.get("query", "")).strip()
 
         if not query:
@@ -553,6 +734,11 @@ def rag_search_bm25() -> Tuple[Any, int] | Any:
 @bp.route("/search/semantic", methods=["POST"])
 def rag_search_semantic() -> Tuple[Any, int] | Any:
     """Semantic (embedding-based) search only."""
+    # Rate limiting check
+    rate_limit_response = _rate_limit_rag()
+    if rate_limit_response is not None:
+        return rate_limit_response
+    
     started = time.monotonic()
     warnings: List[str] = []
     ok = False
@@ -560,6 +746,11 @@ def rag_search_semantic() -> Tuple[Any, int] | Any:
     try:
         data: Dict[str, Any] = request.get_json(silent=True) or {}
         namespace = str(data.get("namespace", "default") or "default")
+        
+        # Namespace validation
+        if not _validate_namespace(namespace):
+            return jsonify({"error": "invalid namespace format"}), 400
+        
         query = str(data.get("query", "")).strip()
 
         if not query:
@@ -615,6 +806,11 @@ def rag_search_semantic() -> Tuple[Any, int] | Any:
 @bp.route("/rerank", methods=["POST"])
 def rag_rerank() -> Tuple[Any, int] | Any:
     """Rerank pre-existing hit lists using Reciprocal Rank Fusion."""
+    # Rate limiting check
+    rate_limit_response = _rate_limit_rag()
+    if rate_limit_response is not None:
+        return rate_limit_response
+    
     started = time.monotonic()
     ok = False
 
@@ -693,12 +889,42 @@ def rag_rerank() -> Tuple[Any, int] | Any:
 
 @bp.route("/stats", methods=["GET"])
 def rag_stats() -> Tuple[Any, int] | Any:
-    """Return BM25 index statistics and request metrics."""
+    """Return BM25 index statistics, request metrics, and cache stats."""
+    # Rate limiting check
+    rate_limit_response = _rate_limit_rag()
+    if rate_limit_response is not None:
+        return rate_limit_response
+    
     namespace = request.args.get("namespace", "default")
+    
+    # Namespace validation
+    if not _validate_namespace(namespace):
+        return jsonify({"error": "invalid namespace format"}), 400
 
     try:
         bm25 = _get_bm25()
         s = bm25.stats(namespace=namespace)
+        
+        # Get cache stats
+        cache_stats = None
+        try:
+            cache = _get_rag_cache()
+            cache_stats = asyncio.run(cache.get_stats())
+        except Exception as e:
+            logger.debug("Failed to get cache stats: %s", e)
+        
+        metrics = _metrics.snapshot()
+        
+        # Add cache metrics to response
+        if cache_stats:
+            metrics["cache"] = {
+                "enabled": cache_stats.get("hybrid", {}).get("enabled", False),
+                "hit_rate": cache_stats.get("hybrid", {}).get("metrics", {}).get("hit_rate", 0.0),
+                "local_size": cache_stats.get("local", {}).get("size", 0),
+                "local_max_size": cache_stats.get("local", {}).get("max_size", 0),
+                "redis_connected": cache_stats.get("redis", {}).get("connected", False),
+            }
+        
         return jsonify({
             "namespace": s.namespace,
             "doc_count": s.doc_count,
@@ -711,7 +937,7 @@ def rag_stats() -> Tuple[Any, int] | Any:
             "db_size_bytes": s.db_size_bytes,
             "schema_version": s.schema_version,
             "semantic_backend": _SEMANTIC_BACKEND_MODULE or None,
-            "metrics": _metrics.snapshot(),
+            "metrics": metrics,
         })
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
@@ -727,6 +953,11 @@ def rag_stats() -> Tuple[Any, int] | Any:
 @bp.route("/index", methods=["POST"])
 def rag_index() -> Tuple[Any, int] | Any:
     """Upsert documents into the BM25 (and optionally semantic) index."""
+    # Rate limiting check
+    rate_limit_response = _rate_limit_rag()
+    if rate_limit_response is not None:
+        return rate_limit_response
+    
     started = time.monotonic()
     warnings: List[str] = []
     ok = False
@@ -734,6 +965,11 @@ def rag_index() -> Tuple[Any, int] | Any:
     try:
         data: Dict[str, Any] = request.get_json(silent=True) or {}
         namespace = str(data.get("namespace", "default") or "default")
+        
+        # Namespace validation
+        if not _validate_namespace(namespace):
+            return jsonify({"error": "invalid namespace format"}), 400
+        
         documents_data = data.get("documents", [])
         index_semantic = bool(data.get("index_semantic", True))
 
@@ -787,6 +1023,61 @@ def rag_index() -> Tuple[Any, int] | Any:
 
 
 # ══════════════════════════════════════════════════════════════════════════
+# ENDPOINT 6b: POST /api/rag/cache/clear  –  Clear RAG Cache
+# ══════════════════════════════════════════════════════════════════════════
+
+@bp.route("/cache/clear", methods=["POST"])
+def rag_cache_clear() -> Tuple[Any, int] | Any:
+    """Clear RAG search result cache.
+    
+    Useful for:
+    - Forcing fresh results after document updates
+    - Debugging cache issues
+    - Performance testing (cold vs warm cache)
+    
+    Request body (optional):
+        - namespace: Clear only specific namespace (default: all)
+        - pattern: Cache key pattern to clear (default: all)
+    
+    Returns:
+        Status and number of entries cleared
+    """
+    # Rate limiting check
+    rate_limit_response = _rate_limit_rag()
+    if rate_limit_response is not None:
+        return rate_limit_response
+    
+    try:
+        data: Dict[str, Any] = request.get_json(silent=True) or {}
+        namespace = data.get("namespace")
+        pattern = data.get("pattern")
+        
+        cache = _get_rag_cache()
+        
+        # Clear all or specific keys
+        if namespace or pattern:
+            # Get all keys and filter
+            # Note: This requires Redis SCAN or iteration over local cache
+            # For now, clear all as a simple implementation
+            asyncio.run(cache.clear())
+            cleared = "all (namespace/pattern filter not yet implemented)"
+        else:
+            asyncio.run(cache.clear())
+            cleared = "all"
+        
+        logger.info("RAG cache cleared: %s", cleared)
+        
+        return jsonify({
+            "status": "ok",
+            "cleared": cleared,
+            "message": f"RAG cache cleared ({cleared})",
+        })
+    except Exception as e:
+        logger.exception("Failed to clear RAG cache")
+        return jsonify({"error": str(e)}), 500
+
+
+# ══════════════════════════════════════════════════════════════════════════
 # ENDPOINT 7: POST /api/rag/search/enhanced  –  Hybrid Search with SearXNG
 # ══════════════════════════════════════════════════════════════════════════
 
@@ -811,6 +1102,11 @@ def rag_search_enhanced() -> Tuple[Any, int] | Any:
     Returns:
         Enhanced search results with query classification and multi-source fusion
     """
+    # Rate limiting check
+    rate_limit_response = _rate_limit_rag()
+    if rate_limit_response is not None:
+        return rate_limit_response
+    
     started = time.monotonic()
     warnings: List[str] = []
     ok = False
@@ -818,6 +1114,11 @@ def rag_search_enhanced() -> Tuple[Any, int] | Any:
     try:
         data: Dict[str, Any] = request.get_json(silent=True) or {}
         namespace = str(data.get("namespace", "default") or "default")
+        
+        # Namespace validation
+        if not _validate_namespace(namespace):
+            return jsonify({"error": "invalid namespace format"}), 400
+        
         query = str(data.get("query", "")).strip()
         
         if not query:
