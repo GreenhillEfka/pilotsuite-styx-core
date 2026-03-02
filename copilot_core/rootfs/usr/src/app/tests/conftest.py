@@ -263,9 +263,10 @@ def test_app(app_config):
     Uses function scope to ensure each test gets a fresh app instance
     with properly initialized blueprints and services.
     """
-    from main import create_app
-    app = create_app(app_config)
+    from copilot_core.app import create_app
+    app = create_app()
     app.config.update(app_config)
+    app.config['TESTING'] = True
     yield app
 
 
