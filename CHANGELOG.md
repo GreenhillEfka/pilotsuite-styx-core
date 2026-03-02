@@ -2,6 +2,50 @@
 
 Alle wesentlichen Änderungen am PilotSuite Styx Core werden in dieser Datei dokumentiert.
 
+## [v13.0.0] - 2026-03-02
+
+### Iteration 21:00 — HA-Core Sync & RAG Search API
+
+#### P0: HA-Core Version Sync ✅ COMPLETE
+
+**P0-101: HA-Core Sync sicherstellen**
+- **Status**: Beide Repos auf v13.0.0 synchronisiert
+- **Core VERSION**: v12.15.0 → v13.0.0
+- **HA VERSION**: v13.0.0 (bereits aktuell)
+- **Ziel**: Synchronisation auf neueste Version erreicht
+
+**P0-102: Release-Pipeline fixen**
+- **Script**: `scripts/sync-ha-core-versions.sh` (bereits vorhanden)
+- **Funktion**: Automatisiert Version-Sync vor Releases
+- **Integration**: In Release-Prozess dokumentiert
+
+#### P1: RAG Search API Tests ✅ COMPLETE
+
+**P1-026: API-Endpoints für RAG Search**
+- **Existing Endpoints** (bereits implementiert in `copilot_core/api/rag_search.py`):
+  - `POST /api/v1/rag/search` - Semantic search with embeddings
+  - `GET /api/v1/rag/search/suggestions` - Autocomplete suggestions
+  - `GET /api/v1/rag/search/stats` - Search analytics
+  - `POST /api/v1/rag/search/benchmark` - Performance benchmark
+
+- **New Tests**:
+  - **File**: `tests/test_rag_search_api.py`
+  - **Coverage**: 13 tests covering all existing RAG endpoints
+  - **Test Categories**:
+    - Search endpoint (POST/GET)
+    - Suggestions endpoint
+    - Stats endpoint
+    - Benchmark endpoint
+    - Authentication tests
+  - **Status**: Alle Tests ✅ PASSED
+
+- **Test Infrastructure**:
+  - **File**: `tests/conftest.py`
+  - **Fix**: test_app fixture updated to use `copilot_core.app.create_app()`
+  - **Benefit**: Tests now use full app with all blueprints registered
+
+---
+
 ## [v12.17.0] - 2026-03-02
 
 ### Phase 6 Completion — Release Pipeline & Test Fixes (Iteration 15:40)
