@@ -2,6 +2,73 @@
 
 Alle wesentlichen Änderungen am PilotSuite Styx Core werden in dieser Datei dokumentiert.
 
+## [v12.17.0] - 2026-03-02
+
+### Phase 6 Completion — Release Pipeline & Test Fixes (Iteration 15:40)
+
+#### P0: Release-Pipeline Auto-Sync ✅ COMPLETE
+
+**P0-102: Auto-Sync HA+Core vor jedem Release**
+- **Script**: `scripts/sync-ha-core-versions.sh`
+- **Funktion**: Synchronisiert VERSION, config.json, manifest.json zwischen Core und HA Repos
+- **Features**:
+  - Automatische Version-Synchronisation vor Release
+  - CHANGELOG-Sync zwischen Repos
+  - Git-Commit mit aussagekräftiger Message
+  - Dry-Run und Force-Modus für manuelle Ausführung
+  - Exit-Codes für CI/CD-Integration
+
+- **GitHub Actions Workflows**:
+  - `.github/workflows/sync-versions.yml` (Core Repo)
+  - `.github/workflows/sync-versions.yml` (HA Repo)
+  - Schedule: Alle 20 Minuten
+  - Trigger: Push zu main, manuell mit Force-Option
+
+**Integration in Release-Pipeline**:
+- Auto-Sync läuft vor jedem Release-Tag
+- Stellt sicher, dass HA und Core immer gleiche Version haben
+- Verhindert Version-Drift zwischen Repos
+
+#### P1: Test-Fixes ✅ COMPLETE
+
+**Zone Editor Tests repariert**:
+- **Files**: `tests/test_zone_editor.py`, `tests/test_zone_editor_api.py`
+- **Status**: 41 Tests grün (1 skipped)
+- **Fixes**:
+  - Flask-App-Initialisierung in Tests korrigiert
+  - Mock-Konfiguration für API-Endpoints optimiert
+  - Test-Isolation verbessert
+
+**Connection Pooling Metriken**:
+- **New API Endpoints**:
+  - `GET /api/v1/performance/pool/metrics` - Umfassende Pool-Metriken
+  - `GET /api/v1/performance/pool/metrics/summary` - Health-Check für Dashboard
+  - Query-Parameter: `?pool=sql|ha|ollama|all`
+
+- **Metriken**:
+  - SQL Connection Pool (sync)
+  - HA Async Connection Pool
+  - Ollama Async Connection Pool
+  - Connection Reuse Rates
+  - Health Status (healthy/degraded/unhealthy)
+  - Automatisierte Empfehlungen bei Problemen
+
+- **Dashboard Integration**:
+  - **Widget**: `static/js/pool-metrics-widget.js`
+  - **Styles**: `static/css/pool-metrics-widget.css`
+  - Auto-Refresh alle 30 Sekunden
+  - Visuelle Health-Indikatoren (Farbcodierung)
+  - Empfehlungen-Section für Problemdiagnose
+
+- **Tests**: `tests/test_pool_metrics.py` - 9 Tests grün
+
+#### Test Coverage Summary
+- Zone Editor Tests: 41/42 Tests ✅
+- Pool Metrics Tests: 9/9 Tests ✅
+- Alle neuen Endpoints vollständig getestet
+
+---
+
 ## [v12.16.0] - 2026-03-02
 
 ### Phase 5 Completion — Security Hardening & Bugfixes (Iteration 15:00)
