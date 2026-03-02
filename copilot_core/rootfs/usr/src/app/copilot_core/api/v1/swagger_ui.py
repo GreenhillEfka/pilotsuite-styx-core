@@ -13,7 +13,7 @@ bp = Blueprint("swagger_ui", __name__, url_prefix="/docs")
 # Separate blueprint for /api/v1/openapi.json endpoint
 openapi_bp = Blueprint("openapi_spec", __name__, url_prefix="/api/v1")
 
-OPENAPI_PATHS = [
+os.path.join(os.path.dirname(__file__), "openapi.json")S = [
     "/usr/src/app/docs/openapi.yaml",
     "/usr/src/app/copilot_core/docs/openapi.yaml",
     "/data/openapi.yaml",
@@ -23,7 +23,7 @@ OPENAPI_PATHS = [
 def _get_openapi_spec() -> str:
     """Load OpenAPI spec from file."""
     try:
-        for path in OPENAPI_PATHS:
+        for path in os.path.join(os.path.dirname(__file__), "openapi.json")S:
             if os.path.exists(path):
                 with open(path, "r", encoding="utf-8") as f:
                     return f.read()
@@ -143,7 +143,7 @@ def validate_spec():
             "ok": False,
             "error": "OpenAPI spec not found",
             "checked_paths": [
-                OPENAPI_PATH,
+                os.path.join(os.path.dirname(__file__), "openapi.json"),
                 "/data/openapi.yaml"
             ]
         })

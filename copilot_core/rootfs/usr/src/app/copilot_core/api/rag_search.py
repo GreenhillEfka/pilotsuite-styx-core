@@ -68,7 +68,8 @@ def _get_from_cache(query: str) -> Optional[list]:
 
 def _record_search(query: str, result_count: int, duration_ms: float):
     """Record search analytics."""
-    # global _search_analytics, _search_history
+    # global _search_analytics
+# global _search_history
     
     _search_analytics[query] += 1
     _search_history.append({
