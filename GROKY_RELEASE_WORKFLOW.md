@@ -44,12 +44,26 @@ Dev Loop (Phase 1-6)  →  Code Build  →  HA Release Pipeline  →  HA Conform
 
 ### Step 1: Version Bump
 
+**CRITICAL: Duplicate Config Check!**
+- ⚠️ **NEVER** place config.yaml or build.yaml in root directory!
+- ⚠️ Root-level config files cause HA to show add-on TWICE!
+- ✅ All add-on metadata belongs in `copilot_core/` subdirectory only
+
 **Files zu updaten:**
 1. `pilotsuite-styx-core/CHANGELOG.md` (neuer Eintrag x.y.z)
 2. `pilotsuite-styx-core/RELEASE_NOTES.md` (neuer Release)
-3. `pilotsuite-styx-core/copilot_core/config.yaml` (version: "x.y.z")
-4. `pilotsuite-styx-core/copilot_core/manifest.json` (domotz.version: x.y.z)
-5. `pilotsuite-styx-ha/custom_components/ai_home_copilot/manifest.json` (version: x.y.z)
+3. `pilotsuite-styx-core/VERSION` (vX.Y.Z)
+4. `pilotsuite-styx-core/copilot_core/VERSION` (X.Y.Z)
+5. `pilotsuite-styx-core/copilot_core/config.yaml` (version: "X.Y.Z")
+6. `pilotsuite-styx-core/copilot_core/manifest.json` (domotz.version: X.Y.Z)
+7. `pilotsuite-styx-ha/custom_components/copilot_ha/manifest.json` (version: X.Y.Z)
+
+**Pre-Release Sync Script:**
+```bash
+# Auto-sync all version files before release
+./scripts/sync-ha-core-versions.sh --dry-run  # preview changes
+./scripts/sync-ha-core-versions.sh --force    # apply sync
+```
 
 ### Step 2: Git Commit + Tag
 
@@ -135,6 +149,22 @@ Hassfest: ✓ compliant
 - **Phase 7 (System Integrity)** kommt **ERST NACH** erfolgreichem HA Release!
 - HA Conformance Check **MUST PASS** before Phase 7!
 - **KEIN** direktes Push zu main ohne HA Conformance!
+
+---
+
+## 🔧 Version Sync Checklist (PRE-RELEASE)
+
+Vor jedem Release-Tag MUSS folgendes synchronisiert sein:
+
+- [ ] `VERSION` (root) — Hauptversionsdatei (vX.Y.Z)
+- [ ] `copilot_core/VERSION` — Add-on runtime version (X.Y.Z)
+- [ ] `copilot_core/config.yaml` — Add-on metadata version (X.Y.Z)
+- [ ] `copilot_core/manifest.json` — Add-on manifest version (X.Y.Z)
+- [ ] `custom_components/copilot_ha/manifest.json` — HA integration version (X.Y.Z)
+
+**Script:** `scripts/sync-ha-core-versions.sh` (auto-sync vor release)
+
+**Warnung:** Duplicate config.yaml Dateien im Root führen zu 2x Add-on in HA!
 
 ---
 
