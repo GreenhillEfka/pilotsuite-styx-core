@@ -219,8 +219,8 @@ def task_push_notifications():
 def task_dashboard_visualization():
     """ P2: Dashboard cards and visualizations for HA """
     # Check both possible paths
-    dash1_path = Path("custom_components/ai_home_copilot/dashboard.py")
-    dash2_path = Path("ai_home_copilot_custom_component/custom_components/ai_home_copilot/dashboard.py")
+    dash1_path = Path("custom_components/copilot_ha/dashboard.py")
+    dash2_path = Path("ai_home_copilot_custom_component/custom_components/copilot_ha/dashboard.py")
     dash_exists = dash1_path.exists() or dash2_path.exists()
     cards_found = 0
     if dash_exists:

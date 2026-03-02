@@ -274,7 +274,7 @@ curl http://192.168.30.18:4041
 
     # HA Conformance Check
     log("PHASE 5b: HA Conformance Check")
-    ha_manifest_path = HA_PATH / "custom_components" / "ai_home_copilot" / "manifest.json"
+    ha_manifest_path = HA_PATH / "custom_components" / "copilot_ha" / "manifest.json"
     if ha_manifest_path.exists():
         try:
             with open(ha_manifest_path) as f:
