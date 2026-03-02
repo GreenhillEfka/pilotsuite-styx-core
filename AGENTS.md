@@ -3,7 +3,9 @@
 ## Project Structure & Module Organization
 This repository contains the PilotSuite Styx Core add-on and API backend.
 
-- Add-on metadata: `copilot_core/config.yaml`, `copilot_core/build.yaml`
+**Important:** All add-on metadata files live in the `copilot_core/` subdirectory. Do NOT place config.yaml or build.yaml in the root directory (causes duplicate add-on detection in HA).
+
+- Add-on metadata: `copilot_core/config.yaml`, `copilot_core/build.yaml` (inside copilot_core/)
 - Runtime app: `copilot_core/rootfs/usr/src/app/`
 - API and services: `copilot_core/rootfs/usr/src/app/copilot_core/`
 - Dashboard template/static: `copilot_core/rootfs/usr/src/app/templates/`, `.../static/`

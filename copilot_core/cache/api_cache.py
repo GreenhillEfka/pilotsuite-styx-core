@@ -284,3 +284,48 @@ async def setup_cache_invalidation(websocket_handler):
         websocket_handler.register_listener("entity_added", on_entity_added)
     
     logger.info("Cache invalidation listeners registered")
+
+
+async def get_cache_stats() -> dict:
+    """Get comprehensive cache statistics.
+    
+    Returns:
+        dict with cache statistics including:
+        - total_keys: Number of cached items
+        - hits: Cache hit count
+        - misses: Cache miss count
+        - hit_rate_pct: Cache hit percentage
+        - connection: Redis connection status
+    """
+    cache = get_api_cache()
+    
+    # Get metrics from cache
+    metrics = await cache.metrics.get_stats()
+    
+    # Get connection stats
+    connection = await cache.redis.get_stats()
+    
+    # Try to get key count from Redis
+    total_keys = 0
+    try:
+        if cache.redis.is_connected and cache.redis._redis:
+            import redis.asyncio as redis
+            keys = await cache.redis._redis.keys(f"{cache.redis.key_prefix}*")
+            total_keys = len(keys)
+        else:
+            # Fallback: estimate from in-memory store
+            total_keys = len(cache.redis._fallback._store)
+    except Exception as e:
+        logger.debug(f"Could not get key count: {e}")
+        total_keys = len(cache.redis._fallback._store)
+    
+    return {
+        "total_keys": total_keys,
+        "hits": metrics["hits"],
+        "misses": metrics["misses"],
+        "total": metrics["total"],
+        "hit_rate_pct": round(metrics["hit_ratio"] * 100, 2),
+        "hit_ratio": metrics["hit_ratio"],
+        "connection": connection,
+        "healthy": connection.get("connected", False) or connection.get("using_fallback", False),
+    }
