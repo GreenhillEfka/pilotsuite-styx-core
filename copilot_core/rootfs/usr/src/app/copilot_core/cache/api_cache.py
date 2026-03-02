@@ -297,5 +297,50 @@ def get_sensor_cache() -> APICache:
     """
     global _sensor_cache_instance
     if _sensor_cache_instance is None:
+        _sensor_cache_instance = APICache()
+    return _sensor_cache_instance
+
+
+async def get_cache_stats() -> dict:
+    """Get cache statistics for monitoring.
+    
+    Returns:
+        Dictionary with cache metrics:
+        - total_keys: Number of cached items
+        - hits: Cache hit count
+        - misses: Cache miss count
+        - hit_rate_pct: Cache hit percentage
+        - healthy: Cache health status
+    """
+    try:
+        cache = get_api_cache()
+        metrics = await cache.metrics.get_stats()
+        
+        # Get key count from Redis
+        redis_client = cache.redis
+        total_keys = 0
+        try:
+            keys = await redis_client.keys("entity:*")
+            total_keys = len(keys)
+        except Exception:
+            # Fallback if Redis unavailable
+            total_keys = metrics.get("total", 0)
+        
+        return {
+            "total_keys": total_keys,
+            "hits": metrics.get("hits", 0),
+            "misses": metrics.get("misses", 0),
+            "hit_rate_pct": round(metrics.get("hit_ratio", 0) * 100, 2),
+            "healthy": True,
+        }
+    except Exception as e:
+        return {
+            "total_keys": 0,
+            "hits": 0,
+            "misses": 0,
+            "hit_rate_pct": 0,
+            "healthy": False,
+            "error": str(e),
+        }
         _sensor_cache_instance = APICache()  # Uses default TTLs (TTL_ENTITY=300)
     return _sensor_cache_instance

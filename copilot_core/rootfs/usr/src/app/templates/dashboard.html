@@ -490,6 +490,38 @@ a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
     <table class="tbl" id="set-system"></table>
   </div>
   <div class="card">
+    <h2><span class="ic">&#x1f525;</span> Connection Pool</h2>
+    <div class="g2" style="margin-top:10px">
+      <div class="pat">
+        <span class="arr">HA Pool</span>
+        <span id="pool-ha-status" class="b b-g">Active</span>
+        <span class="meta" id="pool-ha-reuse">Reuse: 0%</span>
+      </div>
+      <div class="pat">
+        <span class="arr">Ollama Pool</span>
+        <span id="pool-ollama-status" class="b b-g">Active</span>
+        <span class="meta" id="pool-ollama-reuse">Reuse: 0%</span>
+      </div>
+    </div>
+    <div class="gauge" style="margin-top:12px">
+      <div class="gauge-hd">
+        <span>HA Connections</span>
+        <span class="gv" id="pool-ha-gauge">0/10</span>
+      </div>
+      <div class="gauge-bar"><div class="gauge-fill" id="pool-ha-bar" style="width:0%;background:linear-gradient(90deg,var(--green),var(--cyan))"></div></div>
+    </div>
+    <div class="gauge" style="margin-top:8px">
+      <div class="gauge-hd">
+        <span>Ollama Connections</span>
+        <span class="gv" id="pool-ollama-gauge">0/10</span>
+      </div>
+      <div class="gauge-bar"><div class="gauge-fill" id="pool-ollama-bar" style="width:0%;background:linear-gradient(90deg,var(--accent),var(--pink))"></div></div>
+    </div>
+    <div style="margin-top:10px;font-size:11px;color:var(--dim)">
+      <div id="pool-config">Pool size: 10, Timeout: 30s</div>
+    </div>
+  </div>
+  <div class="card">
     <h2><span class="ic">&#x1f517;</span> API Endpoints</h2>
     <table class="tbl">
       <tr><td>Chat (OpenAI)</td><td><code>/v1/chat/completions</code></td></tr>
@@ -2533,14 +2565,74 @@ function loadPage(p){
   });
 }
 
+// Connection Pool Metrics
+async function loadConnectionPoolMetrics(){
+  try{
+    const resp=await fetch(API+'/api/v1/metrics/connection-pool',{
+      headers:{'Authorization':'Bearer '+DASHBOARD_AUTH_TOKEN}
+    });
+    if(!resp.ok)throw new Error('HTTP '+resp.status);
+    const data=await resp.json();
+    
+    // HA Pool
+    const haPool=data.ha_pool||{};
+    const haStatus=$('pool-ha-status');
+    if(haStatus){
+      haStatus.textContent=haPool.session_active?'Active':'Inactive';
+      haStatus.className='b b-'+(haPool.session_active?'g':'r');
+    }
+    const haReuse=$('pool-ha-reuse');
+    if(haReuse)haReuse.textContent='Reuse: '+(haPool.reuse_rate_pct||0)+'%';
+    const haGauge=$('pool-ha-gauge');
+    if(haGauge)haGauge.textContent=haPool.active_connections+'/'+haPool.pool_size;
+    const haBar=$('pool-ha-bar');
+    if(haBar){
+      const pct=Math.min(100,(haPool.active_connections||0)/(haPool.pool_size||10)*100);
+      haBar.style.width=pct+'%';
+    }
+    
+    // Ollama Pool
+    const ollamaPool=data.ollama_pool||{};
+    const ollamaStatus=$('pool-ollama-status');
+    if(ollamaStatus){
+      ollamaStatus.textContent=ollamaPool.session_active?'Active':'Inactive';
+      ollamaStatus.className='b b-'+(ollamaPool.session_active?'g':'r');
+    }
+    const ollamaReuse=$('pool-ollama-reuse');
+    if(ollamaReuse)ollamaReuse.textContent='Reuse: '+(ollamaPool.reuse_rate_pct||0)+'%';
+    const ollamaGauge=$('pool-ollama-gauge');
+    if(ollamaGauge)ollamaGauge.textContent=ollamaPool.active_connections+'/'+ollamaPool.pool_size;
+    const ollamaBar=$('pool-ollama-bar');
+    if(ollamaBar){
+      const pct=Math.min(100,(ollamaPool.active_connections||0)/(ollamaPool.pool_size||10)*100);
+      ollamaBar.style.width=pct+'%';
+    }
+    
+    // Config
+    const config=$('pool-config');
+    if(config&&data.config){
+      config.textContent='Pool size: '+(data.config.max_connections||10)+', Timeout: '+(data.config.timeout||30)+'s';
+    }
+  }catch(e){
+    console.error('Failed to load connection pool metrics:',e);
+  }
+}
+
 // Boot — resilient startup
 loadStyx().catch(e=>console.error('Boot error:',e));
+loadConnectionPoolMetrics().catch(e=>console.error('Pool metrics boot error:',e));
 // Auto-refresh Styx every 30s
 setInterval(()=>{
   try{
     if(document.querySelector('.nav button.active')?.dataset.page==='styx')loadStyx().catch(()=>{});
   }catch(e){}
 },30000);
+// Auto-refresh Connection Pool metrics every 10s
+setInterval(()=>{
+  try{
+    loadConnectionPoolMetrics().catch(()=>{});
+  }catch(e){}
+},10000);
 </script>
 </body>
 </html>

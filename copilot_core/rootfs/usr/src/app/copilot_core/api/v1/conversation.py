@@ -1009,7 +1009,7 @@ def _process_conversation(messages: list, model_override: str = None,
     # Resolve character
     character_name = os.environ.get("CONVERSATION_CHARACTER", DEFAULT_CHARACTER)
     for char_key in CONVERSATION_CHARACTERS:
-        if char_key in model.lower():
+        if char_key in response_model.lower():
             character_name = char_key
             break
 

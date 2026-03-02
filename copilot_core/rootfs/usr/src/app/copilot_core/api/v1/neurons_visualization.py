@@ -15,7 +15,7 @@ from typing import Any, Dict, List, Optional
 from flask import Blueprint, jsonify, request
 
 from copilot_core.neurons.manager import get_neuron_manager
-from copilot_core.neurons.base import NeuronType, MoodType
+from copilot_core.neurons.base import NeuronType, MoodType, BaseNeuron
 from copilot_core.api.security import validate_token
 
 _LOGGER = logging.getLogger(__name__)

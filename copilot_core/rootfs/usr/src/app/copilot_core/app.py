@@ -191,6 +191,22 @@ def create_app() -> Flask:
     # Rate Limit Configuration API is registered via api_v1 blueprint
     # Endpoints: /api/v1/rate-limit/*
 
+    # Metrics API endpoints (/api/v1/metrics/*)
+    try:
+        from copilot_core.api.metrics import setup_metrics_routes
+        setup_metrics_routes(api_v1)
+        logging.getLogger(__name__).info("Metrics API registered")
+    except Exception:
+        logging.getLogger(__name__).exception("Failed to register Metrics API blueprint")
+
+    # RAG Search API endpoints (/api/v1/rag/*)
+    try:
+        from copilot_core.api.rag_search import register_rag_search_flask
+        register_rag_search_flask(app)
+        logging.getLogger(__name__).info("RAG Search API registered")
+    except Exception:
+        logging.getLogger(__name__).exception("Failed to register RAG Search API")
+
     # Initialize Tags API v2 (FIX: Flask Blueprint rewrite)
     from copilot_core.tags.api import init_tags_api
     from copilot_core.tags import TagRegistry
