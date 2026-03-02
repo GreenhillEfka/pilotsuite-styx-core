@@ -436,8 +436,17 @@ def get_mood_history():
     try:
         manager = get_neuron_manager()
         # Server-side cap to prevent DoS
-        limit = min(int(request.args.get("limit", "10")), MOOD_HISTORY_MAX_LIMIT)
-        
+        try:
+            limit = int(request.args.get("limit", "10"))
+        except (ValueError, TypeError):
+            return jsonify({
+                "success": False,
+                "error": "Invalid 'limit' parameter. Must be a positive integer."
+            }), 400
+        if limit < 1:
+            limit = 1
+        limit = min(limit, MOOD_HISTORY_MAX_LIMIT)
+
         history = manager._mood_history[-limit:]
         
         return jsonify({

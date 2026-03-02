@@ -18,6 +18,7 @@ from typing import Any, Optional
 from flask import Blueprint, jsonify, request
 
 from copilot_core.api.security import require_token
+from copilot_core.api.rate_limit import rate_limit
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -43,23 +44,6 @@ def validate_zone_id(zone_id: str) -> bool:
         return False
     return bool(ZONE_ID_PATTERN.match(zone_id))
 
-
-def rate_limit(requests_per_minute: int = 30, burst_size: int = 10):
-    """Rate limiting decorator for endpoints.
-    
-    Args:
-        requests_per_minute: Maximum sustained request rate
-        burst_size: Maximum burst capacity
-    """
-    def decorator(f):
-        from copilot_core.api.middleware.rate_limit import rate_limit_middleware, RateLimitConfig
-        config = RateLimitConfig(
-            requests_per_minute=requests_per_minute,
-            burst_size=burst_size
-        )
-        f.rate_limit_config = config
-        return f
-    return decorator
 
 # Module-level service references, set by init_media_zones_api()
 _media_mgr: Optional[Any] = None
@@ -170,7 +154,7 @@ def get_zone_players(zone_id: str):
 
 @media_zones_bp.route("/zones/<zone_id>/assign", methods=["POST"])
 @require_token
-@rate_limit(requests_per_minute=30, burst_size=10)
+@rate_limit(requests=30)
 def assign_player(zone_id: str):
     """Assign a media player entity to a zone.
 
@@ -262,7 +246,7 @@ def unassign_player(zone_id: str, entity_id: str):
 
 @media_zones_bp.route("/zones/<zone_id>/play", methods=["POST"])
 @require_token
-@rate_limit(requests_per_minute=30, burst_size=10)
+@rate_limit(requests=30)
 def play_zone(zone_id: str):
     """Resume playback for all players in a zone.
 
@@ -292,7 +276,7 @@ def play_zone(zone_id: str):
 
 @media_zones_bp.route("/zones/<zone_id>/pause", methods=["POST"])
 @require_token
-@rate_limit(requests_per_minute=30, burst_size=10)
+@rate_limit(requests=30)
 def pause_zone(zone_id: str):
     """Pause playback for all players in a zone.
 
@@ -322,7 +306,7 @@ def pause_zone(zone_id: str):
 
 @media_zones_bp.route("/zones/<zone_id>/volume", methods=["POST"])
 @require_token
-@rate_limit(requests_per_minute=30, burst_size=10)
+@rate_limit(requests=30)
 def set_zone_volume(zone_id: str):
     """Set the volume for all players in a zone.
 
@@ -379,7 +363,7 @@ def set_zone_volume(zone_id: str):
 
 @media_zones_bp.route("/zones/<zone_id>/play-media", methods=["POST"])
 @require_token
-@rate_limit(requests_per_minute=30, burst_size=10)
+@rate_limit(requests=30)
 def play_media_in_zone(zone_id: str):
     """Play specific media content in a zone.
 
@@ -480,7 +464,7 @@ def get_zone_media_state(zone_id: str):
 
 @media_zones_bp.route("/musikwolke/start", methods=["POST"])
 @require_token
-@rate_limit(requests_per_minute=10, burst_size=5)
+@rate_limit(requests=10)
 def start_musikwolke():
     """Start a Musikwolke session -- audio follows a person between zones.
 
@@ -543,7 +527,7 @@ def start_musikwolke():
 
 @media_zones_bp.route("/musikwolke/<session_id>/update", methods=["POST"])
 @require_token
-@rate_limit(requests_per_minute=20, burst_size=10)
+@rate_limit(requests=20)
 def update_musikwolke(session_id: str):
     """Notify that the tracked person entered a new zone.
 
@@ -658,7 +642,7 @@ def list_musikwolke_sessions():
 
 @media_zones_bp.route("/proactive/zone-entry", methods=["POST"])
 @require_token
-@rate_limit(requests_per_minute=15, burst_size=5)
+@rate_limit(requests=15)
 def proactive_zone_entry():
     """Trigger proactive suggestions when a person enters a zone.
 
@@ -746,7 +730,7 @@ def proactive_zone_entry():
 
 @media_zones_bp.route("/proactive/deliver", methods=["POST"])
 @require_token
-@rate_limit(requests_per_minute=15, burst_size=5)
+@rate_limit(requests=15)
 def proactive_deliver():
     """Deliver a proactive suggestion to the user.
 
@@ -794,6 +778,7 @@ def proactive_deliver():
 
 @media_zones_bp.route("/proactive/dismiss", methods=["POST"])
 @require_token
+@rate_limit(requests=15)
 def proactive_dismiss():
     """Dismiss a specific suggestion type for a person.
 
@@ -843,6 +828,7 @@ def proactive_dismiss():
 
 @media_zones_bp.route("/proactive/reset-dismissals", methods=["POST"])
 @require_token
+@rate_limit(requests=15)
 def proactive_reset_dismissals():
     """Reset all dismissals for a person.
 

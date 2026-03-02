@@ -182,7 +182,7 @@ class NeuronWebSocketHandler:
         @self.socketio.on("unsubscribe")
         def handle_unsubscribe(data):
             """Handle unsubscription.
-            
+
             Args:
                 data: {"room": "neurons" or neuron_id}
             """
@@ -190,6 +190,13 @@ class NeuronWebSocketHandler:
                 return
             client_id = request.sid
             room = data.get("room", "neurons")
+
+            # Validate room name
+            if not validate_room_name(room):
+                _LOGGER.warning("Client %s attempted to leave invalid room: %s", client_id, room)
+                emit("error", {"message": "Invalid room name format"})
+                return
+
             leave_room(room)
             _LOGGER.info("Client %s unsubscribed from %s", client_id, room)
     

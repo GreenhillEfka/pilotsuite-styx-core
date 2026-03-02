@@ -39,7 +39,10 @@ class RateLimiter:
     
     def get_limit(self, endpoint: str) -> tuple[int, int]:
         """Get (requests, period) for an endpoint."""
-        return self._limits.get(endpoint, (100, 60))  # Default: 100 req/min
+        limit = self._limits.get(endpoint)
+        if limit is None:
+            return (100, self._period)
+        return (limit, self._period)
     
     def is_allowed(self, key: str, endpoint: str) -> tuple[bool, Dict[str, Any]]:
         """Check if request is allowed.
@@ -145,7 +148,7 @@ def rate_limit(
         @wraps(f)
         def decorated_function(*args: Any, **kwargs: Any) -> Any:
             limiter = get_rate_limiter()
-            
+
             # Determine endpoint
             ep = endpoint
             if not ep:
@@ -154,12 +157,16 @@ def rate_limit(
                     ep = request.path
                 except RuntimeError:
                     ep = "/api/v1/default"
-            
+
+            # Apply per-decorator overrides if provided
+            if requests is not None:
+                limiter.set_limit(ep, requests, period)
+
             # Get client key (IP or token)
             client_ip = request.headers.get("X-Forwarded-For", request.remote_addr)
             token = request.headers.get("X-Auth-Token", "")
             key = f"{client_ip}:{token[:8]}" if token else client_ip
-            
+
             # Check rate limit
             allowed, info = limiter.is_allowed(key, ep)
             
@@ -197,4 +204,3 @@ def get_rate_limit_status() -> Dict[str, Any]:
         },
         "active_keys": len(limiter._requests),
     }
-EOF
