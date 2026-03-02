@@ -1,0 +1,23 @@
+{
+  "name": "PilotSuite",
+  "version": "v12.15.0",
+  "slug": "pilotsuite",
+  "description": "PilotSuite - Smart Home Intelligence with ML, Anomaly Detection & Predictive Automation",
+  "url": "https://github.com/GreenhillEfka/pilotsuite-styx-ha",
+  "arch": ["armv7", "aarch64", "amd64"],
+  "homeassistant": "2024.1.0",
+  "image": "ghcr.io/greenhillefka/pilotsuite-ha",
+  "init": false,
+  "options": {
+    "core_url": "http://localhost:8000",
+    "enable_ml": true,
+    "enable_anomaly_detection": true
+  },
+  "schema": {
+    "core_url": "str?",
+    "enable_ml": "bool?",
+    "enable_anomaly_detection": "bool?"
+  },
+  "startup": "services",
+  "boot": "auto"
+}
