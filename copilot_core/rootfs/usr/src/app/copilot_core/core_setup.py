@@ -322,6 +322,7 @@ async def init_services(hass=None, config: dict = None):
                 _LOGGER.debug("TelegramBot deferred via lazy loader")
             else:
                 # services["telegram_bot"] = TelegramBot(telegram_config)
+                pass
     except Exception:
         _LOGGER.exception("Failed to init TelegramBot")
 
@@ -351,6 +352,7 @@ async def init_services(hass=None, config: dict = None):
             _LOGGER.debug("ProactiveContextEngine deferred via lazy loader")
         else:
             # services["proactive_engine"] = ProactiveContextEngine()
+            pass
     except Exception:
         _LOGGER.exception("Failed to init ProactiveContextEngine")
 
@@ -362,6 +364,7 @@ async def init_services(hass=None, config: dict = None):
             _LOGGER.debug("WebSearchService deferred via lazy loader")
         else:
             # services["web_search_service"] = WebSearchService()
+            pass
     except Exception:
         _LOGGER.exception("Failed to init WebSearchService")
 
