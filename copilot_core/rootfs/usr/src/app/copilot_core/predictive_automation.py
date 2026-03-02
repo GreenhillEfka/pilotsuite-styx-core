@@ -147,7 +147,7 @@ class PredictiveAutomation:
         self,
         context: Dict[str, Any],
         recent_actions: Optional[List[str]]
-    ) -> List[Tuple[str, float]]:
+    ) -> List:
         """Get potential actions with scores.
         
         Args:

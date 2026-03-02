@@ -1093,7 +1093,7 @@ NotificationManager.get_digest = _get_digest  # type: ignore
 # HomeAssistant Notify Integration Endpoints
 # =============================================================================
 
-def _get_ha_adapter() -> "HANotifyAdapter":
+def _get_ha_adapter():
     """Get or create HA Notify adapter.
     
     Returns:

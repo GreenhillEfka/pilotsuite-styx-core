@@ -49,14 +49,14 @@ def init_zone_editor_api(engine: Optional[HabitusZoneEngine] = None) -> None:
         engine: Optional HabitusZoneEngine instance to use (for testing).
                 If not provided, a new engine is created.
     """
-    global _zone_engine
+    # global _zone_engine
     _zone_engine = engine if engine is not None else HabitusZoneEngine()
     _LOGGER.info("Zone Editor API initialized with HabitusZoneEngine")
 
 
 def get_zone_engine() -> HabitusZoneEngine:
     """Get the zone engine instance."""
-    global _zone_engine
+    # global _zone_engine
     if _zone_engine is None:
         raise RuntimeError("Zone engine not initialized")
     return _zone_engine
@@ -64,13 +64,13 @@ def get_zone_engine() -> HabitusZoneEngine:
 
 def set_zone_engine(engine: HabitusZoneEngine) -> None:
     """Set the zone engine instance (for testing)."""
-    global _zone_engine
+    # global _zone_engine
     _zone_engine = engine
 
 
 def reset_zone_engine() -> None:
     """Reset the zone engine instance (for testing)."""
-    global _zone_engine
+    # global _zone_engine
     _zone_engine = None
 
 

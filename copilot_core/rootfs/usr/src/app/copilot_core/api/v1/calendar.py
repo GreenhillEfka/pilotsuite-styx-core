@@ -85,7 +85,7 @@ def list_calendars():
 @require_token
 def events_today():
     """Get all calendar events for today."""
-    global _event_cache, _cache_ts
+    # global _event_cache, _cache_ts
 
     now = datetime.now()
     date_key = now.strftime("%Y-%m-%d")

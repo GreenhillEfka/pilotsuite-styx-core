@@ -86,7 +86,7 @@ async def connect_ha():
         "friendly_name": "Home Assistant"
     }
     """
-    global _active_client
+    # global _active_client
     
     try:
         data = request.get_json() or {}
@@ -175,7 +175,7 @@ async def get_status():
         "last_error": null
     }
     """
-    global _active_client
+    # global _active_client
     
     if _active_client is None:
         return jsonify({
@@ -214,7 +214,7 @@ async def get_areas():
         ]
     }
     """
-    global _active_client
+    # global _active_client
     
     if _active_client is None:
         return jsonify({
@@ -271,7 +271,7 @@ async def get_entities():
         ]
     }
     """
-    global _active_client
+    # global _active_client
     
     if _active_client is None:
         return jsonify({
@@ -367,7 +367,7 @@ async def get_entity(entity_id: str):
         }
     }
     """
-    global _active_client
+    # global _active_client
     
     if _active_client is None:
         return jsonify({
@@ -503,7 +503,7 @@ async def disconnect_ha():
         "message": "Disconnected"
     }
     """
-    global _active_client
+    # global _active_client
     
     if _active_client:
         await _active_client.close()

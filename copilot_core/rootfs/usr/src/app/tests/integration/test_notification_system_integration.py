@@ -216,7 +216,7 @@ class TestNotificationSecurityIntegration:
         # Make many requests
         for _ in range(10):
             response = test_client.post('/api/notifications', json={
-                'title': f'Spam {__}',
+                'title': f'Spam {i}',
                 'message': 'Rate limit test',
                 'channel': 'push'
             }, headers=headers)

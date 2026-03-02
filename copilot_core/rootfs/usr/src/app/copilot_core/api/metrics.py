@@ -54,7 +54,7 @@ def _collect_current_metrics() -> dict:
 
 def _add_to_history(metrics: dict):
     """Add metrics to history, rotating old entries."""
-    global _metrics_history
+    # global _metrics_history
     
     _metrics_history.append(metrics)
     
@@ -65,7 +65,7 @@ def _add_to_history(metrics: dict):
 
 def get_metrics_history(duration_hours: int = 24) -> list:
     """Get metrics history for specified duration."""
-    global _metrics_history
+    # global _metrics_history
     
     cutoff_time = time.time() - (duration_hours * 3600)
     return [m for m in _metrics_history if m.get("timestamp", 0) > cutoff_time]

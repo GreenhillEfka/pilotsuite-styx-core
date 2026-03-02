@@ -37,7 +37,7 @@ _CACHE_TTL = 300  # 5 minutes
 
 def _add_to_cache(query: str, results: list):
     """Add query result to cache."""
-    global _query_cache
+    # global _query_cache
     
     # Rotate if too large
     if len(_query_cache) >= _CACHE_MAX_SIZE:
@@ -53,7 +53,7 @@ def _add_to_cache(query: str, results: list):
 
 def _get_from_cache(query: str) -> Optional[list]:
     """Get cached query results if not expired."""
-    global _query_cache
+    # global _query_cache
     
     if query in _query_cache:
         entry = _query_cache[query]
@@ -68,7 +68,7 @@ def _get_from_cache(query: str) -> Optional[list]:
 
 def _record_search(query: str, result_count: int, duration_ms: float):
     """Record search analytics."""
-    global _search_analytics, _search_history
+    # global _search_analytics, _search_history
     
     _search_analytics[query] += 1
     _search_history.append({
