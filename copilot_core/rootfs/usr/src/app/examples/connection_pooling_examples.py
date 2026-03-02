@@ -73,7 +73,7 @@ async def safe_ha_call(url: str):
     """Make HA call with proper error handling."""
     try:
         async with get_ha_session() as session:
-            async with session.get(test_url) as resp:
+            async with session.get(url) as resp:
                 resp.raise_for_status()
                 return await resp.json()
     except Exception as e:
@@ -127,14 +127,14 @@ def log_pool_metrics():
 # async def old_way():
 #     import aiohttp
 #     async with aiohttp.ClientSession() as session:
-#         async with session.get(test_url) as resp:
+#         async with session.get(url) as resp:
 #             return await resp.json()
 
 # AFTER (with pooling):
 async def new_way():
     from copilot_core.connection_pool import get_ha_session
     async with get_ha_session() as session:
-        async with session.get(test_url) as resp:
+        async with session.get(url) as resp:
             return await resp.json()
 
 
