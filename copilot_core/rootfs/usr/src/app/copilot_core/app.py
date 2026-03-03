@@ -197,6 +197,14 @@ def create_app() -> Flask:
         logging.getLogger(__name__).exception("Failed to register Predictive Automation API blueprint")
 
     # Rate Limit Configuration API is registered via api_v1 blueprint
+
+    # MCP REST API endpoints (/api/v1/mcp/*)
+    try:
+        from copilot_core.api.v1.mcp import bp as mcp_bp
+        app.register_blueprint(mcp_bp)
+        logging.getLogger(__name__).info("MCP REST API registered")
+    except Exception:
+        logging.getLogger(__name__).exception("Failed to register MCP REST API blueprint")
     # Endpoints: /api/v1/rate-limit/*
 
     # Metrics API endpoints (/api/v1/metrics/*)

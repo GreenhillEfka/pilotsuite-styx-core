@@ -428,6 +428,7 @@ def register_blueprints(app: Flask, services: dict) -> None:
     from copilot_core.api.v1.multihome import bp as multihome_bp
     from copilot_core.api.v1.module_control import module_control_bp
     from copilot_core.api.v1.user_preferences import bp as user_preferences_bp
+    from copilot_core.api.v1.mcp import bp as mcp_bp
     # api_v1.register_blueprint(module_control_bp)  # Can't use api_v1 because module_control_bp has absolute prefix
     from copilot_core.api.v1.voice import bp as voice_bp
     from copilot_core.api.v1.vector import bp as vector_bp
@@ -462,6 +463,9 @@ def register_blueprints(app: Flask, services: dict) -> None:
     app.register_blueprint(swagger_ui_bp, url_prefix="/api/v1")
     app.register_blueprint(rag_bp)  # Already has /api/v1/rag prefix
     app.register_blueprint(styx_bp)  # Already has /api/styx prefix
+    
+    # Register MCP REST API (standalone, absolute prefix /api/v1/mcp)
+    app.register_blueprint(mcp_bp)
     
     # Register PilotSuite Phase 5 APIs
     from copilot_core.sharing.api import sharing_bp

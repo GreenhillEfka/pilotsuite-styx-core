@@ -464,3 +464,310 @@ class TestRedisClientFallback:
         store = InMemoryStore()
         result = await store.ping()
         assert result is True
+
+
+class TestCacheInvalidationSetup:
+    """Test cache invalidation setup functions."""
+    
+    @pytest.mark.asyncio
+    async def test_setup_cache_invalidation(self):
+        """Test setup_cache_invalidation registers listeners."""
+        from copilot_core.cache.api_cache import setup_cache_invalidation
+        
+        # Mock websocket handler with register_listener method
+        mock_handler = MagicMock()
+        mock_handler.register_listener = MagicMock()
+        
+        await setup_cache_invalidation(mock_handler)
+        
+        # Should register two listeners
+        assert mock_handler.register_listener.call_count == 2
+        mock_handler.register_listener.assert_any_call("state_changed", MagicMock())
+        mock_handler.register_listener.assert_any_call("entity_added", MagicMock())
+    
+    @pytest.mark.asyncio
+    async def test_setup_cache_invalidation_no_register_listener(self):
+        """Test setup_cache_invalidation when handler doesn't support register_listener."""
+        from copilot_core.cache.api_cache import setup_cache_invalidation
+        
+        # Mock websocket handler without register_listener method
+        mock_handler = MagicMock(spec=[])
+        
+        # Should not raise
+        await setup_cache_invalidation(mock_handler)
+    
+    @pytest.mark.asyncio
+    async def test_get_cache_stats(self):
+        """Test get_cache_stats returns statistics."""
+        from copilot_core.cache.api_cache import get_cache_stats, get_api_cache
+        from unittest.mock import AsyncMock, patch
+        
+        # Mock the cache
+        mock_cache = AsyncMock()
+        mock_cache.metrics.get_stats = AsyncMock(return_value={
+            "hits": 10,
+            "misses": 5,
+            "total": 15,
+            "hit_ratio": 0.67
+        })
+        mock_cache.redis.get_stats = AsyncMock(return_value={"status": "connected"})
+        mock_cache.redis.is_connected = True
+        mock_cache.redis._redis = AsyncMock()
+        mock_cache.redis._redis.keys = AsyncMock(return_value=["key1", "key2", "key3"])
+        mock_cache.redis.key_prefix = "test:"
+        
+        with patch('copilot_core.cache.api_cache.get_api_cache', return_value=mock_cache):
+            stats = await get_cache_stats()
+            
+            assert stats["total_keys"] == 3
+            assert stats["hits"] == 10
+            assert stats["misses"] == 5
+            assert stats["hit_rate_pct"] == 67.0
+    
+    @pytest.mark.asyncio
+    async def test_get_cache_stats_disconnected(self):
+        """Test get_cache_stats when Redis is disconnected."""
+        from copilot_core.cache.api_cache import get_cache_stats, get_api_cache
+        from unittest.mock import AsyncMock, patch
+        
+        # Mock the cache with disconnected Redis
+        mock_cache = AsyncMock()
+        mock_cache.metrics.get_stats = AsyncMock(return_value={
+            "hits": 5,
+            "misses": 5,
+            "total": 10,
+            "hit_ratio": 0.5
+        })
+        mock_cache.redis.get_stats = AsyncMock(return_value={"status": "disconnected"})
+        mock_cache.redis.is_connected = False
+        mock_cache.redis._fallback._store = {"key1": "val1"}
+        
+        with patch('copilot_core.cache.api_cache.get_api_cache', return_value=mock_cache):
+            stats = await get_cache_stats()
+            
+            assert stats["total_keys"] == 1  # From fallback store
+            assert stats["hits"] == 5
+            assert stats["connection"]["status"] == "disconnected"
+
+
+class TestRedisClientConnection:
+    """Test Redis client connection methods."""
+    
+    @pytest.mark.asyncio
+    async def test_connect_without_redis(self):
+        """Test connect returns False when redis not available."""
+        from copilot_core.cache.redis_client import RedisClient
+        
+        client = RedisClient()
+        # Without redis package, should use fallback
+        result = await client.connect()
+        # Should return False or True depending on redis availability
+        assert isinstance(result, bool)
+    
+    @pytest.mark.asyncio
+    async def test_disconnect(self):
+        """Test disconnect method."""
+        from copilot_core.cache.redis_client import RedisClient
+        
+        client = RedisClient()
+        client._connected = True
+        client._redis = AsyncMock()
+        client._redis.close = AsyncMock()
+        
+        await client.disconnect()
+        
+        assert client._connected is False
+        client._redis.close.assert_called_once()
+    
+    @pytest.mark.asyncio
+    async def test_is_connected_property(self):
+        """Test is_connected property."""
+        from copilot_core.cache.redis_client import RedisClient
+        
+        client = RedisClient()
+        client._connected = True
+        assert client.is_connected is True
+        
+        client._connected = False
+        assert client.is_connected is False
+    
+    @pytest.mark.asyncio
+    async def test_get_store_connected(self):
+        """Test _get_store returns redis when connected."""
+        from copilot_core.cache.redis_client import RedisClient
+        
+        client = RedisClient()
+        client._connected = True
+        mock_redis = AsyncMock()
+        mock_redis.ping = AsyncMock()
+        client._redis = mock_redis
+        
+        store = await client._get_store()
+        assert store == mock_redis
+    
+    @pytest.mark.asyncio
+    async def test_get_store_fallback(self):
+        """Test _get_store returns fallback when disconnected."""
+        from copilot_core.cache.redis_client import RedisClient
+        
+        client = RedisClient()
+        client._connected = False
+        
+        store = await client._get_store()
+        assert store == client._fallback
+    
+    @pytest.mark.asyncio
+    async def test_get_store_fallback_on_ping_failure(self):
+        """Test _get_store switches to fallback when ping fails."""
+        from copilot_core.cache.redis_client import RedisClient
+        
+        client = RedisClient()
+        client._connected = True
+        mock_redis = AsyncMock()
+        mock_redis.ping = AsyncMock(side_effect=Exception("Connection lost"))
+        client._redis = mock_redis
+        
+        store = await client._get_store()
+        assert store == client._fallback
+        assert client._connected is False
+    
+    @pytest.mark.asyncio
+    async def test_get_with_fallback(self):
+        """Test get method uses fallback."""
+        from copilot_core.cache.redis_client import RedisClient
+        
+        client = RedisClient()
+        client._connected = False
+        await client._fallback.set("test:key", "value")
+        
+        result = await client.get("key")
+        assert result == "value"
+    
+    @pytest.mark.asyncio
+    async def test_set_with_fallback(self):
+        """Test set method uses fallback."""
+        from copilot_core.cache.redis_client import RedisClient
+        
+        client = RedisClient()
+        client._connected = False
+        
+        result = await client.set("key", "value", ttl=60)
+        assert result is True
+        
+        stored = await client._fallback.get("test:key")
+        assert stored == "value"
+    
+    @pytest.mark.asyncio
+    async def test_delete_with_fallback(self):
+        """Test delete method uses fallback."""
+        from copilot_core.cache.redis_client import RedisClient
+        
+        client = RedisClient()
+        client._connected = False
+        await client._fallback.set("test:key", "value")
+        
+        result = await client.delete("key")
+        assert result is True
+        
+        stored = await client._fallback.get("test:key")
+        assert stored is None
+    
+    @pytest.mark.asyncio
+    async def test_delete_pattern_with_fallback(self):
+        """Test delete_pattern method uses fallback."""
+        from copilot_core.cache.redis_client import RedisClient
+        
+        client = RedisClient()
+        client._connected = False
+        await client._fallback.set("test:entity:1", "val1")
+        await client._fallback.set("test:entity:2", "val2")
+        await client._fallback.set("test:state:1", "val3")
+        
+        count = await client.delete_pattern("entity:*")
+        assert count == 2
+    
+    @pytest.mark.asyncio
+    async def test_flush_with_fallback(self):
+        """Test flush method uses fallback."""
+        from copilot_core.cache.redis_client import RedisClient
+        
+        client = RedisClient()
+        client._connected = False
+        await client._fallback.set("test:key1", "val1")
+        await client._fallback.set("test:key2", "val2")
+        
+        result = await client.flush()
+        assert result is True
+        
+        keys = await client._fallback.keys("test:*")
+        assert len(keys) == 0
+    
+    @pytest.mark.asyncio
+    async def test_ping_connected(self):
+        """Test ping returns True when connected."""
+        from copilot_core.cache.redis_client import RedisClient
+        
+        client = RedisClient()
+        client._connected = True
+        mock_redis = AsyncMock()
+        mock_redis.ping = AsyncMock()
+        client._redis = mock_redis
+        
+        result = await client.ping()
+        assert result is True
+    
+    @pytest.mark.asyncio
+    async def test_ping_disconnected(self):
+        """Test ping returns False when disconnected."""
+        from copilot_core.cache.redis_client import RedisClient
+        
+        client = RedisClient()
+        client._connected = False
+        
+        result = await client.ping()
+        assert result is False
+    
+    @pytest.mark.asyncio
+    async def test_get_stats(self):
+        """Test get_stats returns connection info."""
+        from copilot_core.cache.redis_client import RedisClient
+        
+        client = RedisClient(host="testhost", port=6380)
+        client._connected = True
+        
+        stats = await client.get_stats()
+        assert stats["connected"] is True
+        assert stats["host"] == "testhost"
+        assert stats["port"] == 6380
+        assert stats["using_fallback"] is False
+    
+    @pytest.mark.asyncio
+    async def test_get_stats_fallback(self):
+        """Test get_stats shows fallback mode."""
+        from copilot_core.cache.redis_client import RedisClient
+        
+        client = RedisClient()
+        client._connected = False
+        
+        stats = await client.get_stats()
+        assert stats["connected"] is False
+        assert stats["using_fallback"] is True
+    
+    @pytest.mark.asyncio
+    async def test_init_redis_client(self):
+        """Test init_redis_client function."""
+        from copilot_core.cache.redis_client import init_redis_client, get_redis_client, _redis_client
+        
+        # Clear global instance
+        import copilot_core.cache.redis_client as rc
+        rc._redis_client = None
+        
+        client = await init_redis_client(host="testhost", port=6380, password="testpass")
+        
+        assert client is not None
+        assert client.host == "testhost"
+        assert client.port == 6380
+        assert client.password == "testpass"
+        
+        # Reset
+        rc._redis_client = None

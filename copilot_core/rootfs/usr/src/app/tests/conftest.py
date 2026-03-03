@@ -235,6 +235,13 @@ def _reset_all_registries():
     except (ImportError, AttributeError):
         pass
 
+    # MCP REST API - reset connections
+    try:
+        import copilot_core.api.v1.mcp as mcp_api
+        mcp_api._MCP_CONNECTIONS.clear()
+    except (ImportError, AttributeError):
+        pass
+
 
 # =============================================================================
 # Test Client Fixtures
