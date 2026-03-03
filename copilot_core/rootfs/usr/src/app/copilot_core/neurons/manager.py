@@ -114,6 +114,9 @@ class NeuronManager:
         self._mood_history: List[Dict[str, float]] = []
         self._history_max: int = 10
 
+        # Proactive engine (optional, wired via set_proactive_engine)
+        self._proactive_engine = None
+
         # Household profile (optional)
         self._household: Optional[HouseholdProfile] = None
 
@@ -767,6 +770,10 @@ class NeuronManager:
         """Register callback for suggestions."""
         self._on_suggestion = callback
     
+    def set_proactive_engine(self, engine) -> None:
+        """Wire a ProactiveContextEngine for mood-triggered suggestions."""
+        self._proactive_engine = engine
+
     def _on_mood_changed(self, new_mood: str, confidence: float) -> None:
         """Handle mood change."""
         _LOGGER.info("Mood changed to: %s (%.2f)", new_mood, confidence)
@@ -775,6 +782,27 @@ class NeuronManager:
                 self._on_mood_change(new_mood, confidence)
             except Exception as e:
                 _LOGGER.error("Mood change callback error: %s", e)
+        self._evaluate_proactive_suggestions(new_mood, confidence)
+
+    def _evaluate_proactive_suggestions(self, new_mood: str, confidence: float) -> None:
+        """Ask ProactiveContextEngine for mood-triggered suggestions."""
+        if not self._proactive_engine:
+            return
+        try:
+            prev_mood = ""
+            prev_conf = 0.0
+            if self._last_result:
+                prev_mood = self._last_result.dominant_mood
+                prev_conf = self._last_result.mood_confidence
+            suggestions = self._proactive_engine.evaluate_mood_trigger(
+                new_mood=new_mood, confidence=confidence,
+                previous_mood=prev_mood, previous_confidence=prev_conf,
+            )
+            for s in suggestions:
+                if self._on_suggestion:
+                    self._on_suggestion(s)
+        except Exception as e:
+            _LOGGER.error("Proactive suggestion error: %s", e)
     
     # -------------------------------------------------------------------------
     # API Helpers
