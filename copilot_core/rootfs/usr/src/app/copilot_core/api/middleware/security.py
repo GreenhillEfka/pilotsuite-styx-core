@@ -67,7 +67,7 @@ class SecurityMiddleware:
         # Check request size
         content_length = request.content_length
         if content_length and content_length > self.max_request_size:
-            from .security_logs import get_security_logger
+            from copilot_core.security.security_logs import get_security_logger
             sec_logger = get_security_logger()
             sec_logger.log_request_size_exceeded(
                 self._get_client_key(),
@@ -86,7 +86,7 @@ class SecurityMiddleware:
         
         # Check for suspicious activity
         if self._is_suspicious_request():
-            from .security_logs import get_security_logger
+            from copilot_core.security.security_logs import get_security_logger
             sec_logger = get_security_logger()
             sec_logger.log_suspicious_request(
                 self._get_client_key(),

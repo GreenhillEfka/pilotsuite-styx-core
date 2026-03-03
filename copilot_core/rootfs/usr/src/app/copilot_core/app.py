@@ -210,6 +210,14 @@ def create_app() -> Flask:
         logging.getLogger(__name__).info("RAG Search API registered (v1 Flask blueprint)")
     except Exception:
         logging.getLogger(__name__).exception("Failed to register RAG Search API blueprint")
+    
+    # RAG Search aiohttp-based endpoints (register Flask wrappers)
+    try:
+        from copilot_core.api.rag_search import register_rag_search_flask
+        register_rag_search_flask(app)
+        logging.getLogger(__name__).info("RAG Search API registered (aiohttp Flask wrappers)")
+    except Exception:
+        logging.getLogger(__name__).exception("Failed to register RAG Search Flask wrappers")
 
     # Initialize Tags API v2 (FIX: Flask Blueprint rewrite)
     from copilot_core.tags.api import init_tags_api
