@@ -353,6 +353,12 @@ async def init_services(hass=None, config: dict = None):
         else:
             # services["proactive_engine"] = ProactiveContextEngine()
             pass
+        # Wire proactive engine into NeuronManager for mood-triggered suggestions
+        engine = services.get("proactive_engine")
+        neuron_mgr = services.get("neuron_manager")
+        if engine and neuron_mgr and not lazy_load_enabled:
+            neuron_mgr.set_proactive_engine(engine)
+            _LOGGER.info("ProactiveContextEngine wired to NeuronManager (mood triggers)")
     except Exception:
         _LOGGER.exception("Failed to init ProactiveContextEngine")
 
