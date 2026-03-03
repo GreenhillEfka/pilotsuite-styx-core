@@ -627,6 +627,86 @@ class TestQueryTypes:
 
 
 # ══════════════════════════════════════════════════════════════════════════
+# ══════════════════════════════════════════════════════════════════════════
+# Test: Backend Services Health Check Endpoint
+# ══════════════════════════════════════════════════════════════════════════
+
+class TestStyxHealthBackend:
+    """Tests für /api/styx/health/backend Endpoint."""
+    
+    @pytest.fixture
+    def client(self):
+        """Erstelle Test-Client mit styx_chat Blueprint."""
+        from flask import Flask
+        from copilot_core.api.v1.styx_chat import bp
+        
+        app = Flask(__name__)
+        app.register_blueprint(bp)
+        app.config["COPILOT_SERVICES"] = {}
+        
+        with app.test_client() as client:
+            yield client
+    
+    def test_health_backend_empty_services(self, client):
+        """Test: Health Check mit leeren Services."""
+        response = client.get("/api/styx/health/backend")
+        
+        assert response.status_code == 200
+        data = response.get_json()
+        
+        assert data["ok"] is True
+        assert data["total_services"] == 0
+        assert data["unhealthy_services"] == []
+        assert "timestamp" in data
+        assert "services" in data
+    
+    def test_health_backend_with_services(self, client):
+        """Test: Health Check mit Services (ein fehlender -> 503)."""
+        # Mock Services
+        mock_brain_graph = MagicMock()
+        mock_brain_graph.health_check = MagicMock(return_value={"status": "ok"})
+        
+        mock_conversation = MagicMock()
+        mock_conversation.get_status = MagicMock(return_value={"status": "ok"})
+        
+        client.application.config["COPILOT_SERVICES"] = {
+            "brain_graph_service": mock_brain_graph,
+            "conversation_memory": mock_conversation,
+            "habitus_service": None,  # Missing service
+        }
+        
+        response = client.get("/api/styx/health/backend")
+        
+        # Should return 503 because habitus_service is missing
+        assert response.status_code == 503
+        data = response.get_json()
+        
+        assert data["ok"] is False  # Weil habitus_service missing
+        assert data["total_services"] == 3
+        assert "habitus_service" in data["unhealthy_services"]
+        assert "brain_graph_service" not in data["unhealthy_services"]
+        assert "conversation_memory" not in data["unhealthy_services"]
+    
+    def test_health_backend_all_healthy(self, client):
+        """Test: Health Check mit allen healthy Services."""
+        mock_service = MagicMock()
+        mock_service.health_check = MagicMock(return_value={"status": "ok"})
+        
+        client.application.config["COPILOT_SERVICES"] = {
+            "service_a": mock_service,
+            "service_b": mock_service,
+        }
+        
+        response = client.get("/api/styx/health/backend")
+        
+        assert response.status_code == 200
+        data = response.get_json()
+        
+        assert data["ok"] is True
+        assert data["total_services"] == 2
+        assert data["unhealthy_services"] == []
+
+
 # Run Tests
 # ══════════════════════════════════════════════════════════════════════════
 

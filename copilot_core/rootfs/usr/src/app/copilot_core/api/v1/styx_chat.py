@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 from flask import Blueprint, jsonify, request
@@ -18,6 +19,11 @@ from copilot_core.styx.chat_handler import ChatHandler
 logger = logging.getLogger(__name__)
 
 bp = Blueprint("styx_chat", __name__, url_prefix="/api/styx")
+
+
+def _now_iso() -> str:
+    """Get current UTC time as ISO string."""
+    return datetime.now(timezone.utc).isoformat()
 
 
 # ── Auth guard ──────────────────────────────────────────────────────────
@@ -224,3 +230,123 @@ def styx_health() -> Any:
         "ok": all_ok,
         "services": status,
     }), 200 if all_ok else 503
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# ENDPOINT: GET /api/styx/health/backend
+# ══════════════════════════════════════════════════════════════════════════
+
+def _check_backend_service(service_name: str, service_obj) -> Dict[str, Any]:
+    """
+    Check a single backend service health.
+    
+    Args:
+        service_name: Name of the service
+        service_obj: Service instance or None
+        
+    Returns:
+        Dict with health status
+    """
+    import json as _json
+    
+    if service_obj is None:
+        return {
+            "service": service_name,
+            "status": "missing",
+            "healthy": False,
+            "message": "Service not initialized",
+        }
+    
+    # Check if service has health check method
+    if hasattr(service_obj, "health_check") or hasattr(service_obj, "get_status"):
+        try:
+            if hasattr(service_obj, "health_check"):
+                health = service_obj.health_check()
+            else:
+                health = service_obj.get_status()
+            
+            # Ensure health is JSON serializable
+            if not isinstance(health, dict):
+                health = {"status": str(health)}
+            
+            # Remove non-serializable objects
+            def _sanitize(obj):
+                if isinstance(obj, dict):
+                    return {k: _sanitize(v) for k, v in obj.items() if not _is_callable_or_unserializable(v)}
+                elif isinstance(obj, (list, tuple)):
+                    return [_sanitize(v) for v in obj if not _is_callable_or_unserializable(v)]
+                elif isinstance(obj, (str, int, float, bool)) or obj is None:
+                    return obj
+                else:
+                    return str(obj)
+            
+            def _is_callable_or_unserializable(obj):
+                return callable(obj) or isinstance(obj, (type, Exception))
+            
+            health = _sanitize(health)
+            
+            return {
+                "service": service_name,
+                "status": "ok",
+                "healthy": True,
+                "data": health,
+            }
+        except Exception as e:
+            return {
+                "service": service_name,
+                "status": "error",
+                "healthy": False,
+                "message": str(e),
+            }
+    
+    # Fallback: service exists but no health method
+    return {
+        "service": service_name,
+        "status": "ok",
+        "healthy": True,
+        "message": "Service running (no health check method)",
+    }
+
+
+@bp.route("/health/backend", methods=["GET"])
+def styx_health_backend() -> Any:
+    """
+    Backend Services Health Check Endpoint.
+    
+    Monitors all services registered in COPILOT_SERVICES:
+    - Core services (brain_graph, conversation_memory, etc.)
+    - Module services (habitus, mood, energy, etc.)
+    - Hub services (hub_dashboard, hub_zones, etc.)
+    
+    Returns:
+        Full health status of all backend services
+    """
+    from flask import current_app
+    
+    # Get all backend services
+    services = current_app.config.get("COPILOT_SERVICES", {})
+    
+    # Check each service
+    service_health = {}
+    unhealthy_services = []
+    
+    for service_name, service_obj in services.items():
+        health = _check_backend_service(service_name, service_obj)
+        service_health[service_name] = health
+        
+        if not health.get("healthy", False):
+            unhealthy_services.append(service_name)
+    
+    # Determine overall status
+    overall_ok = len(unhealthy_services) == 0
+    
+    # Build response
+    response = {
+        "ok": overall_ok,
+        "timestamp": _now_iso(),
+        "total_services": len(service_health),
+        "unhealthy_services": unhealthy_services,
+        "services": service_health,
+    }
+    
+    return jsonify(response), 200 if overall_ok else 503
