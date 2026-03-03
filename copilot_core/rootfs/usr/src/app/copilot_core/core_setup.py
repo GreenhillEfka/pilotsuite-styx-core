@@ -382,6 +382,69 @@ async def init_services(hass=None, config: dict = None):
     except Exception:
         _LOGGER.exception("Failed to init BirthdayService")
 
+    # Initialize PilotSuite Hub engines
+    try:
+        from copilot_core.hub.dashboard import DashboardHub
+        from copilot_core.hub.plugin_manager import PluginManager
+        from copilot_core.hub.multi_home import MultiHomeManager
+        from copilot_core.hub.predictive_maintenance import PredictiveMaintenanceEngine
+        from copilot_core.hub.anomaly_detection import AnomalyDetector
+        from copilot_core.hub.habitus_zones import HabitusZoneEngine
+        from copilot_core.hub.light_intelligence import LightIntelligenceEngine
+        from copilot_core.hub.zone_modes import ZoneModeEngine
+        from copilot_core.hub.media_follow import MediaFollowEngine
+        from copilot_core.hub.energy_advisor import EnergyAdvisor
+        from copilot_core.hub.automation_templates import AutomationTemplateEngine
+        from copilot_core.hub.scene_intelligence import SceneIntelligenceEngine
+        from copilot_core.hub.presence_intelligence import PresenceIntelligenceEngine
+        from copilot_core.hub.notification_intelligence import NotificationIntelligenceEngine
+        from copilot_core.hub.system_integration import SystemIntegrationHub
+        from copilot_core.hub.brain_architecture import BrainArchitectureEngine
+        from copilot_core.hub.brain_activity import BrainActivityTracker
+
+        services["hub_dashboard"] = DashboardHub()
+        services["hub_plugin_manager"] = PluginManager()
+        services["hub_multi_home"] = MultiHomeManager()
+        services["hub_maintenance"] = PredictiveMaintenanceEngine()
+        services["hub_anomaly"] = AnomalyDetector()
+        services["hub_zones"] = HabitusZoneEngine()
+        services["hub_light"] = LightIntelligenceEngine()
+        services["hub_modes"] = ZoneModeEngine()
+        services["hub_media"] = MediaFollowEngine()
+        services["hub_energy"] = EnergyAdvisor()
+        services["hub_templates"] = AutomationTemplateEngine()
+        services["hub_scenes"] = SceneIntelligenceEngine()
+        services["hub_presence"] = PresenceIntelligenceEngine()
+        services["hub_notifications"] = NotificationIntelligenceEngine()
+        services["hub_integration"] = SystemIntegrationHub()
+        services["hub_brain_arch"] = BrainArchitectureEngine()
+        services["hub_brain_activity"] = BrainActivityTracker()
+
+        # Initialize Hub API with engines
+        from copilot_core.hub.api import init_hub_api
+        init_hub_api(
+            dashboard=services["hub_dashboard"],
+            plugin_manager=services["hub_plugin_manager"],
+            multi_home=services["hub_multi_home"],
+            maintenance_engine=services["hub_maintenance"],
+            anomaly_engine=services["hub_anomaly"],
+            zone_engine=services["hub_zones"],
+            light_engine=services["hub_light"],
+            mode_engine=services["hub_modes"],
+            media_engine=services["hub_media"],
+            energy_advisor=services["hub_energy"],
+            template_engine=services["hub_templates"],
+            scene_engine=services["hub_scenes"],
+            presence_engine=services["hub_presence"],
+            notification_engine=services["hub_notifications"],
+            integration_hub=services["hub_integration"],
+            brain_architecture=services["hub_brain_arch"],
+            brain_activity=services["hub_brain_activity"],
+        )
+        _LOGGER.info("Hub engines initialized (17 services)")
+    except Exception:
+        _LOGGER.exception("Failed to init Hub engines")
+
     # Calculate startup time
     services["startup_time_ms"] = (time.perf_counter() - start_time) * 1000
     
@@ -467,10 +530,14 @@ def register_blueprints(app: Flask, services: dict) -> None:
     # Register MCP REST API (standalone, absolute prefix /api/v1/mcp)
     app.register_blueprint(mcp_bp)
     
+    # Register PilotSuite Hub API (standalone, absolute prefix /api/v1/hub)
+    from copilot_core.hub.api import hub_bp
+    app.register_blueprint(hub_bp)
+
     # Register PilotSuite Phase 5 APIs
     from copilot_core.sharing.api import sharing_bp
     from copilot_core.collective_intelligence.api import federated_bp
-    
+
     app.register_blueprint(sharing_bp, url_prefix="/api/v1")
     app.register_blueprint(federated_bp, url_prefix="/api/v1")
     

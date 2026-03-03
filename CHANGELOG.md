@@ -2,6 +2,37 @@
 
 Alle wesentlichen Änderungen am PilotSuite Styx Core werden in dieser Datei dokumentiert.
 
+## [v13.1.0] - 2026-03-03
+
+### Production Readiness Release — Bug Fixes, Hub Integration & RAG Pipeline
+
+#### Critical Bug Fixes ✅
+
+- **37 Broken API Routes**: Double-prefix `/api/v1/api/v1/...` korrigiert:
+  - `sharing/api.py`: 16 Routes — Pfade von `/api/v1/sharing/...` zu `/sharing/...`
+  - `collective_intelligence/api.py`: 15 Routes — Pfade von `/api/v1/federated/...` zu `/federated/...`
+  - `homeassistant/api.py`: 7 Routes — Pfade von `/api/v1/ha/...` zu `/ha/...`
+  - `swagger_ui.py`: openapi_bp `url_prefix="/api/v1"` entfernt (redundant unter api_v1)
+- **RAG Chat Pipeline**: `styx/chat_handler.py` komplett umgeschrieben:
+  - Nutzt jetzt interne RAG Pipeline (BM25 + Semantic + SearXNG) direkt
+  - Kein externer HTTP-Call zu `localhost:8765` mehr
+  - Lazy-Init für RAG Komponenten
+- **12 Test Failures**: Cache-Prefix und Alert-Thresholds korrigiert
+
+#### Hub Module Integration ✅ NEW
+
+- **17 Hub Engines initialisiert** in `core_setup.py::init_services()`
+- **hub_bp registriert** in `register_blueprints()` — 100+ API Routes unter `/api/v1/hub/*`
+- **init_hub_api()** wird jetzt mit allen Engine-Instanzen aufgerufen
+
+#### Test Coverage
+
+- **Core**: 241 passed, 4 skipped
+- **Monitoring**: 54 passed
+- **Total**: 295 passed, 0 failed
+
+---
+
 ## [v13.0.4] - 2026-03-03
 
 ### Module Registry & Test Coverage 100%
