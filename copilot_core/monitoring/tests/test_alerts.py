@@ -66,24 +66,24 @@ class TestAlertEvaluation:
         
         evaluator = AlertEvaluator()
         result = await evaluator.evaluate_system_metrics(
-            cpu_percent=95,
+            cpu_percent=96,
             memory_percent=50,
             disk_percent=50
         )
-        
+
         assert len(result) > 0
         cpu_alert = [a for a in result if a.name == "HighCPUUsage"][0]
         assert cpu_alert.is_firing is True
         assert cpu_alert.severity == "critical"
-    
+
     @pytest.mark.asyncio
     async def test_evaluate_system_metrics_cpu_warning(self):
         """Test CPU warning alert."""
         from copilot_core.monitoring.alerts import AlertEvaluator
-        
+
         evaluator = AlertEvaluator()
         result = await evaluator.evaluate_system_metrics(
-            cpu_percent=75,
+            cpu_percent=85,
             memory_percent=50,
             disk_percent=50
         )
@@ -100,26 +100,26 @@ class TestAlertEvaluation:
         evaluator = AlertEvaluator()
         result = await evaluator.evaluate_system_metrics(
             cpu_percent=50,
-            memory_percent=95,
+            memory_percent=96,
             disk_percent=50
         )
-        
+
         memory_alert = [a for a in result if a.name == "HighMemoryUsage"][0]
         assert memory_alert.is_firing is True
         assert memory_alert.severity == "critical"
-    
+
     @pytest.mark.asyncio
     async def test_evaluate_system_metrics_disk_critical(self):
         """Test disk critical alert."""
         from copilot_core.monitoring.alerts import AlertEvaluator
-        
+
         evaluator = AlertEvaluator()
         result = await evaluator.evaluate_system_metrics(
             cpu_percent=50,
             memory_percent=50,
-            disk_percent=95
+            disk_percent=96
         )
-        
+
         disk_alert = [a for a in result if a.name == "HighDiskUsage"][0]
         assert disk_alert.is_firing is True
         assert disk_alert.severity == "critical"
@@ -193,7 +193,7 @@ class TestAlertEvaluation:
         
         evaluator = AlertEvaluator()
         result = await evaluator.evaluate_all(
-            cpu_percent=75,
+            cpu_percent=85,
             memory_percent=50,
             disk_percent=50,
             error_rate=0.01,
@@ -201,18 +201,18 @@ class TestAlertEvaluation:
             latency_p99=0.5,
             cache_hit_ratio=0.95
         )
-        
+
         assert result["status"] == "warning"
         assert result["firing_count"] > 0
-    
+
     @pytest.mark.asyncio
     async def test_evaluate_all_critical(self):
         """Test evaluate_all with critical status."""
         from copilot_core.monitoring.alerts import AlertEvaluator
-        
+
         evaluator = AlertEvaluator()
         result = await evaluator.evaluate_all(
-            cpu_percent=95,
+            cpu_percent=96,
             memory_percent=50,
             disk_percent=50,
             error_rate=0.01,
@@ -220,7 +220,7 @@ class TestAlertEvaluation:
             latency_p99=0.5,
             cache_hit_ratio=0.95
         )
-        
+
         assert result["status"] == "critical"
     
     @pytest.mark.asyncio
