@@ -449,6 +449,52 @@ class TestAPIEndpoints(unittest.TestCase):
         self.assertTrue(j.get("ok"))
         self.assertEqual(j.get("state"), "learning")
 
+    @patch("copilot_core.api.v1.styx_chat.RAG_API_URL", "http://localhost:8765")
+    @patch("copilot_core.api.v1.styx_chat.OLLAMA_URL", "http://localhost:11434")
+    def test_styx_health_endpoint(self):
+        """Test GET /api/styx/health endpoint."""
+        if create_app is None:
+            self.skipTest("Flask not installed")
+        
+        # Import and manually register styx blueprint for testing
+        from flask import Flask
+        from copilot_core.api.v1.styx_chat import bp as styx_bp
+        
+        app = Flask(__name__)
+        app.register_blueprint(styx_bp)
+        
+        client = app.test_client()
+        r = client.get("/api/styx/health")
+        # Should return 200 or 503 depending on service availability
+        self.assertIn(r.status_code, [200, 503])
+        j = r.get_json()
+        self.assertIn("ok", j)
+        self.assertIn("services", j)
+        self.assertIn("rag_api", j["services"])
+        self.assertIn("ollama", j["services"])
+
+    @patch("copilot_core.api.v1.styx_chat.RAG_API_URL", "http://localhost:8765")
+    @patch("copilot_core.api.v1.styx_chat.OLLAMA_URL", "http://localhost:11434")
+    def test_styx_health_endpoint_returns_services_info(self):
+        """Test /api/styx/health returns service URLs."""
+        if create_app is None:
+            self.skipTest("Flask not installed")
+        
+        # Import and manually register styx blueprint for testing
+        from flask import Flask
+        from copilot_core.api.v1.styx_chat import bp as styx_bp
+        
+        app = Flask(__name__)
+        app.register_blueprint(styx_bp)
+        
+        client = app.test_client()
+        r = client.get("/api/styx/health")
+        j = r.get_json()
+        # Should include service URLs
+        self.assertIn("services", j)
+        self.assertEqual(j["services"]["rag_api_url"], "http://localhost:8765")
+        self.assertEqual(j["services"]["ollama_url"], "http://localhost:11434")
+
 
 if __name__ == "__main__":
     unittest.main()

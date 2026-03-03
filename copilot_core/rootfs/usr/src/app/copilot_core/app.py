@@ -219,6 +219,14 @@ def create_app() -> Flask:
     except Exception:
         logging.getLogger(__name__).exception("Failed to register RAG Search Flask wrappers")
 
+    # Styx Chat API endpoints (/api/styx/*)
+    try:
+        from copilot_core.api.v1.styx_chat import bp as styx_chat_bp
+        app.register_blueprint(styx_chat_bp)
+        logging.getLogger(__name__).info("Styx Chat API registered")
+    except Exception:
+        logging.getLogger(__name__).exception("Failed to register Styx Chat API blueprint")
+
     # Initialize Tags API v2 (FIX: Flask Blueprint rewrite)
     from copilot_core.tags.api import init_tags_api
     from copilot_core.tags import TagRegistry
