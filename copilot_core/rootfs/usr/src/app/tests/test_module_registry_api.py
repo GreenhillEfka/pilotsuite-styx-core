@@ -835,3 +835,25 @@ class TestModuleControlInternalErrorPaths:
         j, status = _json(client.delete("/api/v1/modules/m"))
         assert status == 500
         assert j["ok"] is False
+
+    def test_fallback_to_singleton_when_registry_not_initialized(self, tmp_data, monkeypatch):
+        """Test that _get_registry falls back to ModuleRegistry.get_instance() when _registry is None."""
+        import copilot_core.api.v1.module_control as mc
+        from copilot_core.module_registry import ModuleRegistry, DB_PATH
+
+        _, db_path = tmp_data
+        ModuleRegistry._reset_instance()
+
+        # Set the DB path for the singleton via module_registry module
+        import copilot_core.module_registry as mr_module
+        monkeypatch.setattr(mr_module, "DB_PATH", db_path)
+
+        # Set _registry to None to trigger the fallback
+        monkeypatch.setattr(mc, "_registry", None)
+
+        # Call _get_registry - should fall back to singleton
+        reg = mc._get_registry()
+        assert isinstance(reg, ModuleRegistry)
+        assert getattr(reg, "_db_path") == db_path
+
+        ModuleRegistry._reset_instance()
