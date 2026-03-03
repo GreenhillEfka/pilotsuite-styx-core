@@ -325,11 +325,107 @@ def reset_neuron_graph():
     _graph_instance = None
 
 
+def get_neuron_connections(node_id: Optional[str] = None) -> Dict[str, Any]:
+    """Get connections between neurons.
+    
+    Args:
+        node_id: Optional node ID to filter connections for a specific node
+        
+    Returns:
+        Dictionary with connections data
+    """
+    graph = get_neuron_graph()
+    
+    if node_id:
+        # Get connections for specific node
+        node = graph.get_node(node_id)
+        if not node:
+            return {"error": f"Node not found: {node_id}"}
+        
+        incoming = graph.get_incoming_edges(node_id)
+        outgoing = graph.get_outgoing_edges(node_id)
+        
+        return {
+            "node_id": node_id,
+            "node_name": node.name,
+            "incoming": [edge.to_dict() for edge in incoming],
+            "outgoing": [edge.to_dict() for edge in outgoing],
+            "total_connections": len(incoming) + len(outgoing)
+        }
+    else:
+        # Get all connections
+        return {
+            "total_connections": len(graph.edges),
+            "connections": [edge.to_dict() for edge in graph.edges],
+            "by_type": {
+                "synapse": len([e for e in graph.edges if e.edge_type == "synapse"]),
+                "feedback": len([e for e in graph.edges if e.edge_type == "feedback"]),
+                "modulatory": len([e for e in graph.edges if e.edge_type == "modulatory"])
+            }
+        }
+
+
+def find_paths(start_id: str, end_id: str, max_depth: int = 5) -> List[Dict[str, Any]]:
+    """Find all paths between two nodes.
+    
+    Args:
+        start_id: Starting node ID
+        end_id: Ending node ID
+        max_depth: Maximum path length to search
+        
+    Returns:
+        List of paths, each path is a list of node IDs
+    """
+    graph = get_neuron_graph()
+    
+    start_node = graph.get_node(start_id)
+    end_node = graph.get_node(end_id)
+    
+    if not start_node:
+        raise ValueError(f"Start node not found: {start_id}")
+    if not end_node:
+        raise ValueError(f"End node not found: {end_id}")
+    
+    paths = []
+    
+    def dfs(current: str, target: str, path: List[str], visited: Set[str], depth: int):
+        if depth > max_depth:
+            return
+        
+        if current == target:
+            paths.append(path.copy())
+            return
+        
+        # Get outgoing edges
+        for edge in graph.get_outgoing_edges(current):
+            next_node = edge.target
+            if next_node not in visited:
+                visited.add(next_node)
+                path.append(next_node)
+                dfs(next_node, target, path, visited, depth + 1)
+                path.pop()
+                visited.remove(next_node)
+    
+    visited = {start_id}
+    dfs(start_id, end_id, [start_id], visited, 0)
+    
+    return [
+        {
+            "path": path,
+            "length": len(path) - 1,  # Number of edges
+            "nodes": [graph.get_node(nid).name for nid in path if graph.get_node(nid)]
+        }
+        for path in paths
+    ]
+
+
 __all__ = [
     "NeuronGraph",
     "GraphNode",
     "GraphEdge",
     "NodeMetrics",
     "get_neuron_graph",
-    "reset_neuron_graph"
+    "reset_neuron_graph",
+    "get_neuron_connections",
+    "find_paths"
 ]

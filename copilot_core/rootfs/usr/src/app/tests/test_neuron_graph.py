@@ -10,7 +10,9 @@ from copilot_core.api.v1.neuron_graph import (
     GraphEdge,
     NodeMetrics,
     get_neuron_graph,
-    reset_neuron_graph
+    reset_neuron_graph,
+    get_neuron_connections,
+    find_paths
 )
 
 
@@ -399,6 +401,175 @@ class TestNeuronGraphMetrics:
         graph.update_node_state("state.productivity", active=False, value=0.15, confidence=0.7)
         node = graph.get_node("state.productivity")
         assert node.metrics.trend == "decreasing"
+
+
+class TestNeuronConnections:
+    """Tests for get_neuron_connections function."""
+    
+    def setup_method(self):
+        """Reset graph before each test."""
+        reset_neuron_graph()
+    
+    def test_get_all_connections(self):
+        """Test getting all connections."""
+        result = get_neuron_connections()
+        
+        assert "total_connections" in result
+        assert "connections" in result
+        assert "by_type" in result
+        assert result["total_connections"] > 0
+        assert len(result["connections"]) == result["total_connections"]
+    
+    def test_get_connections_by_type(self):
+        """Test connections are categorized by type."""
+        result = get_neuron_connections()
+        
+        assert "synapse" in result["by_type"]
+        assert "feedback" in result["by_type"]
+        assert "modulatory" in result["by_type"]
+        assert result["by_type"]["synapse"] > 0
+        assert result["by_type"]["feedback"] > 0
+        assert result["by_type"]["modulatory"] > 0
+    
+    def test_get_connections_for_specific_node(self):
+        """Test getting connections for a specific node."""
+        result = get_neuron_connections("context.presence")
+        
+        assert "node_id" in result
+        assert "node_name" in result
+        assert "incoming" in result
+        assert "outgoing" in result
+        assert "total_connections" in result
+        
+        assert result["node_id"] == "context.presence"
+        assert result["node_name"] == "Presence"
+        assert isinstance(result["incoming"], list)
+        assert isinstance(result["outgoing"], list)
+    
+    def test_get_connections_node_not_found(self):
+        """Test getting connections for non-existent node."""
+        result = get_neuron_connections("nonexistent.node")
+        
+        assert "error" in result
+        assert "not found" in result["error"]
+
+
+class TestFindPaths:
+    """Tests for find_paths function."""
+    
+    def setup_method(self):
+        """Reset graph before each test."""
+        reset_neuron_graph()
+    
+    def test_find_path_context_to_mood(self):
+        """Test finding path from context to mood neuron."""
+        paths = find_paths("context.presence", "mood.energy")
+        
+        assert len(paths) > 0
+        for path in paths:
+            assert "path" in path
+            assert "length" in path
+            assert "nodes" in path
+            assert path["path"][0] == "context.presence"
+            assert path["path"][-1] == "mood.energy"
+    
+    def test_find_path_state_to_mood(self):
+        """Test finding path from state to mood neuron."""
+        paths = find_paths("state.energy_level", "mood.focus")
+        
+        assert len(paths) > 0
+        for path in paths:
+            assert path["path"][0] == "state.energy_level"
+            assert path["path"][-1] == "mood.focus"
+    
+    def test_find_path_same_node(self):
+        """Test finding path from node to itself."""
+        paths = find_paths("context.presence", "context.presence")
+        
+        assert len(paths) > 0
+        # Path should have length 0 (same node)
+        assert paths[0]["length"] == 0
+        assert paths[0]["path"] == ["context.presence"]
+    
+    def test_find_path_with_max_depth(self):
+        """Test finding paths with limited depth."""
+        paths_depth1 = find_paths("context.presence", "mood.energy", max_depth=1)
+        paths_depth3 = find_paths("context.presence", "mood.energy", max_depth=3)
+        
+        # Depth 3 should find at least as many paths as depth 1
+        assert len(paths_depth3) >= len(paths_depth1)
+        
+        # All paths in depth1 should have length <= 1
+        for path in paths_depth1:
+            assert path["length"] <= 1
+    
+    def test_find_path_invalid_start(self):
+        """Test finding path with invalid start node."""
+        with pytest.raises(ValueError, match="Start node not found"):
+            find_paths("nonexistent.start", "mood.energy")
+    
+    def test_find_path_invalid_end(self):
+        """Test finding path with invalid end node."""
+        with pytest.raises(ValueError, match="End node not found"):
+            find_paths("context.presence", "nonexistent.end")
+    
+    def test_path_node_names(self):
+        """Test that path includes human-readable node names."""
+        paths = find_paths("context.presence", "state.energy_level")
+        
+        assert len(paths) > 0
+        path = paths[0]
+        
+        # Check that nodes list contains readable names
+        assert len(path["nodes"]) == len(path["path"])
+        assert "Presence" in path["nodes"]
+        assert "Energy Level" in path["nodes"]
+
+
+class TestNeuronGraphAPIIntegration:
+    """Integration tests for Neuron Graph API endpoints."""
+    
+    def test_graph_structure_complete(self):
+        """Test that graph has all required components."""
+        graph = get_neuron_graph()
+        
+        # Check all 14 neurons exist
+        assert len(graph.nodes) == 14
+        
+        # Check layers
+        context_nodes = graph.get_nodes_by_layer(0)
+        state_nodes = graph.get_nodes_by_layer(1)
+        mood_nodes = graph.get_nodes_by_layer(2)
+        
+        assert len(context_nodes) == 5
+        assert len(state_nodes) == 5
+        assert len(mood_nodes) == 4
+    
+    def test_all_neurons_have_connections(self):
+        """Test that all neurons have at least one connection."""
+        graph = get_neuron_graph()
+        
+        for node_id in graph.nodes:
+            incoming = graph.get_incoming_edges(node_id)
+            outgoing = graph.get_outgoing_edges(node_id)
+            
+            # Each neuron should have at least one connection
+            assert len(incoming) > 0 or len(outgoing) > 0, \
+                f"Neuron {node_id} has no connections"
+    
+    def test_paths_exist_between_layers(self):
+        """Test that paths exist between different layers."""
+        # Context -> State
+        paths = find_paths("context.presence", "state.energy_level")
+        assert len(paths) > 0
+        
+        # State -> Mood
+        paths = find_paths("state.energy_level", "mood.energy")
+        assert len(paths) > 0
+        
+        # Context -> Mood (multi-hop)
+        paths = find_paths("context.presence", "mood.focus")
+        assert len(paths) > 0
 
 
 if __name__ == "__main__":

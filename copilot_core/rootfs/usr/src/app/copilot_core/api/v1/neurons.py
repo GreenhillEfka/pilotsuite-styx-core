@@ -29,6 +29,7 @@ bp = Blueprint("neurons", __name__, url_prefix="/neurons")
 from copilot_core.api.security import validate_token as _validate_token, require_admin_token
 from copilot_core.api.v1 import neuron_graph as neuron_graph_module
 from copilot_core.api.v1.websocket_neuron import get_neuron_ws_handler
+from copilot_core.api.v1.neuron_graph import get_neuron_connections, find_paths
 
 # Neuron ID validation: lowercase letters, underscores, dots only
 # Format: prefix.name (e.g., "context.presence", "mood.focus")
@@ -638,6 +639,120 @@ def get_graph_stats():
         })
     except Exception as e:
         _LOGGER.error("Error getting graph stats: %s", e)
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+
+@bp.route("/connections", methods=["GET"])
+def get_connections():
+    """Get connections between neurons.
+    
+    Query params:
+        node_id: Optional node ID to filter connections for a specific node
+    
+    Returns:
+        {
+            "success": true,
+            "data": {
+                "node_id": str (if filtered),
+                "node_name": str (if filtered),
+                "incoming": [...],
+                "outgoing": [...],
+                "total_connections": int
+            }
+        }
+    """
+    try:
+        node_id = request.args.get("node_id")
+        
+        result = get_neuron_connections(node_id)
+        
+        if "error" in result:
+            return jsonify({
+                "success": False,
+                "error": result["error"]
+            }), 404
+        
+        return jsonify({
+            "success": True,
+            "data": result
+        })
+    except Exception as e:
+        _LOGGER.error("Error getting connections: %s", e)
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+
+@bp.route("/paths", methods=["GET"])
+def get_paths():
+    """Find paths between two neurons.
+    
+    Query params:
+        from: Starting node ID (required)
+        to: Ending node ID (required)
+        max_depth: Maximum path length (default: 5, max: 10)
+    
+    Returns:
+        {
+            "success": true,
+            "data": {
+                "from": str,
+                "to": str,
+                "paths": [
+                    {
+                        "path": [...],
+                        "length": int,
+                        "nodes": [...]
+                    }
+                ],
+                "path_count": int
+            }
+        }
+    """
+    try:
+        from_id = request.args.get("from")
+        to_id = request.args.get("to")
+        
+        if not from_id or not to_id:
+            return jsonify({
+                "success": False,
+                "error": "Missing required parameters: 'from' and 'to'"
+            }), 400
+        
+        try:
+            max_depth = int(request.args.get("max_depth", "5"))
+        except (ValueError, TypeError):
+            return jsonify({
+                "success": False,
+                "error": "Invalid 'max_depth' parameter. Must be a positive integer."
+            }), 400
+        
+        # Cap max_depth to prevent excessive computation
+        max_depth = max(1, min(max_depth, 10))
+        
+        paths = find_paths(from_id, to_id, max_depth)
+        
+        return jsonify({
+            "success": True,
+            "data": {
+                "from": from_id,
+                "to": to_id,
+                "paths": paths,
+                "path_count": len(paths),
+                "max_depth": max_depth
+            }
+        })
+    except ValueError as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 404
+    except Exception as e:
+        _LOGGER.error("Error finding paths: %s", e)
         return jsonify({
             "success": False,
             "error": str(e)

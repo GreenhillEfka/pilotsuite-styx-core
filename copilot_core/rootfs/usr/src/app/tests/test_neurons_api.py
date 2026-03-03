@@ -10,6 +10,11 @@ Test coverage for Neuron API:
 - POST /api/v1/neurons/mood/evaluate - Mood evaluation
 - GET /api/v1/neurons/mood/history - Mood Historie
 - GET /api/v1/neurons/suggestions - Vorschläge
+- GET /api/v1/neurons/graph - Graph-Daten (Nodes/Edges)
+- GET /api/v1/neurons/connections - Verbindungen zwischen Neuronen
+- GET /api/v1/neurons/paths - Pfade zwischen Nodes
+- GET /api/v1/neurons/graph/stats - Graph Statistiken
+- GET /api/v1/neurons/<id>/stats - Neuron Statistiken
 
 Author: Clawdya
 Version: 1.0.0
@@ -456,6 +461,137 @@ class TestNeuronAPIErrors:
         response = client.post('/api/v1/neurons/evaluate')
 
         assert response.status_code == 500
+        data = json.loads(response.data)
+        assert data["success"] is False
+
+
+class TestNeuronGraphAPI:
+    """Tests for Neuron Graph API endpoints."""
+    
+    @pytest.fixture
+    def graph_client(self, app):
+        """Create test client with graph endpoints."""
+        from copilot_core.api.v1 import neurons
+        app.register_blueprint(neurons.bp, url_prefix='/api/v1/neurons')
+        with app.test_client() as client:
+            yield client
+    
+    def test_get_graph_success(self, graph_client):
+        """Test getting complete neuron graph."""
+        response = graph_client.get('/api/v1/neurons/graph')
+        
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert data["success"] is True
+        assert "nodes" in data["data"]
+        assert "edges" in data["data"]
+        assert "metadata" in data["data"]
+        assert len(data["data"]["nodes"]) == 14
+    
+    def test_get_graph_stats_success(self, graph_client):
+        """Test getting graph statistics."""
+        response = graph_client.get('/api/v1/neurons/graph/stats')
+        
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert data["success"] is True
+        assert "total_nodes" in data["data"]
+        assert "total_edges" in data["data"]
+        assert data["data"]["total_nodes"] == 14
+    
+    def test_get_neuron_stats_success(self, graph_client):
+        """Test getting individual neuron statistics."""
+        response = graph_client.get('/api/v1/neurons/context.presence/stats')
+        
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert data["success"] is True
+        assert "neuron_id" in data["data"]
+        assert "metrics" in data["data"]
+        assert "connections" in data["data"]
+    
+    def test_get_neuron_stats_not_found(self, graph_client):
+        """Test getting stats for non-existent neuron."""
+        response = graph_client.get('/api/v1/neurons/nonexistent/stats')
+        
+        assert response.status_code == 404
+        data = json.loads(response.data)
+        assert data["success"] is False
+    
+    def test_get_connections_all(self, graph_client):
+        """Test getting all connections."""
+        response = graph_client.get('/api/v1/neurons/connections')
+        
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert data["success"] is True
+        assert "total_connections" in data["data"]
+        assert "connections" in data["data"]
+        assert "by_type" in data["data"]
+    
+    def test_get_connections_for_node(self, graph_client):
+        """Test getting connections for specific node."""
+        response = graph_client.get('/api/v1/neurons/connections?node_id=context.presence')
+        
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert data["success"] is True
+        assert "node_id" in data["data"]
+        assert data["data"]["node_id"] == "context.presence"
+        assert "incoming" in data["data"]
+        assert "outgoing" in data["data"]
+    
+    def test_get_connections_node_not_found(self, graph_client):
+        """Test getting connections for non-existent node."""
+        response = graph_client.get('/api/v1/neurons/connections?node_id=nonexistent')
+        
+        assert response.status_code == 404
+        data = json.loads(response.data)
+        assert data["success"] is False
+    
+    def test_get_paths_success(self, graph_client):
+        """Test finding paths between neurons."""
+        response = graph_client.get('/api/v1/neurons/paths?from=context.presence&to=mood.energy')
+        
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert data["success"] is True
+        assert "paths" in data["data"]
+        assert "path_count" in data["data"]
+        assert data["data"]["from"] == "context.presence"
+        assert data["data"]["to"] == "mood.energy"
+    
+    def test_get_paths_with_max_depth(self, graph_client):
+        """Test finding paths with custom max depth."""
+        response = graph_client.get('/api/v1/neurons/paths?from=context.presence&to=mood.energy&max_depth=3')
+        
+        assert response.status_code == 200
+        data = json.loads(response.data)
+        assert data["success"] is True
+        assert "max_depth" in data["data"]
+    
+    def test_get_paths_missing_params(self, graph_client):
+        """Test paths endpoint with missing parameters."""
+        response = graph_client.get('/api/v1/neurons/paths?from=context.presence')
+        
+        assert response.status_code == 400
+        data = json.loads(response.data)
+        assert data["success"] is False
+        assert "error" in data
+    
+    def test_get_paths_invalid_max_depth(self, graph_client):
+        """Test paths endpoint with invalid max_depth."""
+        response = graph_client.get('/api/v1/neurons/paths?from=context.presence&to=mood.energy&max_depth=invalid')
+        
+        assert response.status_code == 400
+        data = json.loads(response.data)
+        assert data["success"] is False
+    
+    def test_get_paths_node_not_found(self, graph_client):
+        """Test paths endpoint with non-existent node."""
+        response = graph_client.get('/api/v1/neurons/paths?from=nonexistent&to=mood.energy')
+        
+        assert response.status_code == 404
         data = json.loads(response.data)
         assert data["success"] is False
 
