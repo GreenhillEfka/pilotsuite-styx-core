@@ -103,10 +103,10 @@ Error responses include:
 }
 ```
 """,
-        "version": "12.8.0",
+        "version": "13.0.4",
         "contact": {
             "name": "PilotSuite",
-            "url": "https://github.com/pilotsuite/pilotsuite-styx-core"
+            "url": "https://github.com/GreenhillEfka/pilotsuite-styx-core"
         },
         "license": {
             "name": "MIT",

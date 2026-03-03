@@ -23,10 +23,10 @@ info:
     \  \"status\": \"error\",\n  \"error\": {\n    \"code\": \"ERROR_CODE\",\n   \
     \ \"message\": \"Human-readable error message\",\n    \"details\": { ... }\n \
     \ }\n}\n```\n"
-  version: 12.8.0
+  version: 13.0.4
   contact:
     name: PilotSuite
-    url: https://github.com/pilotsuite/pilotsuite-styx-core
+    url: https://github.com/GreenhillEfka/pilotsuite-styx-core
   license:
     name: MIT
     url: https://opensource.org/licenses/MIT
