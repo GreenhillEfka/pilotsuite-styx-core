@@ -1,7 +1,32 @@
 # Groky Release Workflow — Home Assistant / HACS konform
 
-**Status:** v7.11.1 (2026-02-24)  
-**Ziel:** Robuster Release-Workflow mit HA Conformance Check
+**Status:** v13.0.3 (2026-03-03)  
+**Ziel:** Robuster Release-Workflow mit HA Conformance Check  
+**Thinking-Standard:** `--think=high` (MAXIMALES THINKING FÜR ALLE AGENTEN)
+
+---
+
+## 🧠 THINKING-STANDARD (SEIT 2026-03-03)
+
+**Alle Agenten arbeiten permanent mit `--think=high`:**
+
+```bash
+# Standard für alle Sub-Agenten Calls:
+@styx --think=high <task>
+@groky --think=high <task>
+@cowdya --think=high <task>
+```
+
+**Warum?**
+- ✅ **Gründliche Pfad-Prüfung** (keine übersehenen config.yaml Files)
+- ✅ **Tiefe Root-Cause Analyse** statt Symptom-Bekämpfung
+- ✅ **Weniger Fehler** durch maximal gründliches Arbeiten
+- ✅ **Bessere Code-Quality** durch tiefes Verständnis
+
+**Lesson Learned (2026-03-03):**
+- ❌ Oberflächliches Thinking führte zu übersehenen duplicate config.yaml Files
+- ❌ HA zeigte Add-on 2x weil nicht gründlich genug geprüft wurde
+- ✅ Ab jetzt: IMMER `--think=high` für ALLE Tasks
 
 ---
 
