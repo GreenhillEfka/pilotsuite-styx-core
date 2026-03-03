@@ -19,25 +19,52 @@ Usage:
     from copilot_core.security.owasp_middleware import init_owasp_middleware
 """
 
-from .input_validator import (
-    InputValidator,
-    get_validator,
-    validate_input,
-    sanitize_input,
-)
+# Try to import available security modules, skip if not available
+InputValidator = None
+get_validator = None
+validate_input = None
+sanitize_input = None
 
-from .rate_limiter import (
-    RateLimiter,
-    TokenBucket,
-    get_rate_limiter,
-    rate_limit,
-    get_rate_limit_status,
-)
+RateLimiter = None
+TokenBucket = None
+get_rate_limiter = None
+rate_limit = None
+get_rate_limit_status = None
 
-from .security_logs import (
-    SecurityLogger,
-    get_security_logger,
-)
+SecurityLogger = None
+get_security_logger = None
+
+# Try importing input_validator
+try:
+    from .input_validator import (
+        InputValidator,
+        get_validator,
+        validate_input,
+        sanitize_input,
+    )
+except ImportError:
+    pass
+
+# Try importing rate_limiter
+try:
+    from .rate_limiter import (
+        RateLimiter,
+        TokenBucket,
+        get_rate_limiter,
+        rate_limit,
+        get_rate_limit_status,
+    )
+except ImportError:
+    pass
+
+# Try importing security_logs
+try:
+    from .security_logs import (
+        SecurityLogger,
+        get_security_logger,
+    )
+except ImportError:
+    pass
 
 # OWASP middleware (optional import)
 try:
@@ -55,7 +82,7 @@ try:
         get_owasp_middleware,
     )
     OWASP_AVAILABLE = True
-except ImportError:
+except ImportError as e:
     OWASP_AVAILABLE = False
 
 __all__ = [
