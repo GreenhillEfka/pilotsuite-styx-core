@@ -2,6 +2,34 @@
 
 Alle wesentlichen Änderungen am PilotSuite Styx Core werden in dieser Datei dokumentiert.
 
+## [v13.0.4] - 2026-03-03
+
+### Module Registry & Test Coverage 100%
+
+#### Module Registry Implementation ✅ COMPLETE
+- **Commits**: e0e488d, 2911e18
+- **Files**:
+  - `copilot_core/module_registry.py` - Central module registry
+  - Tests: 100% Coverage auf Module Registry
+- **Features**:
+  - Dynamic module discovery and registration
+  - Module lifecycle management (load/unload/reload)
+  - Module metadata tracking
+  - Dependency resolution between modules
+  - Health monitoring for registered modules
+
+#### Test Coverage Expansion ✅ COMPLETE
+- **Commits**: 0f6fdc1, c869944, 4534aeb, 323e761, 75c6777
+- **New Tests**: Vollständige Testabdeckung für neue Module
+- **Coverage**: 100% auf Module Registry
+- **All Tests**: Grün
+
+#### Version Sync ✅
+- **Commit**: dc8254e
+- **Version**: Synchronisiert auf v13.0.4
+
+---
+
 ## [v13.0.0] - 2026-03-02
 
 ### Iteration 21:00 — HA-Core Sync & RAG Search API
