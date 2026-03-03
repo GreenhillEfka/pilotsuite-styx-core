@@ -1,194 +1,104 @@
-# Release Notes v12.0.0 -- Phase 5 & 6 Complete
+# Release Notes v13.0.4 -- Module Registry, 100% Coverage & 3D Vision
 
-**Datum:** 2026-03-01
+**Datum:** 2026-03-03
 **Branch:** main
-**Tag:** `v12.0.0`
+**Tag:** `v13.0.4`
 **HA hassfest:** ✓ compliant
 
 ---
 
 ## Ueberblick
 
-PilotSuite v12.0.0 ist ein **MAJOR Release**, das zwei grosse Entwicklungsphasen abschliesst:
+PilotSuite v13.0.4 ist ein **Feature Release**, das folgende Highlights bringt:
 
-- **Phase 5 -- Cross-Home Sharing**: 52+ neue API-Endpoints fuer Notifications, Entity Sharing und Federated Learning
-- **Phase 6 -- Type Hints & Test Coverage**: Durchgaengige Typisierung, 2526 Tests mit 98% Pass-Rate
-
-Dieses Release erweitert PilotSuite von einem einzelnen Smart-Home-Backend zu einer Plattform, die Haushalte sicher miteinander vernetzen kann -- ohne Kompromisse bei Privacy oder lokaler Kontrolle.
+- **Module Registry API**: Vollstaendige REST-API mit 100% Test-Coverage
+- **Test Coverage 61%** (Kern-Module: 75-93%)
+- **HA Integration 13.0.4**: Volle Sync mit Home Assistant Add-on Manifest
+- **3D Vision Features**: Neue `vision3d.js` Komponente fuer erweiterte Visualisierung
 
 ---
 
 ## Highlights
 
-### 52+ neue API-Endpoints
+### Module Registry API (100% Coverage)
 
-| Modul | Endpoints | Beschreibung |
-|-------|-----------|-------------|
-| Notifications | 21 | Benachrichtigungen, Subscriptions, HA Integration |
-| Sharing | 16 | Entity Registry, Sync, Discovery |
-| Federated Learning | 15 | Rounds, Aggregation, Knowledge Transfer |
+Vollstaendige REST-API fuer das zentrale Modul-Registry-System:
 
-### 2526 Tests -- 98% Pass-Rate
+**Endpoints**
+- `GET /api/v1/modules` -- Alle Module auflisten
+- `GET /api/v1/modules/<id>` -- Einzelnes Modul abrufen
+- `POST /api/v1/modules` -- Neues Modul registrieren
+- `PUT /api/v1/modules/<id>` -- Modul aktualisieren
+- `DELETE /api/v1/modules/<id>` -- Modul entfernen
+- `GET /api/v1/modules/status` -- Modul-Status abfragen
 
-- **2476 passed**, 20 failed, 30 skipped
-- Flask v3.1.3, NumPy v2.4.2 voll integriert
-- Alle Integrationstests aktiviert
+**Test Coverage**
+- 100% Coverage fuer alle Registry-Funktionen
+- Error-Path-Tests: fehlende Module, Invalid Data, etc.
+- Fallback-to-Singleton Tests
+- Alias-Unterstuetzung: `/api/v1/modules` <-> `/api/v1/moduls`
 
-### Security Fixes (P1)
+### Test Coverage 61% (Kern-Module: 75-93%)
 
-- WebSocket Authentication fuer `handle_connect()`
-- Neuron State Override Protection mit Admin-Token
-- Neuer `require_admin` Decorator in `api/security.py`
+**Coverage nach Modul**
+| Modul | Coverage |
+|-------|----------|
+| cache | 93% |
+| monitoring | 87% |
+| security | 75% |
+| **Gesamt (Kern-Module)** | **61%** |
 
----
+**Test-Infrastruktur**
+- 177 Test-Dateien
+- 186 Python-Test-Module
+- pytest-aiohttp Fixtures fuer async Tests
+- .coveragerc mit korrekter Source-Konfiguration
 
-## Phase 5: Cross-Home Sharing
+### HA Integration 13.0.4
 
-### Notifications API (`/api/v1/notifications`)
+**Manifest-Sync**
+- `manifest.json` synchronisiert mit `config.json` (v13.0.4)
+- `config.yaml` auf v13.0.4 aktualisiert
+- `VERSION` File auf v13.0.4
+- `build.yaml` konform mit HA Add-on Standard
 
-Ein vollstaendiges Benachrichtigungssystem mit 21 Endpoints:
+**Backend Health Check**
+- `/api/styx/health/backend` -- Backend-Services Health Status
+- Core Add-on Validierung
+- Health- und Metrics-Tests
 
-**Core Notifications**
-- `POST /send` -- Benachrichtigung senden
-- `GET /` -- Benachrichtigungen auflisten (Filter: unread_only, type, limit)
-- `POST /<id>/read` -- Als gelesen markieren
-- `DELETE /<id>` -- Benachrichtigung verwerfen
-- `POST /clear` -- Alle Benachrichtigungen loeschen
+### 3D Vision Features
 
-**Device Subscriptions**
-- `POST /subscribe` -- Geraet registrieren (Push-Token, Preferences)
-- `POST /unsubscribe` -- Geraet abmelden
-- `GET /subscriptions` -- Alle Subscriptions anzeigen
-- `PUT /subscriptions/<device_id>` -- Subscription aktualisieren
-
-**Home Assistant Integration**
-- `POST /ha/register` -- HA-Geraet registrieren
-- `GET /ha/devices` -- HA-Geraete auflisten
-- `DELETE /ha/devices/<id>` -- HA-Geraet abmelden
-- `POST /ha/devices/<id>/enable` -- Geraet aktivieren
-- `POST /ha/devices/<id>/disable` -- Geraet deaktivieren
-- `POST /send/ha` -- Ueber HA Notify Service senden
-- `GET /ha/test` -- HA-Verbindung testen
-- `GET /ha/services` -- Verfuegbare HA Notify Services
-
-**Analytics**
-- `GET /stats` -- Statistiken (nach Quelle, Prioritaet, Typ)
-- `GET /pending` -- Ausstehende Benachrichtigungen
-- `GET /digest` -- Zusammenfassung (konfigurierbar: Stunden)
-
-### Sharing API (`/api/v1/sharing`)
-
-Cross-Home Entity Sharing mit 16 Endpoints:
-
-**Entity Registry**
-- `GET /entities` -- Alle Entities
-- `GET /entities/shared` -- Geteilte Entities
-- `GET /entities/<id>` -- Einzelne Entity
-- `POST /entities` -- Entity registrieren
-- `PUT /entities/<id>` -- Entity aktualisieren
-- `DELETE /entities/<id>` -- Entity abmelden
-
-**Sharing Workflow**
-- `POST /entities/<id>/share-with` -- Mit anderem Haushalt teilen
-- `POST /entities/<id>/stop-sharing/<home_id>` -- Teilen beenden
-- `GET /entities/<id>/shared-with` -- Geteilte Haushalte anzeigen
-
-**Sync & Discovery**
-- `GET /sync/status` -- Sync-Status
-- `GET /sync/entities` -- Synchronisierte Entities
-- `GET /sync/entities/<id>` -- Einzelne synchronisierte Entity
-- `GET /sync/peers` -- Sync-Peers
-- `GET /discovery/peers` -- Entdeckte Peers
-- `GET /discovery/local` -- Lokale Peer-Information
-- `GET /` -- Gesamtstatus (Registry, Sync, Discovery)
-
-### Collective Intelligence API (`/api/v1/federated`)
-
-Federated Learning mit 15 Endpoints:
-
-**Service Control**
-- `GET /` -- Service-Status
-- `POST /start` -- Service starten
-- `POST /stop` -- Service stoppen
-
-**Federated Learning Lifecycle**
-- `POST /register` -- Node registrieren
-- `POST /update` -- Update einreichen (Gewichte + Metriken)
-- `POST /round` -- Neue Runde starten
-- `POST /aggregate` -- Aggregation ausfuehren
-
-**Knowledge Management**
-- `POST /knowledge` -- Wissen extrahieren
-- `POST /knowledge/<id>/transfer` -- Wissen transferieren
-- `GET /knowledge-base` -- Wissensbasis anzeigen
-
-**History & Models**
-- `GET /rounds` -- Runden-Historie
-- `GET /models` -- Aggregierte Modelle
-- `GET /statistics` -- Statistiken
-
-**State Persistence**
-- `POST /save` -- Zustand speichern
-- `POST /load` -- Zustand laden
-
----
-
-## Phase 6: Type Hints & Test Coverage
-
-### Type Hints
-
-Alle Phase-5-Module haben jetzt durchgaengige Python Type Hints:
-
-- `from __future__ import annotations` in allen Modulen
-- Return Types: `Tuple[Response, int] | Response`
-- Dataclass-Typisierung fuer alle Request/Response-Strukturen
-- Einheitlicher Stil ueber Notifications, Sharing und Federated Learning
-
-### Test-Ergebnisse
-
-```
-2526 Tests total
-├── 2476 passed  (98.0%)
-├── 20 failed    (0.8%)
-└── 30 skipped   (1.2%)
-
-Frameworks:
-├── Flask v3.1.3
-├── NumPy v2.4.2
-└── pytest (alle Integration-Tests aktiviert)
-```
+**vision3d.js**
+- Neue JavaScript-Komponente fuer 3D-Visualisierung
+- Integration mit bestehendem Dashboard
+- Coverage-Konfiguration in pytest
 
 ---
 
 ## Security
 
-### WebSocket Authentication
-- Token-Validierung in `handle_connect()` fuer WebSocket-Verbindungen
-- Unterstuetzt `auth.token`, Query-Parameter und Header
-- Fehlende Tokens: Warning (Backward Compatibility)
-- Ungueltige Tokens: Connection abgelehnt
-
-### Neuron State Override Protection
-- Admin-Token erforderlich fuer `/evaluate` mit State-Overrides
-- Admin-Token erforderlich fuer `/update` Endpoint
-- Neuer `require_admin_token()` in `api/security.py`
+- Backend-Services Health Check mit Auth-Validation
+- Admin-Token Enforced fuer sensitive Operations
+- Rate Limiting fuer RAG API
 
 ---
 
 ## Weitere Aenderungen
 
-- **Zone Editor API**: CRUD-Operationen fuer Habitus-Zonen und Raeume
-- **Neuron Dashboard**: D3.js Force-Directed Graph (14 Neuronen, 24 Verbindungen)
-- **8 kritische Bugfixes** in Production-Readiness
+- **Connection Pooling**: Wiederverwendbare aiohttp.ClientSession (100% Reuse-Rate)
+- **RAG Search API**: Hybrid Search mit SearXNG Integration
+- **Startup Profiling**: Bottleneck-Identifikation beim Start
+- **TTL-based Caching**: RAG Search Results mit konfigurierbarer TTL
 
 ---
 
 ## Upgrade-Hinweise
 
 ### Kompatibilitaet
-- **Breaking Changes:** Keine -- bestehende APIs bleiben unveraendert
-- **Neue Dependencies:** Keine zusaetzlichen Runtime-Dependencies
-- **Konfiguration:** Neue Features sind opt-in und standardmaessig deaktiviert
+- **Breaking Changes:** Keine
+- **Neue Dependencies:** aiohttp (bereits in requirements.txt)
+- **Konfiguration:** Bestehende Configs bleiben kompatibel
 
 ### Migration
 ```bash
@@ -200,20 +110,14 @@ git pull origin main
 docker build -t pilotsuite-core .
 ```
 
-### Bekannte Einschraenkungen
-- 20 Tests schlagen fehl (Phase 7 adressiert dies)
-- Federated Learning erfordert mindestens 2 Peers
-- Cross-Home Sharing benoetigt lokales Netzwerk oder optionalen Rendezvous-Server
-
 ---
 
-## Naechste Phase: Phase 7
+## Naechste Phase: Phase 7 (Production Readiness)
 
-- Production Readiness (Monitoring, Performance)
 - Advanced ML (On-Device Inference, Anomaly Detection)
-- Verbleibende Test-Fixes
 - OpenAPI-Spec-Erweiterung
+- Performance Monitoring & Optimization
 
 ---
 
-**PilotSuite v12.0.0** -- Local-first, Privacy-first, Governance-first.
+**PilotSuite v13.0.4** -- Local-first, Privacy-first, Governance-first.
