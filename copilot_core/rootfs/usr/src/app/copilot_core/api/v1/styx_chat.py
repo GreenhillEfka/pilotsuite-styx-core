@@ -56,11 +56,7 @@ class ChatRequest:
 
 # ── Configuration ───────────────────────────────────────────────────────
 
-# Default URLs (können via ENV überschrieben werden)
-RAG_API_URL = "http://localhost:8765"
-OLLAMA_URL = "http://localhost:11434"
-
-# Singleton ChatHandler
+# Singleton ChatHandler (uses internal RAG pipeline directly)
 _chat_handler: Optional[ChatHandler] = None
 
 
@@ -68,10 +64,7 @@ def _get_chat_handler() -> ChatHandler:
     """Liefert singleton ChatHandler."""
     global _chat_handler
     if _chat_handler is None:
-        _chat_handler = ChatHandler(
-            rag_api_url=RAG_API_URL,
-            ollama_url=OLLAMA_URL,
-        )
+        _chat_handler = ChatHandler()
     return _chat_handler
 
 
@@ -192,40 +185,38 @@ def styx_health() -> Any:
     Returns:
         Status von RAG-API und Ollama
     """
-    import requests
-    
+    import requests as _requests
+    import os
+
+    ollama_url = os.environ.get("OLLAMA_URL", "http://127.0.0.1:11434")
+
     rag_status = "unknown"
     ollama_status = "unknown"
-    
-    # RAG-API checken
+
+    # RAG internal check (BM25 index)
     try:
-        resp = requests.get(
-            f"{RAG_API_URL}/api/rag/stats",
-            timeout=5,
-        )
-        rag_status = "ok" if resp.status_code == 200 else "error"
+        from copilot_core.rag.bm25 import BM25SqliteIndex
+        idx = BM25SqliteIndex()
+        rag_status = "ok" if idx.doc_count >= 0 else "empty"
     except Exception:
-        rag_status = "unreachable"
-    
-    # Ollama checken
+        rag_status = "not_initialized"
+
+    # Ollama check
     try:
-        resp = requests.get(
-            f"{OLLAMA_URL}/api/tags",
-            timeout=5,
-        )
+        resp = _requests.get(f"{ollama_url}/api/tags", timeout=5)
         ollama_status = "ok" if resp.status_code == 200 else "error"
     except Exception:
         ollama_status = "unreachable"
-    
+
     status = {
-        "rag_api": rag_status,
+        "rag_pipeline": rag_status,
         "ollama": ollama_status,
-        "rag_api_url": RAG_API_URL,
-        "ollama_url": OLLAMA_URL,
+        "ollama_url": ollama_url,
+        "rag_type": "internal",
     }
-    
-    all_ok = status["rag_api"] == "ok" and status["ollama"] == "ok"
-    
+
+    all_ok = rag_status in ("ok", "empty") and ollama_status == "ok"
+
     return jsonify({
         "ok": all_ok,
         "services": status,
