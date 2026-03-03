@@ -82,7 +82,8 @@ class ConversationMemory:
                         character TEXT DEFAULT 'copilot',
                         extracted_preferences TEXT DEFAULT '{}',
                         topic_tags TEXT DEFAULT '',
-                        mood_context TEXT DEFAULT '{}'
+                        mood_context TEXT DEFAULT '{}',
+                        conversation_id TEXT DEFAULT NULL
                     );
                     CREATE INDEX IF NOT EXISTS idx_conv_timestamp ON conversations(timestamp);
                     CREATE INDEX IF NOT EXISTS idx_conv_role ON conversations(role);
@@ -107,11 +108,22 @@ class ConversationMemory:
                     CREATE INDEX IF NOT EXISTS idx_summary_timestamp ON conversation_summaries(timestamp);
                 """)
                 conn.commit()
+
+                # Migrate: add conversation_id column if missing (existing DBs)
+                cols = [row[1] for row in conn.execute("PRAGMA table_info(conversations)").fetchall()]
+                if "conversation_id" not in cols:
+                    conn.execute("ALTER TABLE conversations ADD COLUMN conversation_id TEXT DEFAULT NULL")
+                    conn.commit()
+                    logger.info("Migrated conversations table: added conversation_id column")
+
+                # Index on conversation_id (safe to create after migration)
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_conv_conversation_id ON conversations(conversation_id)")
+                conn.commit()
             finally:
                 conn.close()
 
     def store_message(self, role: str, content: str, character: str = "copilot",
-                      mood_context: dict = None) -> int:
+                      mood_context: dict = None, conversation_id: str = None) -> int:
         """Store a conversation message and extract preferences.
 
         Returns the message ID.
@@ -132,8 +144,10 @@ class ConversationMemory:
             try:
                 cursor = conn.execute(
                     "INSERT INTO conversations (timestamp, role, content, character, "
-                    "extracted_preferences, topic_tags, mood_context) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                    (now, role, content, character, json.dumps(prefs), ",".join(topic_tags), mood_json)
+                    "extracted_preferences, topic_tags, mood_context, conversation_id) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    (now, role, content, character, json.dumps(prefs),
+                     ",".join(topic_tags), mood_json, conversation_id)
                 )
                 msg_id = cursor.lastrowid
 
@@ -194,6 +208,34 @@ class ConversationMemory:
             return ""
 
         return "\nErinnerungen:\n" + "\n".join(f"- {p}" for p in context_parts[:8])
+
+    def get_conversation_history(self, conversation_id: str,
+                                  limit: int = 20) -> List[Dict[str, Any]]:
+        """Get message history for a specific conversation.
+
+        Returns messages in chronological order (oldest first),
+        suitable for injecting into an LLM messages array.
+        """
+        if not conversation_id:
+            return []
+
+        with self._lock:
+            conn = sqlite3.connect(self._db_path)
+            try:
+                rows = conn.execute(
+                    "SELECT role, content, timestamp, character FROM conversations "
+                    "WHERE conversation_id = ? ORDER BY timestamp DESC LIMIT ?",
+                    (conversation_id, limit)
+                ).fetchall()
+                # Reverse to chronological order
+                rows.reverse()
+                return [
+                    {"role": role, "content": content,
+                     "timestamp": ts, "character": char}
+                    for role, content, ts, char in rows
+                ]
+            finally:
+                conn.close()
 
     def get_user_preferences(self) -> List[UserPreference]:
         """Get all stored user preferences."""

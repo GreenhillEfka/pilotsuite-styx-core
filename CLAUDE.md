@@ -6,42 +6,47 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Projektueberblick
 
-**PilotSuite Core Add-on** ist das Backend fuer die PilotSuite-Plattform. Es laeuft als Home Assistant Add-on auf Port **8909** und stellt eine Flask/Waitress REST-API bereit.
+**PilotSuite Core Add-on** ist das Gehirn + Stimme der PilotSuite-Plattform. Es laeuft als Home Assistant Add-on (Docker Container) mit Flask/Waitress REST-API auf Port **8909** und bundled Ollama LLM auf Port **11435** (intern).
 
 **Gegenstueck:** [pilotsuite-styx-ha](../pilotsuite-styx-ha) -- HACS Integration (Sensoren, Module, Dashboard)
 
-- **Framework:** Flask (Web), Waitress (WSGI Server)
+- **Framework:** Flask 3.0.2 (Web) + Waitress 3.0.0 (WSGI)
 - **Sprache:** Python 3.11+
-- **Deployment:** Home Assistant Add-on (Docker Container)
-- **Port:** 8909
 - **Lizenz:** Privat, alle Rechte vorbehalten
+- **Version:** Muss in `copilot_core/config.yaml`, `copilot_core/manifest.json` und `copilot_core/rootfs/usr/src/app/VERSION` uebereinstimmen
 
 ---
 
 ## Entwicklungskommandos
 
 ```bash
-# Syntax-Check
-python -m py_compile $(find copilot_core/rootfs/usr/src/app -name '*.py')
+# Tests ausfuehren (alle)
+PYTHONPATH=copilot_core/rootfs/usr/src/app .venv/bin/python -m pytest copilot_core/rootfs/usr/src/app/tests -v --tb=short -x
 
-# Tests ausfuehren
-PYTHONPATH=copilot_core/rootfs/usr/src/app python -m pytest copilot_core/rootfs/usr/src/app/tests -v --tb=short -x
+# Einzelnen Test ausfuehren
+PYTHONPATH=copilot_core/rootfs/usr/src/app .venv/bin/python -m pytest copilot_core/rootfs/usr/src/app/tests/test_mood_service.py -v -x
 
 # Tests mit Coverage
-PYTHONPATH=copilot_core/rootfs/usr/src/app python -m pytest copilot_core/rootfs/usr/src/app/tests -v --tb=short --cov=copilot_core/rootfs/usr/src/app/copilot_core --cov-report=term-missing -x
+PYTHONPATH=copilot_core/rootfs/usr/src/app .venv/bin/python -m pytest copilot_core/rootfs/usr/src/app/tests -v --tb=short --cov=copilot_core/rootfs/usr/src/app/copilot_core --cov-report=term-missing -x
 
-# Security Scan
-bandit -r copilot_core/rootfs/usr/src/app/copilot_core -ll --skip B101,B404,B603
+# Syntax-Check (alle Python-Dateien)
+.venv/bin/python -m py_compile $(find copilot_core/rootfs/usr/src/app -name '*.py')
 
-# App erstellen (Smoke Test)
-PYTHONPATH=copilot_core/rootfs/usr/src/app python -c "from copilot_core.app import create_app; app = create_app(); print('ok')"
+# Smoke Test (Flask App erstellen)
+PYTHONPATH=copilot_core/rootfs/usr/src/app .venv/bin/python -c "from copilot_core.app import create_app; app = create_app(); print('ok')"
 ```
 
 ---
 
 ## Architektur
 
-### Neural Pipeline (Normative Kette)
+### Zwei Entry Points (kritisches Design-Detail)
+
+- **`main.py`** (Produktion): Laedt `/data/options.json`, nutzt `init_services()` + `register_blueprints()` aus `core_setup.py`. Registriert **55+ Blueprints** (22 nested + 35+ standalone).
+- **`app.py`** (Tests): Flask App Factory mit `api_v1` Blueprint aus `api/v1/blueprint.py`. Registriert nur die **22 nested Blueprints** unter `/api/v1`.
+- **Konsequenz:** Tests ueber `app.py` sehen nur Endpoints unter `/api/v1`, nicht die Standalone-Blueprints aus `core_setup.py`. Standalone-Endpoints muessen separat getestet werden.
+
+### Neural Pipeline
 
 ```
 HA Events --> Event Ingest --> Brain Graph --> Habitus Miner --> Candidates
@@ -51,152 +56,101 @@ HA Events --> Event Ingest --> Brain Graph --> Habitus Miner --> Candidates
                               Mood Engine    Vorschlaege --> HA Repairs UI
 ```
 
-1. **Event Ingest**: Empfaengt Events von der HACS Integration (batched, dedupliziert)
-2. **Brain Graph**: Zustandsgraph mit Nodes + Edges, exponential Decay, Snapshots
-3. **Habitus Miner**: Pattern-Discovery mit Association Rules (Support, Confidence, Lift)
-4. **Mood Engine**: Multidimensionale Stimmungsbewertung (Comfort, Joy, Frugality)
-5. **Candidates**: Vorschlaege mit Governance-Workflow (pending -> offered -> accepted/dismissed)
-6. **Neurons**: 12+ Bewertungs-Neuronen (Presence, Energy, Weather, Context, etc.)
+1. **Event Ingest**: N3-Envelopes von HA (batched, dedupliziert, idempotent)
+2. **Brain Graph**: SQLite WAL, exponential Decay, Pruning (max 500 Nodes, 1500 Edges)
+3. **Habitus Miner**: Association Rule Mining mit Wilson-Confidence, zone-basiert
+4. **Mood Engine v3.0**: 6 diskrete Zustaende (Softmax + EMA Hysterese) + 5 kontinuierliche Dimensionen
+5. **Candidates**: Governed Lifecycle (pending -> offered -> accepted/dismissed)
+6. **Neurons**: 25+ in 3 Schichten (Context -> State -> Mood), 60s Evaluationsintervall
 
-### Brain Graph
+### Service-Dict Pattern (`core_setup.py`)
 
-- In-Memory Graph Store mit optionaler JSON-Persistenz
-- Nodes: Entities, Zonen, Devices mit Score und Metadata
-- Edges: Beziehungen mit Gewicht und Decay
-- Max: 500 Nodes, 1500 Edges (konfigurierbar)
-- Pruning, Patterns, SVG-Snapshots
-
-### Habitus Mining
-
-- Association Rule Mining aus Event-Streams
-- Zone-basiertes Mining (Wohnbereich, Schlafbereich, etc.)
-- Confidence-Scoring und Feedback-Loop
-- Zeitbasierte, Trigger-basierte, sequenzielle und kontextuelle Muster
-
-### Mood Engine
-
-- 3D-Bewertung: Comfort, Joy, Frugality (je 0.0-1.0)
-- Zone-spezifische Mood-Snapshots
-- Exponential Smoothing fuer stabile Werte
-- Suggestion-Suppression basierend auf Stimmung
-
----
-
-## Konventionen
-
-### Blueprint-Pattern (Flask)
-
-Alle API-Endpunkte sind als Flask Blueprints organisiert:
+Zentraler Verdrahtungs-Hub — alle Services werden in einem Dict gesammelt und an Blueprints uebergeben:
 
 ```python
-from flask import Blueprint
-bp = Blueprint("modulname", __name__, url_prefix="/modulname")
-
-@bp.get("/endpoint")
-def get_endpoint():
-    ...
+services = init_services(config=options)   # 24+ Services, jeder in try/except
+register_blueprints(app, services)          # Blueprints auf Flask-App
 ```
 
-Blueprints werden in `copilot_core/api/v1/blueprint.py` registriert (relative Prefixes unter `/api/v1`) oder direkt auf der App via `core_setup.register_blueprints()` (absolute Prefixes).
-
-### Service-Dict Pattern
-
-`init_services(config)` in `core_setup.py` initialisiert alle Backend-Services und gibt ein Dict zurueck:
+**Error Boundary:** Jeder Service ist in try/except gewrappt. Fehlgeschlagene Services werden `None` gesetzt — Blueprint-Code muss damit umgehen:
 
 ```python
-services = init_services(config=options)
-# services["brain_graph_store"], services["event_store"], etc.
+# In init_services():
+try:
+    services["my_service"] = MyService(...)
+except Exception:
+    _LOGGER.exception("Failed to init MyService")
+    # services["my_service"] bleibt None
 ```
 
 ### init_services / register_blueprints
 
-- `init_services(config)`: Erstellt und verdrahtet alle Service-Instanzen
-- `register_blueprints(app, services)`: Registriert alle Flask Blueprints auf der App
-- Beide Funktionen leben in `core_setup.py`
+- **Nested** (`api/v1/blueprint.py`): Relative Prefixes unter `/api/v1` (22 Blueprints)
+- **Standalone** (`core_setup.register_blueprints()`): Absolute Prefixes direkt auf App (35+ via data-driven `_SIMPLE_BLUEPRINTS` Loop + individuell)
+- `conversation_bp` existiert absichtlich an `/api/v1/chat/*` UND `/chat/*` (Legacy-Kompatibilitaet)
+- **Neue Blueprints:** Standalone in `register_blueprints()` registrieren, es sei denn rein unter `/api/v1`
 
-### Dateistruktur
+### Token-Validierung (`api/security.py`)
 
+`validate_token(request)` gibt `True` (gueltig) oder `False` (ungueltig) zurueck. Bevorzugt den `@require_token` Decorator verwenden:
+
+```python
+from copilot_core.api.security import require_token
+
+@bp.route("/api/v1/my-endpoint", methods=["POST"])
+@require_token
+def my_endpoint():
+    # Token ist bereits validiert — bei ungueltigem Token wird 401 zurueckgegeben
+    ...
 ```
-copilot_core/
-+-- Dockerfile               # Container-Build
-+-- config.yaml              # HA Add-on Manifest
-+-- rootfs/usr/src/app/
-    +-- main.py              # Entry Point (Flask + Waitress)
-    +-- copilot_core/
-        +-- app.py           # Flask App Factory
-        +-- core_setup.py    # init_services + register_blueprints
-        +-- api/
-        |   +-- v1/
-        |   |   +-- blueprint.py   # Blueprint-Registry
-        |   |   +-- candidates.py  # Candidates API
-        |   |   +-- events.py      # Events API (wird importiert, nicht hier)
-        |   |   +-- mood.py        # Mood API
-        |   |   +-- graph.py       # Brain Graph API
-        |   |   +-- habitus.py     # Habitus API
-        |   |   +-- neurons.py     # Neurons API
-        |   |   +-- search.py      # Search API
-        |   |   +-- notifications.py
-        |   |   +-- dashboard.py
-        |   |   +-- weather.py
-        |   |   +-- user_preferences.py
-        |   |   +-- voice_context_bp.py
-        |   |   +-- user_hints.py
-        |   +-- security.py   # Token-Validierung
-        |   +-- rate_limit.py  # Rate Limiting
-        |   +-- performance.py # Performance Middleware
-        +-- brain_graph/       # Brain Graph Store + Service
-        +-- habitus_miner/     # Habitus Mining Engine
-        +-- habitus/           # Habitus Service Layer
-        +-- mood/              # Mood Engine + Scoring
-        +-- neurons/           # 12+ Bewertungs-Neuronen
-        +-- candidates/        # Candidate Store + API
-        +-- ingest/            # Event Processing Pipeline
-        +-- knowledge_graph/   # Knowledge Graph Store
-        +-- collective_intelligence/  # Federated Learning
-        +-- sharing/           # Cross-Home Sync
-        +-- synapses/          # Synapse Manager
-        +-- storage/           # Persistenz-Layer
-        +-- tags/              # Tag Registry
-        +-- system_health/     # System Health Checks
-        +-- dev_surface/       # Debug/Diagnose
-        +-- energy/            # Energy Neuron API
-        +-- log_fixer_tx/      # Log Recovery
+
+Alternativen:
+- `@optional_token` — setzt `flask.g.token_valid` fuer bedingte Logik
+- `validate_token(request)` — manuell pruefen (True/False)
+
+Token-Quellen (Prioritaet): `X-Auth-Token` Header > `Authorization: Bearer` > `COPILOT_AUTH_TOKEN` Env > `/data/options.json: auth_token`
+
+### NeuronManager Callback-Pattern
+
+Multi-Listener-Pattern — mehrere Callbacks pro Event (kein Ueberschreiben):
+
+```python
+neuron_manager.on_mood_change(webhook_push_callback)  # Listener 1
+neuron_manager.on_mood_change(eventbus_callback)       # Listener 2
 ```
 
 ---
 
-## Aktueller Stand
+## Docker Build + Runtime
 
-### Version v7.7.19
+- **Dockerfile:** `copilot_core/Dockerfile` — HA Add-on Base Image, Python 3.11+, Alpine
+- **Dependencies:** Alle in Dockerfile definiert (keine requirements.txt). Hauptpakete: Flask 3.0.2, Waitress 3.0.0, Pydantic 2.12.5, neo4j, numpy, websockets
+- **Ollama:** Bundled im Container (Alpine edge Package oder Binary-Download)
+- **Ollama Models:** `/share/pilotsuite/ollama/models` — NICHT `/data/` (verhindert Backup-Bloat)
+- **Startup:** `start_dual.sh` → Ollama Daemon (Port 11435) → Model Pull (`qwen3:0.6b`) → Flask/Waitress (Port 8909)
+- **Health Check:** `curl -sf http://localhost:8909/health` alle 30s
+- **Konfiguration:** `/data/options.json` (HA Add-on Mount, generiert aus `config.yaml` Optionen)
 
-- **Tests:** 1962 passed, 1 skipped
-- 28+ Backend-Module implementiert und registriert
-- 40+ API Endpoints (30 Flask Blueprints)
-- Security: Token-Validierung mit `hmac.compare_digest`
-- Brain Graph mit Persistenz, Pruning, SVG-Snapshots
-- Habitus Miner mit Zone Mining und Association Rules
-- Mood Engine mit 3D-Scoring (Comfort/Joy/Frugality)
-- Event Ingest mit Deduplication und Idempotency
-- Candidate Management mit State Machine
-- Knowledge Graph, Vector Store, Search
-- Cross-Home Sync und Collective Intelligence
-- System Health Checks (Zigbee, Z-Wave, Recorder, etc.)
-- Ollama LLM Integration (Default: qwen3:0.6b, Optional: qwen3:4b)
-- Dashboard Auth Bridge fuer Token-geschuetzte API
-- Ollama Cloud Endpoint Hardening
+---
+
+## Tests
+
+Tests in `copilot_core/rootfs/usr/src/app/tests/` (105+ Dateien). `conftest.py` stellt autouse-Fixtures bereit:
+
+- **`reset_auth_token_cache`**: Setzt `_token_cache` in `security.py` vor/nach jedem Test zurueck (60s TTL wuerde sonst State-Leaking verursachen)
+- **`reset_circuit_breakers`**: Setzt `ha_supervisor_breaker`, `ollama_breaker`, `cloud_api_breaker` zurueck (offene Breaker wuerden Folgetests beeinflussen)
 
 ---
 
 ## Hinweise fuer KI-Assistenten
 
-- Flask-Blueprints mit relativen Prefixes werden in `api/v1/blueprint.py` registriert
-- Standalone Blueprints mit `/api/v1/...` Prefix werden in `core_setup.register_blueprints()` registriert
-- Neue Services muessen in `init_services()` initialisiert und im services-Dict zurueckgegeben werden
-- Token-Validierung: `validate_token(request)` aus `api/security.py` verwenden
-- Port ist immer 8909 (Umgebungsvariable PORT)
-- Persistenz unter `/data/` (HA Add-on Mount)
-- Tests mit pytest, Dateien in Repository-Root oder `/tests/`
+- Neue Services: In `init_services()` initialisieren, in try/except wrappen, im services-Dict zurueckgeben
+- Port ist immer 8909 (`PORT` Env-Variable); Ollama intern 11435
+- Persistenz: `/data/` (HA Add-on Mount), Ollama Models unter `/share/`
+- `datetime.now(timezone.utc)` statt `datetime.utcnow()` (deprecated seit Python 3.12)
 - Dokumentation in Deutsch bevorzugt
+- Commit-Messages: `feat:`, `fix:`, `chore:` Prefix
+- Releases: Immer paired mit pilotsuite-styx-ha (gleiche Versionsnummer)
 
 ### Thread-Sicherheit
 
@@ -220,25 +174,23 @@ Zwei konfigurierte Instanzen schuetzen vor kaskadierenden Fehlern:
 | **Governance-first** | Vorschlaege vor Aktionen, Human-in-the-Loop |
 | **Safe Defaults** | Max 500 Nodes, 1500 Edges, Persistenz opt-in |
 
-### PR-Checkliste
-
-- [ ] Changelog updated (if user-visible)
-- [ ] Docs updated (if applicable)
-- [ ] Privacy-first (no secrets, no personal defaults)
-- [ ] Safe defaults (caps/limits; persistence off by default)
-- [ ] Governance-first (no silent actions)
-
 ---
 
 ## Wichtige Dateien
 
 | Datei | Beschreibung |
 |-------|-------------|
-| `copilot_core/rootfs/usr/src/app/main.py` | Entry Point |
-| `copilot_core/rootfs/usr/src/app/copilot_core/app.py` | Flask App Factory |
-| `copilot_core/rootfs/usr/src/app/copilot_core/core_setup.py` | Service-Initialisierung |
-| `copilot_core/rootfs/usr/src/app/copilot_core/api/v1/blueprint.py` | Blueprint-Registry |
-| `copilot_core/rootfs/usr/src/app/copilot_core/api/security.py` | Token-Validierung |
-| `copilot_core/config.yaml` | HA Add-on Manifest |
-| `docs/ARCHITECTURE.md` | Vollstaendige Architektur-Dokumentation |
+| `copilot_core/rootfs/usr/src/app/main.py` | Produktions-Entry-Point |
+| `copilot_core/rootfs/usr/src/app/copilot_core/app.py` | Test-Entry-Point / App Factory |
+| `copilot_core/rootfs/usr/src/app/copilot_core/core_setup.py` | Service-Init + Blueprint-Registration (zentraler Hub) |
+| `copilot_core/rootfs/usr/src/app/copilot_core/api/v1/blueprint.py` | Nested Blueprint-Registry |
+| `copilot_core/rootfs/usr/src/app/copilot_core/api/security.py` | Token-Validierung + Decorators |
+| `copilot_core/rootfs/usr/src/app/copilot_core/neurons/manager.py` | NeuronManager Pipeline |
+| `copilot_core/rootfs/usr/src/app/copilot_core/mood/engine.py` | Unified Mood Engine v3.0 |
+| `copilot_core/rootfs/usr/src/app/copilot_core/brain_graph/store.py` | Brain Graph SQLite Store |
+| `copilot_core/rootfs/usr/src/app/templates/dashboard.html` | Dashboard SPA |
+| `copilot_core/config.yaml` | HA Add-on Manifest (Optionen + Schema) |
+| `copilot_core/Dockerfile` | Container-Build (Dependencies, Ollama) |
+| `copilot_core/rootfs/usr/src/app/start_dual.sh` | Startup: Ollama + Flask |
+| `docs/ARCHITECTURE_DUAL_REPO.md` | Dual-Repo Gesamtkonzept |
 | `docs/API_REFERENCE.md` | API-Endpunkte Dokumentation |

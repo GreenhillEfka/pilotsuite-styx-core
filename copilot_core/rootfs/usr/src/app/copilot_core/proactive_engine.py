@@ -145,6 +145,89 @@ class ProactiveContextEngine:
         return suggestions
 
     # ------------------------------------------------------------------
+    # Mood-triggered suggestions  (v10.5.0)
+    # ------------------------------------------------------------------
+
+    # Minimum confidence delta to trigger mood-based suggestions
+    MOOD_DELTA_THRESHOLD = 0.15
+
+    def evaluate_mood_trigger(
+        self, new_mood: str, confidence: float,
+        previous_mood: str = "", previous_confidence: float = 0.0,
+        zone_id: str = "",
+    ) -> List[Dict[str, Any]]:
+        """Generate suggestions when the dominant mood changes significantly.
+
+        Only triggers when the confidence delta exceeds
+        ``MOOD_DELTA_THRESHOLD`` to avoid noisy transitions.
+
+        Returns a list of suggestion dicts (may be empty).
+        """
+        delta = abs(confidence - previous_confidence)
+        if delta < self.MOOD_DELTA_THRESHOLD and new_mood == previous_mood:
+            return []
+
+        # Check quiet hours
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc)
+        local_hour = (now.hour + int(os.environ.get("TZ_OFFSET", "1"))) % 24
+        if QUIET_START <= 23 and (local_hour >= QUIET_START or local_hour < QUIET_END):
+            return []
+
+        suggestions: List[Dict[str, Any]] = []
+
+        # Comfort drop → suggest adjustment
+        if new_mood in ("alert", "recovery") and previous_mood in ("relax", "social"):
+            suggestions.append({
+                "type": "proactive_mood",
+                "subtype": "comfort_recovery",
+                "priority": "medium",
+                "message": (
+                    f"Die Stimmung hat sich von '{previous_mood}' zu '{new_mood}' "
+                    f"veraendert. Soll ich den Komfort anpassen?"
+                ),
+                "mood_from": previous_mood,
+                "mood_to": new_mood,
+                "confidence": confidence,
+                "zone_id": zone_id,
+                "dismissible": True,
+            })
+
+        # Sleep transition → suggest bedtime routine
+        if new_mood == "sleep" and previous_mood != "sleep":
+            suggestions.append({
+                "type": "proactive_mood",
+                "subtype": "bedtime_transition",
+                "priority": "low",
+                "message": "Die Stimmung wechselt zu Schlaf. Soll ich die Schlafenszeit-Routine starten?",
+                "mood_from": previous_mood,
+                "mood_to": new_mood,
+                "confidence": confidence,
+                "zone_id": zone_id,
+                "dismissible": True,
+            })
+
+        # Focus mode → reduce distractions
+        if new_mood == "focus" and previous_mood != "focus":
+            suggestions.append({
+                "type": "proactive_mood",
+                "subtype": "focus_mode",
+                "priority": "low",
+                "message": "Konzentrationsmodus erkannt. Soll ich Benachrichtigungen stummschalten?",
+                "mood_from": previous_mood,
+                "mood_to": new_mood,
+                "confidence": confidence,
+                "zone_id": zone_id,
+                "dismissible": True,
+            })
+
+        _LOGGER.info(
+            "Mood trigger: %s→%s (delta=%.2f), %d suggestions",
+            previous_mood, new_mood, delta, len(suggestions),
+        )
+        return suggestions
+
+    # ------------------------------------------------------------------
     # Suggestion generators
     # ------------------------------------------------------------------
 
