@@ -72,6 +72,6 @@ Siehe [Releases](https://github.com/GreenhillEfka/pilotsuite-styx-ha/releases) f
 
 ---
 
-**Aktuelle Version:** v12.15.0  
+**Aktuelle Version:** v13.0.3  
 **Letztes Update:** 2026-03-02  
 **Home Assistant:** 2024.1.0+
