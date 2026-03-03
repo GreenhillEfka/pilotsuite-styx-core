@@ -172,6 +172,14 @@ def create_app() -> Flask:
     except Exception:
         logging.getLogger(__name__).exception("Failed to register Multi-Home Synchronization API blueprint")
 
+    # Module Control API endpoints (/api/v1/modules/*)
+    try:
+        from copilot_core.api.v1.module_control import module_control_bp
+        app.register_blueprint(module_control_bp)
+        logging.getLogger(__name__).info("Module Control API registered")
+    except Exception:
+        logging.getLogger(__name__).exception("Failed to register Module Control API blueprint")
+
     # Security Configuration API endpoints (/api/v1/security/*)
     try:
         from copilot_core.api.v1.security import bp as security_bp

@@ -287,6 +287,168 @@ class TestAPIEndpoints(unittest.TestCase):
         j = r.get_json()
         self.assertTrue(j.get("ok"))
 
+    def test_modules_get_list(self):
+        """Test GET /api/v1/modules list."""
+        if create_app is None:
+            self.skipTest("Flask not installed")
+        app = self._create_test_app()
+        client = app.test_client()
+        r = client.get("/api/v1/modules")
+        self.assertEqual(r.status_code, 200)
+        j = r.get_json()
+        self.assertTrue(j.get("ok"))
+        self.assertIn("modules", j)
+
+    def test_modules_get_single(self):
+        """Test GET /api/v1/modules/<id>."""
+        if create_app is None:
+            self.skipTest("Flask not installed")
+        app = self._create_test_app()
+        client = app.test_client()
+        r = client.get("/api/v1/modules/test_module")
+        self.assertEqual(r.status_code, 200)
+        j = r.get_json()
+        self.assertTrue(j.get("ok"))
+        self.assertEqual(j.get("module_id"), "test_module")
+        self.assertIn(j.get("state"), ["active", "learning", "off"])
+
+    def test_modules_post_create(self):
+        """Test POST /api/v1/modules create new module."""
+        if create_app is None:
+            self.skipTest("Flask not installed")
+        app = self._create_test_app()
+        client = app.test_client()
+        payload = {"module_id": "new_module", "state": "learning"}
+        r = client.post("/api/v1/modules", json=payload)
+        self.assertEqual(r.status_code, 200)
+        j = r.get_json()
+        self.assertTrue(j.get("ok"))
+        self.assertEqual(j.get("module_id"), "new_module")
+        self.assertEqual(j.get("state"), "learning")
+        self.assertIn("action", j)
+
+    def test_modules_post_update(self):
+        """Test POST /api/v1/modules update existing module."""
+        if create_app is None:
+            self.skipTest("Flask not installed")
+        app = self._create_test_app()
+        client = app.test_client()
+        # First create
+        client.post("/api/v1/modules", json={"module_id": "update_test", "state": "active"})
+        # Then update
+        payload = {"module_id": "update_test", "state": "learning"}
+        r = client.post("/api/v1/modules", json=payload)
+        self.assertEqual(r.status_code, 200)
+        j = r.get_json()
+        self.assertTrue(j.get("ok"))
+        self.assertEqual(j.get("state"), "learning")
+
+    def test_modules_put_update(self):
+        """Test PUT /api/v1/modules/<id> update."""
+        if create_app is None:
+            self.skipTest("Flask not installed")
+        app = self._create_test_app()
+        client = app.test_client()
+        # First ensure module exists
+        client.post("/api/v1/modules", json={"module_id": "put_test", "state": "active"})
+        # Then PUT update
+        payload = {"state": "off"}
+        r = client.put("/api/v1/modules/put_test", json=payload)
+        self.assertEqual(r.status_code, 200)
+        j = r.get_json()
+        self.assertTrue(j.get("ok"))
+        self.assertEqual(j.get("state"), "off")
+
+    def test_modules_delete(self):
+        """Test DELETE /api/v1/modules/<id>."""
+        if create_app is None:
+            self.skipTest("Flask not installed")
+        app = self._create_test_app()
+        client = app.test_client()
+        # First create
+        client.post("/api/v1/modules", json={"module_id": "delete_test", "state": "learning"})
+        # Then delete
+        r = client.delete("/api/v1/modules/delete_test")
+        self.assertEqual(r.status_code, 200)
+        j = r.get_json()
+        self.assertTrue(j.get("ok"))
+        self.assertEqual(j.get("module_id"), "delete_test")
+        self.assertIn("deleted_state", j)
+
+    def test_modules_delete_nonexistent(self):
+        """Test DELETE /api/v1/modules/<id> for non-existent module."""
+        if create_app is None:
+            self.skipTest("Flask not installed")
+        app = self._create_test_app()
+        client = app.test_client()
+        r = client.delete("/api/v1/modules/nonexistent_module")
+        self.assertEqual(r.status_code, 404)
+        j = r.get_json()
+        self.assertFalse(j.get("ok"))
+
+    def test_modules_post_missing_module_id(self):
+        """Test POST /api/v1/modules with missing module_id."""
+        if create_app is None:
+            self.skipTest("Flask not installed")
+        app = self._create_test_app()
+        client = app.test_client()
+        payload = {"state": "active"}
+        r = client.post("/api/v1/modules", json=payload)
+        self.assertEqual(r.status_code, 400)
+        j = r.get_json()
+        self.assertFalse(j.get("ok"))
+        self.assertIn("error", j)
+
+    def test_modules_post_missing_state(self):
+        """Test POST /api/v1/modules with missing state."""
+        if create_app is None:
+            self.skipTest("Flask not installed")
+        app = self._create_test_app()
+        client = app.test_client()
+        payload = {"module_id": "test"}
+        r = client.post("/api/v1/modules", json=payload)
+        self.assertEqual(r.status_code, 400)
+        j = r.get_json()
+        self.assertFalse(j.get("ok"))
+
+    def test_modules_post_invalid_state(self):
+        """Test POST /api/v1/modules with invalid state."""
+        if create_app is None:
+            self.skipTest("Flask not installed")
+        app = self._create_test_app()
+        client = app.test_client()
+        payload = {"module_id": "test", "state": "invalid"}
+        r = client.post("/api/v1/modules", json=payload)
+        self.assertEqual(r.status_code, 422)
+        j = r.get_json()
+        self.assertFalse(j.get("ok"))
+        self.assertIn("valid_states", j)
+
+    def test_modules_put_invalid_state(self):
+        """Test PUT /api/v1/modules/<id> with invalid state."""
+        if create_app is None:
+            self.skipTest("Flask not installed")
+        app = self._create_test_app()
+        client = app.test_client()
+        payload = {"state": "invalid"}
+        r = client.put("/api/v1/modules/test", json=payload)
+        self.assertEqual(r.status_code, 422)
+        j = r.get_json()
+        self.assertFalse(j.get("ok"))
+
+    def test_modules_configure_still_works(self):
+        """Test that POST /api/v1/modules/<id>/configure still works."""
+        if create_app is None:
+            self.skipTest("Flask not installed")
+        app = self._create_test_app()
+        client = app.test_client()
+        payload = {"state": "learning"}
+        r = client.post("/api/v1/modules/config_test/configure", json=payload)
+        self.assertEqual(r.status_code, 200)
+        j = r.get_json()
+        self.assertTrue(j.get("ok"))
+        self.assertEqual(j.get("state"), "learning")
+
 
 if __name__ == "__main__":
     unittest.main()

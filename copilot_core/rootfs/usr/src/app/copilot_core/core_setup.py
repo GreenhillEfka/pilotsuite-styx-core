@@ -427,10 +427,12 @@ def register_blueprints(app: Flask, services: dict) -> None:
     from copilot_core.api.v1.multihome import bp as multihome_bp
     from copilot_core.api.v1.module_control import module_control_bp
     from copilot_core.api.v1.user_preferences import bp as user_preferences_bp
+    # api_v1.register_blueprint(module_control_bp)  # Can't use api_v1 because module_control_bp has absolute prefix
     from copilot_core.api.v1.voice import bp as voice_bp
     from copilot_core.api.v1.vector import bp as vector_bp
     from copilot_core.api.v1.swagger_ui import bp as swagger_ui_bp
     from copilot_core.api.v1.rag import bp as rag_bp
+    from copilot_core.api.v1.styx_chat import bp as styx_bp
     
     # Register blueprints
     app.register_blueprint(log_fixer_bp, url_prefix="/api/v1")
@@ -449,12 +451,14 @@ def register_blueprints(app: Flask, services: dict) -> None:
     app.register_blueprint(notifications_bp, url_prefix="/api/v1")
     app.register_blueprint(blueprint_bp, url_prefix="/api/v1")
     app.register_blueprint(multihome_bp, url_prefix="/api/v1")
-    app.register_blueprint(module_control_bp, url_prefix="/api/v1")
+    # module_control_bp has url_prefix="/api/v1/modules" (absolute), register directly
+    app.register_blueprint(module_control_bp)
     app.register_blueprint(user_preferences_bp, url_prefix="/api/v1")
     app.register_blueprint(voice_bp, url_prefix="/api/v1")
     app.register_blueprint(vector_bp, url_prefix="/api/v1")
     app.register_blueprint(swagger_ui_bp, url_prefix="/api/v1")
     app.register_blueprint(rag_bp)  # Already has /api/v1/rag prefix
+    app.register_blueprint(styx_bp)  # Already has /api/styx prefix
     
     # Register PilotSuite Phase 5 APIs
     from copilot_core.sharing.api import sharing_bp
