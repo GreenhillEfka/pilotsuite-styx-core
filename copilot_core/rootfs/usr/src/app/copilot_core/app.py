@@ -200,12 +200,8 @@ def create_app() -> Flask:
     # Endpoints: /api/v1/rate-limit/*
 
     # Metrics API endpoints (/api/v1/metrics/*)
-    try:
-        from copilot_core.api.metrics import setup_metrics_routes
-        setup_metrics_routes(api_v1)
-        logging.getLogger(__name__).info("Metrics API registered")
-    except Exception:
-        logging.getLogger(__name__).exception("Failed to register Metrics API blueprint")
+    # Registered via copilot_core.api.v1.blueprint (metrics_bp)
+    logging.getLogger(__name__).info("Metrics API registered (via api_v1 blueprint)")
 
     # RAG Search API endpoints (/api/v1/rag/*)
     try:

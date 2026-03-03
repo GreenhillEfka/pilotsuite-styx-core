@@ -440,7 +440,8 @@ def register_blueprints(app: Flask, services: dict) -> None:
     app.register_blueprint(sensors_bp, url_prefix="/api/v1")
     app.register_blueprint(homekit_bp, url_prefix="/api/v1")
     app.register_blueprint(anomaly_bp, url_prefix="/api/v1")
-    app.register_blueprint(metrics_bp, url_prefix="/api/v1")
+    # metrics_bp registered via api_v1 blueprint (copilot_core.api.v1.blueprint)
+    # app.register_blueprint(metrics_bp, url_prefix="/api/v1")  # Removed - duplicate
     app.register_blueprint(calendar_bp, url_prefix="/api/v1")
     app.register_blueprint(energy_forecast_bp, url_prefix="/api/v1")
     app.register_blueprint(habitus_bp, url_prefix="/api/v1")

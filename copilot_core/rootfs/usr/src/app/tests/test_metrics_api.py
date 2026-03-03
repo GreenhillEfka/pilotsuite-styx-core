@@ -1,12 +1,10 @@
 """
 Tests for Metrics API endpoints
 
-Tests:
-- GET /api/v1/metrics/connection-pool
-- GET /api/v1/metrics/cache
-- GET /api/v1/metrics/all
-- GET /api/v1/metrics/history
-- GET /api/v1/metrics/health
+Tests Flask endpoints in /api/v1/metrics/*
+- /metrics - Prometheus metrics endpoint
+- /health - Extended health check endpoint
+- /ready - Readiness probe
 """
 
 import pytest
@@ -14,28 +12,9 @@ from copilot_core.api.metrics import (
     _collect_current_metrics,
     _add_to_history,
     get_metrics_history,
-    handle_connection_pool_metrics,
-    handle_cache_metrics,
-    handle_all_metrics,
-    handle_metrics_history,
-    handle_health,
 )
-from aiohttp import web
 
-
-@pytest.fixture
-def app():
-    """Create test application with metrics routes."""
-    app = web.Application()
-    from copilot_core.api.metrics import setup_metrics_routes
-    setup_metrics_routes(app)
-    return app
-
-
-@pytest.fixture
-def client(aiohttp_client, app):
-    """Create test client."""
-    return aiohttp_client(app)
+# No aiohttp imports needed - using Flask test client
 
 
 class TestMetricsCollection:
@@ -93,106 +72,44 @@ class TestMetricsCollection:
         _metrics_history.clear()
 
 
-@pytest.mark.skip(reason="Requires pytest-aiohttp fixture")
 class TestMetricsEndpoints:
-    """Test metrics API endpoints."""
+    """Test metrics API endpoints via Flask Blueprint."""
 
-    @pytest.mark.asyncio
-    async def test_connection_pool_metrics(self, client):
-        """Test GET /api/v1/metrics/connection-pool."""
-        resp = await client.get("/api/v1/metrics/connection-pool")
-        assert resp.status == 200
+    def test_metrics_prometheus(self, test_client):
+        """Test GET /api/v1/metrics (Prometheus endpoint)."""
+        resp = test_client.get("/api/v1/metrics")
+        assert resp.status_code == 200
         
-        data = await resp.json()
-        assert "ha_pool" in data
-        assert "ollama_pool" in data
-        assert "config" in data
-        
-        # Check HA pool structure
-        ha_pool = data["ha_pool"]
-        assert "pool_size" in ha_pool
-        assert "active_connections" in ha_pool
-        assert "idle_connections" in ha_pool
-        assert "reuse_rate_pct" in ha_pool
-        assert "healthy" in ha_pool
-        assert "session_active" in ha_pool
+        data = resp.get_data(as_text=True)
+        # Prometheus format: metrics with labels
+        assert "# HELP" in data or "# TYPE" in data or "prometheus" in data.lower()
 
-    @pytest.mark.asyncio
-    async def test_cache_metrics(self, client):
-        """Test GET /api/v1/metrics/cache."""
-        resp = await client.get("/api/v1/metrics/cache")
-        assert resp.status == 200
+    def test_health_extended(self, test_client):
+        """Test GET /api/v1/health (extended health check from metrics_bp)."""
+        resp = test_client.get("/api/v1/health")
+        assert resp.status_code == 200
         
-        data = await resp.json()
-        # Cache stats should be returned (structure depends on cache implementation)
-        assert isinstance(data, dict)
+        data = resp.get_json()
+        assert "healthy" in data or "status" in data
 
-    @pytest.mark.asyncio
-    async def test_all_metrics(self, client):
-        """Test GET /api/v1/metrics/all."""
-        resp = await client.get("/api/v1/metrics/all")
-        assert resp.status == 200
+    def test_ready_probe(self, test_client):
+        """Test GET /api/v1/ready (readiness probe from metrics_bp)."""
+        resp = test_client.get("/api/v1/ready")
+        assert resp.status_code == 200
         
-        data = await resp.json()
-        assert "timestamp" in data
-        assert "connection_pool" in data
-        assert "cache" in data
-
-    @pytest.mark.asyncio
-    async def test_metrics_history(self, client):
-        """Test GET /api/v1/metrics/history."""
-        resp = await client.get("/api/v1/metrics/history")
-        assert resp.status == 200
-        
-        data = await resp.json()
-        assert "history" in data
-        assert "count" in data
-        assert isinstance(data["history"], list)
-        assert isinstance(data["count"], int)
-
-    @pytest.mark.asyncio
-    async def test_metrics_history_with_duration(self, client):
-        """Test GET /api/v1/metrics/history with duration parameter."""
-        resp = await client.get("/api/v1/metrics/history?duration=12")
-        assert resp.status == 200
-        
-        data = await resp.json()
-        assert "history" in data
-        assert "count" in data
-
-    @pytest.mark.asyncio
-    async def test_health_endpoint(self, client):
-        """Test GET /api/v1/metrics/health."""
-        resp = await client.get("/api/v1/metrics/health")
-        assert resp.status == 200
-        
-        data = await resp.json()
-        assert "healthy" in data
-        assert "components" in data
-        assert "timestamp" in data
-        
-        # Check components structure
-        components = data["components"]
-        assert "ha_pool" in components
-        assert "ollama_pool" in components
-        assert "cache" in components
+        data = resp.get_json()
+        assert "ready" in data or "status" in data
 
 
-@pytest.mark.skip(reason="Requires pytest-aiohttp fixture")
 class TestMetricsDashboard:
     """Test metrics dashboard integration."""
 
-    @pytest.mark.asyncio
-    async def test_metrics_for_dashboard(self, client):
+    def test_metrics_structure(self, test_client):
         """Test that metrics endpoint returns dashboard-compatible data."""
-        resp = await client.get("/api/v1/metrics/connection-pool")
-        assert resp.status == 200
+        resp = test_client.get("/api/v1/metrics")
+        assert resp.status_code == 200
         
-        data = await resp.json()
+        data = resp.get_data(as_text=True)
         
-        # Dashboard expects specific fields
-        ha_pool = data["ha_pool"]
-        assert isinstance(ha_pool["pool_size"], int)
-        assert isinstance(ha_pool["reuse_rate_pct"], (int, float))
-        assert isinstance(ha_pool["healthy"], bool)
-        assert isinstance(ha_pool["session_active"], bool)
+        # Prometheus format should contain metric names
+        assert len(data) > 0

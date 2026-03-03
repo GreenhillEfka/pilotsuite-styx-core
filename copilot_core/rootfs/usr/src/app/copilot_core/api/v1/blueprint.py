@@ -35,6 +35,9 @@ from copilot_core.api.v1.rate_limit import rate_limit_bp
 # HomeAssistant Discovery API
 from copilot_core.homeassistant.api import ha_discovery_bp
 
+# Metrics API (Flask)
+from copilot_core.api.v1.metrics import metrics_bp
+
 api_v1 = Blueprint("api_v1", __name__, url_prefix="/api/v1")
 
 # Register sub-blueprints with relative url_prefix (e.g. /neurons, /kg)
@@ -75,6 +78,9 @@ api_v1.register_blueprint(rate_limit_bp)
 
 # Register HomeAssistant Discovery API
 api_v1.register_blueprint(ha_discovery_bp)
+
+# Register Metrics API (Flask)
+api_v1.register_blueprint(metrics_bp)
 
 # Note: Standalone blueprints with absolute prefixes (/api/v1/...)
 # are registered directly on the app via core_setup.register_blueprints():
