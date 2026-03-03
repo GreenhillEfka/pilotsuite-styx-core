@@ -418,6 +418,7 @@ def register_blueprints(app: Flask, services: dict) -> None:
     from copilot_core.api.v1.calendar import calendar_bp
     from copilot_core.api.v1.energy_forecast import energy_forecast_bp
     from copilot_core.api.v1.habitus import bp as habitus_bp
+    from copilot_core.api.v1.habitus_zones import bp as habitus_zones_bp
     from copilot_core.api.v1.mood import bp as mood_bp
     from copilot_core.api.v1.zone_editor import zone_editor_bp
     from copilot_core.api.v1.media_zones import media_zones_bp
@@ -445,6 +446,7 @@ def register_blueprints(app: Flask, services: dict) -> None:
     app.register_blueprint(calendar_bp, url_prefix="/api/v1")
     app.register_blueprint(energy_forecast_bp, url_prefix="/api/v1")
     app.register_blueprint(habitus_bp, url_prefix="/api/v1")
+    app.register_blueprint(habitus_zones_bp)  # Already has /api/v1/habitus/zones prefix
     app.register_blueprint(mood_bp, url_prefix="/api/v1")
     app.register_blueprint(zone_editor_bp, url_prefix="/api/v1")
     app.register_blueprint(media_zones_bp, url_prefix="/api/v1")

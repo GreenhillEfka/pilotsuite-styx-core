@@ -757,12 +757,15 @@ class TestOverlayManagement:
         
         # Create overlay
         overlay = MockElement('div')
+        # Set mock dimensions for getBoundingClientRect
+        overlay._rect = {'width': 150, 'height': 80, 'left': 0, 'top': 0}
         point = {'x': 400, 'y': 300, 'z': 0.5}
         
         view.positionOverlay(overlay, point)
         
-        assert overlay.style.left == '325px'
-        assert overlay.style.top == '260px'
+        # Allow for both int and float representations (JS produces floats)
+        assert overlay.style.left in ['325px', '325.0px']
+        assert overlay.style.top in ['260px', '260.0px']
         assert overlay.style.display == 'block'
 
 
@@ -818,11 +821,21 @@ class TestCanvasDrawing:
             'zone-2': {'x': 450, 'y': 320, 'visible': True, 'data': {}}
         }
         
+        # Track setLineDash calls to verify it was set during drawing
+        original_setLineDash = view.ctx.setLineDash
+        lineDash_history = []
+        
+        def tracked_setLineDash(dash):
+            lineDash_history.append(dash.copy() if hasattr(dash, 'copy') else list(dash))
+            original_setLineDash(dash)
+        
+        view.ctx.setLineDash = tracked_setLineDash
+        
         view.drawZoneConnections()
         
-        # Should have set line dash and drawn
-        assert view.ctx.lineDash == [5, 5]
-        view.ctx.setLineDash([])  # Reset
+        # Should have set line dash to [5, 5] during drawing, then reset to []
+        assert [5, 5] in lineDash_history, f"Expected [5, 5] in lineDash history, got {lineDash_history}"
+        assert view.ctx.lineDash == [], "Line dash should be reset to [] after drawing"
 
 
 class TestSyncControl:

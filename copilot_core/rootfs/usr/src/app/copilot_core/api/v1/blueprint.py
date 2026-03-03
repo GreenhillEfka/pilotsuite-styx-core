@@ -38,6 +38,9 @@ from copilot_core.homeassistant.api import ha_discovery_bp
 # Metrics API (Flask)
 from copilot_core.api.v1.metrics import metrics_bp
 
+# Habitus Zones API (standalone blueprint with absolute prefix)
+from copilot_core.api.v1.habitus_zones import bp as habitus_zones_bp
+
 api_v1 = Blueprint("api_v1", __name__, url_prefix="/api/v1")
 
 # Register sub-blueprints with relative url_prefix (e.g. /neurons, /kg)
