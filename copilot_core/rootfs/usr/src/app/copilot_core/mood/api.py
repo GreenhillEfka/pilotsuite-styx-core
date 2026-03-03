@@ -8,6 +8,7 @@ Endpoints:
     POST /api/v1/mood/update-media        - Update moods from MediaContext
     POST /api/v1/mood/update-habitus      - Update moods from Habitus
     GET  /api/v1/mood/{zone_id}/suppress-energy-saving  - Check if energy-saving should be suppressed
+    GET  /api/v1/mood/{zone_id}/relevance/<suggestion_type>  - Get suggestion relevance multiplier
 """
 
 from __future__ import annotations
