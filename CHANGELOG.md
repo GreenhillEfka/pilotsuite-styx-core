@@ -2,6 +2,27 @@
 
 Alle wesentlichen Änderungen am PilotSuite Styx Core werden in dieser Datei dokumentiert.
 
+## [v13.1.1] - 2026-03-04
+
+### Bug Fixes & Test Stabilization
+
+#### Production Code Fixes
+- **RAG Cache Key Bug**: Cache key now includes `include_text`/`include_metadata` flags — previously cached results could return text even when `include_text=False`
+- **AnomalyDetector.get_feature_names()**: Fixed AttributeError — method exists on FeatureExtractor, not AnomalyDetector; now uses `_feature_names` attribute
+- **Multihome Blueprint url_prefix**: Corrected from `/api/v1` to `/api/v1/multihome`
+- **RAG cache.get() async**: Added missing `asyncio.run()` wrapper for async cache access
+
+#### Test Isolation Fixes (25 Failures → 0)
+- **Rate Limiter Reset**: Fixed `_windows.clear()` → `get_rate_limiter().reset()` (correct API)
+- **RAG Cache Singleton**: Reset `_rag_cache = None` between tests to prevent cross-test pollution
+- **psutil Mock Leak**: `test_dev_surface_simple.py` now saves/restores original psutil module
+- **Auth Env-Var Pollution**: Switched from `os.environ.setdefault()` to `monkeypatch.setenv()`
+
+#### Test Coverage
+- **Full Suite**: 3464 passed, 0 failed, 118 skipped
+
+---
+
 ## [v13.1.0] - 2026-03-03
 
 ### Production Readiness Release — Bug Fixes, Hub Integration & RAG Pipeline
