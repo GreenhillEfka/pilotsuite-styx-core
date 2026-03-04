@@ -10,7 +10,7 @@ from copilot_core.api.security import validate_token, require_token
 
 logger = logging.getLogger(__name__)
 
-bp = Blueprint("multihome", __name__, url_prefix="/multihome")
+bp = Blueprint("multihome", __name__, url_prefix="/api/v1/multihome")
 
 
 @bp.before_request

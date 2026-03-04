@@ -571,61 +571,55 @@ def register_blueprints(app: Flask, services: dict) -> None:
         app: Flask application instance
         services: Dictionary of initialized services
     """
-    # Import blueprints
+    # Import standalone blueprints (NOT already nested in api_v1)
     from copilot_core.api.v1.log_fixer_tx import bp as log_fixer_bp
     from copilot_core.api.v1.events_ingest import bp as events_ingest_bp
     from copilot_core.api.v1.sensors import bp as sensors_bp
     from copilot_core.api.v1.homekit import homekit_bp
     from copilot_core.api.v1.anomaly import anomaly_bp
-    from copilot_core.api.v1.metrics import metrics_bp
     from copilot_core.api.v1.calendar import calendar_bp
     from copilot_core.api.v1.energy_forecast import energy_forecast_bp
-    from copilot_core.api.v1.habitus import bp as habitus_bp
     from copilot_core.api.v1.habitus_zones import bp as habitus_zones_bp
-    from copilot_core.api.v1.mood import bp as mood_bp
     from copilot_core.api.v1.zone_editor import zone_editor_bp
     from copilot_core.api.v1.media_zones import media_zones_bp
     from copilot_core.api.v1.tag_system import bp as tag_bp
-    from copilot_core.api.v1.notifications import bp as notifications_bp
-    from copilot_core.api.v1.blueprint import api_v1 as blueprint_bp
     from copilot_core.api.v1.multihome import bp as multihome_bp
     from copilot_core.api.v1.module_control import module_control_bp
-    from copilot_core.api.v1.user_preferences import bp as user_preferences_bp
     from copilot_core.api.v1.mcp import bp as mcp_bp
-    # api_v1.register_blueprint(module_control_bp)  # Can't use api_v1 because module_control_bp has absolute prefix
     from copilot_core.api.v1.voice import bp as voice_bp
-    from copilot_core.api.v1.vector import bp as vector_bp
-    from copilot_core.api.v1.swagger_ui import bp as swagger_ui_bp
     from copilot_core.api.v1.rag import bp as rag_bp
     from copilot_core.api.v1.styx_chat import bp as styx_bp
+    # api_v1 parent (contains nested: mood, habitus, notifications, vector,
+    # swagger, user_preferences, metrics, sharing, federated, etc.)
+    from copilot_core.api.v1.blueprint import api_v1 as blueprint_bp
     
     # Register blueprints
-    app.register_blueprint(log_fixer_bp, url_prefix="/api/v1")
-    app.register_blueprint(events_ingest_bp, url_prefix="/api/v1")
-    app.register_blueprint(sensors_bp, url_prefix="/api/v1")
-    app.register_blueprint(homekit_bp, url_prefix="/api/v1")
-    app.register_blueprint(anomaly_bp, url_prefix="/api/v1")
-    # metrics_bp registered via api_v1 blueprint (copilot_core.api.v1.blueprint)
-    # app.register_blueprint(metrics_bp, url_prefix="/api/v1")  # Removed - duplicate
-    app.register_blueprint(calendar_bp, url_prefix="/api/v1")
-    app.register_blueprint(energy_forecast_bp, url_prefix="/api/v1")
-    app.register_blueprint(habitus_bp, url_prefix="/api/v1")
-    app.register_blueprint(habitus_zones_bp)  # Already has /api/v1/habitus/zones prefix
-    app.register_blueprint(mood_bp, url_prefix="/api/v1")
-    app.register_blueprint(zone_editor_bp, url_prefix="/api/v1")
-    app.register_blueprint(media_zones_bp, url_prefix="/api/v1")
-    app.register_blueprint(tag_bp, url_prefix="/api/v1")
-    app.register_blueprint(notifications_bp, url_prefix="/api/v1")
-    app.register_blueprint(blueprint_bp, url_prefix="/api/v1")
-    app.register_blueprint(multihome_bp, url_prefix="/api/v1")
-    # module_control_bp has url_prefix="/api/v1/modules" (absolute), register directly
-    app.register_blueprint(module_control_bp)
-    app.register_blueprint(user_preferences_bp, url_prefix="/api/v1")
-    app.register_blueprint(voice_bp, url_prefix="/api/v1")
-    app.register_blueprint(vector_bp, url_prefix="/api/v1")
-    app.register_blueprint(swagger_ui_bp, url_prefix="/api/v1")
-    app.register_blueprint(rag_bp)  # Already has /api/v1/rag prefix
-    app.register_blueprint(styx_bp)  # Already has /api/styx prefix
+    # NOTE: Flask's register_blueprint(url_prefix=X) OVERRIDES the blueprint's
+    # own url_prefix — it does NOT concatenate. Only pass url_prefix for
+    # blueprints that have NO prefix or whose routes already include the sub-path.
+
+    # Standalone blueprints with absolute /api/v1/* prefixes — register directly
+    app.register_blueprint(log_fixer_bp)       # prefix: /api/v1/log_fixer_tx
+    app.register_blueprint(events_ingest_bp)   # no prefix, routes use /api/v1/events
+    app.register_blueprint(sensors_bp)         # prefix: /api/v1/sensors
+    app.register_blueprint(homekit_bp)         # prefix: /api/v1/homekit
+    app.register_blueprint(anomaly_bp, url_prefix="/api/v1")  # no prefix, routes: /anomaly/*
+    app.register_blueprint(calendar_bp)        # prefix: /api/v1/calendar
+    app.register_blueprint(energy_forecast_bp) # prefix: /api/v1/energy
+    app.register_blueprint(habitus_zones_bp)   # prefix: /api/v1/habitus/zones
+    app.register_blueprint(zone_editor_bp)     # prefix: /api/v1/zone-editor
+    app.register_blueprint(media_zones_bp)     # prefix: /api/v1/media
+    app.register_blueprint(tag_bp)             # prefix: /api/v1/tag-system
+    app.register_blueprint(multihome_bp)       # prefix: /api/v1/multihome
+    app.register_blueprint(module_control_bp)  # prefix: /api/v1/modules
+    app.register_blueprint(voice_bp)           # prefix: /api/v1/voice
+    app.register_blueprint(rag_bp)             # prefix: /api/rag
+    app.register_blueprint(styx_bp)            # prefix: /api/styx
+
+    # api_v1 parent blueprint — contains 22+ nested sub-blueprints with
+    # relative prefixes (mood, habitus, notifications, vector, swagger, etc.)
+    # These are correctly concatenated: /api/v1 + /mood = /api/v1/mood
+    app.register_blueprint(blueprint_bp)       # prefix: /api/v1
     
     # Register MCP REST API (standalone, absolute prefix /api/v1/mcp)
     app.register_blueprint(mcp_bp)
@@ -678,13 +672,9 @@ def register_blueprints(app: Flask, services: dict) -> None:
     from copilot_core.hub.api import hub_bp
     app.register_blueprint(hub_bp)
 
-    # Register PilotSuite Phase 5 APIs
-    from copilot_core.sharing.api import sharing_bp
-    from copilot_core.collective_intelligence.api import federated_bp
+    # NOTE: sharing_bp and federated_bp are already nested in api_v1
+    # (via blueprint.py lines 79-80). No standalone registration needed.
 
-    app.register_blueprint(sharing_bp, url_prefix="/api/v1")
-    app.register_blueprint(federated_bp, url_prefix="/api/v1")
-    
     _LOGGER.info("API blueprints registered")
 
 
