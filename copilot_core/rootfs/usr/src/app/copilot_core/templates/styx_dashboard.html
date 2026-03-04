@@ -266,6 +266,95 @@
   .entity-add-row button { padding: 6px 12px; font-size: 0.78rem; background: var(--accent); color: #000; border: none; border-radius: 6px; cursor: pointer; }
   .entity-remove-btn { background: none; border: none; color: var(--red); cursor: pointer; font-size: 0.9rem; padding: 0 4px; }
 
+  /* ── Neuron Layer Visualization (Beyond State of the Art) ─── */
+  .neuron-layer-viz {
+    position: relative; width: 100%; height: 500px;
+    background: #060810; border-radius: 12px; overflow: hidden;
+  }
+  .neuron-layer-bg {
+    position: absolute; top: 0; bottom: 0; border-radius: 8px;
+    display: flex; flex-direction: column; align-items: center;
+    padding-top: 8px; z-index: 0;
+  }
+  .neuron-layer-bg.layer-context { left: 2%; width: 28%; background: linear-gradient(180deg, #0a1a2a 0%, #0a1220 100%); }
+  .neuron-layer-bg.layer-state   { left: 36%; width: 28%; background: linear-gradient(180deg, #0a2a1a 0%, #0a2010 100%); }
+  .neuron-layer-bg.layer-mood    { left: 70%; width: 28%; background: linear-gradient(180deg, #1a0a2a 0%, #150a20 100%); }
+  .neuron-layer-label {
+    font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 2px;
+    padding: 4px 12px; border-radius: 4px; background: rgba(0,0,0,0.4);
+  }
+  .neuron-layer-label.ctx { color: #4fc3f7; }
+  .neuron-layer-label.sta { color: #81c784; }
+  .neuron-layer-label.moo { color: #ce93d8; }
+
+  @keyframes neuronPulse {
+    0% { box-shadow: 0 0 4px 2px currentColor; }
+    50% { box-shadow: 0 0 16px 6px currentColor; }
+    100% { box-shadow: 0 0 4px 2px currentColor; }
+  }
+  @keyframes neuronFire {
+    0% { transform: scale(1); filter: brightness(1); }
+    30% { transform: scale(1.3); filter: brightness(1.8); }
+    100% { transform: scale(1); filter: brightness(1); }
+  }
+  @keyframes signalFlow {
+    0% { offset-distance: 0%; opacity: 0; }
+    10% { opacity: 1; }
+    90% { opacity: 1; }
+    100% { offset-distance: 100%; opacity: 0; }
+  }
+  .neuron-stats-panel {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 8px; margin-top: 12px;
+  }
+  .neuron-stat-chip {
+    background: var(--surface2); border-radius: 8px; padding: 8px 12px; text-align: center;
+  }
+  .neuron-stat-chip .nsc-label { font-size: 0.65rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+  .neuron-stat-chip .nsc-value { font-size: 1.1rem; font-weight: 700; margin-top: 2px; font-variant-numeric: tabular-nums; }
+
+  /* ── HomeKit Cards ─────────────────────────────────── */
+  .homekit-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; margin-top: 12px; }
+  .homekit-card {
+    background: var(--surface); border-radius: var(--radius); padding: 16px;
+    border: 1px solid var(--surface2); transition: all 0.2s;
+  }
+  .homekit-card:hover { border-color: #999; }
+  .homekit-card.hk-enabled { border-color: #81c784; }
+  .homekit-card .hk-header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .homekit-card .hk-icon { font-size: 1.3rem; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; background: #1a1a2e; border-radius: 8px; }
+  .homekit-card .hk-title { font-weight: 600; font-size: 0.9rem; }
+  .homekit-card .hk-subtitle { font-size: 0.72rem; color: var(--muted); }
+  .homekit-card .hk-qr { display: flex; justify-content: center; margin: 12px 0; background: #fff; border-radius: 8px; padding: 8px; }
+  .homekit-card .hk-qr img, .homekit-card .hk-qr svg { width: 120px; height: 120px; }
+  .homekit-card .hk-code {
+    text-align: center; font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 1.1rem; font-weight: 700; letter-spacing: 2px;
+    color: var(--accent); margin: 8px 0;
+  }
+  .homekit-card .hk-entities { font-size: 0.75rem; color: var(--muted); text-align: center; }
+  .homekit-card .hk-badge {
+    display: inline-block; font-size: 0.65rem; padding: 2px 8px;
+    border-radius: 10px; font-weight: 600;
+  }
+  .homekit-card .hk-badge.active { background: #1a3a2a; color: var(--green); }
+  .homekit-card .hk-badge.inactive { background: #3a1a1a; color: var(--red); }
+
+  /* ── Zone Mood Bars ────────────────────────────────── */
+  .zone-mood { display: flex; gap: 6px; margin-top: 8px; align-items: center; }
+  .zone-mood-bar {
+    flex: 1; height: 4px; background: var(--surface2); border-radius: 2px; overflow: hidden; position: relative;
+  }
+  .zone-mood-bar .fill { height: 100%; border-radius: 2px; transition: width 0.5s ease; }
+  .zone-mood-label { font-size: 0.6rem; color: var(--muted); min-width: 50px; }
+  .zone-status-badge {
+    display: inline-block; font-size: 0.65rem; padding: 2px 8px;
+    border-radius: 10px; font-weight: 600;
+  }
+  .zone-status-badge.active { background: #1a3a2a; color: var(--green); }
+  .zone-status-badge.idle { background: #2a2a1a; color: var(--orange); }
+  .zone-status-badge.disabled { background: #2a1a1a; color: var(--red); }
+
   /* ── Keyboard Hint ──────────────────────────────── */
   .kbd-hint { display: inline-block; font-size: 0.6rem; color: var(--muted); background: var(--surface2); padding: 1px 4px; border-radius: 3px; margin-left: 4px; vertical-align: middle; }
 
@@ -351,8 +440,22 @@
 
   <!-- ═══════════════ TAB: Zonen ═══════════════ -->
   <div class="tab-content" id="tab-zones">
-    <div class="section-title">&#x1F3E0; Habitus-Zonen &#x2014; Raum&uuml;bersicht</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+      <div class="section-title" style="margin:0">&#x1F3E0; Habitus-Zonen &#x2014; Raum&uuml;bersicht</div>
+      <div style="display:flex;gap:6px">
+        <span class="zone-status-badge active" id="zone-count-active">0 aktiv</span>
+        <span class="zone-status-badge idle" id="zone-count-idle">0 idle</span>
+        <span style="font-size:0.75rem;color:var(--muted);padding:2px 8px" id="zone-count-entities">0 Entit&auml;ten</span>
+      </div>
+    </div>
     <div class="zone-grid" id="zone-cards"></div>
+
+    <!-- HomeKit per Zone -->
+    <div class="section-title" style="margin-top:24px">&#xF8FF; HomeKit &#x2014; Pro Zone automatisch erstellt</div>
+    <p style="font-size:0.82rem;color:var(--muted);margin-bottom:12px">Jede Habitus-Zone erh&auml;lt automatisch eine eigene HomeKit-Bridge. QR-Code scannen zum Pairen mit Apple Home.</p>
+    <div class="homekit-grid" id="homekit-cards">
+      <div class="loading-overlay"><span class="loading"></span> HomeKit-Status laden...</div>
+    </div>
   </div>
 
   <!-- ═══════════════ TAB: Musikwolke ═══════════════ -->
@@ -436,11 +539,36 @@
 
   <!-- ═══════════════ TAB: Neurons ═══════════════ -->
   <div class="tab-content" id="tab-neurons">
-    <div class="card wide">
-      <h2><span class="icon" style="background:#1a2a4a">&#x1F52C;</span> Brain Visualisierung</h2>
-      <canvas id="brain-canvas-2"></canvas>
-      <div class="brain-tooltip" id="brain-tooltip-2"></div>
+    <!-- Layer Visualization Panel -->
+    <div class="card wide" style="padding:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <h2 style="margin:0"><span class="icon" style="background:#1a2a4a">&#x1F9E0;</span> Neuronen-Brain &mdash; 3-Layer Pipeline</h2>
+        <div style="display:flex;gap:6px">
+          <span class="neuron-layer-label ctx" style="font-size:0.65rem">Kontext</span>
+          <span style="color:var(--muted);font-size:0.8rem">&#x2192;</span>
+          <span class="neuron-layer-label sta" style="font-size:0.65rem">Zustand</span>
+          <span style="color:var(--muted);font-size:0.8rem">&#x2192;</span>
+          <span class="neuron-layer-label moo" style="font-size:0.65rem">Stimmung</span>
+        </div>
+      </div>
+      <div class="neuron-layer-viz">
+        <div class="neuron-layer-bg layer-context"><span class="neuron-layer-label ctx">CONTEXT</span></div>
+        <div class="neuron-layer-bg layer-state"><span class="neuron-layer-label sta">STATE</span></div>
+        <div class="neuron-layer-bg layer-mood"><span class="neuron-layer-label moo">MOOD</span></div>
+        <canvas id="brain-canvas-2" style="position:absolute;inset:0;width:100%;height:100%;z-index:1"></canvas>
+        <div class="brain-tooltip" id="brain-tooltip-2"></div>
+      </div>
+      <!-- Neuron Stats Strip -->
+      <div class="neuron-stats-panel" id="neuron-stats-panel">
+        <div class="neuron-stat-chip"><div class="nsc-label">Neuronen</div><div class="nsc-value" id="nstat-total">14</div></div>
+        <div class="neuron-stat-chip"><div class="nsc-label">Aktiv</div><div class="nsc-value" id="nstat-active" style="color:var(--green)">0</div></div>
+        <div class="neuron-stat-chip"><div class="nsc-label">Feuern</div><div class="nsc-value" id="nstat-firing" style="color:var(--orange)">0</div></div>
+        <div class="neuron-stat-chip"><div class="nsc-label">Synapsen</div><div class="nsc-value" id="nstat-synapses" style="color:var(--purple)">18</div></div>
+        <div class="neuron-stat-chip"><div class="nsc-label">Dom. Mood</div><div class="nsc-value" id="nstat-dominant" style="color:var(--accent)">&mdash;</div></div>
+        <div class="neuron-stat-chip"><div class="nsc-label">Signal&middot;St&auml;rke</div><div class="nsc-value" id="nstat-signal">0%</div></div>
+      </div>
     </div>
+
     <div class="section-title">Neuronen-Konfiguration</div>
     <div class="neuron-config-grid" id="neuron-config"></div>
 
@@ -1042,99 +1170,211 @@ function drawBrainOn(canvasId) {
   const canvas = document.getElementById(canvasId);
   if (!canvas || !canvas.offsetParent) return;
   const rect = canvas.parentElement.getBoundingClientRect();
-  canvas.width = rect.width - 42;
-  canvas.height = 400;
+  const isLayerViz = canvasId === "brain-canvas-2";
+  canvas.width = rect.width;
+  canvas.height = isLayerViz ? rect.height : 400;
   const ctx = canvas.getContext("2d");
   const W = canvas.width, H = canvas.height;
+  const now = Date.now();
 
-  ctx.fillStyle = "#0a0a14";
-  ctx.fillRect(0, 0, W, H);
-
-  ctx.font = "bold 11px Inter, sans-serif";
-  ctx.textAlign = "center";
-  for (let i = 0; i < 3; i++) {
-    ctx.fillStyle = LAYER_COLORS[i];
-    ctx.globalAlpha = 0.5;
-    ctx.fillText(LAYER_LABELS[i], [0.12, 0.42, 0.72][i] * W, 20);
-    ctx.globalAlpha = 1;
+  // Background (only for overview canvas; layer-viz has CSS backgrounds)
+  if (!isLayerViz) {
+    ctx.fillStyle = "#0a0a14";
+    ctx.fillRect(0, 0, W, H);
+  } else {
+    ctx.clearRect(0, 0, W, H);
   }
 
+  // Layer labels (overview canvas only)
+  if (!isLayerViz) {
+    ctx.font = "bold 11px Inter, sans-serif";
+    ctx.textAlign = "center";
+    for (let i = 0; i < 3; i++) {
+      ctx.fillStyle = LAYER_COLORS[i];
+      ctx.globalAlpha = 0.5;
+      ctx.fillText(LAYER_LABELS[i], [0.12, 0.42, 0.72][i] * W, 20);
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  // ── Draw Edges with Signal Particles ──
+  let totalSignal = 0;
   for (const [src, tgt, weight] of BRAIN_EDGES) {
     const sn = BRAIN_NEURONS.find(n => n.id === src);
     const tn = BRAIN_NEURONS.find(n => n.id === tgt);
     if (!sn || !tn) continue;
     const sx = sn.x * W, sy = sn.y * H, tx = tn.x * W, ty = tn.y * H;
     const srcVal = brainNodeValues[src] || 0;
+    const tgtVal = brainNodeValues[tgt] || 0;
     const sig = srcVal * Math.abs(weight);
-    const isActive = sig > 0.1;
+    const isActive = sig > 0.08;
+    totalSignal += sig;
 
+    // Edge curve
+    const cpx1 = sx + (tx - sx) * 0.4, cpy1 = sy;
+    const cpx2 = sx + (tx - sx) * 0.6, cpy2 = ty;
     ctx.beginPath();
     ctx.moveTo(sx, sy);
-    ctx.bezierCurveTo((sx+tx)/2, sy, (sx+tx)/2, ty, tx, ty);
-    ctx.strokeStyle = weight > 0 ? (isActive ? "#34D399" : "#1a3a2a") : (isActive ? "#F87171" : "#3a1a1a");
-    ctx.lineWidth = isActive ? 1 + sig * 3 : 0.5;
-    ctx.globalAlpha = isActive ? 0.4 + sig * 0.6 : 0.15;
+    ctx.bezierCurveTo(cpx1, cpy1, cpx2, cpy2, tx, ty);
+
+    if (isActive) {
+      // Glowing active edge
+      ctx.strokeStyle = weight > 0 ? "#34D399" : "#F87171";
+      ctx.lineWidth = 1 + sig * 4;
+      ctx.globalAlpha = 0.2 + sig * 0.5;
+      ctx.shadowColor = weight > 0 ? "#34D399" : "#F87171";
+      ctx.shadowBlur = sig * 12;
+    } else {
+      ctx.strokeStyle = weight > 0 ? "#1a3a2a" : "#3a1a1a";
+      ctx.lineWidth = 0.5;
+      ctx.globalAlpha = 0.12;
+      ctx.shadowBlur = 0;
+    }
     ctx.setLineDash(weight <= 0 ? [4, 4] : []);
     ctx.stroke();
     ctx.globalAlpha = 1;
     ctx.setLineDash([]);
+    ctx.shadowBlur = 0;
 
+    // Signal particles (multiple per edge when active)
     if (isActive) {
-      const t = (Date.now() % 2000) / 2000;
-      ctx.beginPath();
-      ctx.arc(sx + (tx-sx)*t, sy + (ty-sy)*t, 2, 0, Math.PI*2);
-      ctx.fillStyle = weight > 0 ? "#34D399" : "#F87171";
-      ctx.globalAlpha = 0.6;
-      ctx.fill();
-      ctx.globalAlpha = 1;
+      const particleCount = Math.max(1, Math.floor(sig * 4));
+      for (let p = 0; p < particleCount; p++) {
+        const speed = 2500 + p * 800;
+        const t = ((now + p * 400) % speed) / speed;
+        const u = 1 - t;
+        const px = u*u*u*sx + 3*u*u*t*cpx1 + 3*u*t*t*cpx2 + t*t*t*tx;
+        const py = u*u*u*sy + 3*u*u*t*cpy1 + 3*u*t*t*cpy2 + t*t*t*ty;
+        const pr = 2 + sig * 3;
+        const particleAlpha = Math.sin(t * Math.PI) * (0.4 + sig * 0.6);
+
+        ctx.beginPath();
+        ctx.arc(px, py, pr, 0, Math.PI * 2);
+        const pg = ctx.createRadialGradient(px, py, 0, px, py, pr);
+        pg.addColorStop(0, weight > 0 ? "#34D399" : "#F87171");
+        pg.addColorStop(1, "transparent");
+        ctx.fillStyle = pg;
+        ctx.globalAlpha = particleAlpha;
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
     }
   }
 
+  // ── Draw Neurons ──
+  let activeCount = 0, firingCount = 0;
   for (const n of BRAIN_NEURONS) {
     const x = n.x * W, y = n.y * H;
     const val = brainNodeValues[n.id] || 0;
-    const r = 18 + val * 8;
+    const isFiring = val > 0.6;
+    const isActive = val > 0.2;
+    if (isActive) activeCount++;
+    if (isFiring) firingCount++;
+    const baseR = isLayerViz ? 20 : 18;
+    const r = baseR + val * 10;
     const isHovered = hoveredNode === n.id;
 
-    if (val > 0.3) {
-      ctx.beginPath();
-      ctx.arc(x, y, r + 8, 0, Math.PI * 2);
-      const glow = ctx.createRadialGradient(x, y, r, x, y, r + 8);
-      glow.addColorStop(0, LAYER_COLORS[n.layer] + "40");
-      glow.addColorStop(1, "transparent");
-      ctx.fillStyle = glow;
-      ctx.fill();
+    // Outer glow (3 layers for depth)
+    if (val > 0.15) {
+      for (let g = 3; g >= 1; g--) {
+        ctx.beginPath();
+        ctx.arc(x, y, r + g * 8, 0, Math.PI * 2);
+        const glow = ctx.createRadialGradient(x, y, r, x, y, r + g * 8);
+        glow.addColorStop(0, LAYER_COLORS[n.layer] + (isFiring ? "50" : "20"));
+        glow.addColorStop(1, "transparent");
+        ctx.fillStyle = glow;
+        ctx.fill();
+      }
     }
 
+    // Firing pulse ring
+    if (isFiring) {
+      const pulseT = ((now + n.id.charCodeAt(5) * 100) % 1200) / 1200;
+      const pulseR = r + 4 + pulseT * 18;
+      ctx.beginPath();
+      ctx.arc(x, y, pulseR, 0, Math.PI * 2);
+      ctx.strokeStyle = LAYER_COLORS[n.layer];
+      ctx.lineWidth = 2 * (1 - pulseT);
+      ctx.globalAlpha = 0.6 * (1 - pulseT);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+
+    // Neuron body
     ctx.beginPath();
     ctx.arc(x, y, r, 0, Math.PI * 2);
-    ctx.fillStyle = val < 0.2 ? "#3a3a4a" : val < 0.5 ? LAYER_COLORS[n.layer] + "aa" : LAYER_COLORS[n.layer];
+    const bodyGrad = ctx.createRadialGradient(x - r * 0.3, y - r * 0.3, 0, x, y, r);
+    if (val < 0.15) {
+      bodyGrad.addColorStop(0, "#4a4a5a");
+      bodyGrad.addColorStop(1, "#2a2a3a");
+    } else if (isFiring) {
+      bodyGrad.addColorStop(0, LAYER_COLORS[n.layer]);
+      bodyGrad.addColorStop(1, LAYER_COLORS[n.layer] + "cc");
+    } else {
+      bodyGrad.addColorStop(0, LAYER_COLORS[n.layer] + "cc");
+      bodyGrad.addColorStop(1, LAYER_COLORS[n.layer] + "66");
+    }
+    ctx.fillStyle = bodyGrad;
     ctx.fill();
-    ctx.strokeStyle = isHovered ? "#fff" : LAYER_COLORS[n.layer];
-    ctx.lineWidth = isHovered ? 2 : 1;
+
+    // Border
+    ctx.strokeStyle = isHovered ? "#fff" : (isFiring ? LAYER_COLORS[n.layer] : LAYER_COLORS[n.layer] + "88");
+    ctx.lineWidth = isHovered ? 2.5 : (isFiring ? 2 : 1);
     ctx.stroke();
 
-    ctx.fillStyle = val > 0.3 ? "#fff" : "#aaa";
-    ctx.font = "bold 10px Inter, sans-serif";
+    // Value text
+    ctx.fillStyle = val > 0.25 ? "#fff" : "#aaa";
+    ctx.font = `bold ${isLayerViz ? 11 : 10}px Inter, sans-serif`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText((val * 100).toFixed(0), x, y);
 
-    ctx.fillStyle = isHovered ? "#fff" : "#888";
-    ctx.font = "9px Inter, sans-serif";
-    ctx.fillText(n.label, x, y + r + 12);
+    // Label
+    ctx.fillStyle = isHovered ? "#fff" : (val > 0.3 ? "#ccc" : "#666");
+    ctx.font = `${isLayerViz ? 10 : 9}px Inter, sans-serif`;
+    ctx.fillText(n.label, x, y + r + (isLayerViz ? 14 : 12));
+
+    // Firing indicator dot
+    if (isFiring) {
+      ctx.beginPath();
+      ctx.arc(x + r * 0.7, y - r * 0.7, 4, 0, Math.PI * 2);
+      ctx.fillStyle = "#ffb74d";
+      ctx.fill();
+      ctx.strokeStyle = "#0a0a14";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
   }
 
+  // ── Dominant Mood Output ──
   const dominant = Object.entries(brainNodeValues).filter(([k]) => k.startsWith("mood.")).sort((a, b) => b[1] - a[1])[0];
   if (dominant && dominant[1] > 0) {
+    const outX = 0.94 * W, outY = H / 2;
+    // Output arrow
     ctx.fillStyle = LAYER_COLORS[2];
-    ctx.font = "bold 13px Inter, sans-serif";
+    ctx.globalAlpha = 0.8;
+    ctx.font = "bold 14px Inter, sans-serif";
     ctx.textAlign = "center";
     const mName = dominant[0].split(".")[1];
-    ctx.fillText("\u2192 " + mName.charAt(0).toUpperCase() + mName.slice(1), 0.9 * W, H / 2);
-    ctx.font = "11px Inter, sans-serif";
-    ctx.fillStyle = "#888";
-    ctx.fillText((dominant[1] * 100).toFixed(0) + "%", 0.9 * W, H / 2 + 18);
+    ctx.fillText(mName.charAt(0).toUpperCase() + mName.slice(1), outX, outY);
+    ctx.font = "bold 20px Inter, sans-serif";
+    ctx.fillText((dominant[1] * 100).toFixed(0) + "%", outX, outY + 22);
+    ctx.globalAlpha = 1;
+  }
+
+  // ── Update Stats Panel (layer viz only) ──
+  if (isLayerViz) {
+    const el = (id) => document.getElementById(id);
+    if (el("nstat-total")) el("nstat-total").textContent = BRAIN_NEURONS.length;
+    if (el("nstat-active")) el("nstat-active").textContent = activeCount;
+    if (el("nstat-firing")) el("nstat-firing").textContent = firingCount;
+    if (el("nstat-synapses")) el("nstat-synapses").textContent = BRAIN_EDGES.length;
+    if (dominant && dominant[1] > 0) {
+      const mName = dominant[0].split(".")[1];
+      if (el("nstat-dominant")) { el("nstat-dominant").textContent = mName.charAt(0).toUpperCase() + mName.slice(1); }
+    }
+    const avgSig = BRAIN_EDGES.length > 0 ? Math.round((totalSignal / BRAIN_EDGES.length) * 100) : 0;
+    if (el("nstat-signal")) el("nstat-signal").textContent = avgSig + "%";
   }
 }
 
@@ -1665,6 +1905,135 @@ async function importExampleEntities() {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// HomeKit per Zone
+// ═══════════════════════════════════════════════════════════════
+
+let homekitData = null;
+
+async function loadHomeKit() {
+  const data = await fetchJSON("/api/v1/homekit/all-zones-info");
+  if (!data || !data.ok) {
+    // Fallback: try status endpoint
+    const status = await fetchJSON("/api/v1/homekit/status");
+    if (status && status.ok) { homekitData = status; renderHomeKitCards(status.zones || []); }
+    else { document.getElementById("homekit-cards").innerHTML = '<div style="color:var(--muted);padding:16px">HomeKit-Status nicht verfuegbar. API-Endpunkt antwortet nicht.</div>'; }
+    return;
+  }
+  homekitData = data;
+  renderHomeKitCards(data.zones || []);
+}
+
+function renderHomeKitCards(zones) {
+  const el = document.getElementById("homekit-cards");
+  if (!el) return;
+  if (!zones || zones.length === 0) {
+    el.innerHTML = '<div style="color:var(--muted);padding:16px">Keine HomeKit-Zonen konfiguriert. Aktiviere HomeKit fuer eine Habitus-Zone.</div>';
+    return;
+  }
+  el.innerHTML = zones.map(z => {
+    const enabled = z.enabled !== false;
+    const zoneId = z.zone_id || z.id || "";
+    const zoneName = z.zone_name || z.name || zoneId;
+    const icon = ZONE_ICONS[zoneId.replace("zone:","")] || "\u{1F3E0}";
+    const setupCode = z.setup_code || z.setup_info?.setup_code || "—";
+    const entityCount = z.entity_count || (z.entity_ids || []).length || 0;
+    const qrUrl = z.qr_svg_url || `${BASE}/api/v1/homekit/qr/${encodeURIComponent(zoneId)}.svg`;
+    const serial = z.serial || z.setup_info?.serial || "";
+
+    return `<div class="homekit-card ${enabled ? 'hk-enabled' : ''}">
+      <div class="hk-header">
+        <span class="hk-icon">${icon}</span>
+        <div style="flex:1">
+          <div class="hk-title">${zoneName}</div>
+          <div class="hk-subtitle">${serial}</div>
+        </div>
+        <span class="hk-badge ${enabled ? 'active' : 'inactive'}">${enabled ? 'Aktiv' : 'Inaktiv'}</span>
+      </div>
+      ${enabled ? `
+      <div class="hk-qr"><img src="${qrUrl}" alt="HomeKit QR ${zoneName}" onerror="this.parentElement.innerHTML='<span style=\\'color:var(--muted);font-size:0.75rem\\'>QR nicht verfuegbar</span>'"/></div>
+      <div class="hk-code">${setupCode}</div>
+      ` : '<div style="text-align:center;color:var(--muted);font-size:0.82rem;padding:16px">HomeKit deaktiviert</div>'}
+      <div class="hk-entities">${entityCount} Entit&auml;ten exponiert</div>
+      <div style="text-align:center;margin-top:8px">
+        <button class="btn-sm ${enabled ? 'btn-danger' : 'btn-success'}" onclick="toggleHomeKit('${zoneId}',${!enabled})">${enabled ? 'Deaktivieren' : 'Aktivieren'}</button>
+      </div>
+    </div>`;
+  }).join("");
+}
+
+async function toggleHomeKit(zoneId, enable) {
+  const result = await postJSON("/api/v1/homekit/toggle", {zone_id: zoneId, enabled: enable});
+  if (result && result.ok) {
+    showToast(`HomeKit ${enable ? 'aktiviert' : 'deaktiviert'} fuer ${zoneId}`);
+    loadHomeKit();
+  } else {
+    showToast(`Fehler: ${(result && result.error) || 'Unbekannt'}`, 4000);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Enhanced Zone Cards with Status + Mood
+// ═══════════════════════════════════════════════════════════════
+
+let zoneDashboardData = null;
+
+async function loadZoneDashboard() {
+  const data = await fetchJSON("/api/v1/zone/dashboard?include_entities=true&include_mood=true&include_actions=true");
+  if (data && data.ok) {
+    zoneDashboardData = data;
+    enrichZoneCards(data.zones || []);
+    // Update zone counters
+    const zones = data.zones || [];
+    const activeCount = zones.filter(z => z.status === "active").length;
+    const idleCount = zones.filter(z => z.status === "idle").length;
+    const totalEntities = zones.reduce((s, z) => s + (z.entity_count || 0), 0);
+    const el = (id) => document.getElementById(id);
+    if (el("zone-count-active")) el("zone-count-active").textContent = `${activeCount} aktiv`;
+    if (el("zone-count-idle")) el("zone-count-idle").textContent = `${idleCount} idle`;
+    if (el("zone-count-entities")) el("zone-count-entities").textContent = `${totalEntities} Entitaeten`;
+  }
+}
+
+function enrichZoneCards(zonesDashData) {
+  // Merge zone dashboard data into existing zone cards
+  if (!dashboardZones.length || !zonesDashData.length) return;
+  for (const zd of zonesDashData) {
+    const card = document.querySelector(`[onclick="openZoneDetail('${zd.zone_id || zd.id}')"]`);
+    if (!card) continue;
+    // Add status badge
+    const status = zd.status || "idle";
+    const statusLabel = status === "active" ? "Aktiv" : status === "idle" ? "Idle" : "Aus";
+    let statusBadge = card.querySelector(".zone-status-injected");
+    if (!statusBadge) {
+      statusBadge = document.createElement("span");
+      statusBadge.className = `zone-status-badge ${status} zone-status-injected`;
+      statusBadge.style.cssText = "position:absolute;top:12px;right:80px";
+      card.style.position = "relative";
+      card.appendChild(statusBadge);
+    }
+    statusBadge.className = `zone-status-badge ${status} zone-status-injected`;
+    statusBadge.textContent = statusLabel;
+
+    // Add mood bars
+    const mood = zd.mood;
+    if (mood && !card.querySelector(".zone-mood")) {
+      const moodDiv = document.createElement("div");
+      moodDiv.className = "zone-mood";
+      const dims = [
+        {key:"comfort", label:"Komfort", color:"var(--green)"},
+        {key:"joy", label:"Freude", color:"var(--accent)"},
+        {key:"frugality", label:"Sparsamkeit", color:"var(--orange)"},
+      ];
+      moodDiv.innerHTML = dims.map(d => {
+        const val = Math.round((mood[d.key] || 0) * 100);
+        return `<span class="zone-mood-label">${d.label}</span><div class="zone-mood-bar"><div class="fill" style="width:${val}%;background:${d.color}"></div></div>`;
+      }).join("");
+      card.appendChild(moodDiv);
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
 // Main Load
 // ═══════════════════════════════════════════════════════════════
 
@@ -1698,7 +2067,7 @@ async function loadDashboard() {
 }
 
 async function loadAll() {
-  await Promise.all([loadDashboard(), loadLLM(), loadAutomation()]);
+  await Promise.all([loadDashboard(), loadLLM(), loadAutomation(), loadHomeKit(), loadZoneDashboard()]);
 }
 
 // Initialize

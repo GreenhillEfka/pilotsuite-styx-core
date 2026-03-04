@@ -653,6 +653,10 @@ def register_blueprints(app: Flask, services: dict) -> None:
         init_zone_automation_api(None)
     app.register_blueprint(zone_automation_bp)
 
+    # Register Zone Dashboard API (real-time zone status, mood, quick-actions)
+    from copilot_core.api.v1.zone_dashboard import zone_dashboard_bp
+    app.register_blueprint(zone_dashboard_bp)  # prefix: /api/v1/zone/dashboard
+
     # Register Styx Dashboard API
     from copilot_core.api.v1.styx_dashboard import styx_dashboard_bp, init_styx_dashboard_api
     init_styx_dashboard_api(services)
