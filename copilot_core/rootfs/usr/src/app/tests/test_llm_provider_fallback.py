@@ -169,7 +169,7 @@ def test_non_ollama_cloud_keeps_generic_default_model(monkeypatch: pytest.Monkey
 
     assert result["provider"] == "cloud"
     assert result["content"] == "ok from cloud"
-    assert cloud_models == ["gpt-4o-mini"]
+    assert cloud_models == ["gpt-4.1-nano"]
 
 
 def test_cloud_url_with_chat_completions_suffix_is_normalized(
@@ -250,7 +250,7 @@ def test_cloud_like_ollama_config_is_forced_to_local_fallback(
     def _fake_post(self, url: str, json: dict[str, Any], timeout: int):  # noqa: A002
         calls.append(str(json.get("model")))
         model = str(json.get("model"))
-        if model == "qwen3:0.6b":
+        if model == "qwen3:4b":
             return _Resp(200, "", {"message": {"content": "ok fallback"}})
         return _Resp(404, f'{{"error":"model \\"{model}\\" not found"}}')
 
@@ -262,8 +262,8 @@ def test_cloud_like_ollama_config_is_forced_to_local_fallback(
 
     assert result["provider"] == "ollama"
     assert result["content"] == "ok fallback"
-    assert calls == ["qwen3:0.6b"]
-    assert status["ollama_model"] == "qwen3:0.6b"
+    assert calls == ["qwen3:4b"]
+    assert status["ollama_model"] == "qwen3:4b"
     assert status["ollama_model_configured"] == "gpt-4o-mini"
     assert status["ollama_model_overridden"] is True
 

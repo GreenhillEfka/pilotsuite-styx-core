@@ -14,20 +14,27 @@
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); color: var(--text); }
   .app { max-width: 1400px; margin: 0 auto; padding: 16px; }
-  header { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; padding: 16px 0; border-bottom: 1px solid var(--surface2); }
-  header h1 { font-size: 1.5rem; font-weight: 700; }
-  header .status { margin-left: auto; font-size: 0.85rem; color: var(--muted); }
+  header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; padding: 12px 0; border-bottom: 1px solid var(--surface2); }
+  header h1 { font-size: 1.4rem; font-weight: 700; }
+  header .status { margin-left: auto; font-size: 0.8rem; color: var(--muted); }
+
+  /* ── Tab Navigation ─────────────────────────────── */
+  .tabs { display: flex; gap: 4px; margin-bottom: 16px; border-bottom: 2px solid var(--surface2); padding-bottom: 0; overflow-x: auto; }
+  .tab { padding: 10px 18px; cursor: pointer; font-size: 0.85rem; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -2px; white-space: nowrap; transition: all 0.2s; }
+  .tab:hover { color: var(--text); background: var(--surface); border-radius: 8px 8px 0 0; }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  /* ── Grid & Cards ───────────────────────────────── */
   .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
   .card { background: var(--surface); border-radius: var(--radius); padding: 20px; border: 1px solid var(--surface2); }
-  .card h2 { font-size: 1rem; font-weight: 600; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+  .card h2 { font-size: 0.95rem; font-weight: 600; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
   .card h2 .icon { width: 20px; height: 20px; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; }
-  .mood-badge { display: inline-block; padding: 4px 12px; border-radius: 20px; font-weight: 600; font-size: 0.9rem; text-transform: capitalize; }
-  .mood-relax { background: #1a472a; color: var(--green); }
-  .mood-focus { background: #1a2e4a; color: var(--accent); }
-  .mood-active { background: #4a2a1a; color: var(--orange); }
-  .mood-sleep { background: #2a1a4a; color: var(--purple); }
-  .mood-alert { background: #4a1a1a; color: var(--red); }
-  .mood-away { background: #2a2a2a; color: var(--muted); }
+  .wide { grid-column: span 2; }
+  @media (max-width: 700px) { .wide { grid-column: span 1; } .grid { grid-template-columns: 1fr; } }
+
+  /* ── Stats & Bars ───────────────────────────────── */
   .stat { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--surface2); }
   .stat:last-child { border-bottom: none; }
   .stat .label { color: var(--muted); font-size: 0.85rem; }
@@ -37,38 +44,77 @@
   .bar-track { flex: 1; height: 6px; background: var(--surface2); border-radius: 3px; overflow: hidden; }
   .bar-fill { height: 100%; border-radius: 3px; transition: width 0.5s ease; }
   .bar-value { flex: 0 0 40px; text-align: right; font-size: 0.8rem; font-variant-numeric: tabular-nums; }
-  .module-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
-  .module-chip { padding: 8px 10px; border-radius: 8px; font-size: 0.78rem; display: flex; align-items: center; gap: 6px; cursor: pointer; transition: background 0.2s; }
-  .module-chip:hover { filter: brightness(1.2); }
+
+  /* ── Mood ────────────────────────────────────────── */
+  .mood-badge { display: inline-block; padding: 4px 12px; border-radius: 20px; font-weight: 600; font-size: 0.9rem; text-transform: capitalize; }
+  .mood-relax { background: #1a472a; color: var(--green); }
+  .mood-focus { background: #1a2e4a; color: var(--accent); }
+  .mood-active { background: #4a2a1a; color: var(--orange); }
+  .mood-sleep { background: #2a1a4a; color: var(--purple); }
+  .mood-alert { background: #4a1a1a; color: var(--red); }
+  .mood-away { background: #2a2a2a; color: var(--muted); }
+
+  /* ── Modules ────────────────────────────────────── */
+  .module-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px; }
+  .module-chip { padding: 10px 12px; border-radius: 8px; font-size: 0.8rem; display: flex; align-items: center; gap: 8px; cursor: pointer; transition: all 0.2s; }
+  .module-chip:hover { filter: brightness(1.2); transform: translateY(-1px); }
   .module-chip .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .module-chip .module-name { flex: 1; }
+  .module-chip .module-state { font-size: 0.7rem; color: var(--muted); text-transform: uppercase; }
   .module-chip.active { background: #1a3a2a; }
   .module-chip.active .dot { background: var(--green); }
   .module-chip.learning { background: #3a3a1a; }
   .module-chip.learning .dot { background: var(--orange); }
   .module-chip.off { background: #2a1a1a; }
   .module-chip.off .dot { background: var(--red); }
-  .zone-list { list-style: none; }
-  .zone-item { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--surface2); }
-  .zone-item:last-child { border-bottom: none; }
-  .zone-icon { font-size: 1.1rem; width: 28px; text-align: center; }
-  .zone-name { flex: 1; font-size: 0.85rem; }
-  .zone-prio { font-size: 0.75rem; color: var(--muted); }
-  .candidate-item { padding: 8px; margin: 4px 0; background: var(--surface2); border-radius: 8px; font-size: 0.82rem; }
-  .candidate-item .label { font-weight: 500; }
-  .candidate-item .meta { color: var(--muted); font-size: 0.75rem; margin-top: 2px; }
-  .wide { grid-column: span 2; }
-  @media (max-width: 700px) { .wide { grid-column: span 1; } .grid { grid-template-columns: 1fr; } }
-  .refresh-btn { background: var(--surface2); border: none; color: var(--accent); padding: 6px 14px; border-radius: 8px; cursor: pointer; font-size: 0.8rem; }
-  .refresh-btn:hover { background: var(--surface); }
-  .svg-container { text-align: center; margin-top: 8px; }
-  .svg-container img { max-width: 100%; height: auto; border-radius: 8px; }
 
-  /* ── Brain Canvas Visualization ────────────────── */
+  /* ── Model Cards ────────────────────────────────── */
+  .model-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+  .model-card { background: var(--surface2); border-radius: 10px; padding: 14px; border: 1px solid transparent; transition: all 0.2s; position: relative; }
+  .model-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+  .model-card.active-model { border-color: var(--green); }
+  .model-card.active-model::after { content: "AKTIV"; position: absolute; top: 8px; right: 8px; background: var(--green); color: #000; font-size: 0.65rem; font-weight: 700; padding: 2px 6px; border-radius: 4px; }
+  .model-card .model-name { font-weight: 600; font-size: 0.9rem; margin-bottom: 4px; }
+  .model-card .model-desc { font-size: 0.78rem; color: var(--muted); line-height: 1.4; margin-bottom: 8px; }
+  .model-card .model-meta { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+  .model-card .tag { font-size: 0.65rem; padding: 2px 6px; border-radius: 4px; background: #2a2a4a; color: var(--accent); }
+  .model-card .tag.installed { background: #1a3a2a; color: var(--green); }
+  .model-card .tag.not-installed { background: #3a1a1a; color: var(--red); }
+  .model-card .model-actions { display: flex; gap: 6px; }
+  .btn-sm { padding: 6px 14px; border-radius: 6px; border: none; font-size: 0.78rem; cursor: pointer; font-weight: 600; transition: all 0.2s; }
+  .btn-sm:hover { filter: brightness(1.15); }
+  .btn-sm:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-primary { background: var(--accent); color: #0f0f1a; }
+  .btn-success { background: var(--green); color: #0f0f1a; }
+  .btn-danger { background: var(--red); color: #fff; }
+  .btn-secondary { background: var(--surface); color: var(--text); border: 1px solid var(--surface2); }
+
+  /* ── Provider Routing Panel ─────────────────────── */
+  .routing-panel { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+  .routing-box { background: var(--surface2); border-radius: 10px; padding: 16px; }
+  .routing-box h3 { font-size: 0.85rem; margin-bottom: 8px; color: var(--accent); }
+  .routing-box .provider-badge { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 0.78rem; font-weight: 600; }
+  .routing-box .provider-badge.offline { background: #1a3a2a; color: var(--green); }
+  .routing-box .provider-badge.cloud { background: #1a2a4a; color: var(--accent); }
+  .routing-box .provider-badge.none { background: #3a1a1a; color: var(--red); }
+  .routing-box select { background: var(--surface); color: var(--text); border: 1px solid var(--surface2); padding: 6px 10px; border-radius: 6px; font-size: 0.82rem; width: 100%; margin-top: 6px; }
+
+  /* ── Neuron Config Panel ────────────────────────── */
+  .neuron-config-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+  .neuron-cfg-card { background: var(--surface2); border-radius: 8px; padding: 12px; }
+  .neuron-cfg-card .neuron-id { font-weight: 600; font-size: 0.85rem; }
+  .neuron-cfg-card .neuron-type { font-size: 0.7rem; color: var(--muted); text-transform: uppercase; }
+  .neuron-cfg-card .slider-row { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+  .neuron-cfg-card .slider-row label { font-size: 0.72rem; color: var(--muted); flex: 0 0 70px; }
+  .neuron-cfg-card input[type="range"] { flex: 1; accent-color: var(--accent); height: 4px; }
+  .neuron-cfg-card .slider-val { flex: 0 0 32px; font-size: 0.72rem; text-align: right; font-variant-numeric: tabular-nums; }
+
+  /* ── Brain Canvas ───────────────────────────────── */
   #brain-canvas { width: 100%; height: 400px; border-radius: 8px; background: #0a0a14; cursor: grab; }
   #brain-canvas:active { cursor: grabbing; }
-  .brain-tooltip { position: absolute; background: rgba(0,0,0,0.9); color: #e0e0f0; padding: 6px 10px; border-radius: 6px; font-size: 0.75rem; pointer-events: none; opacity: 0; transition: opacity 0.15s; border: 1px solid var(--accent); z-index: 10; }
+  .brain-tooltip { position: absolute; background: rgba(0,0,0,0.92); color: #e0e0f0; padding: 6px 10px; border-radius: 6px; font-size: 0.75rem; pointer-events: none; opacity: 0; transition: opacity 0.15s; border: 1px solid var(--accent); z-index: 10; }
 
-  /* ── Chat Interface ────────────────────────────── */
+  /* ── Chat ────────────────────────────────────────── */
   .chat-wrap { display: flex; flex-direction: column; height: 400px; }
   .chat-messages { flex: 1; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 8px; }
   .chat-msg { max-width: 85%; padding: 8px 12px; border-radius: 12px; font-size: 0.85rem; line-height: 1.4; word-wrap: break-word; }
@@ -82,55 +128,143 @@
   .chat-send:hover { filter: brightness(1.1); }
   .chat-send:disabled { opacity: 0.5; cursor: not-allowed; }
   .chat-status { font-size: 0.7rem; color: var(--muted); padding: 4px 0; text-align: right; }
+
+  /* ── Misc ────────────────────────────────────────── */
+  .zone-list { list-style: none; }
+  .zone-item { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--surface2); }
+  .zone-item:last-child { border-bottom: none; }
+  .zone-icon { font-size: 1.1rem; width: 28px; text-align: center; }
+  .zone-name { flex: 1; font-size: 0.85rem; }
+  .zone-prio { font-size: 0.75rem; color: var(--muted); }
+  .candidate-item { padding: 8px; margin: 4px 0; background: var(--surface2); border-radius: 8px; font-size: 0.82rem; }
+  .candidate-item .label { font-weight: 500; }
+  .candidate-item .meta { color: var(--muted); font-size: 0.75rem; margin-top: 2px; }
+  .refresh-btn { background: var(--surface2); border: none; color: var(--accent); padding: 6px 14px; border-radius: 8px; cursor: pointer; font-size: 0.8rem; }
+  .refresh-btn:hover { background: var(--surface); }
+  .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+  .status-dot.ok { background: var(--green); }
+  .status-dot.warn { background: var(--orange); }
+  .status-dot.err { background: var(--red); }
+  .section-title { font-size: 0.9rem; font-weight: 600; margin: 16px 0 10px; color: var(--accent); }
+  .toast { position: fixed; bottom: 20px; right: 20px; background: var(--surface); border: 1px solid var(--accent); color: var(--text); padding: 12px 20px; border-radius: 8px; font-size: 0.82rem; z-index: 100; opacity: 0; transition: opacity 0.3s; pointer-events: none; }
+  .toast.show { opacity: 1; }
+  @media (max-width: 700px) { .routing-panel { grid-template-columns: 1fr; } }
 </style>
 </head>
 <body>
 <div class="app">
   <header>
     <h1>&#x1F9E0; Styx Dashboard</h1>
-    <button class="refresh-btn" onclick="loadDashboard()">&#x21BB; Refresh</button>
+    <button class="refresh-btn" onclick="loadAll()">&#x21BB; Aktualisieren</button>
     <div class="status" id="status">Laden...</div>
   </header>
 
-  <div class="grid">
-    <!-- Mood Card -->
-    <div class="card">
-      <h2><span class="icon" style="background:#1a3a4a">&#x1F3AD;</span> Stimmung</h2>
-      <div id="mood-content">&ndash;</div>
+  <!-- Tab Navigation -->
+  <div class="tabs" id="tabs">
+    <div class="tab active" data-tab="overview">&#x1F4CA; Uebersicht</div>
+    <div class="tab" data-tab="llm">&#x1F916; KI / LLM</div>
+    <div class="tab" data-tab="modules">&#x1F527; Module</div>
+    <div class="tab" data-tab="neurons">&#x26A1; Neuronen</div>
+    <div class="tab" data-tab="chat">&#x1F4AC; Chat</div>
+  </div>
+
+  <!-- ═══════════════ TAB: Overview ═══════════════ -->
+  <div class="tab-content active" id="tab-overview">
+    <div class="grid">
+      <div class="card">
+        <h2><span class="icon" style="background:#1a3a4a">&#x1F3AD;</span> Stimmung</h2>
+        <div id="mood-content">&ndash;</div>
+      </div>
+      <div class="card">
+        <h2><span class="icon" style="background:#1a2a4a">&#x1F916;</span> LLM Status</h2>
+        <div id="llm-status-mini">&ndash;</div>
+      </div>
+      <div class="card">
+        <h2><span class="icon" style="background:#2a1a4a">&#x26A1;</span> Neuronen</h2>
+        <div id="neuron-content">&ndash;</div>
+      </div>
+      <div class="card">
+        <h2><span class="icon" style="background:#1a2a3a">&#x1F578;&#xFE0F;</span> Brain Graph</h2>
+        <div id="graph-content">&ndash;</div>
+      </div>
+      <div class="card">
+        <h2><span class="icon" style="background:#1a3a2a">&#x1F4E1;</span> Integration Bus</h2>
+        <div id="bus-content">&ndash;</div>
+      </div>
+      <div class="card">
+        <h2><span class="icon" style="background:#2a3a1a">&#x1F3E0;</span> Habitus-Zonen</h2>
+        <ul class="zone-list" id="zones-content"></ul>
+      </div>
+      <div class="card wide">
+        <h2><span class="icon" style="background:#1a2a4a">&#x1F52C;</span> Neuronen-Brain Visualisierung</h2>
+        <canvas id="brain-canvas"></canvas>
+        <div class="brain-tooltip" id="brain-tooltip"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════ TAB: LLM / KI ═══════════════ -->
+  <div class="tab-content" id="tab-llm">
+    <!-- Provider Routing -->
+    <div class="routing-panel" id="routing-panel">
+      <div class="routing-box">
+        <h3>&#x1F3E0; Primaerer Provider</h3>
+        <div id="primary-provider-info"></div>
+        <select id="sel-primary" onchange="updateRouting()">
+          <option value="offline">Offline (Ollama)</option>
+          <option value="cloud">Cloud API</option>
+        </select>
+      </div>
+      <div class="routing-box">
+        <h3>&#x2601;&#xFE0F; Sekundaerer Provider (Fallback)</h3>
+        <div id="secondary-provider-info"></div>
+        <select id="sel-secondary" onchange="updateRouting()">
+          <option value="cloud">Cloud API</option>
+          <option value="offline">Offline (Ollama)</option>
+        </select>
+      </div>
     </div>
 
-    <!-- Neurons Card -->
-    <div class="card">
-      <h2><span class="icon" style="background:#2a1a4a">&#x26A1;</span> Neuronen</h2>
-      <div id="neuron-content">&ndash;</div>
-    </div>
+    <!-- Offline Models -->
+    <div class="section-title">&#x1F4E6; Offline-Modelle (Ollama)</div>
+    <div class="model-grid" id="offline-models"></div>
 
-    <!-- Brain Graph Card -->
-    <div class="card">
-      <h2><span class="icon" style="background:#1a2a3a">&#x1F578;&#xFE0F;</span> Brain Graph</h2>
-      <div id="graph-content">&ndash;</div>
-    </div>
+    <!-- Cloud Models -->
+    <div class="section-title">&#x2601;&#xFE0F; Cloud-Modelle</div>
+    <div class="model-grid" id="cloud-models"></div>
+  </div>
 
-    <!-- Integration Bus Card -->
-    <div class="card">
-      <h2><span class="icon" style="background:#1a3a2a">&#x1F4E1;</span> Integration Bus</h2>
-      <div id="bus-content">&ndash;</div>
-    </div>
-
-    <!-- Modules Card -->
+  <!-- ═══════════════ TAB: Modules ═══════════════ -->
+  <div class="tab-content" id="tab-modules">
     <div class="card wide">
-      <h2><span class="icon" style="background:#3a2a1a">&#x1F527;</span> Module</h2>
+      <h2><span class="icon" style="background:#3a2a1a">&#x1F527;</span> Module &mdash; Klicken zum Umschalten</h2>
       <div class="module-grid" id="modules-content">&ndash;</div>
     </div>
-
-    <!-- Brain Visualization Canvas -->
-    <div class="card wide">
-      <h2><span class="icon" style="background:#1a2a4a">&#x1F52C;</span> Neuronen-Brain Visualisierung</h2>
-      <canvas id="brain-canvas"></canvas>
-      <div class="brain-tooltip" id="brain-tooltip"></div>
+    <div class="grid" style="margin-top:16px">
+      <div class="card">
+        <h2><span class="icon" style="background:#4a1a3a">&#x1F393;</span> Hebbian Learning</h2>
+        <div id="learning-content">&ndash;</div>
+      </div>
+      <div class="card">
+        <h2><span class="icon" style="background:#2a2a1a">&#x1F4A1;</span> Letzte Kandidaten</h2>
+        <div id="candidates-content">&ndash;</div>
+      </div>
     </div>
+  </div>
 
-    <!-- Chat Interface -->
+  <!-- ═══════════════ TAB: Neurons ═══════════════ -->
+  <div class="tab-content" id="tab-neurons">
+    <div class="card wide">
+      <h2><span class="icon" style="background:#1a2a4a">&#x1F52C;</span> Brain Visualisierung</h2>
+      <canvas id="brain-canvas-2"></canvas>
+      <div class="brain-tooltip" id="brain-tooltip-2"></div>
+    </div>
+    <div class="section-title">Neuronen-Konfiguration</div>
+    <div class="neuron-config-grid" id="neuron-config"></div>
+  </div>
+
+  <!-- ═══════════════ TAB: Chat ═══════════════ -->
+  <div class="tab-content" id="tab-chat">
     <div class="card wide">
       <h2><span class="icon" style="background:#2a1a3a">&#x1F4AC;</span> Styx Chat</h2>
       <div class="chat-wrap">
@@ -144,31 +278,19 @@
         </div>
       </div>
     </div>
-
-    <!-- Habitus Zones Card -->
-    <div class="card">
-      <h2><span class="icon" style="background:#2a3a1a">&#x1F3E0;</span> Habitus-Zonen</h2>
-      <ul class="zone-list" id="zones-content"></ul>
-    </div>
-
-    <!-- Hebbian Learning Card -->
-    <div class="card">
-      <h2><span class="icon" style="background:#4a1a3a">&#x1F393;</span> Hebbian Learning</h2>
-      <div id="learning-content">&ndash;</div>
-    </div>
-
-    <!-- Recent Candidates Card -->
-    <div class="card">
-      <h2><span class="icon" style="background:#2a2a1a">&#x1F4A1;</span> Letzte Kandidaten</h2>
-      <div id="candidates-content">&ndash;</div>
-    </div>
   </div>
 </div>
+
+<div class="toast" id="toast"></div>
 
 <script>
 const BASE = location.origin;
 const TOKEN = new URLSearchParams(location.search).get("token") || "";
 const HEADERS = TOKEN ? {"X-Auth-Token": TOKEN} : {};
+
+// ═══════════════════════════════════════════════════════════════
+// Utilities
+// ═══════════════════════════════════════════════════════════════
 
 async function fetchJSON(path) {
   const r = await fetch(BASE + path, {headers: HEADERS});
@@ -176,15 +298,20 @@ async function fetchJSON(path) {
   return r.json();
 }
 
-function moodClass(mood) {
-  const m = (mood || "").toLowerCase();
-  if (m.includes("relax")) return "mood-relax";
-  if (m.includes("focus")) return "mood-focus";
-  if (m.includes("active")) return "mood-active";
-  if (m.includes("sleep")) return "mood-sleep";
-  if (m.includes("alert")) return "mood-alert";
-  if (m.includes("away")) return "mood-away";
-  return "mood-relax";
+async function postJSON(path, body) {
+  const r = await fetch(BASE + path, {
+    method: "POST",
+    headers: {...HEADERS, "Content-Type": "application/json"},
+    body: JSON.stringify(body),
+  });
+  return r.json();
+}
+
+function showToast(msg, ms) {
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  setTimeout(() => t.classList.remove("show"), ms || 3000);
 }
 
 function barHTML(label, value, color) {
@@ -196,6 +323,36 @@ function barHTML(label, value, color) {
   </div>`;
 }
 
+// ═══════════════════════════════════════════════════════════════
+// Tab Navigation
+// ═══════════════════════════════════════════════════════════════
+
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
+    // Initialize brain canvas on neurons tab
+    if (tab.dataset.tab === 'neurons') { initBrain('brain-canvas-2', 'brain-tooltip-2'); drawBrain(); }
+    if (tab.dataset.tab === 'overview') { initBrain('brain-canvas', 'brain-tooltip'); drawBrain(); }
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════
+// Overview Tab Renderers
+// ═══════════════════════════════════════════════════════════════
+
+function moodClass(mood) {
+  const m = (mood || "").toLowerCase();
+  if (m.includes("relax")) return "mood-relax";
+  if (m.includes("focus")) return "mood-focus";
+  if (m.includes("active")) return "mood-active";
+  if (m.includes("sleep")) return "mood-sleep";
+  if (m.includes("alert")) return "mood-alert";
+  return "mood-away";
+}
+
 function renderMood(mood) {
   if (!mood || !mood.mood) return "Kein Mood-Daten";
   const conf = Math.round((mood.confidence || 0) * 100);
@@ -204,9 +361,7 @@ function renderMood(mood) {
   if (mood.mood_values) {
     const colors = {relax:"#81c784",focus:"#4fc3f7",active:"#ffb74d",sleep:"#ce93d8",alert:"#ef5350",away:"#888",social:"#ff8a65",recovery:"#a5d6a7"};
     html += '<div style="margin-top:12px">';
-    for (const [k, v] of Object.entries(mood.mood_values)) {
-      html += barHTML(k, v, colors[k] || "#4fc3f7");
-    }
+    for (const [k, v] of Object.entries(mood.mood_values)) html += barHTML(k, v, colors[k] || "#4fc3f7");
     html += '</div>';
   }
   return html;
@@ -226,11 +381,7 @@ function renderGraph(graph) {
   if (!graph || !graph.total_nodes) return "Kein Graph-Daten";
   let html = `<div class="stat"><span class="label">Knoten</span><span class="value">${graph.total_nodes}</span></div>
     <div class="stat"><span class="label">Kanten</span><span class="value">${graph.total_edges}</span></div>`;
-  if (graph.nodes_by_kind) {
-    for (const [k, v] of Object.entries(graph.nodes_by_kind)) {
-      html += `<div class="stat"><span class="label" style="padding-left:12px">\u2192 ${k}</span><span class="value">${v}</span></div>`;
-    }
-  }
+  if (graph.nodes_by_kind) for (const [k, v] of Object.entries(graph.nodes_by_kind)) html += `<div class="stat"><span class="label" style="padding-left:12px">\u2192 ${k}</span><span class="value">${v}</span></div>`;
   return html;
 }
 
@@ -244,16 +395,171 @@ function renderBus(bus) {
     <div class="stat"><span class="label">Fehlerrate</span><span class="value">${errorRate}%</span></div>`;
 }
 
+function renderLLMStatusMini(status) {
+  if (!status) return "LLM nicht verfuegbar";
+  const dot = status.active_provider !== "none" ? "ok" : "err";
+  const provider = status.active_provider === "ollama" ? "Ollama" : status.active_provider === "cloud" ? "Cloud" : "Keiner";
+  return `<div class="stat"><span class="label"><span class="status-dot ${dot}"></span>Provider</span><span class="value">${provider}</span></div>
+    <div class="stat"><span class="label">Modell</span><span class="value">${status.primary_model || "—"}</span></div>
+    <div class="stat"><span class="label">Ollama</span><span class="value">${status.ollama_available ? "\u2705" : "\u274C"}</span></div>
+    <div class="stat"><span class="label">Cloud</span><span class="value">${status.cloud_configured ? "\u2705" : "Nicht konfiguriert"}</span></div>
+    <div class="stat"><span class="label">Fallback</span><span class="value">${status.secondary_provider || "—"}</span></div>`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// LLM Tab
+// ═══════════════════════════════════════════════════════════════
+
+let llmRecommended = {offline: [], cloud: [], status: {}};
+
+async function loadLLM() {
+  const data = await fetchJSON("/chat/models/recommended");
+  if (!data || !data.ok) return;
+  llmRecommended = data;
+
+  // Update routing selectors
+  const st = data.status;
+  document.getElementById("sel-primary").value = st.primary_provider;
+  document.getElementById("sel-secondary").value = st.secondary_provider;
+
+  const pInfo = document.getElementById("primary-provider-info");
+  pInfo.innerHTML = `<span class="provider-badge ${st.primary_provider}">${st.primary_provider === "offline" ? "Ollama" : "Cloud"}</span>
+    <span style="margin-left:8px;font-size:0.82rem">${st.primary_model || ""}</span>`;
+
+  const sInfo = document.getElementById("secondary-provider-info");
+  sInfo.innerHTML = `<span class="provider-badge ${st.secondary_provider}">${st.secondary_provider === "offline" ? "Ollama" : "Cloud"}</span>
+    <span style="margin-left:8px;font-size:0.82rem">${st.secondary_model || ""}</span>`;
+
+  // Render offline models
+  const offEl = document.getElementById("offline-models");
+  offEl.innerHTML = data.offline.map(m => {
+    const isActive = m.active;
+    const installedTag = m.installed
+      ? '<span class="tag installed">Installiert</span>'
+      : '<span class="tag not-installed">Nicht installiert</span>';
+    const sizeTag = m.size_mb ? `<span class="tag">${m.size_mb >= 1000 ? (m.size_mb/1000).toFixed(1)+"GB" : m.size_mb+"MB"}</span>` : '';
+    const toolTag = m.supports_tools ? '<span class="tag">Tool-Calling</span>' : '';
+    const recTag = (m.tags || []).includes("recommended") ? '<span class="tag" style="background:#2a3a1a;color:#81c784">Empfohlen</span>' : '';
+
+    const pullBtn = m.installed
+      ? `<button class="btn-sm btn-success" onclick="activateModel('${m.id}','offline')" ${isActive ? 'disabled' : ''}>${isActive ? 'Aktiv' : 'Aktivieren'}</button>`
+      : `<button class="btn-sm btn-primary" onclick="pullModel('${m.id}',this)">Herunterladen</button>`;
+    const deleteBtn = m.installed && !isActive
+      ? `<button class="btn-sm btn-danger" onclick="deleteModel('${m.id}',this)">&#x1F5D1;</button>` : '';
+
+    return `<div class="model-card ${isActive ? 'active-model' : ''}">
+      <div class="model-name">${m.name}</div>
+      <div class="model-desc">${m.description}</div>
+      <div class="model-meta">${recTag}${installedTag}${sizeTag}${toolTag}</div>
+      <div class="model-actions">${pullBtn}${deleteBtn}</div>
+    </div>`;
+  }).join("");
+
+  // Render cloud models
+  const cloudEl = document.getElementById("cloud-models");
+  if (!st.cloud_configured) {
+    cloudEl.innerHTML = `<div class="model-card"><div class="model-name">Cloud nicht konfiguriert</div>
+      <div class="model-desc">Setze CLOUD_API_URL und CLOUD_API_KEY in der Addon-Konfiguration.</div></div>`;
+    return;
+  }
+  cloudEl.innerHTML = data.cloud.map(m => {
+    const isActive = m.active;
+    const priceTag = m.price_input_1m != null ? `<span class="tag">$${m.price_input_1m}/$${m.price_output_1m} /1M</span>` : '';
+    const recTag = (m.tags || []).includes("recommended") ? '<span class="tag" style="background:#2a3a1a;color:#81c784">Empfohlen</span>' : '';
+    const activateBtn = `<button class="btn-sm btn-success" onclick="activateModel('${m.id}','cloud')" ${isActive ? 'disabled' : ''}>${isActive ? 'Aktiv' : 'Aktivieren'}</button>`;
+
+    return `<div class="model-card ${isActive ? 'active-model' : ''}">
+      <div class="model-name">${m.name}</div>
+      <div class="model-desc">${m.description}</div>
+      <div class="model-meta">${recTag}${priceTag}</div>
+      <div class="model-actions">${activateBtn}</div>
+    </div>`;
+  }).join("");
+
+  // Also update mini status on overview
+  document.getElementById("llm-status-mini").innerHTML = renderLLMStatusMini(st);
+}
+
+async function pullModel(modelId, btn) {
+  btn.disabled = true;
+  btn.textContent = "Lade...";
+  showToast(`Lade ${modelId} herunter... Das kann mehrere Minuten dauern.`);
+  const result = await postJSON("/chat/models/pull", {model: modelId});
+  if (result.ok) {
+    showToast(`${modelId} erfolgreich heruntergeladen!`);
+    await loadLLM();
+  } else {
+    showToast(`Fehler: ${result.error}`, 5000);
+    btn.disabled = false;
+    btn.textContent = "Herunterladen";
+  }
+}
+
+async function deleteModel(modelId, btn) {
+  if (!confirm(`Modell "${modelId}" wirklich loeschen?`)) return;
+  btn.disabled = true;
+  const result = await postJSON("/chat/models/delete", {model: modelId});
+  if (result.ok) {
+    showToast(`${modelId} geloescht.`);
+    await loadLLM();
+  } else {
+    showToast(`Fehler: ${result.error}`, 5000);
+    btn.disabled = false;
+  }
+}
+
+async function activateModel(modelId, provider) {
+  const body = provider === "cloud" ? {cloud_model: modelId} : {offline_model: modelId};
+  const result = await postJSON("/chat/routing", body);
+  if (result.ok) {
+    showToast(`${modelId} als ${provider === "cloud" ? "Cloud" : "Offline"}-Modell aktiviert.`);
+    await loadLLM();
+  } else {
+    showToast("Fehler beim Aktivieren.", 4000);
+  }
+}
+
+async function updateRouting() {
+  const primary = document.getElementById("sel-primary").value;
+  const secondary = document.getElementById("sel-secondary").value;
+  await postJSON("/chat/routing", {primary_provider: primary, secondary_provider: secondary});
+  showToast("Routing aktualisiert.");
+  await loadLLM();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Modules Tab
+// ═══════════════════════════════════════════════════════════════
+
+const MODULE_STATES = ["active", "learning", "off"];
+let moduleStates = {};
+
 function renderModules(modules) {
   if (!modules || Object.keys(modules).length === 0) return "Keine Module konfiguriert";
+  moduleStates = modules;
   let html = "";
   for (const [id, state] of Object.entries(modules)) {
     const label = id.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
-    html += `<div class="module-chip ${state}" title="${id}: ${state}">
-      <span class="dot"></span>${label}
+    const stateLabel = state === "active" ? "Aktiv" : state === "learning" ? "Lernend" : "Aus";
+    html += `<div class="module-chip ${state}" onclick="cycleModule('${id}')" title="Klicken: ${id} umschalten">
+      <span class="dot"></span>
+      <span class="module-name">${label}</span>
+      <span class="module-state">${stateLabel}</span>
     </div>`;
   }
   return html;
+}
+
+async function cycleModule(moduleId) {
+  const current = moduleStates[moduleId] || "active";
+  const idx = MODULE_STATES.indexOf(current);
+  const next = MODULE_STATES[(idx + 1) % MODULE_STATES.length];
+  const result = await postJSON(`/api/v1/modules/${moduleId}/configure`, {state: next});
+  if (result.ok) {
+    moduleStates[moduleId] = next;
+    document.getElementById("modules-content").innerHTML = renderModules(moduleStates);
+    showToast(`${moduleId}: ${next}`);
+  }
 }
 
 function renderLearning(learning) {
@@ -261,9 +567,7 @@ function renderLearning(learning) {
   let html = `<div class="stat"><span class="label">Synapsen</span><span class="value">${learning.total_synapses}</span></div>`;
   if (learning.top_drifts) {
     html += '<div style="margin-top:8px;font-size:0.8rem;color:var(--muted)">Top Drift:</div>';
-    for (const d of learning.top_drifts) {
-      html += barHTML(d.synapse.split(":").pop(), Math.min(d.drift, 1), "#ce93d8");
-    }
+    for (const d of learning.top_drifts) html += barHTML(d.synapse.split(":").pop(), Math.min(d.drift, 1), "#ce93d8");
   }
   return html;
 }
@@ -272,81 +576,67 @@ function renderCandidates(candidates) {
   if (!candidates || candidates.length === 0) return "Keine Kandidaten";
   return candidates.map(c => `<div class="candidate-item">
     <div class="label">${c.label || c.id}</div>
-    <div class="meta">${c.kind || "\u2013"} \u00B7 Score: ${(c.score || 0).toFixed(2)} \u00B7 ${c.source || ""}</div>
+    <div class="meta">${c.kind || "—"} · Score: ${(c.score || 0).toFixed(2)} · ${c.source || ""}</div>
   </div>`).join("");
 }
 
-const ZONE_ICONS = {living:"\u{1F6CB}\uFE0F",bath:"\u{1F6BF}",kitchen:"\u{1F373}",office:"\u{1F4BC}",hallway:"\u{1F6AA}",bedroom:"\u{1F6CF}\uFE0F",room_mira:"\u{1F467}",room_paul:"\u{1F466}",terrace:"\u{1F33F}",outside:"\u{1F333}"};
+// ═══════════════════════════════════════════════════════════════
+// Neurons Tab — Config Cards
+// ═══════════════════════════════════════════════════════════════
 
-function renderZones(zones) {
-  const el = document.getElementById("zones-content");
-  if (!zones || zones.length === 0) { el.innerHTML = '<li style="color:var(--muted);padding:8px">Keine Zonen</li>'; return; }
-  el.innerHTML = zones.map(z => `<li class="zone-item">
-    <span class="zone-icon">${ZONE_ICONS[z.id] || "\u{1F3E0}"}</span>
-    <span class="zone-name">${z.name_de || z.id}</span>
-    <span class="zone-prio">P${z.priority || 0}</span>
-  </li>`).join("");
+function renderNeuronConfig(dashData) {
+  const summary = dashData.neurons?.summary || {};
+  const el = document.getElementById("neuron-config");
+  let html = "";
+  for (const layer of ["context", "state", "mood"]) {
+    const vals = summary[layer] || {};
+    const layerColor = layer === "context" ? "#4fc3f7" : layer === "state" ? "#81c784" : "#ce93d8";
+    for (const [k, v] of Object.entries(vals)) {
+      const val = typeof v === "number" ? v : (v?.value || 0);
+      const pct = (val * 100).toFixed(0);
+      html += `<div class="neuron-cfg-card">
+        <div style="display:flex;justify-content:space-between">
+          <span class="neuron-id" style="color:${layerColor}">${k}</span>
+          <span class="neuron-type">${layer}</span>
+        </div>
+        <div class="slider-row"><label>Wert</label>
+          <input type="range" min="0" max="100" value="${pct}" disabled/>
+          <span class="slider-val">${pct}%</span>
+        </div>
+        ${barHTML("Aktivitaet", val, layerColor)}
+      </div>`;
+    }
+  }
+  el.innerHTML = html || "Keine Neuron-Daten. Pipeline noch nicht evaluiert.";
 }
 
-async function loadDashboard() {
-  document.getElementById("status").textContent = "Laden...";
-  const [dash, conf] = await Promise.all([
-    fetchJSON("/api/v1/styx/dashboard"),
-    fetchJSON("/api/v1/styx/config"),
-  ]);
-
-  if (dash && dash.ok) {
-    document.getElementById("mood-content").innerHTML = renderMood(dash.mood);
-    document.getElementById("neuron-content").innerHTML = renderNeurons(dash.neurons);
-    document.getElementById("graph-content").innerHTML = renderGraph(dash.graph);
-    document.getElementById("bus-content").innerHTML = renderBus(dash.bus);
-    document.getElementById("modules-content").innerHTML = renderModules(dash.modules);
-    document.getElementById("learning-content").innerHTML = renderLearning(dash.learning);
-    document.getElementById("candidates-content").innerHTML = renderCandidates(dash.candidates);
-    document.getElementById("status").textContent = `${dash.render_ms}ms \u00B7 ${new Date(dash.timestamp).toLocaleTimeString("de-DE")}`;
-    // Update brain visualization with neuron data
-    updateBrainViz(dash);
-  } else {
-    document.getElementById("status").textContent = "Fehler beim Laden";
-  }
-
-  if (conf && conf.ok) {
-    renderZones(conf.habitus_zones);
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════════
-// Brain Canvas Visualization — Interactive Neuron Network
-// ═══════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
+// Brain Canvas Visualization
+// ═══════════════════════════════════════════════════════════════
 
 const BRAIN_NEURONS = [
-  // Context Layer (left)
-  {id:"context.presence",    label:"Presence",    layer:0, x:0.12, y:0.2},
-  {id:"context.time_of_day", label:"Time",        layer:0, x:0.12, y:0.35},
-  {id:"context.light_level", label:"Light",       layer:0, x:0.12, y:0.5},
-  {id:"context.weather",     label:"Weather",     layer:0, x:0.12, y:0.65},
-  {id:"context.activity",    label:"Activity",    layer:0, x:0.12, y:0.8},
-  // State Layer (center)
-  {id:"state.energy_level",  label:"Energy",      layer:1, x:0.42, y:0.15},
-  {id:"state.comfort",       label:"Comfort",     layer:1, x:0.42, y:0.32},
-  {id:"state.productivity",  label:"Productivity",layer:1, x:0.42, y:0.5},
-  {id:"state.relaxation",    label:"Relaxation",  layer:1, x:0.42, y:0.67},
-  {id:"state.social",        label:"Social",      layer:1, x:0.42, y:0.84},
-  // Mood Layer (right)
-  {id:"mood.focus",          label:"Focus",       layer:2, x:0.72, y:0.2},
-  {id:"mood.relax",          label:"Relax",       layer:2, x:0.72, y:0.4},
-  {id:"mood.energy",         label:"Energy",      layer:2, x:0.72, y:0.6},
-  {id:"mood.calm",           label:"Calm",        layer:2, x:0.72, y:0.8},
+  {id:"context.presence",label:"Presence",layer:0,x:0.12,y:0.2},
+  {id:"context.time_of_day",label:"Time",layer:0,x:0.12,y:0.35},
+  {id:"context.light_level",label:"Light",layer:0,x:0.12,y:0.5},
+  {id:"context.weather",label:"Weather",layer:0,x:0.12,y:0.65},
+  {id:"context.activity",label:"Activity",layer:0,x:0.12,y:0.8},
+  {id:"state.energy_level",label:"Energy",layer:1,x:0.42,y:0.15},
+  {id:"state.comfort",label:"Comfort",layer:1,x:0.42,y:0.32},
+  {id:"state.productivity",label:"Productivity",layer:1,x:0.42,y:0.5},
+  {id:"state.relaxation",label:"Relaxation",layer:1,x:0.42,y:0.67},
+  {id:"state.social",label:"Social",layer:1,x:0.42,y:0.84},
+  {id:"mood.focus",label:"Focus",layer:2,x:0.72,y:0.2},
+  {id:"mood.relax",label:"Relax",layer:2,x:0.72,y:0.4},
+  {id:"mood.energy",label:"Energy",layer:2,x:0.72,y:0.6},
+  {id:"mood.calm",label:"Calm",layer:2,x:0.72,y:0.8},
 ];
 
 const BRAIN_EDGES = [
-  // Context -> State
   ["context.presence","state.energy_level",0.3],["context.presence","state.comfort",0.2],
   ["context.time_of_day","state.energy_level",0.4],["context.time_of_day","state.relaxation",0.3],
   ["context.light_level","state.comfort",0.5],["context.light_level","state.productivity",0.3],
   ["context.weather","state.comfort",0.2],["context.weather","state.energy_level",0.1],
   ["context.activity","state.productivity",0.4],["context.activity","state.social",0.3],
-  // State -> Mood
   ["state.energy_level","mood.energy",0.6],["state.energy_level","mood.focus",0.3],
   ["state.comfort","mood.relax",0.5],["state.comfort","mood.calm",0.4],
   ["state.productivity","mood.focus",0.5],["state.relaxation","mood.relax",0.6],
@@ -358,147 +648,16 @@ const LAYER_LABELS = ["Kontext","Zustand","Stimmung"];
 
 let brainNodeValues = {};
 let hoveredNode = null;
+let activeCanvasId = "brain-canvas";
+let activeTooltipId = "brain-tooltip";
 
-function updateBrainViz(dashData) {
-  // Extract neuron values from dashboard data
-  brainNodeValues = {};
-  const summary = dashData.neurons?.summary || {};
-  for (const layer of ["context","state","mood"]) {
-    const vals = summary[layer] || {};
-    for (const [k, v] of Object.entries(vals)) {
-      brainNodeValues[`${layer}.${k}`] = typeof v === "number" ? v : (v?.value || 0);
-    }
-  }
-  drawBrain();
-}
-
-function drawBrain() {
-  const canvas = document.getElementById("brain-canvas");
-  if (!canvas) return;
-  const rect = canvas.parentElement.getBoundingClientRect();
-  canvas.width = rect.width - 42;
-  canvas.height = 400;
-  const ctx = canvas.getContext("2d");
-  const W = canvas.width, H = canvas.height;
-
-  // Background
-  ctx.fillStyle = "#0a0a14";
-  ctx.fillRect(0, 0, W, H);
-
-  // Layer labels
-  ctx.font = "bold 11px Inter, sans-serif";
-  ctx.textAlign = "center";
-  for (let i = 0; i < 3; i++) {
-    const x = [0.12, 0.42, 0.72][i] * W;
-    ctx.fillStyle = LAYER_COLORS[i];
-    ctx.globalAlpha = 0.5;
-    ctx.fillText(LAYER_LABELS[i], x, 20);
-    ctx.globalAlpha = 1;
-  }
-
-  // Draw edges
-  for (const [src, tgt, weight] of BRAIN_EDGES) {
-    const sn = BRAIN_NEURONS.find(n => n.id === src);
-    const tn = BRAIN_NEURONS.find(n => n.id === tgt);
-    if (!sn || !tn) continue;
-
-    const sx = sn.x * W, sy = sn.y * H;
-    const tx = tn.x * W, ty = tn.y * H;
-    const srcVal = brainNodeValues[src] || 0;
-    const signalStrength = srcVal * Math.abs(weight);
-
-    ctx.beginPath();
-    // Bezier curve for smooth connections
-    const cpx = (sx + tx) / 2;
-    ctx.moveTo(sx, sy);
-    ctx.bezierCurveTo(cpx, sy, cpx, ty, tx, ty);
-
-    const isActive = signalStrength > 0.1;
-    ctx.strokeStyle = weight > 0 ? (isActive ? "#34D399" : "#1a3a2a") : (isActive ? "#F87171" : "#3a1a1a");
-    ctx.lineWidth = isActive ? 1 + signalStrength * 3 : 0.5;
-    ctx.globalAlpha = isActive ? 0.4 + signalStrength * 0.6 : 0.15;
-    if (weight <= 0) ctx.setLineDash([4, 4]);
-    else ctx.setLineDash([]);
-    ctx.stroke();
-    ctx.globalAlpha = 1;
-    ctx.setLineDash([]);
-
-    // Signal pulse animation dot
-    if (isActive) {
-      const t = (Date.now() % 2000) / 2000;
-      const px = sx + (tx - sx) * t;
-      const py = sy + (ty - sy) * t;
-      ctx.beginPath();
-      ctx.arc(px, py, 2, 0, Math.PI * 2);
-      ctx.fillStyle = weight > 0 ? "#34D399" : "#F87171";
-      ctx.globalAlpha = 0.6;
-      ctx.fill();
-      ctx.globalAlpha = 1;
-    }
-  }
-
-  // Draw nodes
-  for (const n of BRAIN_NEURONS) {
-    const x = n.x * W, y = n.y * H;
-    const val = brainNodeValues[n.id] || 0;
-    const r = 18 + val * 8;
-    const isHovered = hoveredNode === n.id;
-
-    // Glow for active neurons
-    if (val > 0.3) {
-      ctx.beginPath();
-      ctx.arc(x, y, r + 8, 0, Math.PI * 2);
-      const glow = ctx.createRadialGradient(x, y, r, x, y, r + 8);
-      glow.addColorStop(0, LAYER_COLORS[n.layer] + "40");
-      glow.addColorStop(1, "transparent");
-      ctx.fillStyle = glow;
-      ctx.fill();
-    }
-
-    // Node circle
-    ctx.beginPath();
-    ctx.arc(x, y, r, 0, Math.PI * 2);
-    const nodeColor = val < 0.2 ? "#3a3a4a" : val < 0.5 ? LAYER_COLORS[n.layer] + "aa" : LAYER_COLORS[n.layer];
-    ctx.fillStyle = nodeColor;
-    ctx.fill();
-    ctx.strokeStyle = isHovered ? "#fff" : LAYER_COLORS[n.layer];
-    ctx.lineWidth = isHovered ? 2 : 1;
-    ctx.stroke();
-
-    // Value text
-    ctx.fillStyle = val > 0.3 ? "#fff" : "#aaa";
-    ctx.font = "bold 10px Inter, sans-serif";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText((val * 100).toFixed(0), x, y);
-
-    // Label below
-    ctx.fillStyle = isHovered ? "#fff" : "#888";
-    ctx.font = "9px Inter, sans-serif";
-    ctx.fillText(n.label, x, y + r + 12);
-  }
-
-  // Mood output indicator (right side)
-  const dominant = Object.entries(brainNodeValues)
-    .filter(([k]) => k.startsWith("mood."))
-    .sort((a, b) => b[1] - a[1])[0];
-  if (dominant && dominant[1] > 0) {
-    ctx.fillStyle = LAYER_COLORS[2];
-    ctx.font = "bold 13px Inter, sans-serif";
-    ctx.textAlign = "center";
-    const moodName = dominant[0].split(".")[1];
-    ctx.fillText("\u2192 " + moodName.charAt(0).toUpperCase() + moodName.slice(1), 0.9 * W, H / 2);
-    ctx.font = "11px Inter, sans-serif";
-    ctx.fillStyle = "#888";
-    ctx.fillText((dominant[1] * 100).toFixed(0) + "%", 0.9 * W, H / 2 + 18);
-  }
-}
-
-// Canvas hover for tooltips
-(function() {
-  const canvas = document.getElementById("brain-canvas");
-  const tooltip = document.getElementById("brain-tooltip");
-  if (!canvas) return;
+function initBrain(canvasId, tooltipId) {
+  activeCanvasId = canvasId;
+  activeTooltipId = tooltipId;
+  const canvas = document.getElementById(canvasId);
+  const tooltip = document.getElementById(tooltipId);
+  if (!canvas || canvas._brainInit) return;
+  canvas._brainInit = true;
 
   canvas.addEventListener("mousemove", function(e) {
     const rect = canvas.getBoundingClientRect();
@@ -520,26 +679,131 @@ function drawBrain() {
       hoveredNode = null;
       tooltip.style.opacity = "0";
     }
-    drawBrain();
+    drawBrainOn(canvasId);
   });
   canvas.addEventListener("mouseleave", function() {
     hoveredNode = null;
     tooltip.style.opacity = "0";
-    drawBrain();
+    drawBrainOn(canvasId);
   });
-})();
-
-// Animation loop for signal pulses
-let _brainAnimFrame;
-function animateBrain() {
-  drawBrain();
-  _brainAnimFrame = requestAnimationFrame(animateBrain);
 }
-animateBrain();
 
-// ═══════════════════════════════════════════════════════════════════════
-// Chat Interface — Styx Chat with RAG
-// ═══════════════════════════════════════════════════════════════════════
+function updateBrainViz(dashData) {
+  brainNodeValues = {};
+  const summary = dashData.neurons?.summary || {};
+  for (const layer of ["context","state","mood"]) {
+    const vals = summary[layer] || {};
+    for (const [k, v] of Object.entries(vals))
+      brainNodeValues[`${layer}.${k}`] = typeof v === "number" ? v : (v?.value || 0);
+  }
+  drawBrain();
+}
+
+function drawBrain() { drawBrainOn(activeCanvasId); }
+
+function drawBrainOn(canvasId) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas || !canvas.offsetParent) return;
+  const rect = canvas.parentElement.getBoundingClientRect();
+  canvas.width = rect.width - 42;
+  canvas.height = 400;
+  const ctx = canvas.getContext("2d");
+  const W = canvas.width, H = canvas.height;
+
+  ctx.fillStyle = "#0a0a14";
+  ctx.fillRect(0, 0, W, H);
+
+  ctx.font = "bold 11px Inter, sans-serif";
+  ctx.textAlign = "center";
+  for (let i = 0; i < 3; i++) {
+    ctx.fillStyle = LAYER_COLORS[i];
+    ctx.globalAlpha = 0.5;
+    ctx.fillText(LAYER_LABELS[i], [0.12, 0.42, 0.72][i] * W, 20);
+    ctx.globalAlpha = 1;
+  }
+
+  for (const [src, tgt, weight] of BRAIN_EDGES) {
+    const sn = BRAIN_NEURONS.find(n => n.id === src);
+    const tn = BRAIN_NEURONS.find(n => n.id === tgt);
+    if (!sn || !tn) continue;
+    const sx = sn.x * W, sy = sn.y * H, tx = tn.x * W, ty = tn.y * H;
+    const srcVal = brainNodeValues[src] || 0;
+    const sig = srcVal * Math.abs(weight);
+    const isActive = sig > 0.1;
+
+    ctx.beginPath();
+    ctx.moveTo(sx, sy);
+    ctx.bezierCurveTo((sx+tx)/2, sy, (sx+tx)/2, ty, tx, ty);
+    ctx.strokeStyle = weight > 0 ? (isActive ? "#34D399" : "#1a3a2a") : (isActive ? "#F87171" : "#3a1a1a");
+    ctx.lineWidth = isActive ? 1 + sig * 3 : 0.5;
+    ctx.globalAlpha = isActive ? 0.4 + sig * 0.6 : 0.15;
+    ctx.setLineDash(weight <= 0 ? [4, 4] : []);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.setLineDash([]);
+
+    if (isActive) {
+      const t = (Date.now() % 2000) / 2000;
+      ctx.beginPath();
+      ctx.arc(sx + (tx-sx)*t, sy + (ty-sy)*t, 2, 0, Math.PI*2);
+      ctx.fillStyle = weight > 0 ? "#34D399" : "#F87171";
+      ctx.globalAlpha = 0.6;
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  for (const n of BRAIN_NEURONS) {
+    const x = n.x * W, y = n.y * H;
+    const val = brainNodeValues[n.id] || 0;
+    const r = 18 + val * 8;
+    const isHovered = hoveredNode === n.id;
+
+    if (val > 0.3) {
+      ctx.beginPath();
+      ctx.arc(x, y, r + 8, 0, Math.PI * 2);
+      const glow = ctx.createRadialGradient(x, y, r, x, y, r + 8);
+      glow.addColorStop(0, LAYER_COLORS[n.layer] + "40");
+      glow.addColorStop(1, "transparent");
+      ctx.fillStyle = glow;
+      ctx.fill();
+    }
+
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fillStyle = val < 0.2 ? "#3a3a4a" : val < 0.5 ? LAYER_COLORS[n.layer] + "aa" : LAYER_COLORS[n.layer];
+    ctx.fill();
+    ctx.strokeStyle = isHovered ? "#fff" : LAYER_COLORS[n.layer];
+    ctx.lineWidth = isHovered ? 2 : 1;
+    ctx.stroke();
+
+    ctx.fillStyle = val > 0.3 ? "#fff" : "#aaa";
+    ctx.font = "bold 10px Inter, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText((val * 100).toFixed(0), x, y);
+
+    ctx.fillStyle = isHovered ? "#fff" : "#888";
+    ctx.font = "9px Inter, sans-serif";
+    ctx.fillText(n.label, x, y + r + 12);
+  }
+
+  const dominant = Object.entries(brainNodeValues).filter(([k]) => k.startsWith("mood.")).sort((a, b) => b[1] - a[1])[0];
+  if (dominant && dominant[1] > 0) {
+    ctx.fillStyle = LAYER_COLORS[2];
+    ctx.font = "bold 13px Inter, sans-serif";
+    ctx.textAlign = "center";
+    const mName = dominant[0].split(".")[1];
+    ctx.fillText("\u2192 " + mName.charAt(0).toUpperCase() + mName.slice(1), 0.9 * W, H / 2);
+    ctx.font = "11px Inter, sans-serif";
+    ctx.fillStyle = "#888";
+    ctx.fillText((dominant[1] * 100).toFixed(0) + "%", 0.9 * W, H / 2 + 18);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Chat Interface
+// ═══════════════════════════════════════════════════════════════
 
 let chatBusy = false;
 
@@ -568,14 +832,13 @@ async function sendChat() {
     const resp = await fetch(BASE + "/api/styx/chat", {
       method: "POST",
       headers: {...HEADERS, "Content-Type": "application/json"},
-      body: JSON.stringify({query: query, user_id: "styx-dashboard", use_web: false}),
+      body: JSON.stringify({query, user_id: "styx-dashboard", use_web: false}),
     });
     const data = await resp.json();
     if (data.ok && data.response) {
       appendChatMsg("assistant", data.response);
       const srcCount = (data.sources || []).length;
-      const qType = data.query_type || "local";
-      document.getElementById("chat-status").textContent = `${qType} \u00B7 ${srcCount} Quellen \u00B7 ${data.elapsed_ms || 0}ms`;
+      document.getElementById("chat-status").textContent = `${data.query_type || "local"} · ${srcCount} Quellen · ${data.elapsed_ms || 0}ms`;
     } else {
       appendChatMsg("system", "Fehler: " + (data.error || "Unbekannter Fehler"));
       document.getElementById("chat-status").textContent = "";
@@ -584,14 +847,64 @@ async function sendChat() {
     appendChatMsg("system", "Verbindungsfehler: " + err.message);
     document.getElementById("chat-status").textContent = "";
   }
-
   chatBusy = false;
   document.getElementById("chat-send").disabled = false;
 }
 
-// Initial load + auto-refresh (data cards only, not chat)
-loadDashboard();
+// ═══════════════════════════════════════════════════════════════
+// Zones
+// ═══════════════════════════════════════════════════════════════
+
+const ZONE_ICONS = {living:"\u{1F6CB}\uFE0F",bath:"\u{1F6BF}",kitchen:"\u{1F373}",office:"\u{1F4BC}",hallway:"\u{1F6AA}",bedroom:"\u{1F6CF}\uFE0F",room_mira:"\u{1F467}",room_paul:"\u{1F466}",terrace:"\u{1F33F}",outside:"\u{1F333}"};
+
+function renderZones(zones) {
+  const el = document.getElementById("zones-content");
+  if (!zones || zones.length === 0) { el.innerHTML = '<li style="color:var(--muted);padding:8px">Keine Zonen</li>'; return; }
+  el.innerHTML = zones.map(z => `<li class="zone-item">
+    <span class="zone-icon">${ZONE_ICONS[z.id] || "\u{1F3E0}"}</span>
+    <span class="zone-name">${z.name_de || z.id}</span>
+    <span class="zone-prio">P${z.priority || 0}</span>
+  </li>`).join("");
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Main Load
+// ═══════════════════════════════════════════════════════════════
+
+async function loadDashboard() {
+  document.getElementById("status").textContent = "Laden...";
+  const [dash, conf] = await Promise.all([
+    fetchJSON("/api/v1/styx/dashboard"),
+    fetchJSON("/api/v1/styx/config"),
+  ]);
+  if (dash && dash.ok) {
+    document.getElementById("mood-content").innerHTML = renderMood(dash.mood);
+    document.getElementById("neuron-content").innerHTML = renderNeurons(dash.neurons);
+    document.getElementById("graph-content").innerHTML = renderGraph(dash.graph);
+    document.getElementById("bus-content").innerHTML = renderBus(dash.bus);
+    document.getElementById("modules-content").innerHTML = renderModules(dash.modules);
+    document.getElementById("learning-content").innerHTML = renderLearning(dash.learning);
+    document.getElementById("candidates-content").innerHTML = renderCandidates(dash.candidates);
+    document.getElementById("status").textContent = `${dash.render_ms}ms · ${new Date(dash.timestamp).toLocaleTimeString("de-DE")}`;
+    updateBrainViz(dash);
+    renderNeuronConfig(dash);
+  } else {
+    document.getElementById("status").textContent = "Fehler beim Laden";
+  }
+  if (conf && conf.ok) renderZones(conf.habitus_zones);
+}
+
+async function loadAll() {
+  await Promise.all([loadDashboard(), loadLLM()]);
+}
+
+// Initialize
+initBrain("brain-canvas", "brain-tooltip");
+loadAll();
 setInterval(loadDashboard, 30000);
+
+// Animation loop
+(function animateBrain() { drawBrain(); requestAnimationFrame(animateBrain); })();
 </script>
 </body>
 </html>

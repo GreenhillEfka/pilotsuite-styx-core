@@ -66,34 +66,50 @@ openai_compat_bp = Blueprint('openai_compat', __name__, url_prefix='/v1')
 
 RECOMMENDED_MODELS = [
     {
-        "id": "lfm2.5-thinking",
-        "name": "LFM 2.5 Thinking (1.2B)",
-        "size_mb": 731,
-        "description": "Liquid AI reasoning model. Ultra-light (731MB), 32K context. Good for simple conversation.",
-        "tags": ["lightweight", "reasoning"],
-        "supports_tools": False,
+        "id": "qwen3:4b",
+        "name": "Qwen 3 (4B) — Empfohlen",
+        "size_mb": 2500,
+        "description": "Beste Wahl fuer PilotSuite. Hybrid-Reasoning, 256K Kontext, exzellentes Tool-Calling, mehrsprachig (DE/EN).",
+        "tags": ["default", "recommended", "tool-calling", "multilingual", "reasoning"],
+        "supports_tools": True,
     },
     {
-        "id": "qwen3:4b",
-        "name": "Qwen 3 (4B)",
-        "size_mb": 2500,
-        "description": "Higher-quality tool-calling model. Recommended on stronger hardware.",
-        "tags": ["high-quality", "tool-calling"],
+        "id": "qwen3:1.7b",
+        "name": "Qwen 3 (1.7B)",
+        "size_mb": 1100,
+        "description": "Leichtgewichtig mit Tool-Calling. Ideal fuer Raspberry Pi / NUC mit 4GB RAM.",
+        "tags": ["lightweight", "tool-calling", "multilingual"],
         "supports_tools": True,
     },
     {
         "id": "qwen3:0.6b",
         "name": "Qwen 3 (0.6B)",
         "size_mb": 400,
-        "description": "Ultra-lightweight with tool-calling. Fast startup and low memory footprint.",
-        "tags": ["default", "recommended", "ultra-lightweight", "tool-calling"],
+        "description": "Ultra-leicht fuer schwache Hardware. Minimaler RAM-Verbrauch, schneller Start.",
+        "tags": ["ultra-lightweight", "tool-calling"],
+        "supports_tools": True,
+    },
+    {
+        "id": "gemma3:4b",
+        "name": "Gemma 3 (4B)",
+        "size_mb": 2500,
+        "description": "Google Gemini-Technologie. 128K Kontext, multimodal-faehig, kompakt.",
+        "tags": ["multimodal", "tool-calling"],
+        "supports_tools": True,
+    },
+    {
+        "id": "fixt/home-3b-v3",
+        "name": "Home 3B v3 (HA-optimiert)",
+        "size_mb": 2000,
+        "description": "Speziell fuer HA-Geraetesteuerung trainiert. 97% Function-Calling-Genauigkeit.",
+        "tags": ["ha-optimized", "tool-calling", "multilingual"],
         "supports_tools": True,
     },
     {
         "id": "llama3.2:3b",
         "name": "Llama 3.2 (3B)",
         "size_mb": 2000,
-        "description": "Meta's small model. 128K context window. Basic tool calling support.",
+        "description": "Meta's kompaktes Modell. 128K Kontext, solides Tool-Calling.",
         "tags": ["tool-calling", "lightweight"],
         "supports_tools": True,
     },
@@ -101,21 +117,56 @@ RECOMMENDED_MODELS = [
         "id": "mistral:7b",
         "name": "Mistral (7B)",
         "size_mb": 4000,
-        "description": "Proven function-calling reliability. Widely used in HA community.",
+        "description": "Bewaehrte Function-Calling-Zuverlaessigkeit. Benoetigt 8GB+ RAM.",
         "tags": ["reliable", "tool-calling"],
         "supports_tools": True,
     },
     {
-        "id": "fixt/home-3b-v3",
-        "name": "Home 3B v3 (HA-optimized)",
-        "size_mb": 2000,
-        "description": "Purpose-trained for HA device control. 97% function-calling accuracy. Use with home-llm.",
-        "tags": ["ha-optimized", "tool-calling"],
+        "id": "phi4-mini",
+        "name": "Phi-4 Mini (3.8B)",
+        "size_mb": 2200,
+        "description": "Microsoft. Starkes Reasoning + Mathematik, explizites Function-Calling.",
+        "tags": ["reasoning", "tool-calling", "multilingual"],
         "supports_tools": True,
     },
 ]
 
-DEFAULT_MODEL = "qwen3:0.6b"
+RECOMMENDED_CLOUD_MODELS = [
+    {
+        "id": "gpt-4.1-nano",
+        "name": "GPT-4.1 Nano — Empfohlen",
+        "description": "OpenAI's schnellstes + guenstigstes Modell. $0.10/1M Input. Ideal fuer Smart-Home.",
+        "tags": ["default", "recommended", "budget"],
+        "price_input_1m": 0.10,
+        "price_output_1m": 0.40,
+    },
+    {
+        "id": "gpt-4.1-mini",
+        "name": "GPT-4.1 Mini",
+        "description": "Ausgewogen: schnell + hochqualitativ. $0.40/1M Input.",
+        "tags": ["balanced"],
+        "price_input_1m": 0.40,
+        "price_output_1m": 1.60,
+    },
+    {
+        "id": "gpt-4.1",
+        "name": "GPT-4.1",
+        "description": "Vollstaendiges GPT-4.1. 1M Token Kontext.",
+        "tags": ["premium"],
+        "price_input_1m": 2.00,
+        "price_output_1m": 8.00,
+    },
+    {
+        "id": "deepseek-chat",
+        "name": "DeepSeek V3",
+        "description": "Extrem guenstig ($0.14/1M). OpenAI-kompatibel. Qualitaet auf GPT-4-Niveau.",
+        "tags": ["budget", "high-quality"],
+        "price_input_1m": 0.14,
+        "price_output_1m": 0.28,
+    },
+]
+
+DEFAULT_MODEL = "qwen3:4b"
 MODEL_ALIASES = {"pilotsuite", "default", "auto", "primary"}
 LOCAL_MODEL_ALIASES = {"local", "offline", "ollama"}
 CLOUD_MODEL_ALIASES = {"cloud", "remote"}
@@ -759,53 +810,6 @@ def list_characters():
     })
 
 
-@conversation_bp.route('/models/recommended', methods=['GET'])
-def list_recommended_models():
-    """List recommended local+cloud models and runtime routing."""
-    provider = _get_llm_provider()
-    provider_status = provider.status()
-    catalog = provider.model_catalog()
-
-    installed = {
-        str(model).split(":")[0]
-        for model in catalog.get("offline", {}).get("models", [])
-    }
-    installed_full = {str(model) for model in catalog.get("offline", {}).get("models", [])}
-
-    models = []
-    for m in RECOMMENDED_MODELS:
-        model_id = str(m["id"])
-        models.append({
-            **m,
-            "installed": model_id in installed_full or model_id.split(":")[0] in installed,
-            "active": model_id == str(provider_status.get("ollama_model", "")),
-            "scope": "offline",
-        })
-
-    cloud_models = []
-    for model_id in catalog.get("cloud", {}).get("recommended", []) or []:
-        cloud_models.append({
-            "id": model_id,
-            "name": model_id,
-            "description": "Cloud model",
-            "tags": ["cloud"],
-            "supports_tools": True,
-            "active": model_id == str(provider_status.get("cloud_model", "")),
-        })
-
-    return jsonify({
-        "models": models,
-        "cloud_models": cloud_models,
-        "offline_models": catalog.get("offline", {}).get("models", []),
-        "current_model": provider_status.get("ollama_model", DEFAULT_MODEL),
-        "cloud_current_model": provider_status.get("cloud_model"),
-        "primary_provider": provider_status.get("primary_provider", "offline"),
-        "secondary_provider": provider_status.get("secondary_provider", "cloud"),
-        "ollama_url": provider_status.get("ollama_url"),
-        "cloud_url": provider_status.get("cloud_api_url"),
-    })
-
-
 @conversation_bp.route('/status', methods=['GET'])
 def llm_status():
     """Return LLM availability and configuration."""
@@ -893,6 +897,159 @@ def llm_routing_set():
         "ok": True,
         "status": status,
         "catalog": provider.model_catalog(force_refresh=True),
+    })
+
+
+@conversation_bp.route('/models/pull', methods=['POST'])
+@require_token
+def llm_model_pull():
+    """Trigger Ollama model download (pull). Returns streaming progress."""
+    body = request.get_json(silent=True) or {}
+    model_name = str(body.get("model", "")).strip()
+    if not model_name:
+        return jsonify({"ok": False, "error": "Missing 'model' parameter"}), 400
+
+    provider = _get_llm_provider()
+    ollama_url = provider.ollama_url
+
+    import requests as http_req
+    try:
+        resp = http_req.post(
+            f"{ollama_url}/api/pull",
+            json={"name": model_name, "stream": False},
+            timeout=600,
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            provider.reload_config()
+            return jsonify({
+                "ok": True,
+                "model": model_name,
+                "status": data.get("status", "success"),
+                "catalog": provider.model_catalog(force_refresh=True),
+            })
+        return jsonify({
+            "ok": False,
+            "error": f"Ollama returned {resp.status_code}: {resp.text[:200]}",
+        }), 502
+    except http_req.exceptions.ConnectionError:
+        return jsonify({
+            "ok": False,
+            "error": f"Ollama nicht erreichbar unter {ollama_url}",
+        }), 503
+    except http_req.exceptions.Timeout:
+        return jsonify({
+            "ok": False,
+            "error": "Download-Timeout (>600s). Modell manuell herunterladen: ollama pull " + model_name,
+        }), 504
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+@conversation_bp.route('/models/pull/status', methods=['POST'])
+@require_token
+def llm_model_pull_status():
+    """Check if a model is already downloaded in Ollama."""
+    body = request.get_json(silent=True) or {}
+    model_name = str(body.get("model", "")).strip()
+    if not model_name:
+        return jsonify({"ok": False, "error": "Missing 'model'"}), 400
+
+    provider = _get_llm_provider()
+    ollama_url = provider.ollama_url
+
+    import requests as http_req
+    try:
+        resp = http_req.post(
+            f"{ollama_url}/api/show",
+            json={"name": model_name},
+            timeout=10,
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            size_bytes = 0
+            for layer in data.get("details", {}).get("families", []):
+                pass
+            # Try to get model size from modelfile info
+            model_info = data.get("modelinfo", data.get("details", {}))
+            return jsonify({
+                "ok": True,
+                "model": model_name,
+                "installed": True,
+                "details": {
+                    "format": model_info.get("format", ""),
+                    "family": model_info.get("family", ""),
+                    "parameter_size": model_info.get("parameter_size", ""),
+                    "quantization_level": model_info.get("quantization_level", ""),
+                },
+            })
+        return jsonify({"ok": True, "model": model_name, "installed": False})
+    except Exception:
+        return jsonify({"ok": True, "model": model_name, "installed": False})
+
+
+@conversation_bp.route('/models/delete', methods=['POST'])
+@require_token
+def llm_model_delete():
+    """Delete an Ollama model."""
+    body = request.get_json(silent=True) or {}
+    model_name = str(body.get("model", "")).strip()
+    if not model_name:
+        return jsonify({"ok": False, "error": "Missing 'model'"}), 400
+
+    provider = _get_llm_provider()
+    ollama_url = provider.ollama_url
+
+    import requests as http_req
+    try:
+        resp = http_req.delete(
+            f"{ollama_url}/api/delete",
+            json={"name": model_name},
+            timeout=30,
+        )
+        if resp.status_code == 200:
+            provider.reload_config()
+            return jsonify({
+                "ok": True,
+                "model": model_name,
+                "status": "deleted",
+                "catalog": provider.model_catalog(force_refresh=True),
+            })
+        return jsonify({
+            "ok": False,
+            "error": f"Ollama: {resp.status_code} — {resp.text[:200]}",
+        }), 502
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+@conversation_bp.route('/models/recommended', methods=['GET'])
+def llm_recommended_models():
+    """Return recommended offline + cloud models with install status."""
+    provider = _get_llm_provider()
+    catalog = provider.model_catalog(force_refresh=False)
+    installed = set(catalog.get("offline", {}).get("models", []))
+
+    offline_recs = []
+    for m in RECOMMENDED_MODELS:
+        entry = dict(m)
+        entry["installed"] = m["id"] in installed or any(
+            m["id"].split(":")[0] in inst for inst in installed
+        )
+        entry["active"] = m["id"] == catalog.get("offline", {}).get("active_model")
+        offline_recs.append(entry)
+
+    cloud_recs = []
+    for m in RECOMMENDED_CLOUD_MODELS:
+        entry = dict(m)
+        entry["active"] = m["id"] == catalog.get("cloud", {}).get("active_model")
+        cloud_recs.append(entry)
+
+    return jsonify({
+        "ok": True,
+        "offline": offline_recs,
+        "cloud": cloud_recs,
+        "status": provider.status(),
     })
 
 

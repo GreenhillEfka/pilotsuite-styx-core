@@ -41,19 +41,20 @@ class TestConversationEndpoints:
         """Test GET /api/v1/chat/models/recommended endpoint."""
         with patch('copilot_core.api.v1.conversation._get_llm_provider') as mock_prov:
             mock_prov.return_value = MagicMock()
-            mock_prov.return_value.status.return_value = {"ollama_model": "qwen3:0.6b"}
+            mock_prov.return_value.status.return_value = {"ollama_model": "qwen3:4b"}
             mock_prov.return_value.model_catalog.return_value = {
-                "offline": {"models": []},
-                "online": {"models": []},
+                "offline": {"models": ["qwen3:4b"], "active_model": "qwen3:4b"},
+                "cloud": {"models": [], "active_model": "gpt-4.1-nano"},
             }
 
             r = conversation_client.get("/api/v1/chat/models/recommended")
             assert r.status_code == 200
             j = r.get_json()
-            assert "models" in j
-            assert isinstance(j["models"], list)
-            model_ids = [m["id"] for m in j["models"]]
-            assert "qwen3:0.6b" in model_ids
+            assert j["ok"] is True
+            assert "offline" in j
+            assert isinstance(j["offline"], list)
+            model_ids = [m["id"] for m in j["offline"]]
+            assert "qwen3:4b" in model_ids
 
     def test_chat_completions_endpoint(self, conversation_client):
         """Test POST /api/v1/chat/completions endpoint with mocked LLM."""
