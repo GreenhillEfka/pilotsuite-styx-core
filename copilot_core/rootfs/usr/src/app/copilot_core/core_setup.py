@@ -362,6 +362,70 @@ async def init_services(hass=None, config: dict = None):
     except Exception:
         _LOGGER.exception("Failed to init IntegrationBus")
 
+    # Initialize Neuron Layers Visualization API
+    try:
+        from copilot_core.api.v1.neuron_layers import init_neuron_layers_api
+        if services.get("neuron_manager"):
+            init_neuron_layers_api(
+                services["neuron_manager"],
+                services.get("integration_bus"),
+            )
+            _LOGGER.info("Neuron Layers Visualization API initialized")
+    except Exception:
+        _LOGGER.exception("Failed to init Neuron Layers API")
+
+    # Initialize Hebbian Learning engine
+    try:
+        from copilot_core.neurons.learning import HebbianLearning
+        from copilot_core.api.v1.neuron_layers import SYNAPSE_TOPOLOGY
+        hebbian = HebbianLearning(
+            topology=SYNAPSE_TOPOLOGY,
+            persist_path="/data/synapse_weights.json",
+        )
+        services["hebbian_learning"] = hebbian
+
+        # Wire learning to bus: update weights on each evaluation
+        bus = services.get("integration_bus")
+        if bus:
+            def _on_eval_for_learning(event):
+                values = {}
+                for key in ("context_values", "state_values", "mood_values"):
+                    prefix = key.split("_")[0]
+                    for name, val in event.data.get(key, {}).items():
+                        values[f"{prefix}.{name}"] = val
+                hebbian.update_weights(values)
+
+            bus.subscribe("neuron.evaluated", _on_eval_for_learning)
+
+        _LOGGER.info("HebbianLearning initialized (%d synapses)", len(SYNAPSE_TOPOLOGY))
+    except Exception:
+        _LOGGER.exception("Failed to init HebbianLearning")
+
+    # Initialize Cross-Module Analyzer
+    try:
+        from copilot_core.integration.cross_module import CrossModuleAnalyzer
+        bus = services.get("integration_bus")
+        if bus:
+            analyzer = CrossModuleAnalyzer(bus)
+            services["cross_module_analyzer"] = analyzer
+            _LOGGER.info("CrossModuleAnalyzer initialized")
+    except Exception:
+        _LOGGER.exception("Failed to init CrossModuleAnalyzer")
+
+    # Initialize Module Health Dashboard API
+    try:
+        from copilot_core.api.v1.module_health import init_module_health_api
+        init_module_health_api(
+            module_registry=services.get("module_registry"),
+            integration_bus=services.get("integration_bus"),
+            hebbian_learning=services.get("hebbian_learning"),
+            cross_module_analyzer=services.get("cross_module_analyzer"),
+            feedback_loop=services.get("feedback_loop"),
+        )
+        _LOGGER.info("Module Health Dashboard API initialized")
+    except Exception:
+        _LOGGER.exception("Failed to init Module Health API")
+
     # Initialize Automation Creator
     try:
         services["automation_creator"] = AutomationCreator()
@@ -569,6 +633,14 @@ def register_blueprints(app: Flask, services: dict) -> None:
     # Register Integration Bus API
     from copilot_core.integration.api import integration_bp
     app.register_blueprint(integration_bp)
+
+    # Register Neuron Layers Visualization API
+    from copilot_core.api.v1.neuron_layers import neuron_layers_bp
+    app.register_blueprint(neuron_layers_bp)
+
+    # Register Module Health Dashboard API
+    from copilot_core.api.v1.module_health import module_health_bp
+    app.register_blueprint(module_health_bp)
     
     # Register PilotSuite Hub API (standalone, absolute prefix /api/v1/hub)
     from copilot_core.hub.api import hub_bp
