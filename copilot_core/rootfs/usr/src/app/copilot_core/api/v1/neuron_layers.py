@@ -363,3 +363,156 @@ def render_neuron_layer_svg(all_neurons: dict, result) -> str:
 
     parts.append("</svg>")
     return "\n".join(parts)
+
+
+# =============================================================================
+# Synapse Configuration Endpoints (Iteration 2)
+# =============================================================================
+
+# Mutable synapse overrides (runtime adjustments persisted to JSON)
+_synapse_overrides: Dict[str, float] = {}
+_SYNAPSE_CONFIG_PATH = "/data/synapse_overrides.json"
+
+
+def _load_synapse_overrides() -> None:
+    """Load persisted synapse weight overrides."""
+    global _synapse_overrides
+    import json, os
+    path = os.environ.get("SYNAPSE_CONFIG_PATH", _SYNAPSE_CONFIG_PATH)
+    try:
+        if os.path.exists(path):
+            with open(path, "r") as f:
+                _synapse_overrides = json.load(f)
+            _LOGGER.info("Loaded %d synapse overrides from %s", len(_synapse_overrides), path)
+    except Exception as e:
+        _LOGGER.warning("Failed to load synapse overrides: %s", e)
+
+
+def _save_synapse_overrides() -> None:
+    """Persist synapse weight overrides to disk."""
+    import json, os
+    path = os.environ.get("SYNAPSE_CONFIG_PATH", _SYNAPSE_CONFIG_PATH)
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w") as f:
+            json.dump(_synapse_overrides, f, indent=2)
+    except Exception as e:
+        _LOGGER.warning("Failed to save synapse overrides: %s", e)
+
+
+def get_effective_synapse_weight(from_id: str, to_id: str) -> float:
+    """Get effective synapse weight (override or default)."""
+    key = f"{from_id}->{to_id}"
+    if key in _synapse_overrides:
+        return _synapse_overrides[key]
+    for frm, to, w in SYNAPSE_TOPOLOGY:
+        if frm == from_id and to == to_id:
+            return w
+    return 0.0
+
+
+def get_all_synapses() -> List[Dict[str, Any]]:
+    """Get all synapses with effective weights."""
+    synapses = []
+    for frm, to, default_w in SYNAPSE_TOPOLOGY:
+        key = f"{frm}->{to}"
+        effective = _synapse_overrides.get(key, default_w)
+        synapses.append({
+            "from": frm,
+            "to": to,
+            "default_weight": default_w,
+            "weight": effective,
+            "overridden": key in _synapse_overrides,
+        })
+    return synapses
+
+
+@neuron_layers_bp.route("/synapses", methods=["GET"])
+def list_synapses():
+    """List all synapses with current and default weights."""
+    return jsonify({
+        "success": True,
+        "data": get_all_synapses(),
+        "count": len(SYNAPSE_TOPOLOGY),
+    })
+
+
+@neuron_layers_bp.route("/synapses/update", methods=["POST"])
+def update_synapse_weight():
+    """Update a synapse weight.
+
+    JSON body:
+        {"from": "context.presence", "to": "mood.active", "weight": 0.5}
+    """
+    from flask import request as req
+    body = req.get_json(silent=True) or {}
+    from_id = str(body.get("from", "")).strip()
+    to_id = str(body.get("to", "")).strip()
+    weight = body.get("weight")
+
+    if not from_id or not to_id or weight is None:
+        return jsonify({"success": False, "error": "Missing from, to, or weight"}), 400
+
+    try:
+        weight = float(weight)
+    except (ValueError, TypeError):
+        return jsonify({"success": False, "error": "weight must be a number"}), 400
+
+    if not -1.0 <= weight <= 1.0:
+        return jsonify({"success": False, "error": "weight must be between -1.0 and 1.0"}), 400
+
+    # Verify synapse exists in topology
+    found = any(frm == from_id and to == to_id for frm, to, _ in SYNAPSE_TOPOLOGY)
+    if not found:
+        return jsonify({"success": False, "error": f"Synapse {from_id} -> {to_id} not found"}), 404
+
+    key = f"{from_id}->{to_id}"
+    _synapse_overrides[key] = weight
+    _save_synapse_overrides()
+
+    _LOGGER.info("Updated synapse %s -> %s weight to %.3f", from_id, to_id, weight)
+
+    return jsonify({
+        "success": True,
+        "data": {
+            "from": from_id,
+            "to": to_id,
+            "weight": weight,
+            "default_weight": next(w for f, t, w in SYNAPSE_TOPOLOGY if f == from_id and t == to_id),
+        },
+    })
+
+
+@neuron_layers_bp.route("/synapses/reset", methods=["POST"])
+def reset_synapse_weight():
+    """Reset a synapse weight to default.
+
+    JSON body:
+        {"from": "context.presence", "to": "mood.active"}
+    Or reset all:
+        {"all": true}
+    """
+    from flask import request as req
+    body = req.get_json(silent=True) or {}
+
+    if body.get("all"):
+        count = len(_synapse_overrides)
+        _synapse_overrides.clear()
+        _save_synapse_overrides()
+        return jsonify({"success": True, "data": {"reset_count": count}})
+
+    from_id = str(body.get("from", "")).strip()
+    to_id = str(body.get("to", "")).strip()
+    if not from_id or not to_id:
+        return jsonify({"success": False, "error": "Missing from or to"}), 400
+
+    key = f"{from_id}->{to_id}"
+    if key in _synapse_overrides:
+        del _synapse_overrides[key]
+        _save_synapse_overrides()
+
+    return jsonify({"success": True, "data": {"from": from_id, "to": to_id, "reset": True}})
+
+
+# Load overrides on module import
+_load_synapse_overrides()

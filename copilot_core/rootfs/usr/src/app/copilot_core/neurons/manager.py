@@ -23,7 +23,9 @@ from __future__ import annotations
 
 import asyncio
 import collections
+import json as _json
 import logging
+import os
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Callable
@@ -122,6 +124,11 @@ class NeuronManager:
 
         # Household profile (optional)
         self._household: Optional[HouseholdProfile] = None
+
+        # Neuron config persistence path
+        self._config_path = os.environ.get(
+            "NEURON_CONFIG_PATH", "/data/neuron_configs.json"
+        )
 
         _LOGGER.info("NeuronManager initialized")
     
@@ -339,9 +346,54 @@ class NeuronManager:
         return {}
     
     # -------------------------------------------------------------------------
+    # Neuron Config Persistence
+    # -------------------------------------------------------------------------
+
+    def persist_neuron_config(self, neuron_id: str) -> None:
+        """Persist a single neuron's config to disk."""
+        self.persist_all_neuron_configs()
+
+    def persist_all_neuron_configs(self) -> None:
+        """Persist all neuron configs to JSON file."""
+        all_neurons = self.get_all_neurons()
+        data = {}
+        for nid, neuron in all_neurons.items():
+            data[nid] = neuron.config.to_dict()
+        try:
+            os.makedirs(os.path.dirname(self._config_path), exist_ok=True)
+            with open(self._config_path, "w") as f:
+                _json.dump(data, f, indent=2)
+            _LOGGER.info("Persisted %d neuron configs to %s", len(data), self._config_path)
+        except Exception as e:
+            _LOGGER.warning("Failed to persist neuron configs: %s", e)
+
+    def load_neuron_configs(self) -> None:
+        """Load persisted neuron configs and apply overrides."""
+        try:
+            if not os.path.exists(self._config_path):
+                return
+            with open(self._config_path, "r") as f:
+                data = _json.load(f)
+            applied = 0
+            for nid, cfg_data in data.items():
+                neuron = self.get_neuron(nid) or self.get_neuron(
+                    nid.split(".")[-1] if "." in nid else nid
+                )
+                if neuron:
+                    for key in ("threshold", "decay_rate", "smoothing_factor", "enabled"):
+                        if key in cfg_data:
+                            setattr(neuron.config, key, cfg_data[key])
+                    if "weights" in cfg_data:
+                        neuron.config.weights.update(cfg_data["weights"])
+                    applied += 1
+            _LOGGER.info("Loaded %d/%d neuron configs from %s", applied, len(data), self._config_path)
+        except Exception as e:
+            _LOGGER.warning("Failed to load neuron configs: %s", e)
+
+    # -------------------------------------------------------------------------
     # State Updates
     # -------------------------------------------------------------------------
-    
+
     def update_states(self, ha_states: Dict[str, Any]) -> None:
         """Update Home Assistant states.
         
