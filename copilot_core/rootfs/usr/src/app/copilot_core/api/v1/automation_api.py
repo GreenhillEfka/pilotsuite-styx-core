@@ -16,6 +16,8 @@ from typing import Optional
 from flask import Blueprint, jsonify, request
 
 from copilot_core.api.security import require_token
+from copilot_core.api.validation import validate_json
+from copilot_core.api.v1.schemas import AutomationCreateSchema
 from copilot_core.automation_creator import AutomationCreator
 
 _LOGGER = logging.getLogger(__name__)
@@ -50,63 +52,38 @@ def _get_creator() -> Optional[AutomationCreator]:
 
 @automation_bp.route("/create", methods=["POST"])
 @require_token
-def create_automation():
-    """Create an HA automation from a suggestion.
-
-    Request body::
-
-        {
-            "antecedent": "When the sun sets",
-            "consequent": "Turn on light.living_room",
-            "alias":      "Sunset living room lights"   // optional
-        }
-
-    Response (success)::
-
-        {
-            "ok": true,
-            "automation_id": "styx_a1b2c3d4e5f6",
-            "alias": "Sunset living room lights"
-        }
-
-    Response (failure)::
-
-        {
-            "ok": false,
-            "error": "Cannot parse trigger: ..."
-        }
-    """
+@validate_json(AutomationCreateSchema)
+def create_automation(body: AutomationCreateSchema):
+    """Create an HA automation from a suggestion (Pydantic-validated)."""
     creator = _get_creator()
     if creator is None:
         return jsonify({
             "ok": False,
             "error": "AutomationCreator not initialized",
+            "code": "SERVICE_UNAVAILABLE",
         }), 503
 
-    data = request.get_json(silent=True) or {}
-
-    if not data.get("antecedent") or not data.get("consequent"):
-        return jsonify({
-            "ok": False,
-            "error": "Both 'antecedent' and 'consequent' fields are required",
-        }), 400
-
+    data = body.model_dump()
     result = creator.create_from_suggestion(data)
 
     if result.get("ok"):
         return jsonify(result), 201
+
+    # Structured error codes instead of string matching
+    error_msg = result.get("error", "")
+    if "SUPERVISOR_TOKEN" in error_msg:
+        result["code"] = "SUPERVISOR_UNAVAILABLE"
+        status = 503
+    elif "Cannot parse" in error_msg:
+        result["code"] = "PARSE_ERROR"
+        status = 422
+    elif "HA API error" in error_msg:
+        result["code"] = "HA_API_ERROR"
+        status = 502
     else:
-        # Determine appropriate HTTP status based on error type
-        error_msg = result.get("error", "")
-        if "SUPERVISOR_TOKEN" in error_msg:
-            status = 503
-        elif "Cannot parse" in error_msg:
-            status = 422
-        elif "HA API error" in error_msg:
-            status = 502
-        else:
-            status = 500
-        return jsonify(result), status
+        result["code"] = "INTERNAL_ERROR"
+        status = 500
+    return jsonify(result), status
 
 
 @automation_bp.route("/", methods=["GET"])

@@ -126,13 +126,13 @@ class UserPreferenceStore:
                         data = json.loads(line.strip())
                         user = UserPreferences.from_dict(data)
                         self._users[user.user_id] = user
-                    except Exception:
+                    except (json.JSONDecodeError, KeyError, TypeError):
                         continue
         except FileNotFoundError:
             pass
-        except Exception:
+        except IOError:
             pass
-        
+
         # Load device affinities
         try:
             with open(self.affinities_path, "r", encoding="utf-8") as fh:
@@ -141,11 +141,11 @@ class UserPreferenceStore:
                         data = json.loads(line.strip())
                         aff = DeviceAffinity.from_dict(data)
                         self._affinities[aff.entity_id] = aff
-                    except Exception:
+                    except (json.JSONDecodeError, KeyError, TypeError):
                         continue
         except FileNotFoundError:
             pass
-        except Exception:
+        except IOError:
             pass
     
     def _save_users(self) -> None:

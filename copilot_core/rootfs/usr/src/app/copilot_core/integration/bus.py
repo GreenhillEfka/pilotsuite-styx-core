@@ -75,6 +75,7 @@ class IntegrationBus:
         self._events_published = 0
         self._events_delivered = 0
         self._errors = 0
+        self._dead_letters: list[dict] = []
         _LOGGER.info("IntegrationBus initialized")
 
     # ------------------------------------------------------------------
@@ -163,10 +164,26 @@ class IntegrationBus:
 
         for sub_id, callback in subscribers:
             try:
+                t0 = time.monotonic()
                 callback(event)
+                elapsed = time.monotonic() - t0
                 self._events_delivered += 1
+                if elapsed > 5.0:
+                    _LOGGER.warning(
+                        "Slow subscriber %s took %.2fs on %s event",
+                        sub_id[:8], elapsed, event_type,
+                    )
             except Exception:
                 self._errors += 1
+                self._dead_letters.append({
+                    "event_id": event.event_id,
+                    "event_type": event_type,
+                    "subscriber": sub_id[:8],
+                    "timestamp_ms": int(time.time() * 1000),
+                })
+                # Keep bounded
+                if len(self._dead_letters) > 100:
+                    self._dead_letters = self._dead_letters[-50:]
                 _LOGGER.exception(
                     "Subscriber %s failed on %s event from %s",
                     sub_id[:8], event_type, source,
@@ -192,12 +209,18 @@ class IntegrationBus:
             "events_published": self._events_published,
             "events_delivered": self._events_delivered,
             "errors": self._errors,
+            "dead_letter_count": len(self._dead_letters),
             "total_subscribers": total_subs,
             "event_types_active": event_types,
         }
+
+    def get_dead_letters(self) -> list[dict]:
+        """Return recent dead-letter events (failed deliveries)."""
+        return list(self._dead_letters)
 
     def reset_stats(self) -> None:
         """Reset metrics counters (testing only)."""
         self._events_published = 0
         self._events_delivered = 0
         self._errors = 0
+        self._dead_letters.clear()

@@ -39,17 +39,17 @@ def graph_state():
 
     try:
         hops = int(request.args.get("hops", "1"))
-    except Exception:
+    except (ValueError, TypeError):
         hops = 1
 
     try:
         limit_nodes = int(request.args.get("limitNodes", request.args.get("limit_nodes", "200")))
-    except Exception:
+    except (ValueError, TypeError):
         limit_nodes = 200
 
     try:
         limit_edges = int(request.args.get("limitEdges", request.args.get("limit_edges", "400")))
-    except Exception:
+    except (ValueError, TypeError):
         limit_edges = 400
 
     # Server-side caps: tighter than storage maxima by default.

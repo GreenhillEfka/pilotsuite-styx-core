@@ -14,6 +14,8 @@ from typing import Any, Dict, Optional
 from flask import Blueprint, jsonify, request
 
 from copilot_core.api.security import validate_token
+from copilot_core.api.validation import validate_json
+from copilot_core.api.v1.schemas import ChatRequestSchema
 from copilot_core.styx.chat_handler import ChatHandler
 
 logger = logging.getLogger(__name__)
@@ -73,90 +75,36 @@ def _get_chat_handler() -> ChatHandler:
 # ══════════════════════════════════════════════════════════════════════════
 
 @bp.route("/chat", methods=["POST"])
-def styx_chat() -> Any:
-    """
-    PilotSuite-Styx Chat-Endpoint.
-    
-    Verarbeitet Chat-Queries mit RAG-API Integration:
-    1. RAG-Suche (lokal + optional Web via SearXNG)
-    2. LLM-Prompt mit RAG-Kontext
-    3. Ollama-Inferenz
-    4. Logging für History
-    
-    Args:
-        query: User-Frage (required)
-        user_id: User-Identifier (required, für History)
-        use_web: Web-Suche aktivieren (default: false)
-        model: Ollama-Modell (default: qwen3.5:397b-cloud)
-    
-    Returns:
-        JSON mit:
-        - response: LLM-Antwort
-        - sources: Liste der RAG-Sources (für UI-Anzeige)
-        - query_type: local|web|hybrid
-        - context_used: Verwendete Kontext-Informationen
-    
-    Example Request:
-        POST /api/styx/chat
-        {
-            "query": "Wie war der Energieverbrauch gestern?",
-            "user_id": "user_123",
-            "use_web": false
-        }
-    
-    Example Response:
-        {
-            "response": "Der Energieverbrauch gestern betrug...",
-            "sources": [
-                {"id": "ha_state_123", "score": 0.95, "source": "ha_states"}
-            ],
-            "query_type": "local",
-            "context_used": [...]
-        }
+@validate_json(ChatRequestSchema)
+def styx_chat(body: ChatRequestSchema) -> Any:
+    """PilotSuite-Styx Chat-Endpoint with Pydantic validation.
+
+    Validates: query (1–10000 chars), user_id (required), model, use_web.
     """
     try:
-        data = request.get_json(silent=True) or {}
-        
-        # Request validieren
-        if not data.get("query"):
-            return jsonify({
-                "ok": False,
-                "error": "query is required",
-            }), 400
-        
-        if not data.get("user_id"):
-            return jsonify({
-                "ok": False,
-                "error": "user_id is required",
-            }), 400
-        
-        # Request parsen
-        chat_request = ChatRequest.from_json(data)
-        
         logger.info(
             "Styx chat request (user_id=%s, query=%s, use_web=%s, model=%s)",
-            chat_request.user_id,
-            chat_request.query[:100] if len(chat_request.query) > 100 else chat_request.query,
-            chat_request.use_web,
-            chat_request.model
+            body.user_id,
+            body.query[:100],
+            body.use_web,
+            body.model,
         )
-        
-        # ChatHandler aufrufen
+
         handler = _get_chat_handler()
         result = handler.handle_query(
-            query=chat_request.query,
-            user_id=chat_request.user_id,
-            use_web=chat_request.use_web,
-            model=chat_request.model,
+            query=body.query,
+            user_id=body.user_id,
+            use_web=body.use_web,
+            model=body.model,
         )
-        
+
         logger.info(
             "Styx chat response (query_type=%s, sources_count=%s, response_length=%s)",
             result.get("query_type", "local"),
             len(result.get("sources", [])),
-            len(result.get("response", ""))
+            len(result.get("response", "")),
         )
-        
+
         return jsonify({
             "ok": True,
             "response": result.get("response", ""),
@@ -164,7 +112,7 @@ def styx_chat() -> Any:
             "query_type": result.get("query_type", "local"),
             "context_used": result.get("context_used", []),
         })
-        
+
     except Exception as exc:
         logger.exception("Styx chat endpoint failed: %s", exc)
         return jsonify({

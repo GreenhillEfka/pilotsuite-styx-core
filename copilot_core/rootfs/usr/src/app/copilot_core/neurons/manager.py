@@ -22,6 +22,7 @@ Haushaltsbewusste Vorschlaege (wenn HouseholdProfile gesetzt):
 from __future__ import annotations
 
 import asyncio
+import collections
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -110,9 +111,8 @@ class NeuronManager:
         # Last result
         self._last_result: Optional[NeuralPipelineResult] = None
         
-        # Mood history for smoothing
-        self._mood_history: List[Dict[str, float]] = []
-        self._history_max: int = 10
+        # Mood history for smoothing (deque for O(1) eviction)
+        self._mood_history: collections.deque[Dict[str, float]] = collections.deque(maxlen=10)
 
         # Proactive engine (optional, wired via set_proactive_engine)
         self._proactive_engine = None
@@ -500,8 +500,6 @@ class NeuronManager:
 
         self._last_result = result
         self._mood_history.append(mood_values)
-        if len(self._mood_history) > self._history_max:
-            self._mood_history.pop(0)
 
         # Publish pipeline result to integration bus
         if self._bus:
@@ -540,7 +538,8 @@ class NeuronManager:
         if self._mood_history:
             smoothed = {}
             for mood, value in mood_values.items():
-                history_values = [h.get(mood, 0) for h in self._mood_history[-3:]]
+                recent = list(self._mood_history)[-3:]
+                history_values = [h.get(mood, 0) for h in recent]
                 history_values.append(value)
                 smoothed[mood] = sum(history_values) / len(history_values)
             mood_values = smoothed

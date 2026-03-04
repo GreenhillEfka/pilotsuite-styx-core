@@ -98,13 +98,17 @@ def query_events():
         limit     – max results (default 100, max 1000)
     """
     store = get_store()
+    try:
+        limit = int(request.args.get("limit", 100))
+    except (ValueError, TypeError):
+        limit = 100
     events = store.query(
         domain=request.args.get("domain"),
         entity_id=request.args.get("entity_id"),
         kind=request.args.get("kind"),
         zone_id=request.args.get("zone_id"),
         since=request.args.get("since"),
-        limit=int(request.args.get("limit", 100)),
+        limit=limit,
     )
 
     return jsonify({"events": events, "count": len(events)}), 200

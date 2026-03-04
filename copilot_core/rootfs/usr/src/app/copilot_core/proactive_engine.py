@@ -33,6 +33,15 @@ QUIET_START = int(os.environ.get("QUIET_HOUR_START", "23"))
 QUIET_END = int(os.environ.get("QUIET_HOUR_END", "7"))
 
 
+def _safe_tz_offset() -> int:
+    """Get TZ_OFFSET from env with bounds check (-12..+14)."""
+    try:
+        offset = int(os.environ.get("TZ_OFFSET", "1"))
+    except (ValueError, TypeError):
+        offset = 1
+    return max(-12, min(14, offset))
+
+
 class ProactiveContextEngine:
     """Generate context-aware suggestions on zone entry.
 
@@ -87,7 +96,7 @@ class ProactiveContextEngine:
         # Check quiet hours
         from datetime import datetime, timezone
         now = datetime.now(timezone.utc)
-        local_hour = (now.hour + int(os.environ.get("TZ_OFFSET", "1"))) % 24
+        local_hour = (now.hour + _safe_tz_offset()) % 24
         if QUIET_START <= 23 and (local_hour >= QUIET_START or local_hour < QUIET_END):
             return []
 
@@ -170,7 +179,7 @@ class ProactiveContextEngine:
         # Check quiet hours
         from datetime import datetime, timezone
         now = datetime.now(timezone.utc)
-        local_hour = (now.hour + int(os.environ.get("TZ_OFFSET", "1"))) % 24
+        local_hour = (now.hour + _safe_tz_offset()) % 24
         if QUIET_START <= 23 and (local_hour >= QUIET_START or local_hour < QUIET_END):
             return []
 
@@ -428,7 +437,7 @@ class ProactiveContextEngine:
         # --- Quiet-hours gate ------------------------------------------------
         from datetime import datetime, timezone
         now = datetime.now(timezone.utc)
-        local_hour = (now.hour + int(os.environ.get("TZ_OFFSET", "1"))) % 24
+        local_hour = (now.hour + _safe_tz_offset()) % 24
         if QUIET_START <= 23 and (local_hour >= QUIET_START or local_hour < QUIET_END):
             return []
 

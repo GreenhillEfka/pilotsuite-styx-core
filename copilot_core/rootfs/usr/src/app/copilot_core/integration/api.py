@@ -11,6 +11,8 @@ from __future__ import annotations
 import logging
 from flask import Blueprint, jsonify, request
 
+from copilot_core.api.validation import validate_json
+from copilot_core.api.v1.schemas import FeedbackRequestSchema
 from .bus import IntegrationBus
 
 _LOGGER = logging.getLogger(__name__)
@@ -30,32 +32,17 @@ def init_integration_api(bus: IntegrationBus, feedback_loop=None) -> None:
 
 
 @integration_bp.route("/feedback", methods=["POST"])
-def post_feedback():
-    """Submit feedback for a suggestion.
-
-    Body:
-        {
-            "suggestion_id": "abc123",
-            "accepted": true,
-            "related_entities": ["light.kitchen", "switch.coffee"],
-            "pattern_key": "light.kitchen:on → switch.coffee:on"  // optional
-        }
-    """
+@validate_json(FeedbackRequestSchema)
+def post_feedback(body: FeedbackRequestSchema):
+    """Submit feedback for a suggestion (Pydantic-validated)."""
     if _bus is None:
         return jsonify({"error": "Integration bus not initialized"}), 503
 
-    body = request.get_json(silent=True) or {}
-    suggestion_id = body.get("suggestion_id", "")
-    accepted = body.get("accepted")
-
-    if accepted is None:
-        return jsonify({"error": "Missing 'accepted' field (true/false)"}), 400
-
-    event_type = "suggestion.accepted" if accepted else "suggestion.rejected"
+    event_type = "suggestion.accepted" if body.accepted else "suggestion.rejected"
     event = _bus.publish(event_type, {
-        "suggestion_id": suggestion_id,
-        "related_entities": body.get("related_entities", []),
-        "pattern_key": body.get("pattern_key"),
+        "suggestion_id": body.suggestion_id,
+        "related_entities": body.related_entities,
+        "pattern_key": body.pattern_key,
     }, source="user_feedback")
 
     return jsonify({
