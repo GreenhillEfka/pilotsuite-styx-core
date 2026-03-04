@@ -117,6 +117,9 @@ class NeuronManager:
         # Proactive engine (optional, wired via set_proactive_engine)
         self._proactive_engine = None
 
+        # Integration bus (optional, wired via set_bus)
+        self._bus = None
+
         # Household profile (optional)
         self._household: Optional[HouseholdProfile] = None
 
@@ -368,7 +371,16 @@ class NeuronManager:
         """
         self._household = profile
         _LOGGER.info("Household profile set with %d members", len(profile.members))
-    
+
+    def set_bus(self, bus) -> None:
+        """Wire the integration bus for event publishing.
+
+        When set, evaluate() publishes ``neuron.evaluated`` events and
+        mood changes publish ``mood.changed`` events.
+        """
+        self._bus = bus
+        _LOGGER.info("IntegrationBus wired to NeuronManager")
+
     # -------------------------------------------------------------------------
     # Pipeline Execution
     # -------------------------------------------------------------------------
@@ -480,22 +492,36 @@ class NeuronManager:
         # Stimmungswechsel pruefen und Callback auslösen
         if self._last_result and self._last_result.dominant_mood != dominant_mood:
             self._on_mood_changed(dominant_mood, confidence)
-        
+
         # Vorschlags-Callbacks ausfuehren
         for suggestion in suggestions:
             if self._on_suggestion:
                 self._on_suggestion(suggestion)
-        
+
         self._last_result = result
         self._mood_history.append(mood_values)
         if len(self._mood_history) > self._history_max:
             self._mood_history.pop(0)
-        
+
+        # Publish pipeline result to integration bus
+        if self._bus:
+            try:
+                self._bus.publish("neuron.evaluated", {
+                    "context_values": context_values,
+                    "state_values": state_values,
+                    "mood_values": mood_values,
+                    "dominant_mood": dominant_mood,
+                    "mood_confidence": confidence,
+                    "suggestions_count": len(suggestions),
+                }, source="neuron_manager")
+            except Exception:
+                _LOGGER.exception("Failed to publish neuron.evaluated event")
+
         _LOGGER.info(
             "Neural pipeline: mood=%s (%.2f), suggestions=%d",
             dominant_mood, confidence, len(suggestions)
         )
-        
+
         return result
     
     def _determine_mood(self, mood_values: Dict[str, float]) -> tuple:
@@ -776,12 +802,23 @@ class NeuronManager:
 
     def _on_mood_changed(self, new_mood: str, confidence: float) -> None:
         """Handle mood change."""
+        prev_mood = self._last_result.dominant_mood if self._last_result else ""
         _LOGGER.info("Mood changed to: %s (%.2f)", new_mood, confidence)
         if self._on_mood_change:
             try:
                 self._on_mood_change(new_mood, confidence)
             except Exception as e:
                 _LOGGER.error("Mood change callback error: %s", e)
+        # Publish mood change to integration bus
+        if self._bus:
+            try:
+                self._bus.publish("mood.changed", {
+                    "mood": new_mood,
+                    "confidence": confidence,
+                    "previous_mood": prev_mood,
+                }, source="neuron_manager")
+            except Exception:
+                _LOGGER.exception("Failed to publish mood.changed event")
         self._evaluate_proactive_suggestions(new_mood, confidence)
 
     def _evaluate_proactive_suggestions(self, new_mood: str, confidence: float) -> None:

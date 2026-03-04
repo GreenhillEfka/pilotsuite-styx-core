@@ -332,6 +332,36 @@ async def init_services(hass=None, config: dict = None):
     except Exception:
         _LOGGER.exception("Failed to init ModuleRegistry")
 
+    # Initialize Integration Bus and wire to existing services
+    try:
+        from copilot_core.integration.bus import IntegrationBus
+        from copilot_core.integration.feedback import FeedbackLoop
+        bus = IntegrationBus.get_instance()
+        services["integration_bus"] = bus
+
+        # Wire bus to NeuronManager
+        if services.get("neuron_manager"):
+            services["neuron_manager"].set_bus(bus)
+
+        # Wire bus to ModuleRegistry
+        if services.get("module_registry"):
+            services["module_registry"].set_bus(bus)
+
+        # Initialize feedback loop (BrainGraph weight adjustments)
+        if services.get("brain_graph_service"):
+            feedback_loop = FeedbackLoop(services["brain_graph_service"], bus)
+            services["feedback_loop"] = feedback_loop
+        else:
+            services["feedback_loop"] = None
+
+        # Initialize integration API
+        from copilot_core.integration.api import init_integration_api
+        init_integration_api(bus, services.get("feedback_loop"))
+
+        _LOGGER.info("IntegrationBus initialized and wired to services")
+    except Exception:
+        _LOGGER.exception("Failed to init IntegrationBus")
+
     # Initialize Automation Creator
     try:
         services["automation_creator"] = AutomationCreator()
@@ -535,6 +565,10 @@ def register_blueprints(app: Flask, services: dict) -> None:
     
     # Register MCP REST API (standalone, absolute prefix /api/v1/mcp)
     app.register_blueprint(mcp_bp)
+
+    # Register Integration Bus API
+    from copilot_core.integration.api import integration_bp
+    app.register_blueprint(integration_bp)
     
     # Register PilotSuite Hub API (standalone, absolute prefix /api/v1/hub)
     from copilot_core.hub.api import hub_bp
