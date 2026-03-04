@@ -355,6 +355,29 @@
   .zone-status-badge.idle { background: #2a2a1a; color: var(--orange); }
   .zone-status-badge.disabled { background: #2a1a1a; color: var(--red); }
 
+  /* ── Zone Detail Modal Enhanced ───────────────────── */
+  .zd-section { margin-bottom: 16px; }
+  .zd-section-title { font-size: 0.78rem; font-weight: 600; color: var(--accent); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+  .zd-agg-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 6px; }
+  .zd-agg-chip { background: var(--surface2); border-radius: 8px; padding: 8px 10px; text-align: center; }
+  .zd-agg-chip .zd-agg-icon { font-size: 1.2rem; }
+  .zd-agg-chip .zd-agg-count { font-size: 1.1rem; font-weight: 700; }
+  .zd-agg-chip .zd-agg-label { font-size: 0.65rem; color: var(--muted); }
+  .zd-entity-list { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+  .zd-entity-tag { font-size: 0.7rem; background: var(--surface2); color: var(--text); padding: 2px 8px; border-radius: 6px; white-space: nowrap; }
+  .zd-scene-grid { display: flex; flex-wrap: wrap; gap: 6px; }
+  .zd-scene-chip { background: var(--surface2); border: 1px solid transparent; border-radius: 8px; padding: 6px 12px; cursor: pointer; transition: all 0.2s; font-size: 0.78rem; }
+  .zd-scene-chip:hover { border-color: var(--accent); background: #222260; }
+  .zd-scene-chip .sc-icon { margin-right: 4px; }
+  .zd-mood-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .zd-mood-item { text-align: center; }
+  .zd-mood-item .zd-mood-ring { width: 56px; height: 56px; border-radius: 50%; border: 3px solid var(--surface2); display: inline-flex; align-items: center; justify-content: center; font-size: 1.1rem; font-weight: 700; margin-bottom: 4px; position: relative; }
+  .zd-mood-item .zd-mood-label { font-size: 0.65rem; color: var(--muted); }
+  .zd-quick-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+  .zd-fav-select { background: var(--surface2); color: var(--text); border: 1px solid #444; border-radius: 6px; padding: 6px 10px; font-size: 0.8rem; width: 100%; margin-top: 6px; }
+  .zd-media-now { display: flex; align-items: center; gap: 10px; background: var(--surface2); border-radius: 8px; padding: 10px; margin-top: 6px; }
+  .zd-media-now .mnp-art { width: 40px; height: 40px; background: var(--surface); border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 1.3rem; }
+
   /* ── Keyboard Hint ──────────────────────────────── */
   .kbd-hint { display: inline-block; font-size: 0.6rem; color: var(--muted); background: var(--surface2); padding: 1px 4px; border-radius: 3px; margin-left: 4px; vertical-align: middle; }
 
@@ -620,7 +643,7 @@
 
 <!-- Zone Detail Modal -->
 <div class="modal-overlay" id="zone-modal" onclick="if(event.target===this)closeZoneModal()">
-  <div class="modal">
+  <div class="modal" style="max-width:720px;max-height:85vh;overflow-y:auto">
     <div class="modal-header">
       <h3 id="zone-modal-title">Zone</h3>
       <button class="modal-close" onclick="closeZoneModal()">&times;</button>
@@ -1471,32 +1494,209 @@ function renderZoneCards(zones) {
   }).join("");
 }
 
-function openZoneDetail(zoneId) {
+async function openZoneDetail(zoneId) {
   const z = dashboardZones.find(zz => zz.id === zoneId);
   if (!z) return;
   document.getElementById("zone-modal-title").innerHTML = `${z.icon || ZONE_ICONS[zoneId] || ''} ${z.name_de || zoneId}`;
-  let html = `<div style="margin-bottom:12px;font-size:0.82rem;color:var(--muted)">${z.name_en || ''} &middot; Priorit&auml;t ${z.priority || 0} &middot; ${z.entity_count || 0} Entit&auml;ten</div>`;
+  document.getElementById("zone-modal-content").innerHTML = '<div style="text-align:center;padding:24px;color:var(--muted)">Laden...</div>';
+  document.getElementById("zone-modal").classList.add("show");
 
-  // Load entity details from example config via dashboard data
-  const roles = z.roles || {};
-  // Show role summary with entity counts
-  for (const [role, count] of Object.entries(roles)) {
-    if (count === 0) continue;
-    html += `<div class="entity-group">
-      <h4>${ROLE_ICONS[role] || ''} ${role} (${count})</h4>`;
-    // We don't have entity IDs in the dashboard data, but we show counts
-    html += `<div class="entity-item">${count} Entit&auml;t${count > 1 ? 'en' : ''} zugewiesen</div>`;
-    html += `</div>`;
-  }
+  // Fetch detail, scenes, presets in parallel
+  const [detail, scenesResp, presetsResp] = await Promise.all([
+    fetchJSON(`/api/v1/zone/dashboard/${zoneId}`),
+    fetchJSON(`/api/v1/scenes?zone_id=${zoneId}`),
+    fetchJSON("/api/v1/scenes/presets"),
+  ]);
 
-  // Quick actions
-  html += `<div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap">
-    <button class="btn-sm btn-primary" onclick="askStyxAboutZone('${zoneId}')">&#x1F4AC; Im Chat fragen</button>
-    <button class="btn-sm btn-secondary" onclick="mediaGroupZone('${zoneId}')">&#x1F50A; Gruppieren</button>
+  const zd = (detail && detail.ok) ? detail.zone : null;
+  const scenes = scenesResp ? (scenesResp.scenes || []) : [];
+  const presets = presetsResp ? (presetsResp.presets || []) : [];
+  const entities = zd ? (zd.entities || {}) : (z.roles_entities || {});
+  const domainEnts = zd ? (zd.domain_entities || {}) : {};
+  const mood = zd ? zd.mood : null;
+  const entityIds = zd ? (zd.entity_ids || []) : [];
+  const quickActions = zd ? (zd.quick_actions || []) : [];
+
+  let html = '';
+
+  // ── Status Header ──
+  const status = zd ? zd.status : "idle";
+  const statusLabel = {active:"Aktiv",idle:"Idle",disabled:"Aus"}[status] || status;
+  const personCount = zd ? (zd.person_count || 0) : 0;
+  html += `<div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+    <span class="zone-status-badge ${status}">${statusLabel}</span>
+    <span style="font-size:0.8rem;color:var(--muted)">${personCount} Person${personCount !== 1 ? 'en' : ''} &middot; ${entityIds.length} Entit&auml;ten &middot; Priorit&auml;t ${z.priority || 0}</span>
   </div>`;
 
+  // ── Mood Rings ──
+  if (mood) {
+    const dims = [
+      {key:"comfort", label:"Komfort", color:"var(--green)"},
+      {key:"joy", label:"Freude", color:"var(--accent)"},
+      {key:"frugality", label:"Sparsamkeit", color:"var(--orange)"},
+    ];
+    html += '<div class="zd-section"><div class="zd-section-title">Stimmung</div><div class="zd-mood-grid">';
+    for (const d of dims) {
+      const pct = Math.round((mood[d.key] || 0) * 100);
+      const deg = Math.round(pct * 3.6);
+      html += `<div class="zd-mood-item">
+        <div class="zd-mood-ring" style="border-color:${d.color};background:conic-gradient(${d.color} ${deg}deg, var(--surface2) ${deg}deg)">${pct}%</div>
+        <div class="zd-mood-label">${d.label}</div>
+      </div>`;
+    }
+    html += '</div></div>';
+  }
+
+  // ── Domain Aggregates ──
+  const DOMAIN_ICONS = {light:"\u{1F4A1}",switch:"\u2B55",binary_sensor:"\u{1F440}",sensor:"\u{1F321}",climate:"\u2744\uFE0F",media_player:"\u{1F3B5}",cover:"\u{1F6AA}",person:"\u{1F464}",device_tracker:"\u{1F4F1}",fan:"\u{1F32C}",lock:"\u{1F512}",camera:"\u{1F4F7}",input_boolean:"\u2611\uFE0F"};
+  if (Object.keys(domainEnts).length > 0) {
+    html += '<div class="zd-section"><div class="zd-section-title">Entit&auml;ten nach Typ</div><div class="zd-agg-grid">';
+    for (const [dom, eids] of Object.entries(domainEnts)) {
+      html += `<div class="zd-agg-chip">
+        <div class="zd-agg-icon">${DOMAIN_ICONS[dom] || "\u2699\uFE0F"}</div>
+        <div class="zd-agg-count">${eids.length}</div>
+        <div class="zd-agg-label">${dom}</div>
+      </div>`;
+    }
+    html += '</div></div>';
+  }
+
+  // ── Entities by Role ──
+  if (Object.keys(entities).length > 0) {
+    html += '<div class="zd-section"><div class="zd-section-title">Entit&auml;ten nach Rolle</div>';
+    for (const [role, roleEnts] of Object.entries(entities)) {
+      const eids = Array.isArray(roleEnts) ? roleEnts : [];
+      if (eids.length === 0) continue;
+      html += `<div style="margin-bottom:8px"><span style="font-size:0.78rem;font-weight:600">${ROLE_ICONS[role] || ''} ${role} (${eids.length})</span>`;
+      html += '<div class="zd-entity-list">';
+      for (const eid of eids) {
+        const short = eid.split(".").pop();
+        html += `<span class="zd-entity-tag" title="${eid}">${short}</span>`;
+      }
+      html += '</div></div>';
+    }
+    html += '</div>';
+  }
+
+  // ── Scenes ──
+  html += '<div class="zd-section"><div class="zd-section-title">Szenen</div>';
+  html += '<div class="zd-scene-grid">';
+  for (const p of presets) {
+    html += `<div class="zd-scene-chip" onclick="applyPreset('${zoneId}','${p.preset_id}')" title="${p.description}"><span class="sc-icon">${p.icon ? p.icon.replace('mdi:','') : ''}</span>${p.name}</div>`;
+  }
+  for (const s of scenes) {
+    html += `<div class="zd-scene-chip" onclick="applyScene('${s.scene_id}')" title="Gespeichert: ${s.name}"><span class="sc-icon">\u2B50</span>${s.name}</div>`;
+  }
+  html += '</div>';
+  html += `<button class="btn-sm btn-secondary" style="margin-top:8px" onclick="saveZoneScene('${zoneId}','${z.name_de || zoneId}')">&#x1F4BE; Aktuelle Szene speichern</button>`;
+  html += '</div>';
+
+  // ── Media / Sonos Favorites ──
+  const hasMedia = entityIds.some(e => e.startsWith("media_player."));
+  if (hasMedia) {
+    html += '<div class="zd-section"><div class="zd-section-title">Medien &amp; Musikwolke</div>';
+    html += `<div id="zd-media-${zoneId}" style="color:var(--muted);font-size:0.8rem">Lade Medien...</div>`;
+    html += '</div>';
+  }
+
+  // ── Quick Actions ──
+  html += '<div class="zd-section"><div class="zd-section-title">Schnellaktionen</div><div class="zd-quick-actions">';
+  for (const a of quickActions) {
+    html += `<button class="btn-sm btn-secondary" onclick="executeQuickAction('${zoneId}','${a.action_id}','${a.service}')">${a.name}</button>`;
+  }
+  html += `<button class="btn-sm btn-primary" onclick="askStyxAboutZone('${zoneId}')">&#x1F4AC; Im Chat fragen</button>`;
+  html += `<button class="btn-sm btn-secondary" onclick="mediaGroupZone('${zoneId}')">&#x1F50A; Gruppieren</button>`;
+  html += '</div></div>';
+
   document.getElementById("zone-modal-content").innerHTML = html;
-  document.getElementById("zone-modal").classList.add("show");
+
+  // Async: load media state + favorites
+  if (hasMedia) {
+    loadZoneMedia(zoneId);
+  }
+}
+
+async function loadZoneMedia(zoneId) {
+  const el = document.getElementById(`zd-media-${zoneId}`);
+  if (!el) return;
+  const [stateResp, favResp] = await Promise.all([
+    fetchJSON(`/api/v1/media/zones/${zoneId}/state`),
+    fetchJSON(`/api/v1/media/zones/${zoneId}/favorites`),
+  ]);
+  let html = '';
+
+  // Now Playing
+  const players = stateResp ? (stateResp.players || []) : [];
+  const playing = players.find(p => p.state === "playing");
+  if (playing) {
+    html += `<div class="zd-media-now">
+      <div class="mnp-art">&#x1F3B6;</div>
+      <div>
+        <div style="font-weight:600;font-size:0.85rem">${playing.media_title || 'Unbekannt'}</div>
+        <div style="font-size:0.75rem;color:var(--muted)">${playing.media_artist || ''} &middot; ${playing.source || ''}</div>
+      </div>
+    </div>`;
+  } else {
+    html += '<div style="font-size:0.8rem;color:var(--muted);margin-bottom:6px">Keine Wiedergabe aktiv</div>';
+  }
+
+  // Favorites dropdown
+  const favs = (favResp && favResp.ok) ? (favResp.favorites || []) : [];
+  if (favs.length > 0) {
+    html += `<select class="zd-fav-select" onchange="selectZoneSource('${zoneId}',this.value)">
+      <option value="">Favorit / Quelle w&auml;hlen...</option>`;
+    for (const f of favs) {
+      const sel = playing && playing.source === f ? ' selected' : '';
+      html += `<option value="${f}"${sel}>${f}</option>`;
+    }
+    html += '</select>';
+  }
+
+  el.innerHTML = html;
+}
+
+async function applyScene(sceneId) {
+  const r = await postJSON(`/api/v1/scenes/${sceneId}/apply`, {});
+  showToast(r && r.success ? "Szene angewendet" : "Fehler beim Anwenden");
+}
+
+async function applyPreset(zoneId, presetId) {
+  showToast(`Preset "${presetId}" f\u00FCr ${zoneId} (Demo)`);
+}
+
+async function saveZoneScene(zoneId, zoneName) {
+  const name = prompt("Name f\u00FCr die Szene:", `${zoneName} — ${new Date().toLocaleString("de-DE")}`);
+  if (!name) return;
+  // Get zone entity IDs
+  const z = dashboardZones.find(zz => zz.id === zoneId);
+  const entityIds = [];
+  if (z && z.roles_entities) {
+    for (const eids of Object.values(z.roles_entities)) {
+      if (Array.isArray(eids)) entityIds.push(...eids);
+    }
+  }
+  // Fallback: use zone dashboard data
+  if (entityIds.length === 0 && zoneDashboardData) {
+    const zd = (zoneDashboardData.zones || []).find(zz => zz.zone_id === zoneId);
+    if (zd && zd.entity_ids) entityIds.push(...zd.entity_ids);
+  }
+  const r = await postJSON("/api/v1/scenes/create", {
+    zone_id: zoneId, zone_name: zoneName, name: name, entity_ids: entityIds,
+  });
+  showToast(r && r.success ? `Szene "${name}" gespeichert` : "Fehler: " + (r ? r.error : "unbekannt"));
+}
+
+async function selectZoneSource(zoneId, source) {
+  if (!source) return;
+  const r = await postJSON(`/api/v1/media/zones/${zoneId}/select-source`, {source});
+  showToast(r && r.ok ? `Quelle: ${source}` : "Fehler beim Wechseln");
+}
+
+async function executeQuickAction(zoneId, actionId, service) {
+  const r = await postJSON("/api/v1/zone/dashboard/quick-action", {
+    zone_id: zoneId, action_id: actionId, service: service,
+  });
+  showToast(r && r.ok ? "Aktion ausgef\u00FChrt" : "Fehler");
 }
 
 function closeZoneModal() {

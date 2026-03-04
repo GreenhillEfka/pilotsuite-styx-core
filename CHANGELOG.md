@@ -2,6 +2,51 @@
 
 Alle wesentlichen Änderungen am PilotSuite Styx Core werden in dieser Datei dokumentiert.
 
+## [v13.4.0] - 2026-03-04
+
+### Styx Dashboard — Enhanced Zone Detail, Scenes, Sonos Favorites, Brain Viz
+
+#### Zone Detail Modal (komplett neu)
+- **Entity-Statistiken**: Aggregierte Darstellung nach Domain (light, sensor, climate, media_player, etc.) mit Icons und Counts
+- **Entity-Liste nach Rolle**: Alle Entity-IDs pro Rolle (lights, motion, media, climate, ...) mit Klick-Tags
+- **Mood-Ringe**: Conic-Gradient Visualisierung fuer Komfort, Freude, Sparsamkeit (0-100%)
+- **Szenen-Sektion**: 8 Built-in Presets (Morgen, Tag, Abend, Nacht, Film, Party, Konzentration, Abwesend) + gespeicherte Szenen mit Apply-Button
+- **Szene speichern**: Button zum Erfassen des aktuellen Zonenzustands mit Benennung
+- **Medien & Musikwolke**: Now-Playing Anzeige, Sonos Favorites/Source-Auswahl Dropdown
+- **Quick-Actions**: Licht an/aus, Komfort, Stimmung, Zone Toggle direkt im Modal
+- **Async Loading**: Zone-Detail wird asynchron per API geladen, nicht nur aus Cache
+
+#### Sonos Favorites Endpoint (NEU)
+- `GET /api/v1/media/zones/<zone_id>/favorites` — Source-Liste aller Player einer Zone
+- `POST /api/v1/media/zones/<zone_id>/select-source` — Source/Favorit auf allen Playern setzen
+- `MediaZoneManager.get_zone_favorites()` — HA source_list Attribut abfragen
+- `MediaZoneManager.select_source()` — Source auf Zone-Playern setzen
+
+#### Brain Visualization (Enhanced)
+- **3-Layer Neural Viz**: Context, State, Mood Layer mit CSS-Gradient Hintergruenden
+- **Signal-Partikel**: Animierte Partikel fliessen entlang Bezier-Kurven zwischen Neuronen
+- **Firing Animations**: Pulse-Ringe und Glow-Effekte bei hochaktiven Neuronen
+- **Stats Panel**: 6 Echtzeit-Metriken (Neuronen, Aktiv, Feuern, Synapsen, Mood, Signalstaerke)
+
+#### HomeKit QR-Codes (NEU im Dashboard)
+- **Zonen-Tab**: HomeKit-Sektion mit QR-Code-Karten pro Zone
+- **Setup Codes**: Deterministische QR-Code Generierung mit SHA256
+- **Toggle**: HomeKit pro Zone ein-/ausschalten
+
+#### Zone Dashboard API Fix
+- **Zone-ID Normalisierung**: Lookup funktioniert mit/ohne `zone:` Prefix (war broken)
+- **Domain Aggregates**: Neue `domain_entities` Map im Zone-Detail-Response
+- **Szenen-Integration**: Zone-Detail liefert zugehoerige Szenen mit
+- **zone_dashboard_bp**: War NICHT in core_setup.py registriert — jetzt gefixt
+
+#### Versions-Harmonisierung
+- Alle VERSION-Dateien (3x), config.yaml, manifest.json, README, openapi.yaml auf 13.4.0 aligned
+
+#### Test Coverage
+- **3569+ Tests** passed, 0 neue Failures
+
+---
+
 ## [v13.3.0] - 2026-03-04
 
 ### Zone Automation — Praesenzabhaengige Licht- & Musiksteuerung, Entity-Management

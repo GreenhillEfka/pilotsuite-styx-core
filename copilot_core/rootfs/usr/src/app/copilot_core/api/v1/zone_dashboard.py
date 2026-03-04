@@ -429,32 +429,66 @@ def execute_quick_action():
 @zone_dashboard_bp.route("/<zone_id>", methods=["GET"])
 @require_token
 def get_zone_detail(zone_id: str):
-    """Get detailed data for a single zone."""
-    zone_id = zone_id if zone_id.startswith("zone:") else f"zone:{zone_id}"
-    
+    """Get detailed data for a single zone including scenes and aggregates."""
     zones = _get_habitus_zones()
-    zone = next((z for z in zones if z.get("zone_id") == zone_id), None)
-    
+
+    # Try matching with and without zone: prefix
+    bare_id = zone_id.removeprefix("zone:")
+    prefixed_id = f"zone:{bare_id}"
+    zone = next(
+        (z for z in zones if z.get("zone_id") in (bare_id, prefixed_id, zone_id)),
+        None,
+    )
+
     if zone is None:
         return jsonify({"ok": False, "error": "Zone not found"}), 404
-    
+
+    zid = zone.get("zone_id", bare_id)
+    entities_by_role = zone.get("entities", {})
+    entity_ids = zone.get("entity_ids", [])
+
+    # Build domain aggregates
+    domain_agg: Dict[str, List[str]] = {}
+    for eid in entity_ids:
+        domain = eid.split(".")[0] if "." in eid else "other"
+        domain_agg.setdefault(domain, []).append(eid)
+    for role_entities in entities_by_role.values():
+        if isinstance(role_entities, list):
+            for eid in role_entities:
+                domain = eid.split(".")[0] if "." in eid else "other"
+                if eid not in domain_agg.get(domain, []):
+                    domain_agg.setdefault(domain, []).append(eid)
+
+    # Fetch scenes for this zone
+    scenes_data = []
+    try:
+        from copilot_core.api.v1.scenes import _scene_cache
+        scenes_data = [
+            s for s in _scene_cache.values()
+            if s.get("zone_id") in (zid, prefixed_id, bare_id)
+        ]
+    except ImportError:
+        pass
+
     zone_data = {
-        "zone_id": zone.get("zone_id"),
+        "zone_id": zid,
         "name": zone.get("name"),
         "zone_type": zone.get("zone_type", "room"),
         "status": _get_zone_status(zone),
         "person_count": _get_person_count(zone),
-        "entity_count": len(zone.get("entity_ids", [])),
+        "entity_count": len(entity_ids),
         "entity_counts_by_domain": _get_entity_count(zone),
-        "mood": _get_zone_mood(zone_id),
+        "domain_entities": domain_agg,
+        "mood": _get_zone_mood(zid),
         "quick_actions": _generate_quick_actions(zone),
-        "entity_ids": zone.get("entity_ids", []),
-        "entities": zone.get("entities", {}),
+        "entity_ids": entity_ids,
+        "entities": entities_by_role,
+        "scenes": scenes_data,
         "metadata": zone.get("metadata", {}),
         "enabled": zone.get("enabled", True),
         "updated_at": zone.get("updated_at"),
     }
-    
+
     return jsonify({
         "ok": True,
         "zone": zone_data,

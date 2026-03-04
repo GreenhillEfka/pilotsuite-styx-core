@@ -10,10 +10,14 @@
 - **Smart Scheduling** - Optimiert Geräteeinsatz (Waschmaschine, Wallbox, etc.)
 - **Echtzeit-Dashboard** - 10 Habituszonen mit Live-Daten
 - **WebSocket Support** - Sofortige Updates ohne Polling
-- **Styx Dashboard SPA** - 8-Tab Dashboard mit Zonen, Musikwolke, Vorschläge, KI/LLM, Module, Neuronen, Chat
+- **Styx Dashboard SPA** - 9-Tab Dashboard mit Zonen, Musikwolke, Vorschläge, Automation, KI/LLM, Module, Neuronen, Chat
 - **Musikwolke (Sonos)** - Audio-follows-user mit Group/Ungroup, Volume-Slider, Play/Pause
 - **Vorschlagssystem** - Muster-basierte Automationsvorschläge mit Konfidenz-Score und Accept/Reject/Snooze
-- **Keyboard Shortcuts** - 1-8 für Tabs, Escape für Modal, r für Refresh
+- **Szenen-Management** - 8 Presets + benutzerdefinierte Szenen pro Zone mit Save/Apply
+- **Sonos Favorites** - Source-Auswahl pro Zone, Musikwolke-Integration
+- **Brain Visualization** - 3-Layer Neural-Viz mit Signal-Partikeln und Firing-Animationen
+- **HomeKit QR-Codes** - Automatische HomeKit-Bridge pro Habituszone mit QR-Code-Pairing
+- **Keyboard Shortcuts** - 1-9 für Tabs, Escape für Modal, r für Refresh
 - **Zero-Config Example** - Vollständige Beispielkonfiguration für alle 10 Zonen mit echten HA-Entitäten
 
 ## 📦 Installation
@@ -77,6 +81,6 @@ Siehe [Releases](https://github.com/GreenhillEfka/pilotsuite-styx-ha/releases) f
 
 ---
 
-**Aktuelle Version:** v13.2.0
+**Aktuelle Version:** v13.4.0
 **Letztes Update:** 2026-03-04
 **Home Assistant:** 2024.1.0+
