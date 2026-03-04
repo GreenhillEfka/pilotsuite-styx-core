@@ -239,6 +239,33 @@
   .suggestion-card.snoozed { opacity: 0.6; border-left-color: var(--muted); }
   .sug-pattern { font-family: monospace; font-size: 0.72rem; color: var(--purple); background: var(--surface2); padding: 4px 8px; border-radius: 4px; margin-top: 6px; word-break: break-all; }
 
+  /* ── Automation Config ───────────────────────────── */
+  .auto-zone-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; margin-top: 12px; }
+  .auto-zone-card { background: var(--surface); border-radius: var(--radius); padding: 16px; border: 1px solid var(--surface2); }
+  .auto-zone-card h3 { font-size: 1rem; margin-bottom: 12px; }
+  .auto-section { margin-bottom: 14px; }
+  .auto-section-title { font-size: 0.78rem; font-weight: 600; color: var(--accent); margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+  .slider-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 0.78rem; }
+  .slider-row label { min-width: 140px; color: var(--muted); }
+  .slider-row input[type="range"] { flex: 1; accent-color: var(--accent); height: 6px; }
+  .slider-row .slider-val { min-width: 40px; text-align: right; font-variant-numeric: tabular-nums; color: var(--text); }
+  .toggle-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 0.78rem; }
+  .toggle-switch { position: relative; width: 36px; height: 20px; }
+  .toggle-switch input { opacity: 0; width: 0; height: 0; }
+  .toggle-switch .slider { position: absolute; cursor: pointer; inset: 0; background: var(--surface2); border-radius: 20px; transition: 0.3s; }
+  .toggle-switch .slider::before { content: ""; position: absolute; height: 16px; width: 16px; left: 2px; bottom: 2px; background: var(--muted); border-radius: 50%; transition: 0.3s; }
+  .toggle-switch input:checked + .slider { background: var(--accent); }
+  .toggle-switch input:checked + .slider::before { transform: translateX(16px); background: #fff; }
+  .entity-list { margin-top: 8px; }
+  .entity-item { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 0.78rem; border-bottom: 1px solid var(--surface2); }
+  .entity-item:last-child { border-bottom: none; }
+  .entity-role-badge { font-size: 0.65rem; padding: 2px 6px; border-radius: 4px; background: var(--surface2); color: var(--accent); }
+  .entity-tag { font-size: 0.6rem; padding: 1px 5px; border-radius: 3px; margin-left: 2px; }
+  .entity-add-row { display: flex; gap: 6px; margin-top: 8px; }
+  .entity-add-row input { flex: 1; padding: 6px 10px; font-size: 0.78rem; background: var(--surface2); border: 1px solid var(--surface2); border-radius: 6px; color: var(--text); }
+  .entity-add-row button { padding: 6px 12px; font-size: 0.78rem; background: var(--accent); color: #000; border: none; border-radius: 6px; cursor: pointer; }
+  .entity-remove-btn { background: none; border: none; color: var(--red); cursor: pointer; font-size: 0.9rem; padding: 0 4px; }
+
   /* ── Keyboard Hint ──────────────────────────────── */
   .kbd-hint { display: inline-block; font-size: 0.6rem; color: var(--muted); background: var(--surface2); padding: 1px 4px; border-radius: 3px; margin-left: 4px; vertical-align: middle; }
 
@@ -279,10 +306,11 @@
     <div class="tab" data-tab="zones">&#x1F3E0; Zonen <span class="kbd-hint">2</span></div>
     <div class="tab" data-tab="media">&#x1F3B5; Musikwolke <span class="kbd-hint">3</span></div>
     <div class="tab" data-tab="suggestions">&#x1F4A1; Vorschlaege <span class="kbd-hint">4</span></div>
-    <div class="tab" data-tab="llm">&#x1F916; KI / LLM <span class="kbd-hint">5</span></div>
-    <div class="tab" data-tab="modules">&#x1F527; Module <span class="kbd-hint">6</span></div>
-    <div class="tab" data-tab="neurons">&#x26A1; Neuronen <span class="kbd-hint">7</span></div>
-    <div class="tab" data-tab="chat">&#x1F4AC; Chat <span class="kbd-hint">8</span></div>
+    <div class="tab" data-tab="automation">&#x2699;&#xFE0F; Automation <span class="kbd-hint">5</span></div>
+    <div class="tab" data-tab="llm">&#x1F916; KI / LLM <span class="kbd-hint">6</span></div>
+    <div class="tab" data-tab="modules">&#x1F527; Module <span class="kbd-hint">7</span></div>
+    <div class="tab" data-tab="neurons">&#x26A1; Neuronen <span class="kbd-hint">8</span></div>
+    <div class="tab" data-tab="chat">&#x1F4AC; Chat <span class="kbd-hint">9</span></div>
   </div>
 
   <!-- ═══════════════ TAB: Overview ═══════════════ -->
@@ -426,6 +454,24 @@
     </div>
   </div>
 
+  <!-- ═══════════════ TAB: Automation ═══════════════ -->
+  <div class="tab-content" id="tab-automation">
+    <div class="card wide">
+      <h2><span class="icon" style="background:#1a2a3a">&#x2699;&#xFE0F;</span> Zone Automation</h2>
+      <p style="color:var(--muted);font-size:0.82rem;margin-bottom:12px">
+        Praesenzabhaengige Licht- und Musiksteuerung pro Zone. Slider fuer Verzoegerung, Helligkeit, Daempfung.
+      </p>
+      <div id="automation-zones" class="auto-zone-grid"></div>
+    </div>
+    <div class="card wide" style="margin-top:16px">
+      <h2><span class="icon" style="background:#2a1a3a">&#x1F3F7;&#xFE0F;</span> Entitaeten &amp; Tags</h2>
+      <p style="color:var(--muted);font-size:0.82rem;margin-bottom:12px">
+        Entitaeten zu Zonen hinzufuegen/entfernen. Rollen und Tags zuweisen.
+      </p>
+      <div id="entity-management"></div>
+    </div>
+  </div>
+
   <!-- ═══════════════ TAB: Chat ═══════════════ -->
   <div class="tab-content" id="tab-chat">
     <div class="card wide">
@@ -524,7 +570,7 @@ try {
 } catch(e) {}
 
 // Keyboard shortcuts: 1-8 for tabs, Escape for modal
-const TAB_KEYS = ['overview','zones','media','suggestions','llm','modules','neurons','chat'];
+const TAB_KEYS = ['overview','zones','media','suggestions','automation','llm','modules','neurons','chat'];
 document.addEventListener('keydown', (e) => {
   // Don't capture when typing in input/textarea
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
@@ -1478,6 +1524,147 @@ function renderSummaryStrip(dash) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// Automation Tab
+// ═══════════════════════════════════════════════════════════════
+
+let automationData = null;
+
+async function loadAutomation() {
+  const data = await fetchJSON("/api/v1/zone-automation/dashboard");
+  if (!data || !data.ok) return;
+  automationData = data;
+  renderAutomationZones(data.zones || []);
+  renderEntityManagement(data.zones || []);
+}
+
+function renderAutomationZones(zones) {
+  const el = document.getElementById("automation-zones");
+  if (!el) return;
+  if (!zones.length) { el.innerHTML = '<p style="color:var(--muted)">Keine Zonen konfiguriert. Importiere Beispieldaten:</p><button onclick="importExampleEntities()" style="margin-top:8px;padding:8px 16px;background:var(--accent);color:#000;border:none;border-radius:6px;cursor:pointer">Beispielkonfiguration importieren</button>'; return; }
+  el.innerHTML = zones.map(z => {
+    const c = z.config || {};
+    const lc = c.light || {};
+    const mc = c.music || {};
+    const st = z.state || {};
+    const zid = z.zone_id;
+    return `<div class="auto-zone-card" id="auto-zone-${zid}">
+      <h3>${c.zone_name || zid} ${st.occupied ? '<span style="color:var(--green)">&#x25CF; Besetzt</span>' : '<span style="color:var(--muted)">&#x25CB;</span>'}</h3>
+      <div class="auto-section">
+        <div class="auto-section-title">&#x1F4A1; Lichtautomatisierung
+          <label class="toggle-switch"><input type="checkbox" ${lc.enabled ? 'checked' : ''} onchange="toggleAutoLight('${zid}',this.checked)"><span class="slider"></span></label>
+        </div>
+        ${lc.enabled ? `
+        <div class="slider-row"><label>Praesenz-Delay</label><input type="range" min="0" max="120" value="${lc.presence_delay_s||5}" onchange="updateLightConfig('${zid}','presence_delay_s',+this.value);this.nextElementSibling.textContent=this.value+'s'"><span class="slider-val">${lc.presence_delay_s||5}s</span></div>
+        <div class="slider-row"><label>Abschalt-Delay</label><input type="range" min="0" max="600" step="10" value="${lc.absence_delay_s||120}" onchange="updateLightConfig('${zid}','absence_delay_s',+this.value);this.nextElementSibling.textContent=this.value+'s'"><span class="slider-val">${lc.absence_delay_s||120}s</span></div>
+        <div class="slider-row"><label>Raumausleuchtung</label><input type="range" min="0" max="100" value="${lc.brightness_target_pct||80}" onchange="updateLightConfig('${zid}','brightness_target_pct',+this.value);this.nextElementSibling.textContent=this.value+'%'"><span class="slider-val">${lc.brightness_target_pct||80}%</span></div>
+        <div class="slider-row"><label>Min. Helligkeit</label><input type="range" min="0" max="100" value="${lc.brightness_min_pct||0}" onchange="updateLightConfig('${zid}','brightness_min_pct',+this.value);this.nextElementSibling.textContent=this.value+'%'"><span class="slider-val">${lc.brightness_min_pct||0}%</span></div>
+        <div class="slider-row"><label>Daempfung (Hysterese)</label><input type="range" min="0" max="50" value="${lc.dampening_band_pct||10}" onchange="updateLightConfig('${zid}','dampening_band_pct',+this.value);this.nextElementSibling.textContent=this.value+'%'"><span class="slider-val">${lc.dampening_band_pct||10}%</span></div>
+        <div class="toggle-row"><label class="toggle-switch"><input type="checkbox" ${lc.lux_outdoor_compensation ? 'checked' : ''} onchange="updateLightConfig('${zid}','lux_outdoor_compensation',this.checked)"><span class="slider"></span></label><span style="color:var(--muted);font-size:0.78rem">Innen/Aussen-Kompensation</span></div>
+        ` : '<p style="color:var(--muted);font-size:0.75rem;margin-top:4px">Deaktiviert</p>'}
+      </div>
+      <div class="auto-section">
+        <div class="auto-section-title">&#x1F3B5; Musikwolke
+          <label class="toggle-switch"><input type="checkbox" ${mc.enabled ? 'checked' : ''} onchange="toggleAutoMusic('${zid}',this.checked)"><span class="slider"></span></label>
+        </div>
+        ${mc.enabled ? `
+        <div class="toggle-row"><label class="toggle-switch"><input type="checkbox" ${mc.presence_auto_play ? 'checked' : ''} onchange="updateMusicConfig('${zid}','presence_auto_play',this.checked)"><span class="slider"></span></label><span style="color:var(--muted);font-size:0.78rem">Auto-Play bei Praesenz</span></div>
+        <div class="slider-row"><label>Praesenz-Delay</label><input type="range" min="0" max="120" value="${mc.presence_delay_s||10}" onchange="updateMusicConfig('${zid}','presence_delay_s',+this.value);this.nextElementSibling.textContent=this.value+'s'"><span class="slider-val">${mc.presence_delay_s||10}s</span></div>
+        <div class="slider-row"><label>Pause-Delay</label><input type="range" min="0" max="600" step="10" value="${mc.absence_pause_s||300}" onchange="updateMusicConfig('${zid}','absence_pause_s',+this.value);this.nextElementSibling.textContent=this.value+'s'"><span class="slider-val">${mc.absence_pause_s||300}s</span></div>
+        <div class="slider-row"><label>Standard-Lautstaerke</label><input type="range" min="0" max="100" value="${mc.default_volume_pct||30}" onchange="updateMusicConfig('${zid}','default_volume_pct',+this.value);this.nextElementSibling.textContent=this.value+'%'"><span class="slider-val">${mc.default_volume_pct||30}%</span></div>
+        <div class="toggle-row"><label class="toggle-switch"><input type="checkbox" ${mc.follow_mode ? 'checked' : ''} onchange="updateMusicConfig('${zid}','follow_mode',this.checked)"><span class="slider"></span></label><span style="color:var(--muted);font-size:0.78rem">Follow-Modus (Musik folgt)</span></div>
+        ` : '<p style="color:var(--muted);font-size:0.75rem;margin-top:4px">Deaktiviert</p>'}
+      </div>
+      ${st.lights_on ? `<div style="font-size:0.75rem;color:var(--green);margin-top:4px">&#x1F4A1; Licht AN (${st.current_brightness_pct}%)</div>` : ''}
+      ${st.music_playing ? `<div style="font-size:0.75rem;color:var(--accent);margin-top:2px">&#x1F3B5; Musik laeuft</div>` : ''}
+    </div>`;
+  }).join("");
+}
+
+function renderEntityManagement(zones) {
+  const el = document.getElementById("entity-management");
+  if (!el) return;
+  if (!zones.length) { el.innerHTML = ''; return; }
+  let html = '<div class="auto-zone-grid">';
+  for (const z of zones) {
+    const zid = z.zone_id;
+    const entities = z.config?.entities || [];
+    html += `<div class="auto-zone-card">
+      <h3>${z.config?.zone_name || zid}</h3>
+      <div class="entity-list" id="entity-list-${zid}">Lade...</div>
+      <div class="entity-add-row">
+        <input type="text" id="entity-input-${zid}" placeholder="entity_id (z.B. light.xyz)">
+        <button onclick="addEntityToZone('${zid}')">+</button>
+      </div>
+    </div>`;
+  }
+  html += '</div>';
+  el.innerHTML = html;
+  // Load entities for each zone
+  zones.forEach(z => loadZoneEntities(z.zone_id));
+}
+
+async function loadZoneEntities(zoneId) {
+  const data = await fetchJSON(`/api/v1/zone-automation/zones/${zoneId}/entities?by_role=true`);
+  const el = document.getElementById(`entity-list-${zoneId}`);
+  if (!el || !data || !data.ok) { if (el) el.innerHTML = '<span style="color:var(--muted);font-size:0.75rem">Keine Entitaeten</span>'; return; }
+  const byRole = data.entities_by_role || {};
+  let html = '';
+  for (const [role, entities] of Object.entries(byRole)) {
+    html += `<div style="margin-bottom:6px"><span class="entity-role-badge">${role}</span></div>`;
+    for (const e of entities) {
+      const tags = (e.tags || []).map(t => `<span class="entity-tag" style="background:${getTagColor(t)}">${t}</span>`).join('');
+      html += `<div class="entity-item"><span style="flex:1">${e.entity_id}</span>${tags}<button class="entity-remove-btn" onclick="removeEntityFromZone('${zoneId}','${e.entity_id}')">&times;</button></div>`;
+    }
+  }
+  if (!html) html = '<span style="color:var(--muted);font-size:0.75rem">Keine Entitaeten</span>';
+  el.innerHTML = html;
+}
+
+function getTagColor(tag) {
+  const colors = {licht:'#fbbf2433',praesenz:'#a78bfa33',medien:'#60a5fa33',klima:'#34d39933',sensor:'#f472b633',rollladen:'#fb923c33',energie:'#4ade8033',styx:'#8b5cf633'};
+  return colors[tag] || '#6366f133';
+}
+
+async function updateLightConfig(zoneId, key, value) {
+  await postJSON(`/api/v1/zone-automation/zones/${zoneId}/config`, {light: {[key]: value}});
+}
+
+async function updateMusicConfig(zoneId, key, value) {
+  await postJSON(`/api/v1/zone-automation/zones/${zoneId}/config`, {music: {[key]: value}});
+}
+
+async function toggleAutoLight(zoneId, enabled) {
+  await postJSON(`/api/v1/zone-automation/zones/${zoneId}/override`, {light_enabled: enabled});
+  loadAutomation();
+}
+
+async function toggleAutoMusic(zoneId, enabled) {
+  await postJSON(`/api/v1/zone-automation/zones/${zoneId}/override`, {music_enabled: enabled});
+  loadAutomation();
+}
+
+async function addEntityToZone(zoneId) {
+  const input = document.getElementById(`entity-input-${zoneId}`);
+  if (!input || !input.value.trim()) return;
+  await postJSON(`/api/v1/zone-automation/zones/${zoneId}/entities`, {entity_id: input.value.trim()});
+  input.value = '';
+  loadZoneEntities(zoneId);
+}
+
+async function removeEntityFromZone(zoneId, entityId) {
+  await fetch(BASE + `/api/v1/zone-automation/zones/${zoneId}/entities/${entityId}`, {method:'DELETE', headers: HEADERS});
+  loadZoneEntities(zoneId);
+}
+
+async function importExampleEntities() {
+  const result = await postJSON('/api/v1/zone-automation/import', {source: 'example'});
+  if (result && result.ok) {
+    showToast(`${result.imported} Entitaeten importiert`);
+    loadAutomation();
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
 // Main Load
 // ═══════════════════════════════════════════════════════════════
 
@@ -1511,7 +1698,7 @@ async function loadDashboard() {
 }
 
 async function loadAll() {
-  await Promise.all([loadDashboard(), loadLLM()]);
+  await Promise.all([loadDashboard(), loadLLM(), loadAutomation()]);
 }
 
 // Initialize

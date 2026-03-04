@@ -2,6 +2,63 @@
 
 Alle wesentlichen Änderungen am PilotSuite Styx Core werden in dieser Datei dokumentiert.
 
+## [v13.3.0] - 2026-03-04
+
+### Zone Automation — Praesenzabhaengige Licht- & Musiksteuerung, Entity-Management
+
+#### Praesenzabhaengige Lichtsteuerung
+- **Presence Delay Slider** (0-120s): Konfigurierbare Verzoegerung vor Lichtaktivierung
+- **Absence Delay Slider** (0-600s): Konfigurierbare Verzoegerung vor Abschaltung
+- **Raumausleuchtung** (0-100%): Ziel-Helligkeit mit Indoor/Outdoor-Kompensation
+- **Min. Helligkeit** (0-100%): Mindesthelligkeit wenn Licht aktiv
+- **Hysterese/Daempfung** (0-50%): Dead-Band zur Vermeidung von Flackern bei Wolkendurchzug
+- **Innen/Aussen-Kompensation**: Automatische Anpassung basierend auf Aussen-Lux
+- **Override Switch**: Lichtautomatisierung pro Zone aktivieren/deaktivieren
+
+#### Praesenzabhaengige Musikwolke
+- **Auto-Play bei Praesenz**: Musik startet automatisch bei Zonenbetreten
+- **Presence Delay Slider** (0-120s): Verzoegerung vor Musikstart
+- **Pause Delay Slider** (0-600s): Verzoegerung vor Pause bei Abwesenheit
+- **Standard-Lautstaerke** (0-100%): Konfigurierbare Startlautstaerke
+- **Follow-Modus**: Musik folgt automatisch zwischen Zonen
+- **Override Switch**: Musikautomatisierung pro Zone aktivieren/deaktivieren
+
+#### Entity-Management & Tag-System
+- **Entitaeten hinzufuegen/entfernen**: Pro Zone ueber Dashboard oder API
+- **Auto-Rollenerkennung**: Domain + Name-basierte Rollenzuweisung (lights, motion, media, etc.)
+- **Auto-Tagging**: Automatische Tags basierend auf Entity-Name (licht, praesenz, klima, etc.)
+- **13 Tag-Definitionen**: licht, praesenz, bewegung, medien, klima, sensor, rollladen, schloss, tuer, fenster, energie, sicherheit, styx
+- **11 Entity-Rollen**: lights, motion, media, climate, sensors, cover, lock, door, window, energy, other
+- **Import aus Beispielkonfiguration**: Alle 10 Zonen mit ~80 Entitaeten importierbar
+- **Suche**: Entitaeten ueber alle Zonen durchsuchbar
+
+#### Styx Dashboard — Neuer Automation-Tab (Tab 5)
+- **Zone Automation Cards**: Pro-Zone Konfiguration mit Slider-UI
+- **Toggle Switches**: Aktivieren/Deaktivieren von Licht- und Musikautomatisierung
+- **Entity-Management UI**: Entitaeten hinzufuegen/entfernen mit Rollen-Badges und Tag-Anzeige
+- **Beispiel-Import Button**: Ein-Klick Import der Beispielkonfiguration
+- **9 Tabs**: Overview, Zonen, Musikwolke, Vorschlaege, **Automation (NEU)**, KI/LLM, Module, Neuronen, Chat
+
+#### REST API — 16 neue Endpoints
+- `GET /api/v1/zone-automation/dashboard` — Automation Dashboard
+- `GET/POST /api/v1/zone-automation/zones/<id>/config` — Zone Config CRUD
+- `POST /api/v1/zone-automation/zones/<id>/override` — Toggle Override
+- `POST /api/v1/zone-automation/zones/<id>/presence` — Presence Event
+- `POST /api/v1/zone-automation/zones/<id>/brightness` — Brightness Update
+- `GET/POST/DELETE /api/v1/zone-automation/zones/<id>/entities` — Entity CRUD
+- `POST /api/v1/zone-automation/zones/<id>/entities/<eid>/tags` — Tag Update
+- `POST /api/v1/zone-automation/zones/<id>/entities/<eid>/role` — Role Update
+- `GET /api/v1/zone-automation/tags` — Tag Definitionen
+- `GET /api/v1/zone-automation/roles` — Rollen-Liste
+- `GET /api/v1/zone-automation/entities/search` — Entity-Suche
+- `POST /api/v1/zone-automation/import` — Import
+
+#### Test Coverage
+- **3720+ Tests** passed, 0 failed
+- **38 neue Tests** fuer Zone Automation Controller + API
+
+---
+
 ## [v13.2.0] - 2026-03-04
 
 ### Styx Dashboard — Zonen, Musikwolke & Vorschlagssystem (3 Iterationen)

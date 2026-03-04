@@ -1,0 +1,315 @@
+"""
+Zone Automation API — Presence-based light & music control, entity management.
+
+Blueprint prefix: /api/v1/zone-automation
+
+Endpoints:
+    GET  /api/v1/zone-automation/dashboard              — Full automation dashboard
+    GET  /api/v1/zone-automation/zones/<zone_id>         — Zone state + config
+    POST /api/v1/zone-automation/zones/<zone_id>/config   — Update zone config (light/music sliders)
+    POST /api/v1/zone-automation/zones/<zone_id>/presence  — Report presence event
+    POST /api/v1/zone-automation/zones/<zone_id>/brightness — Report brightness update
+    POST /api/v1/zone-automation/zones/<zone_id>/override   — Toggle override switch
+    GET  /api/v1/zone-automation/zones/<zone_id>/entities   — List zone entities
+    POST /api/v1/zone-automation/zones/<zone_id>/entities   — Add entity to zone
+    DELETE /api/v1/zone-automation/zones/<zone_id>/entities/<entity_id> — Remove entity
+    POST /api/v1/zone-automation/zones/<zone_id>/entities/<entity_id>/tags — Update entity tags
+    POST /api/v1/zone-automation/zones/<zone_id>/entities/<entity_id>/role — Update entity role
+    GET  /api/v1/zone-automation/tags                    — List tag definitions
+    GET  /api/v1/zone-automation/roles                   — List role definitions
+    GET  /api/v1/zone-automation/entities/search         — Search entities
+    POST /api/v1/zone-automation/import                  — Import from example config
+"""
+
+from __future__ import annotations
+
+import logging
+from typing import Any, Optional
+
+from flask import Blueprint, jsonify, request
+
+from copilot_core.api.security import require_token
+
+_LOGGER = logging.getLogger(__name__)
+
+zone_automation_bp = Blueprint(
+    "zone_automation", __name__, url_prefix="/api/v1/zone-automation"
+)
+
+# Module-level service reference
+_controller: Optional[Any] = None
+
+
+def init_zone_automation_api(controller=None) -> None:
+    """Wire the zone automation controller into the blueprint."""
+    global _controller
+    _controller = controller
+    _LOGGER.info("Zone Automation API initialized")
+
+
+# ── Dashboard ────────────────────────────────────────────────────────────────
+
+
+@zone_automation_bp.route("/dashboard", methods=["GET"])
+@require_token
+def get_dashboard():
+    """Full automation dashboard with all zone states."""
+    if _controller is None:
+        return jsonify({"ok": False, "error": "Controller not initialized"}), 503
+    return jsonify({"ok": True, **_controller.get_dashboard()})
+
+
+# ── Zone config & state ──────────────────────────────────────────────────────
+
+
+@zone_automation_bp.route("/zones/<zone_id>", methods=["GET"])
+@require_token
+def get_zone_state(zone_id: str):
+    """Get zone automation state and config."""
+    if _controller is None:
+        return jsonify({"ok": False, "error": "Controller not initialized"}), 503
+    return jsonify({"ok": True, **_controller.get_zone_state(zone_id)})
+
+
+@zone_automation_bp.route("/zones/<zone_id>/config", methods=["POST"])
+@require_token
+def update_zone_config(zone_id: str):
+    """Update zone automation config (partial updates).
+
+    Body: {"light": {...}, "music": {...}, "zone_name": "..."}
+    """
+    if _controller is None:
+        return jsonify({"ok": False, "error": "Controller not initialized"}), 503
+
+    data = request.get_json(silent=True) or {}
+    config = _controller.set_zone_config(zone_id, data)
+    return jsonify({"ok": True, "config": config.to_dict()})
+
+
+@zone_automation_bp.route("/zones/<zone_id>/override", methods=["POST"])
+@require_token
+def toggle_override(zone_id: str):
+    """Toggle light/music override switch.
+
+    Body: {"light_enabled": true/false, "music_enabled": true/false}
+    """
+    if _controller is None:
+        return jsonify({"ok": False, "error": "Controller not initialized"}), 503
+
+    data = request.get_json(silent=True) or {}
+    updates = {}
+    if "light_enabled" in data:
+        updates["light"] = {"enabled": bool(data["light_enabled"])}
+    if "music_enabled" in data:
+        updates["music"] = {"enabled": bool(data["music_enabled"])}
+
+    config = _controller.set_zone_config(zone_id, updates)
+    return jsonify({"ok": True, "config": config.to_dict()})
+
+
+# ── Presence & brightness events ─────────────────────────────────────────────
+
+
+@zone_automation_bp.route("/zones/<zone_id>/presence", methods=["POST"])
+@require_token
+def report_presence(zone_id: str):
+    """Report presence event.
+
+    Body: {"detected": true/false}
+    """
+    if _controller is None:
+        return jsonify({"ok": False, "error": "Controller not initialized"}), 503
+
+    data = request.get_json(silent=True) or {}
+    detected = data.get("detected", True)
+
+    if detected:
+        actions = _controller.on_presence_detected(zone_id)
+    else:
+        actions = _controller.on_presence_cleared(zone_id)
+
+    return jsonify({"ok": True, "actions": actions})
+
+
+@zone_automation_bp.route("/zones/<zone_id>/brightness", methods=["POST"])
+@require_token
+def report_brightness(zone_id: str):
+    """Report brightness update for adaptive dimming.
+
+    Body: {"indoor_lux": 150.0, "outdoor_lux": 5000.0}
+    """
+    if _controller is None:
+        return jsonify({"ok": False, "error": "Controller not initialized"}), 503
+
+    data = request.get_json(silent=True) or {}
+    indoor = data.get("indoor_lux", 0.0)
+    outdoor = data.get("outdoor_lux", 0.0)
+
+    result = _controller.update_brightness(zone_id, indoor, outdoor)
+    return jsonify({"ok": True, **result})
+
+
+# ── Entity management ────────────────────────────────────────────────────────
+
+
+@zone_automation_bp.route("/zones/<zone_id>/entities", methods=["GET"])
+@require_token
+def list_zone_entities(zone_id: str):
+    """List all entities in a zone, optionally grouped by role."""
+    if _controller is None:
+        return jsonify({"ok": False, "error": "Controller not initialized"}), 503
+
+    by_role = request.args.get("by_role", "false").lower() == "true"
+    if by_role:
+        return jsonify({"ok": True, "zone_id": zone_id,
+                        "entities_by_role": _controller.get_zone_entities_by_role(zone_id)})
+    return jsonify({"ok": True, "zone_id": zone_id,
+                    "entities": _controller.get_zone_entities(zone_id)})
+
+
+@zone_automation_bp.route("/zones/<zone_id>/entities", methods=["POST"])
+@require_token
+def add_entity(zone_id: str):
+    """Add entity to zone.
+
+    Body: {"entity_id": "light.xyz", "role": "lights", "tags": ["licht"], "display_name": "..."}
+    """
+    if _controller is None:
+        return jsonify({"ok": False, "error": "Controller not initialized"}), 503
+
+    data = request.get_json(silent=True) or {}
+    entity_id = data.get("entity_id", "").strip()
+    if not entity_id:
+        return jsonify({"ok": False, "error": "Missing entity_id"}), 400
+
+    from dataclasses import asdict
+    assignment = _controller.add_entity(
+        zone_id=zone_id,
+        entity_id=entity_id,
+        role=data.get("role"),
+        tags=data.get("tags"),
+        display_name=data.get("display_name", ""),
+    )
+    return jsonify({"ok": True, "assignment": asdict(assignment)})
+
+
+@zone_automation_bp.route("/zones/<zone_id>/entities/<path:entity_id>", methods=["DELETE"])
+@require_token
+def remove_entity(zone_id: str, entity_id: str):
+    """Remove entity from zone."""
+    if _controller is None:
+        return jsonify({"ok": False, "error": "Controller not initialized"}), 503
+
+    removed = _controller.remove_entity(zone_id, entity_id)
+    if not removed:
+        return jsonify({"ok": False, "error": "Entity not found in zone"}), 404
+    return jsonify({"ok": True, "removed": entity_id})
+
+
+@zone_automation_bp.route("/zones/<zone_id>/entities/<path:entity_id>/tags", methods=["POST"])
+@require_token
+def update_entity_tags(zone_id: str, entity_id: str):
+    """Update tags for an entity.
+
+    Body: {"tags": ["licht", "styx"]}
+    """
+    if _controller is None:
+        return jsonify({"ok": False, "error": "Controller not initialized"}), 503
+
+    data = request.get_json(silent=True) or {}
+    tags = data.get("tags", [])
+    if not isinstance(tags, list):
+        return jsonify({"ok": False, "error": "tags must be a list"}), 400
+
+    updated = _controller.update_entity_tags(zone_id, entity_id, tags)
+    if not updated:
+        return jsonify({"ok": False, "error": "Entity not found"}), 404
+    return jsonify({"ok": True, "entity_id": entity_id, "tags": tags})
+
+
+@zone_automation_bp.route("/zones/<zone_id>/entities/<path:entity_id>/role", methods=["POST"])
+@require_token
+def update_entity_role(zone_id: str, entity_id: str):
+    """Update role for an entity.
+
+    Body: {"role": "lights"}
+    """
+    if _controller is None:
+        return jsonify({"ok": False, "error": "Controller not initialized"}), 503
+
+    data = request.get_json(silent=True) or {}
+    role = data.get("role", "").strip()
+    if not role:
+        return jsonify({"ok": False, "error": "Missing role"}), 400
+
+    updated = _controller.update_entity_role(zone_id, entity_id, role)
+    if not updated:
+        return jsonify({"ok": False, "error": "Entity not found or invalid role"}), 404
+    return jsonify({"ok": True, "entity_id": entity_id, "role": role})
+
+
+# ── Tags & roles ─────────────────────────────────────────────────────────────
+
+
+@zone_automation_bp.route("/tags", methods=["GET"])
+@require_token
+def list_tags():
+    """List all available tag definitions."""
+    if _controller is None:
+        return jsonify({"ok": False, "error": "Controller not initialized"}), 503
+    return jsonify({"ok": True, "tags": _controller.get_tag_definitions()})
+
+
+@zone_automation_bp.route("/roles", methods=["GET"])
+@require_token
+def list_roles():
+    """List all available entity roles."""
+    if _controller is None:
+        return jsonify({"ok": False, "error": "Controller not initialized"}), 503
+    return jsonify({"ok": True, "roles": _controller.get_role_definitions()})
+
+
+@zone_automation_bp.route("/entities/search", methods=["GET"])
+@require_token
+def search_entities():
+    """Search entities across all zones.
+
+    Query param: ?q=search_term
+    """
+    if _controller is None:
+        return jsonify({"ok": False, "error": "Controller not initialized"}), 503
+
+    query = request.args.get("q", "").strip()
+    if not query:
+        return jsonify({"ok": False, "error": "Missing query parameter 'q'"}), 400
+
+    results = _controller.search_entities(query)
+    return jsonify({"ok": True, "results": results, "count": len(results)})
+
+
+# ── Import ───────────────────────────────────────────────────────────────────
+
+
+@zone_automation_bp.route("/import", methods=["POST"])
+@require_token
+def import_entities():
+    """Import entities from example config or custom data.
+
+    Body: {"source": "example"} or {"zones": {"zone_id": {"role": ["entity_id", ...]}}}
+    """
+    if _controller is None:
+        return jsonify({"ok": False, "error": "Controller not initialized"}), 503
+
+    data = request.get_json(silent=True) or {}
+
+    if data.get("source") == "example":
+        from copilot_core.example_config import EXAMPLE_ZONE_ENTITIES
+        count = _controller.import_from_example_config(EXAMPLE_ZONE_ENTITIES)
+        return jsonify({"ok": True, "imported": count, "source": "example"})
+
+    zones = data.get("zones")
+    if zones and isinstance(zones, dict):
+        count = _controller.import_from_example_config(zones)
+        return jsonify({"ok": True, "imported": count, "source": "custom"})
+
+    return jsonify({"ok": False, "error": "Provide 'source': 'example' or 'zones' dict"}), 400

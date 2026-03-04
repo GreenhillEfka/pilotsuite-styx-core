@@ -647,6 +647,18 @@ def register_blueprints(app: Flask, services: dict) -> None:
     init_suggestions_api(services.get("suggestion_engine"))
     app.register_blueprint(suggestions_bp)
 
+    # Register Zone Automation API (presence-based light + music + entity management)
+    from copilot_core.api.v1.zone_automation import zone_automation_bp, init_zone_automation_api
+    try:
+        from copilot_core.hub.zone_automation import ZoneAutomationController
+        zone_auto_ctrl = ZoneAutomationController()
+        services["zone_automation"] = zone_auto_ctrl
+        init_zone_automation_api(zone_auto_ctrl)
+    except Exception as exc:
+        _LOGGER.warning("Zone Automation init failed: %s", exc)
+        init_zone_automation_api(None)
+    app.register_blueprint(zone_automation_bp)
+
     # Register Styx Dashboard API
     from copilot_core.api.v1.styx_dashboard import styx_dashboard_bp, init_styx_dashboard_api
     init_styx_dashboard_api(services)

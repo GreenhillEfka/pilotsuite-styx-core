@@ -29,8 +29,8 @@ class TestKeyboardShortcuts:
         """Each tab should have a kbd-hint badge with its number."""
         html = _get_dashboard_html()
         assert "kbd-hint" in html
-        # 8 tabs, numbered 1-8
-        for i in range(1, 9):
+        # 9 tabs, numbered 1-9
+        for i in range(1, 10):
             assert f'<span class="kbd-hint">{i}</span>' in html
 
     def test_keyboard_event_listener(self):
@@ -42,7 +42,7 @@ class TestKeyboardShortcuts:
         """TAB_KEYS array should list all 8 tab names in order."""
         html = _get_dashboard_html()
         assert "TAB_KEYS" in html
-        expected_tabs = ["overview", "zones", "media", "suggestions", "llm", "modules", "neurons", "chat"]
+        expected_tabs = ["overview", "zones", "media", "suggestions", "automation", "llm", "modules", "neurons", "chat"]
         for tab in expected_tabs:
             assert f"'{tab}'" in html or f'"{tab}"' in html
 
