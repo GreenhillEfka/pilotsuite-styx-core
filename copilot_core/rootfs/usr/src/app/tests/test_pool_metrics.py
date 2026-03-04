@@ -36,7 +36,7 @@ class TestPoolStatus:
             "avg_query_time_ms": 12.5,
         }
         
-        with patch('copilot_core.performance.sql_pool', mock_sql_pool):
+        with patch('copilot_core.api.performance.sql_pool', mock_sql_pool):
             with patch('copilot_core.api.security.validate_token', return_value=True):
                 from copilot_core.api import performance
                 
@@ -58,7 +58,7 @@ class TestPoolStatus:
         mock_sql_pool = MagicMock()
         mock_sql_pool.get_stats.return_value = {}
         
-        with patch('copilot_core.performance.sql_pool', mock_sql_pool):
+        with patch('copilot_core.api.performance.sql_pool', mock_sql_pool):
             with patch('copilot_core.api.security.validate_token', return_value=False):
                 from copilot_core.api import performance
                 
@@ -96,7 +96,7 @@ class TestPoolMetrics:
             },
         }
         
-        with patch('copilot_core.performance.sql_pool', mock_sql_pool):
+        with patch('copilot_core.api.performance.sql_pool', mock_sql_pool):
             with patch('copilot_core.api.performance.HAS_ASYNC_POOL', True):
                 with patch('copilot_core.api.performance.get_async_pool_metrics', return_value=mock_async_metrics):
                     with patch('copilot_core.api.security.validate_token', return_value=True):
@@ -119,7 +119,7 @@ class TestPoolMetrics:
         mock_sql_pool = MagicMock()
         mock_sql_pool.get_stats.return_value = {"active_connections": 5}
         
-        with patch('copilot_core.performance.sql_pool', mock_sql_pool):
+        with patch('copilot_core.api.performance.sql_pool', mock_sql_pool):
             with patch('copilot_core.api.security.validate_token', return_value=True):
                 from copilot_core.api import performance
                 
@@ -152,7 +152,7 @@ class TestPoolMetricsSummary:
             "ollama_pool": {"reuse_rate_pct": 80.0, "healthy": True},
         }
         
-        with patch('copilot_core.performance.sql_pool', mock_sql_pool):
+        with patch('copilot_core.api.performance.sql_pool', mock_sql_pool):
             with patch('copilot_core.api.performance.HAS_ASYNC_POOL', True):
                 with patch('copilot_core.api.performance.get_async_pool_metrics', return_value=mock_async_metrics):
                     with patch('copilot_core.api.security.validate_token', return_value=True):
@@ -178,7 +178,7 @@ class TestPoolMetricsSummary:
             "max_connections": 20,
         }
         
-        with patch('copilot_core.performance.sql_pool', mock_sql_pool):
+        with patch('copilot_core.api.performance.sql_pool', mock_sql_pool):
             with patch('copilot_core.api.performance.HAS_ASYNC_POOL', True):
                 with patch('copilot_core.api.performance.get_async_pool_metrics', return_value={}):
                     with patch('copilot_core.api.security.validate_token', return_value=True):
@@ -204,7 +204,7 @@ class TestPoolMetricsSummary:
             "max_connections": 20,
         }
         
-        with patch('copilot_core.performance.sql_pool', mock_sql_pool):
+        with patch('copilot_core.api.performance.sql_pool', mock_sql_pool):
             with patch('copilot_core.api.performance.HAS_ASYNC_POOL', True):
                 with patch('copilot_core.api.performance.get_async_pool_metrics', return_value={}):
                     with patch('copilot_core.api.security.validate_token', return_value=True):
@@ -258,7 +258,7 @@ class TestPoolCleanup:
         mock_sql_pool = MagicMock()
         mock_sql_pool.cleanup_idle.return_value = 0
         
-        with patch('copilot_core.performance.sql_pool', mock_sql_pool):
+        with patch('copilot_core.api.performance.sql_pool', mock_sql_pool):
             with patch('copilot_core.api.security.validate_token', return_value=False):
                 from copilot_core.api import performance
                 

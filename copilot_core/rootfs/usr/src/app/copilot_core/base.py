@@ -22,7 +22,7 @@ import logging
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Optional, TypeVar, Generic
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
@@ -139,7 +139,7 @@ class CopilotModule(ABC):
         """
         try:
             self.metadata.load_count += 1
-            self.metadata.loaded_at = datetime.utcnow()
+            self.metadata.loaded_at = datetime.now(timezone.utc)
             result = self._init_impl()
             self._is_initialized = result
             if result:

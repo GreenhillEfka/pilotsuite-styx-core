@@ -12,7 +12,7 @@ import logging
 import time
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Any
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 logger = logging.getLogger(__name__)
 
@@ -111,7 +111,7 @@ class UniFiService:
     
     async def _ensure_update(self) -> None:
         """Ensure data is fresh (lazy update)."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         if self._last_update is None or (now - self._last_update).total_seconds() > self._cache_ttl:
             await self.update()
     
@@ -122,7 +122,7 @@ class UniFiService:
         Returns:
             UniFiSnapshot with current network status
         """
-        self._last_update = datetime.utcnow()
+        self._last_update = datetime.now(timezone.utc)
         
         # Gather data from available sources
         wan = await self._get_wan_status()
@@ -179,7 +179,7 @@ class UniFiService:
                     online=True,
                     latency_ms=latency,
                     packet_loss_percent=packet_loss,
-                    last_check=datetime.utcnow().isoformat()
+                    last_check=datetime.now(timezone.utc).isoformat()
                 )
         
         # Fallback: return offline status (will be updated when UniFi is configured)
@@ -187,7 +187,7 @@ class UniFiService:
             online=False,
             latency_ms=0.0,
             packet_loss_percent=0.0,
-            last_check=datetime.utcnow().isoformat()
+            last_check=datetime.now(timezone.utc).isoformat()
         )
     
     async def _get_clients(self) -> List[ClientDevice]:
@@ -259,7 +259,7 @@ class UniFiService:
             avg_download_mbps=100.0,
             peak_upload_mbps=50.0,
             peak_download_mbps=500.0,
-            last_updated=datetime.utcnow().isoformat()
+            last_updated=datetime.now(timezone.utc).isoformat()
         )
     
     def _check_suppression(self, wan: WANStatus, roams: List[RoamEvent]) -> tuple:
@@ -284,8 +284,14 @@ class UniFiService:
             return True, f"Packet loss ({wan.packet_loss_percent:.1f}%)"
         
         # Check for recent roaming storms (client moving rapidly)
-        recent_roams = [r for r in roams if 
-            (datetime.utcnow() - datetime.fromisoformat(r.timestamp)).total_seconds() < 3600]
+        now = datetime.now(timezone.utc)
+        recent_roams = []
+        for r in roams:
+            ts = datetime.fromisoformat(r.timestamp)
+            if ts.tzinfo is None:
+                ts = ts.replace(tzinfo=timezone.utc)
+            if (now - ts).total_seconds() < 3600:
+                recent_roams.append(r)
         
         if len(recent_roams) > 10:  # More than 10 roams in an hour
             return True, f"Client roaming storm ({len(recent_roams)} events/hour)"
