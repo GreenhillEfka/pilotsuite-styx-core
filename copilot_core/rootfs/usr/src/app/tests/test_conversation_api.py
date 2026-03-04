@@ -14,25 +14,46 @@ def conversation_client():
     """Create a test client for the conversation API."""
     if create_app is None:
         pytest.skip("Flask not installed")
-    
+
     app = create_app()
     app.config['TESTING'] = True
     return app.test_client()
+
+
+def _mock_response(content="Hello!", finish_reason="stop"):
+    """Build a valid OpenAI-shaped response dict."""
+    return {
+        "id": "chatcmpl-test",
+        "object": "chat.completion",
+        "model": "qwen3:0.6b",
+        "choices": [{
+            "index": 0,
+            "message": {"role": "assistant", "content": content},
+            "finish_reason": finish_reason,
+        }],
+    }
 
 
 class TestConversationEndpoints:
     """Tests for conversation API endpoints."""
 
     def test_get_models_endpoint(self, conversation_client):
-        """Test GET /api/v1/chat/models endpoint."""
-        r = conversation_client.get("/api/v1/chat/models")
-        assert r.status_code == 200
-        j = r.get_json()
-        assert "data" in j
-        assert isinstance(j["data"], list)
-        # Check that recommended models are present
-        model_ids = [m["id"] for m in j["data"]]
-        assert "qwen3:0.6b" in model_ids
+        """Test GET /api/v1/chat/models/recommended endpoint."""
+        with patch('copilot_core.api.v1.conversation._get_llm_provider') as mock_prov:
+            mock_prov.return_value = MagicMock()
+            mock_prov.return_value.status.return_value = {"ollama_model": "qwen3:0.6b"}
+            mock_prov.return_value.model_catalog.return_value = {
+                "offline": {"models": []},
+                "online": {"models": []},
+            }
+
+            r = conversation_client.get("/api/v1/chat/models/recommended")
+            assert r.status_code == 200
+            j = r.get_json()
+            assert "models" in j
+            assert isinstance(j["models"], list)
+            model_ids = [m["id"] for m in j["models"]]
+            assert "qwen3:0.6b" in model_ids
 
     def test_chat_completions_endpoint(self, conversation_client):
         """Test POST /api/v1/chat/completions endpoint with mocked LLM."""
@@ -40,11 +61,8 @@ class TestConversationEndpoints:
             "model": "qwen3:0.6b",
             "messages": [{"role": "user", "content": "Hello"}]
         }
-        
-        with patch('copilot_core.api.v1.conversation._get_llm_provider') as mock_provider:
-            mock_provider.return_value = MagicMock()
-            mock_provider.return_value.generate.return_value = "Hello! How can I help you?"
-            
+
+        with patch('copilot_core.api.v1.conversation._process_conversation', return_value=_mock_response()):
             r = conversation_client.post("/api/v1/chat/completions", json=payload)
             assert r.status_code == 200
             j = r.get_json()
@@ -58,14 +76,11 @@ class TestConversationEndpoints:
             "messages": [{"role": "user", "content": "Test"}],
             "stream": True
         }
-        
-        with patch('copilot_core.api.v1.conversation._get_llm_provider') as mock_provider:
-            mock_provider.return_value = MagicMock()
-            mock_provider.return_value.generate_stream.return_value = iter(["Test ", "response"])
-            
+
+        with patch('copilot_core.api.v1.conversation._process_conversation',
+                    return_value=_mock_response("Test response")):
             r = conversation_client.post("/api/v1/chat/completions", json=payload)
             assert r.status_code == 200
-            # Stream response should be chunked
             assert r.data
 
     def test_chat_completions_invalid_model(self, conversation_client):
@@ -74,10 +89,11 @@ class TestConversationEndpoints:
             "model": "invalid-model-xyz",
             "messages": [{"role": "user", "content": "Hello"}]
         }
-        
-        r = conversation_client.post("/api/v1/chat/completions", json=payload)
-        # Should return an error for invalid model
-        assert r.status_code in [200, 400, 422]  # Allow for different error handling
+
+        with patch('copilot_core.api.v1.conversation._process_conversation',
+                    return_value=_mock_response()):
+            r = conversation_client.post("/api/v1/chat/completions", json=payload)
+            assert r.status_code in [200, 400, 422]
 
     def test_chat_completions_missing_messages(self, conversation_client):
         """Test POST /api/v1/chat/completions with missing messages."""
@@ -85,7 +101,7 @@ class TestConversationEndpoints:
             "model": "qwen3:0.6b"
             # Missing messages
         }
-        
+
         r = conversation_client.post("/api/v1/chat/completions", json=payload)
         # Should return validation error
         assert r.status_code in [400, 422]
@@ -96,7 +112,7 @@ class TestConversationEndpoints:
             "model": "qwen3:0.6b",
             "messages": []
         }
-        
+
         r = conversation_client.post("/api/v1/chat/completions", json=payload)
         # Should handle empty messages gracefully
         assert r.status_code in [200, 400, 422]
@@ -120,16 +136,17 @@ class TestConversationEndpoints:
                 }
             }]
         }
-        
-        with patch('copilot_core.api.v1.conversation._get_llm_provider') as mock_provider:
-            mock_provider.return_value = MagicMock()
-            mock_provider.return_value.generate.return_value = {
-                "tool_calls": [{
-                    "name": "turn_on_light",
-                    "arguments": {"entity_id": "light.living_room"}
-                }]
-            }
-            
+
+        tool_response = _mock_response()
+        tool_response["choices"][0]["finish_reason"] = "tool_calls"
+        tool_response["choices"][0]["message"]["tool_calls"] = [{
+            "id": "call_abc123",
+            "type": "function",
+            "function": {"name": "turn_on_light", "arguments": '{"entity_id":"light.living_room"}'},
+        }]
+
+        with patch('copilot_core.api.v1.conversation._process_conversation',
+                    return_value=tool_response):
             r = conversation_client.post("/api/v1/chat/completions", json=payload)
             assert r.status_code == 200
 
@@ -140,11 +157,9 @@ class TestConversationEndpoints:
             "messages": [{"role": "user", "content": "Hello"}],
             "temperature": 0.7
         }
-        
-        with patch('copilot_core.api.v1.conversation._get_llm_provider') as mock_provider:
-            mock_provider.return_value = MagicMock()
-            mock_provider.return_value.generate.return_value = "Response"
-            
+
+        with patch('copilot_core.api.v1.conversation._process_conversation',
+                    return_value=_mock_response()):
             r = conversation_client.post("/api/v1/chat/completions", json=payload)
             assert r.status_code == 200
 
@@ -155,11 +170,9 @@ class TestConversationEndpoints:
             "messages": [{"role": "user", "content": "Hello"}],
             "max_tokens": 100
         }
-        
-        with patch('copilot_core.api.v1.conversation._get_llm_provider') as mock_provider:
-            mock_provider.return_value = MagicMock()
-            mock_provider.return_value.generate.return_value = "Response"
-            
+
+        with patch('copilot_core.api.v1.conversation._process_conversation',
+                    return_value=_mock_response()):
             r = conversation_client.post("/api/v1/chat/completions", json=payload)
             assert r.status_code == 200
 
@@ -173,11 +186,9 @@ class TestConversationEndpoints:
                 {"role": "user", "content": "How are you?"}
             ]
         }
-        
-        with patch('copilot_core.api.v1.conversation._get_llm_provider') as mock_provider:
-            mock_provider.return_value = MagicMock()
-            mock_provider.return_value.generate.return_value = "I'm doing well, thanks for asking!"
-            
+
+        with patch('copilot_core.api.v1.conversation._process_conversation',
+                    return_value=_mock_response("I'm doing well, thanks for asking!")):
             r = conversation_client.post("/api/v1/chat/completions", json=payload)
             assert r.status_code == 200
 

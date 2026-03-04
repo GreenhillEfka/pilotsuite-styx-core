@@ -66,15 +66,25 @@ def mock_bm25_index():
 
 
 @pytest.fixture
-def client(app, mock_bm25_index):
+def client(app, mock_bm25_index, monkeypatch):
     """Create test client with mocked RAG backend."""
+    monkeypatch.setenv("COPILOT_AUTH_REQUIRED", "false")
+    import copilot_core.api.security as sec
+    sec._token_cache = ("", 0.0)
+
     with patch('copilot_core.api.v1.rag._get_bm25', return_value=mock_bm25_index):
         with patch('copilot_core.api.v1.rag._load_semantic_backend', return_value=None):
             from copilot_core.api.v1 import rag
-            
-            # Reset RAG API state for test isolation
+
+            # Reset RAG API state, cache, and rate limiter for test isolation
             rag.init_rag_api()
-            
+            rag._rag_cache = None
+            try:
+                from copilot_core.security.rate_limiter import get_rate_limiter
+                get_rate_limiter().reset()
+            except Exception:
+                pass
+
             app.register_blueprint(rag.bp)
             with app.test_client() as test_client:
                 yield test_client

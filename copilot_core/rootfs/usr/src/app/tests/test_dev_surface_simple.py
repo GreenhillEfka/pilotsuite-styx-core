@@ -9,8 +9,9 @@ import tempfile
 import os
 from unittest.mock import patch, Mock
 
-# Mock psutil before importing dev_surface modules
+# Mock psutil before importing dev_surface modules (save original to restore later)
 import sys
+_original_psutil = sys.modules.get('psutil')
 mock_psutil = Mock()
 mock_psutil.Process.return_value.memory_info.return_value.rss = 134217728  # 128 MB
 sys.modules['psutil'] = mock_psutil
@@ -224,6 +225,14 @@ class TestDevSurfaceBasics(unittest.TestCase):
         log_messages = [log["message"] for log in diagnostics["recent_logs"]]
         self.assertIn("Info message", log_messages)
         self.assertIn("Error message", log_messages)
+
+
+def teardown_module():
+    """Restore original psutil module to prevent pollution of other tests."""
+    if _original_psutil is not None:
+        sys.modules['psutil'] = _original_psutil
+    else:
+        sys.modules.pop('psutil', None)
 
 
 if __name__ == '__main__':

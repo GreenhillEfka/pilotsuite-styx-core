@@ -200,20 +200,25 @@ def _get_rag_cache():
     return _rag_cache
 
 
-def _generate_cache_key(namespace: str, query: str, top_k: int, mode: str = "hybrid") -> str:
+def _generate_cache_key(
+    namespace: str, query: str, top_k: int, mode: str = "hybrid",
+    include_text: bool = True, include_metadata: bool = True,
+) -> str:
     """Generate cache key for RAG search results.
-    
+
     Args:
         namespace: Document namespace
         query: Search query
         top_k: Number of results
         mode: Search mode (hybrid, bm25, semantic)
-    
+        include_text: Whether text is included in results
+        include_metadata: Whether metadata is included in results
+
     Returns:
         Cache key string
     """
     import hashlib
-    key_base = f"{mode}:{namespace}:{query}:{top_k}"
+    key_base = f"{mode}:{namespace}:{query}:{top_k}:t{int(include_text)}:m{int(include_metadata)}"
     key_hash = hashlib.md5(key_base.encode()).hexdigest()[:12]
     return f"rag:{mode}:{namespace}:{key_hash}"
 
@@ -522,7 +527,7 @@ def rag_search() -> Tuple[Any, int] | Any:
             mode = "semantic"
         
         # Generate cache key
-        cache_key = _generate_cache_key(namespace, query, top_k, mode)
+        cache_key = _generate_cache_key(namespace, query, top_k, mode, include_text, include_metadata)
         
         # Try cache first (only for hybrid and bm25 modes with default weights)
         use_cache = (
@@ -534,7 +539,7 @@ def rag_search() -> Tuple[Any, int] | Any:
         
         if use_cache:
             cache = _get_rag_cache()
-            cached_result = cache.get(cache_key)
+            cached_result = asyncio.run(cache.get(cache_key))
             if cached_result is not None:
                 cache_hit = True
                 logger.debug("RAG cache HIT: %s", cache_key)

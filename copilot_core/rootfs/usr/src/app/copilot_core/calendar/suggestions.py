@@ -472,12 +472,15 @@ class ScheduleSuggester:
     ) -> List[ScheduleSuggestion]:
         """Generate stress relief suggestions based on mood."""
         
+        if now is None:
+            now = datetime.now(timezone.utc)
+
         mood = self._get_current_mood()
         if not mood:
             return []
-        
+
         stress_level = mood.features.stress_index
-        
+
         if stress_level < self.config.stress_break_threshold:
             return []
         

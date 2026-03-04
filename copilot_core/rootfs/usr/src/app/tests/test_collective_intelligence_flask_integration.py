@@ -107,7 +107,7 @@ def test_app(mock_service, isolated_blueprint_test):
     
     app = Flask(__name__)
     app.config['TESTING'] = True
-    app.register_blueprint(federated_bp)
+    app.register_blueprint(federated_bp, url_prefix="/api/v1")
     
     # Initialize with mock service
     init_federated_api(mock_service)
@@ -365,7 +365,7 @@ class TestFederatedFlaskIntegration:
         init_federated_api(None)  # Clear any existing service
         app = Flask(__name__)
         app.config['TESTING'] = True
-        app.register_blueprint(federated_bp)
+        app.register_blueprint(federated_bp, url_prefix="/api/v1")
         
         client = app.test_client()
         response = client.get('/api/v1/federated')
@@ -385,7 +385,7 @@ class TestFederatedErrorCases:
         init_federated_api(None)  # Clear service
         app = Flask(__name__)
         app.config['TESTING'] = True
-        app.register_blueprint(federated_bp)
+        app.register_blueprint(federated_bp, url_prefix="/api/v1")
         client = app.test_client()
         
         # Test GET /api/v1/federated

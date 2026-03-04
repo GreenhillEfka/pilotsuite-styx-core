@@ -1,5 +1,6 @@
 """Tests for MCP REST API endpoints (/api/v1/mcp/*)."""
 
+import os
 import tempfile
 import unittest
 from unittest.mock import patch, MagicMock
@@ -217,19 +218,20 @@ class TestMCPRestAPI(unittest.TestCase):
             }
         }
         
-        with patch("requests.post", side_effect=[connect_response, query_response]):
+        with patch("requests.post", side_effect=[connect_response]):
             client.post("/api/v1/mcp/connect", json={
                 "server_url": "http://localhost:3000",
                 "server_id": "query-test"
             }, headers=self._get_auth_headers())
-        
-        # Execute query
+
+        # Execute query (mock the HTTP call to the MCP server)
         payload = {
             "server_id": "query-test",
             "resource_uri": "resource://test",
             "parameters": {"limit": 10}
         }
-        r = client.post("/api/v1/mcp/query", json=payload, headers=self._get_auth_headers())
+        with patch("requests.post", return_value=query_response):
+            r = client.post("/api/v1/mcp/query", json=payload, headers=self._get_auth_headers())
         
         self.assertEqual(r.status_code, 200)
         j = r.get_json()
@@ -314,11 +316,17 @@ class TestMCPRestAPI(unittest.TestCase):
         self.assertIn("error", j)
 
     def test_mcp_auth_required(self):
-        """Test that MCP endpoints require authentication."""
+        """Test that MCP endpoints require authentication when token is set."""
         if create_app is None:
             self.skipTest("Flask not installed")
-        
+
+        import copilot_core.api.security as _sec
+
         app = self._create_test_app()
+        # Enable auth by setting env var and clearing cache
+        old_token = os.environ.get("COPILOT_AUTH_TOKEN", "")
+        os.environ["COPILOT_AUTH_TOKEN"] = "test-secret-token"
+        _sec._token_cache = ("", 0.0)  # clear TTL cache
         client = app.test_client()
         
         # Connect endpoint without auth
@@ -344,6 +352,13 @@ class TestMCPRestAPI(unittest.TestCase):
         # Tools call endpoint without auth
         r = client.post("/api/v1/mcp/tools/call", json={"tool_name": "x"})
         self.assertEqual(r.status_code, 401)
+
+        # Restore env
+        if old_token:
+            os.environ["COPILOT_AUTH_TOKEN"] = old_token
+        else:
+            os.environ.pop("COPILOT_AUTH_TOKEN", None)
+        _sec._token_cache = ("", 0.0)
 
 
 if __name__ == "__main__":

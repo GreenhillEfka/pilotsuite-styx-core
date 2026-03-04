@@ -4,9 +4,12 @@ import pytest
 from unittest.mock import Mock, MagicMock, patch
 from datetime import datetime, timezone
 
-# Mock flask_socketio before importing
+# Mock flask_socketio before importing websocket_neuron module,
+# then restore original modules to avoid polluting other tests.
 import sys
-from unittest.mock import MagicMock
+
+_original_flask = sys.modules.get('flask')
+_original_flask_socketio = sys.modules.get('flask_socketio')
 
 mock_socketio_module = MagicMock()
 mock_socketio_module.SocketIO = MagicMock()
@@ -29,6 +32,17 @@ from copilot_core.api.v1.websocket_neuron import (
     EVENT_MOOD_CHANGE,
     EVENT_SUGGESTION
 )
+
+# Restore original modules so other test files are not affected
+if _original_flask is not None:
+    sys.modules['flask'] = _original_flask
+else:
+    del sys.modules['flask']
+
+if _original_flask_socketio is not None:
+    sys.modules['flask_socketio'] = _original_flask_socketio
+else:
+    del sys.modules['flask_socketio']
 
 
 class TestNeuronWebSocketHandler:

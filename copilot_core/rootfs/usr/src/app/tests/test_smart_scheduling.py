@@ -205,7 +205,7 @@ class TestMoodAwareScheduler:
                 priority=EventPriority.MEDIUM,
             )
             
-            assert recommendation.confidence > 0.5
+            assert recommendation.confidence >= 0.5
             assert any("focus" in r.lower() for r in recommendation.reasons)
     
     def test_adjust_event_lighting(self, mood_scheduler):

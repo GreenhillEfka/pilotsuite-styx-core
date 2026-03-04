@@ -20,8 +20,12 @@ from unittest.mock import patch
 import pytest
 from flask import Flask
 
-# Disable auth for tests
-os.environ.setdefault("COPILOT_AUTH_REQUIRED", "false")
+@pytest.fixture(autouse=True)
+def _disable_auth_for_rag_tests(monkeypatch):
+    """Disable auth for RAG tests without polluting other test modules."""
+    monkeypatch.setenv("COPILOT_AUTH_REQUIRED", "false")
+    import copilot_core.api.security as sec
+    sec._token_cache = ("", 0.0)
 
 
 @pytest.fixture(autouse=True)
@@ -31,6 +35,13 @@ def _reset_singletons():
     rag_mod._bm25_index = None
     rag_mod._semantic_backend = None
     rag_mod._metrics = rag_mod._Metrics()
+    rag_mod._rag_cache = None
+    # Reset rate limiter to avoid cross-test rate limit pollution
+    try:
+        from copilot_core.security.rate_limiter import get_rate_limiter
+        get_rate_limiter().reset()
+    except Exception:
+        pass
     yield
 
 

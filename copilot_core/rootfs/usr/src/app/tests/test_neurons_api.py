@@ -117,14 +117,14 @@ def mock_neuron_manager():
 @pytest.fixture
 def client(app, mock_neuron_manager):
     """Create test client with mocked neuron manager and auth bypass."""
-    # Mock auth BEFORE importing neurons module
-    from copilot_core.api import security
-    with patch.object(security, 'require_admin_token', return_value=True):
-        with patch.object(security, 'validate_token', return_value=True):
-            with patch('copilot_core.api.v1.neurons.get_neuron_manager', return_value=mock_neuron_manager):
-                from copilot_core.api.v1 import neurons
+    from copilot_core.api.v1 import neurons
 
-                app.register_blueprint(neurons.bp, url_prefix='/api/v1/neurons')
+    app.register_blueprint(neurons.bp, url_prefix='/api/v1/neurons')
+
+    # Patch auth in the neurons module namespace (already imported references)
+    with patch.object(neurons, 'require_admin_token', return_value=True):
+        with patch.object(neurons, '_validate_token', return_value=True):
+            with patch('copilot_core.api.v1.neurons.get_neuron_manager', return_value=mock_neuron_manager):
                 with app.test_client() as test_client:
                     yield test_client
 
