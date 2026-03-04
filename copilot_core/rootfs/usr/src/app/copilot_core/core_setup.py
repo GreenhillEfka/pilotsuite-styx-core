@@ -642,6 +642,11 @@ def register_blueprints(app: Flask, services: dict) -> None:
     from copilot_core.api.v1.module_health import module_health_bp
     app.register_blueprint(module_health_bp)
 
+    # Register Suggestions API
+    from copilot_core.api.v1.suggestions import suggestions_bp, init_suggestions_api
+    init_suggestions_api(services.get("suggestion_engine"))
+    app.register_blueprint(suggestions_bp)
+
     # Register Styx Dashboard API
     from copilot_core.api.v1.styx_dashboard import styx_dashboard_bp, init_styx_dashboard_api
     init_styx_dashboard_api(services)

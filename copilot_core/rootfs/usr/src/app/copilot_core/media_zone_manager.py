@@ -338,3 +338,88 @@ class MediaZoneManager:
                 zone_state = "paused"
 
         return {"zone_id": zone_id, "state": zone_state, "players": states}
+
+    # ------------------------------------------------------------------
+    # Sonos Group / Ungroup
+    # ------------------------------------------------------------------
+
+    def group_zone_players(self, zone_id: str, master_entity: str | None = None) -> dict:
+        """Group all Sonos/media players in a zone under one master.
+
+        If no master is specified, the first primary player is used.
+        Uses media_player.join to create a speaker group.
+        """
+        players = self.get_zone_players(zone_id)
+        if len(players) < 2:
+            return {"ok": False, "error": "Need at least 2 players to group"}
+
+        if not master_entity:
+            primaries = [p for p in players if p["role"] == "primary"]
+            master_entity = (primaries[0] if primaries else players[0])["entity_id"]
+
+        members = [p["entity_id"] for p in players if p["entity_id"] != master_entity]
+        if not members:
+            return {"ok": False, "error": "No members to group"}
+
+        result = self._call_service("media_player", "join", {
+            "entity_id": master_entity,
+            "group_members": members,
+        })
+        _LOGGER.info("Grouped zone %s: master=%s, members=%s", zone_id, master_entity, members)
+        return {"ok": result.get("ok", False), "zone_id": zone_id,
+                "master": master_entity, "members": members}
+
+    def ungroup_zone_players(self, zone_id: str) -> dict:
+        """Ungroup all Sonos/media players in a zone.
+
+        Uses media_player.unjoin on each player.
+        """
+        players = self.get_zone_players(zone_id)
+        results = []
+        for p in players:
+            r = self._call_service("media_player", "unjoin",
+                                   {"entity_id": p["entity_id"]})
+            results.append({**r, "entity_id": p["entity_id"]})
+        _LOGGER.info("Ungrouped zone %s (%d players)", zone_id, len(players))
+        return {"ok": True, "zone_id": zone_id, "results": results}
+
+    def group_multi_zone(self, zone_ids: List[str],
+                         master_entity: str | None = None) -> dict:
+        """Group players across multiple zones (Musikwolke multi-zone).
+
+        Joins all players from all specified zones into one group.
+        """
+        all_players = []
+        for zid in zone_ids:
+            all_players.extend(self.get_zone_players(zid))
+        if len(all_players) < 2:
+            return {"ok": False, "error": "Need at least 2 players across zones"}
+
+        if not master_entity:
+            master_entity = all_players[0]["entity_id"]
+
+        members = [p["entity_id"] for p in all_players if p["entity_id"] != master_entity]
+        result = self._call_service("media_player", "join", {
+            "entity_id": master_entity,
+            "group_members": members,
+        })
+        _LOGGER.info("Multi-zone group: zones=%s, master=%s, %d members",
+                      zone_ids, master_entity, len(members))
+        return {"ok": result.get("ok", False), "zones": zone_ids,
+                "master": master_entity, "members": members}
+
+    def get_summary(self) -> dict:
+        """Get full media zone summary for dashboard."""
+        assignments = self.get_all_assignments()
+        sessions = self.get_musikwolke_sessions()
+        zone_states = {}
+        for zone_id in assignments:
+            zone_states[zone_id] = self.get_zone_media_state(zone_id)
+        return {
+            "assignments": assignments,
+            "musikwolke_sessions": sessions,
+            "zone_states": zone_states,
+            "total_zones": len(assignments),
+            "total_players": sum(len(v) for v in assignments.values()),
+            "active_sessions": len(sessions),
+        }

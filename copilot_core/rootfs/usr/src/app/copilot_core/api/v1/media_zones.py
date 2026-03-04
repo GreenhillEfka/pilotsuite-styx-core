@@ -462,6 +462,124 @@ def get_zone_media_state(zone_id: str):
 # Musikwolke (Smart Audio Follow)
 # ===================================================================
 
+@media_zones_bp.route("/zones/group", methods=["POST"])
+@require_token
+@rate_limit(requests=20)
+def group_zone():
+    """Group all speakers in a zone (Sonos join).
+
+    Request body::
+
+        {"zone_id": "living"}
+
+    Response::
+
+        {"ok": true, "zone_id": "living", "action": "group"}
+    """
+    mgr, err = _require_media_mgr()
+    if err:
+        return err
+
+    data = request.get_json(silent=True) or {}
+    zone_id = data.get("zone_id", "").strip()
+
+    if not zone_id or not validate_zone_id(zone_id):
+        return jsonify({"ok": False, "error": "Invalid or missing zone_id"}), 400
+
+    try:
+        mgr.group_zone_players(zone_id)
+    except Exception as exc:
+        _LOGGER.exception("Failed to group zone %s", zone_id)
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+    return jsonify({"ok": True, "zone_id": zone_id, "action": "group"})
+
+
+@media_zones_bp.route("/zones/ungroup", methods=["POST"])
+@require_token
+@rate_limit(requests=20)
+def ungroup_zone():
+    """Ungroup all speakers in a zone (Sonos unjoin).
+
+    Request body::
+
+        {"zone_id": "living"}
+
+    Response::
+
+        {"ok": true, "zone_id": "living", "action": "ungroup"}
+    """
+    mgr, err = _require_media_mgr()
+    if err:
+        return err
+
+    data = request.get_json(silent=True) or {}
+    zone_id = data.get("zone_id", "").strip()
+
+    if not zone_id or not validate_zone_id(zone_id):
+        return jsonify({"ok": False, "error": "Invalid or missing zone_id"}), 400
+
+    try:
+        mgr.ungroup_zone_players(zone_id)
+    except Exception as exc:
+        _LOGGER.exception("Failed to ungroup zone %s", zone_id)
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+    return jsonify({"ok": True, "zone_id": zone_id, "action": "ungroup"})
+
+
+@media_zones_bp.route("/zones/group-all", methods=["POST"])
+@require_token
+@rate_limit(requests=5)
+def group_all_zones():
+    """Group all speakers across all zones into one Musikwolke group.
+
+    Response::
+
+        {"ok": true, "action": "group-all"}
+    """
+    mgr, err = _require_media_mgr()
+    if err:
+        return err
+
+    try:
+        all_zones = list(mgr.get_all_assignments().keys())
+        if all_zones:
+            mgr.group_multi_zone(all_zones)
+    except Exception as exc:
+        _LOGGER.exception("Failed to group all zones")
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+    return jsonify({"ok": True, "action": "group-all"})
+
+
+@media_zones_bp.route("/zones/ungroup-all", methods=["POST"])
+@require_token
+@rate_limit(requests=5)
+def ungroup_all_zones():
+    """Ungroup all speakers across all zones.
+
+    Response::
+
+        {"ok": true, "action": "ungroup-all"}
+    """
+    mgr, err = _require_media_mgr()
+    if err:
+        return err
+
+    try:
+        for zone_id in list(mgr.get_all_assignments().keys()):
+            try:
+                mgr.ungroup_zone_players(zone_id)
+            except Exception:
+                _LOGGER.debug("Failed to ungroup zone %s", zone_id, exc_info=True)
+    except Exception as exc:
+        _LOGGER.exception("Failed to ungroup all zones")
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+    return jsonify({"ok": True, "action": "ungroup-all"})
+
+
 @media_zones_bp.route("/musikwolke/start", methods=["POST"])
 @require_token
 @rate_limit(requests=10)

@@ -124,6 +124,49 @@ def full_dashboard():
     if candidates_store:
         recent_candidates = _safe_call(lambda: candidates_store.list(limit=5), [])
 
+    # ── Habitus Zones ──
+    zones_data = []
+    try:
+        from copilot_core.homeassistant.habitus_zones import get_all_zones
+        from copilot_core.example_config import ZONE_DISPLAY, EXAMPLE_ZONE_ENTITIES
+        for zone in get_all_zones():
+            zid = zone.zone_type.value
+            display = ZONE_DISPLAY.get(zid, {})
+            entity_map = EXAMPLE_ZONE_ENTITIES.get(zid, {})
+            entity_count = sum(len(v) for v in entity_map.values())
+            zones_data.append({
+                "id": zid,
+                "name_de": zone.name_de,
+                "name_en": zone.name_en,
+                "icon": display.get("icon", ""),
+                "color": display.get("color", "#888"),
+                "priority": zone.priority,
+                "entity_count": entity_count,
+                "roles": {k: len(v) for k, v in entity_map.items()},
+            })
+    except Exception:
+        pass
+
+    # ── Media / Musikwolke ──
+    media_mgr = _services.get("media_zone_manager")
+    media_data = {}
+    if media_mgr:
+        media_data = _safe_call(media_mgr.get_summary, {})
+
+    # ── Suggestions ──
+    suggestion_engine = _services.get("suggestion_engine")
+    suggestions = []
+    if suggestion_engine:
+        suggestions = _safe_call(
+            lambda: suggestion_engine.get_pending(limit=10), []
+        )
+    if not suggestions:
+        try:
+            from copilot_core.example_config import EXAMPLE_SUGGESTIONS
+            suggestions = EXAMPLE_SUGGESTIONS
+        except Exception:
+            pass
+
     elapsed_ms = round((time.monotonic() - t0) * 1000, 1)
 
     return jsonify({
@@ -145,6 +188,9 @@ def full_dashboard():
         "habitus": habitus_stats,
         "learning": learning_data,
         "candidates": recent_candidates,
+        "zones": zones_data,
+        "media": media_data,
+        "suggestions": suggestions,
     })
 
 
