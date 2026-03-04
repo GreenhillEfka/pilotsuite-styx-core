@@ -641,6 +641,17 @@ def register_blueprints(app: Flask, services: dict) -> None:
     # Register Module Health Dashboard API
     from copilot_core.api.v1.module_health import module_health_bp
     app.register_blueprint(module_health_bp)
+
+    # Register Styx Dashboard API
+    from copilot_core.api.v1.styx_dashboard import styx_dashboard_bp, init_styx_dashboard_api
+    init_styx_dashboard_api(services)
+    app.register_blueprint(styx_dashboard_bp)
+
+    # Serve Styx Dashboard SPA at /styx
+    @app.route("/styx")
+    def _serve_styx_dashboard():
+        from flask import render_template
+        return render_template("styx_dashboard.html")
     
     # Register PilotSuite Hub API (standalone, absolute prefix /api/v1/hub)
     from copilot_core.hub.api import hub_bp

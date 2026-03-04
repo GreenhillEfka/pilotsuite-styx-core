@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Styx — PilotSuite Dashboard</title>
+<style>
+  :root {
+    --bg: #0f0f1a; --surface: #1a1a2e; --surface2: #222240;
+    --text: #e0e0f0; --muted: #888; --accent: #4fc3f7;
+    --green: #81c784; --orange: #ffb74d; --red: #ef5350;
+    --purple: #ce93d8; --radius: 12px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); color: var(--text); }
+  .app { max-width: 1400px; margin: 0 auto; padding: 16px; }
+  header { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; padding: 16px 0; border-bottom: 1px solid var(--surface2); }
+  header h1 { font-size: 1.5rem; font-weight: 700; }
+  header .status { margin-left: auto; font-size: 0.85rem; color: var(--muted); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
+  .card { background: var(--surface); border-radius: var(--radius); padding: 20px; border: 1px solid var(--surface2); }
+  .card h2 { font-size: 1rem; font-weight: 600; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+  .card h2 .icon { width: 20px; height: 20px; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; }
+  .mood-badge { display: inline-block; padding: 4px 12px; border-radius: 20px; font-weight: 600; font-size: 0.9rem; text-transform: capitalize; }
+  .mood-relax { background: #1a472a; color: var(--green); }
+  .mood-focus { background: #1a2e4a; color: var(--accent); }
+  .mood-active { background: #4a2a1a; color: var(--orange); }
+  .mood-sleep { background: #2a1a4a; color: var(--purple); }
+  .mood-alert { background: #4a1a1a; color: var(--red); }
+  .mood-away { background: #2a2a2a; color: var(--muted); }
+  .stat { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--surface2); }
+  .stat:last-child { border-bottom: none; }
+  .stat .label { color: var(--muted); font-size: 0.85rem; }
+  .stat .value { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .bar-row { display: flex; align-items: center; gap: 8px; margin: 4px 0; }
+  .bar-label { flex: 0 0 100px; font-size: 0.8rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bar-track { flex: 1; height: 6px; background: var(--surface2); border-radius: 3px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 3px; transition: width 0.5s ease; }
+  .bar-value { flex: 0 0 40px; text-align: right; font-size: 0.8rem; font-variant-numeric: tabular-nums; }
+  .module-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
+  .module-chip { padding: 8px 10px; border-radius: 8px; font-size: 0.78rem; display: flex; align-items: center; gap: 6px; cursor: pointer; transition: background 0.2s; }
+  .module-chip:hover { filter: brightness(1.2); }
+  .module-chip .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .module-chip.active { background: #1a3a2a; }
+  .module-chip.active .dot { background: var(--green); }
+  .module-chip.learning { background: #3a3a1a; }
+  .module-chip.learning .dot { background: var(--orange); }
+  .module-chip.off { background: #2a1a1a; }
+  .module-chip.off .dot { background: var(--red); }
+  .zone-list { list-style: none; }
+  .zone-item { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--surface2); }
+  .zone-item:last-child { border-bottom: none; }
+  .zone-icon { font-size: 1.1rem; width: 28px; text-align: center; }
+  .zone-name { flex: 1; font-size: 0.85rem; }
+  .zone-prio { font-size: 0.75rem; color: var(--muted); }
+  .candidate-item { padding: 8px; margin: 4px 0; background: var(--surface2); border-radius: 8px; font-size: 0.82rem; }
+  .candidate-item .label { font-weight: 500; }
+  .candidate-item .meta { color: var(--muted); font-size: 0.75rem; margin-top: 2px; }
+  .wide { grid-column: span 2; }
+  @media (max-width: 700px) { .wide { grid-column: span 1; } .grid { grid-template-columns: 1fr; } }
+  .refresh-btn { background: var(--surface2); border: none; color: var(--accent); padding: 6px 14px; border-radius: 8px; cursor: pointer; font-size: 0.8rem; }
+  .refresh-btn:hover { background: var(--surface); }
+  .svg-container { text-align: center; margin-top: 8px; }
+  .svg-container img { max-width: 100%; height: auto; border-radius: 8px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>🧠 Styx Dashboard</h1>
+    <button class="refresh-btn" onclick="loadDashboard()">↻ Refresh</button>
+    <div class="status" id="status">Laden…</div>
+  </header>
+
+  <div class="grid">
+    <!-- Mood Card -->
+    <div class="card">
+      <h2><span class="icon" style="background:#1a3a4a">🎭</span> Stimmung</h2>
+      <div id="mood-content">–</div>
+    </div>
+
+    <!-- Neurons Card -->
+    <div class="card">
+      <h2><span class="icon" style="background:#2a1a4a">⚡</span> Neuronen</h2>
+      <div id="neuron-content">–</div>
+    </div>
+
+    <!-- Brain Graph Card -->
+    <div class="card">
+      <h2><span class="icon" style="background:#1a2a3a">🕸️</span> Brain Graph</h2>
+      <div id="graph-content">–</div>
+    </div>
+
+    <!-- Integration Bus Card -->
+    <div class="card">
+      <h2><span class="icon" style="background:#1a3a2a">📡</span> Integration Bus</h2>
+      <div id="bus-content">–</div>
+    </div>
+
+    <!-- Modules Card -->
+    <div class="card wide">
+      <h2><span class="icon" style="background:#3a2a1a">🔧</span> Module</h2>
+      <div class="module-grid" id="modules-content">–</div>
+    </div>
+
+    <!-- Habitus Zones Card -->
+    <div class="card">
+      <h2><span class="icon" style="background:#2a3a1a">🏠</span> Habitus-Zonen</h2>
+      <ul class="zone-list" id="zones-content"></ul>
+    </div>
+
+    <!-- Hebbian Learning Card -->
+    <div class="card">
+      <h2><span class="icon" style="background:#4a1a3a">🎓</span> Hebbian Learning</h2>
+      <div id="learning-content">–</div>
+    </div>
+
+    <!-- Neural Visualization -->
+    <div class="card wide">
+      <h2><span class="icon" style="background:#1a2a4a">🔬</span> Neural Pipeline Visualisierung</h2>
+      <div class="svg-container" id="svg-container">
+        <img id="neuron-svg" alt="Neural Pipeline" />
+      </div>
+    </div>
+
+    <!-- Recent Candidates Card -->
+    <div class="card">
+      <h2><span class="icon" style="background:#2a2a1a">💡</span> Letzte Kandidaten</h2>
+      <div id="candidates-content">–</div>
+    </div>
+  </div>
+</div>
+
+<script>
+const BASE = location.origin;
+const TOKEN = new URLSearchParams(location.search).get("token") || "";
+const HEADERS = TOKEN ? {"X-Auth-Token": TOKEN} : {};
+
+async function fetchJSON(path) {
+  const r = await fetch(BASE + path, {headers: HEADERS});
+  if (!r.ok) return null;
+  return r.json();
+}
+
+function moodClass(mood) {
+  const m = (mood || "").toLowerCase();
+  if (m.includes("relax")) return "mood-relax";
+  if (m.includes("focus")) return "mood-focus";
+  if (m.includes("active")) return "mood-active";
+  if (m.includes("sleep")) return "mood-sleep";
+  if (m.includes("alert")) return "mood-alert";
+  if (m.includes("away")) return "mood-away";
+  return "mood-relax";
+}
+
+function barHTML(label, value, color) {
+  const pct = Math.round((value || 0) * 100);
+  return `<div class="bar-row">
+    <span class="bar-label">${label}</span>
+    <span class="bar-track"><span class="bar-fill" style="width:${pct}%;background:${color}"></span></span>
+    <span class="bar-value">${pct}%</span>
+  </div>`;
+}
+
+function renderMood(mood) {
+  if (!mood || !mood.mood) return "Kein Mood-Daten";
+  const conf = Math.round((mood.confidence || 0) * 100);
+  let html = `<span class="mood-badge ${moodClass(mood.mood)}">${mood.mood}</span>
+    <span style="margin-left:8px;color:var(--muted);font-size:0.85rem">${conf}% Konfidenz</span>`;
+  if (mood.mood_values) {
+    const colors = {relax:"#81c784",focus:"#4fc3f7",active:"#ffb74d",sleep:"#ce93d8",alert:"#ef5350",away:"#888",social:"#ff8a65",recovery:"#a5d6a7"};
+    html += '<div style="margin-top:12px">';
+    for (const [k, v] of Object.entries(mood.mood_values)) {
+      html += barHTML(k, v, colors[k] || "#4fc3f7");
+    }
+    html += '</div>';
+  }
+  return html;
+}
+
+function renderNeurons(neurons) {
+  if (!neurons || !neurons.summary) return "Keine Neuron-Daten";
+  const s = neurons.summary;
+  const counts = {context: Object.keys(s.context || {}).length, state: Object.keys(s.state || {}).length, mood: Object.keys(s.mood || {}).length};
+  return `<div class="stat"><span class="label">Kontext</span><span class="value">${counts.context}</span></div>
+    <div class="stat"><span class="label">Zustand</span><span class="value">${counts.state}</span></div>
+    <div class="stat"><span class="label">Stimmung</span><span class="value">${counts.mood}</span></div>
+    <div class="stat"><span class="label">Gesamt</span><span class="value">${neurons.total_count}</span></div>`;
+}
+
+function renderGraph(graph) {
+  if (!graph || !graph.total_nodes) return "Kein Graph-Daten";
+  let html = `<div class="stat"><span class="label">Knoten</span><span class="value">${graph.total_nodes}</span></div>
+    <div class="stat"><span class="label">Kanten</span><span class="value">${graph.total_edges}</span></div>`;
+  if (graph.nodes_by_kind) {
+    for (const [k, v] of Object.entries(graph.nodes_by_kind)) {
+      html += `<div class="stat"><span class="label" style="padding-left:12px">↳ ${k}</span><span class="value">${v}</span></div>`;
+    }
+  }
+  return html;
+}
+
+function renderBus(bus) {
+  if (!bus || bus.events_published === undefined) return "Bus nicht aktiv";
+  const errorRate = bus.events_published > 0 ? ((bus.errors / bus.events_published) * 100).toFixed(1) : "0.0";
+  return `<div class="stat"><span class="label">Veröffentlicht</span><span class="value">${bus.events_published}</span></div>
+    <div class="stat"><span class="label">Zugestellt</span><span class="value">${bus.events_delivered}</span></div>
+    <div class="stat"><span class="label">Fehler</span><span class="value" style="color:${bus.errors>0?'var(--red)':'inherit'}">${bus.errors}</span></div>
+    <div class="stat"><span class="label">Dead Letters</span><span class="value">${bus.dead_letter_count || 0}</span></div>
+    <div class="stat"><span class="label">Fehlerrate</span><span class="value">${errorRate}%</span></div>`;
+}
+
+function renderModules(modules) {
+  if (!modules || Object.keys(modules).length === 0) return "Keine Module konfiguriert";
+  let html = "";
+  for (const [id, state] of Object.entries(modules)) {
+    const label = id.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+    html += `<div class="module-chip ${state}" title="${id}: ${state}">
+      <span class="dot"></span>${label}
+    </div>`;
+  }
+  return html;
+}
+
+function renderLearning(learning) {
+  if (!learning || !learning.total_synapses) return "Nicht aktiv";
+  let html = `<div class="stat"><span class="label">Synapsen</span><span class="value">${learning.total_synapses}</span></div>`;
+  if (learning.top_drifts) {
+    html += '<div style="margin-top:8px;font-size:0.8rem;color:var(--muted)">Top Drift:</div>';
+    for (const d of learning.top_drifts) {
+      html += barHTML(d.synapse.split(":").pop(), Math.min(d.drift, 1), "#ce93d8");
+    }
+  }
+  return html;
+}
+
+function renderCandidates(candidates) {
+  if (!candidates || candidates.length === 0) return "Keine Kandidaten";
+  return candidates.map(c => `<div class="candidate-item">
+    <div class="label">${c.label || c.id}</div>
+    <div class="meta">${c.kind || "–"} · Score: ${(c.score || 0).toFixed(2)} · ${c.source || ""}</div>
+  </div>`).join("");
+}
+
+const ZONE_ICONS = {living:"🛋️",bath:"🚿",kitchen:"🍳",office:"💼",hallway:"🚪",bedroom:"🛏️",room_mira:"👧",room_paul:"👦",terrace:"🌿",outside:"🌳"};
+
+function renderZones(zones) {
+  const el = document.getElementById("zones-content");
+  if (!zones || zones.length === 0) { el.innerHTML = '<li style="color:var(--muted);padding:8px">Keine Zonen</li>'; return; }
+  el.innerHTML = zones.map(z => `<li class="zone-item">
+    <span class="zone-icon">${ZONE_ICONS[z.id] || "🏠"}</span>
+    <span class="zone-name">${z.name_de || z.id}</span>
+    <span class="zone-prio">P${z.priority || 0}</span>
+  </li>`).join("");
+}
+
+async function loadDashboard() {
+  document.getElementById("status").textContent = "Laden…";
+  const [dash, conf] = await Promise.all([
+    fetchJSON("/api/v1/styx/dashboard"),
+    fetchJSON("/api/v1/styx/config"),
+  ]);
+
+  if (dash && dash.ok) {
+    document.getElementById("mood-content").innerHTML = renderMood(dash.mood);
+    document.getElementById("neuron-content").innerHTML = renderNeurons(dash.neurons);
+    document.getElementById("graph-content").innerHTML = renderGraph(dash.graph);
+    document.getElementById("bus-content").innerHTML = renderBus(dash.bus);
+    document.getElementById("modules-content").innerHTML = renderModules(dash.modules);
+    document.getElementById("learning-content").innerHTML = renderLearning(dash.learning);
+    document.getElementById("candidates-content").innerHTML = renderCandidates(dash.candidates);
+    document.getElementById("status").textContent = `${dash.render_ms}ms · ${new Date(dash.timestamp).toLocaleTimeString("de-DE")}`;
+  } else {
+    document.getElementById("status").textContent = "Fehler beim Laden";
+  }
+
+  if (conf && conf.ok) {
+    renderZones(conf.habitus_zones);
+  }
+
+  // Load neural SVG
+  const svgImg = document.getElementById("neuron-svg");
+  svgImg.src = BASE + "/api/v1/neurons/layers/snapshot.svg?" + Date.now();
+}
+
+// Initial load + auto-refresh
+loadDashboard();
+setInterval(loadDashboard, 30000);
+</script>
+</body>
+</html>
