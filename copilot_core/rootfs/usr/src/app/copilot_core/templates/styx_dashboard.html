@@ -208,7 +208,37 @@
   .musikwolke-panel { background: linear-gradient(135deg, #1a1a3a, #2a1a4a); border-radius: var(--radius); padding: 20px; margin-bottom: 16px; border: 1px solid #3a2a5a; }
   .musikwolke-panel h3 { color: var(--purple); margin-bottom: 8px; }
 
-  @media (max-width: 700px) { .routing-panel { grid-template-columns: 1fr; } .neuron-config-grid { grid-template-columns: 1fr; } .zone-grid { grid-template-columns: 1fr; } }
+  /* ── Zone Detail Modal ──────────────────────────── */
+  .modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 50; align-items: center; justify-content: center; }
+  .modal-overlay.show { display: flex; }
+  .modal { background: var(--surface); border-radius: var(--radius); padding: 24px; max-width: 600px; width: 90%; max-height: 80vh; overflow-y: auto; border: 1px solid var(--surface2); animation: fadeIn 0.2s ease; }
+  .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+  .modal-header h3 { font-size: 1.1rem; font-weight: 600; }
+  .modal-close { background: none; border: none; color: var(--muted); font-size: 1.3rem; cursor: pointer; padding: 4px 8px; }
+  .modal-close:hover { color: var(--text); }
+  .entity-group { margin-bottom: 14px; }
+  .entity-group h4 { font-size: 0.82rem; color: var(--accent); margin-bottom: 6px; text-transform: capitalize; }
+  .entity-group .entity-item { font-size: 0.78rem; padding: 4px 8px; background: var(--surface2); border-radius: 4px; margin: 2px 0; color: var(--muted); }
+
+  /* ── Volume Slider ──────────────────────────────── */
+  .volume-row { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+  .volume-row input[type="range"] { flex: 1; accent-color: var(--green); height: 4px; }
+  .volume-row .vol-val { font-size: 0.72rem; color: var(--muted); width: 32px; text-align: right; }
+
+  /* ── Overview Summary Cards ──────────────────────── */
+  .summary-strip { display: flex; gap: 12px; margin-bottom: 16px; overflow-x: auto; padding-bottom: 4px; }
+  .summary-chip { background: var(--surface); border-radius: 10px; padding: 12px 16px; min-width: 140px; border: 1px solid var(--surface2); flex-shrink: 0; }
+  .summary-chip .sc-label { font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+  .summary-chip .sc-value { font-size: 1.3rem; font-weight: 700; margin-top: 2px; font-variant-numeric: tabular-nums; }
+  .summary-chip .sc-sub { font-size: 0.72rem; color: var(--muted); margin-top: 2px; }
+
+  /* ── Suggestion Enhanced ──────────────────────────── */
+  .suggestion-card.accepted { opacity: 0.5; border-left-color: var(--green); }
+  .suggestion-card.rejected { opacity: 0.3; border-left-color: var(--red); }
+  .suggestion-card.snoozed { opacity: 0.6; border-left-color: var(--muted); }
+  .sug-pattern { font-family: monospace; font-size: 0.72rem; color: var(--purple); background: var(--surface2); padding: 4px 8px; border-radius: 4px; margin-top: 6px; word-break: break-all; }
+
+  @media (max-width: 700px) { .routing-panel { grid-template-columns: 1fr; } .neuron-config-grid { grid-template-columns: 1fr; } .zone-grid { grid-template-columns: 1fr; } .summary-strip { flex-direction: column; } }
 </style>
 </head>
 <body>
@@ -233,6 +263,7 @@
 
   <!-- ═══════════════ TAB: Overview ═══════════════ -->
   <div class="tab-content active" id="tab-overview">
+    <div class="summary-strip" id="summary-strip"></div>
     <div class="grid">
       <div class="card">
         <h2><span class="icon" style="background:#1a3a4a">&#x1F3AD;</span> Stimmung</h2>
@@ -289,8 +320,16 @@
 
   <!-- ═══════════════ TAB: Vorschlaege ═══════════════ -->
   <div class="tab-content" id="tab-suggestions">
-    <div class="section-title">&#x1F4A1; Automations-Vorschl&auml;ge</div>
-    <p style="font-size:0.82rem;color:var(--muted);margin-bottom:16px">Basierend auf erkannten Mustern und Verhaltensanalyse. Konfidenz &ge; 70% werden empfohlen.</p>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div>
+        <div class="section-title" style="margin:0">&#x1F4A1; Automations-Vorschl&auml;ge</div>
+        <p style="font-size:0.82rem;color:var(--muted);margin-top:4px">Basierend auf erkannten Mustern und Verhaltensanalyse. Konfidenz &ge; 70% werden empfohlen.</p>
+      </div>
+      <div style="display:flex;gap:6px">
+        <span class="sug-tag" style="background:var(--green)20;color:var(--green);padding:4px 10px;border-radius:6px;font-size:0.75rem" id="sug-count-pending">0 offen</span>
+        <span class="sug-tag" style="background:var(--surface2);color:var(--muted);padding:4px 10px;border-radius:6px;font-size:0.75rem" id="sug-count-accepted">0 angenommen</span>
+      </div>
+    </div>
     <div class="suggestion-grid" id="suggestion-cards"></div>
   </div>
 
@@ -378,6 +417,17 @@
         </div>
       </div>
     </div>
+  </div>
+</div>
+
+<!-- Zone Detail Modal -->
+<div class="modal-overlay" id="zone-modal" onclick="if(event.target===this)closeZoneModal()">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="zone-modal-title">Zone</h3>
+      <button class="modal-close" onclick="closeZoneModal()">&times;</button>
+    </div>
+    <div id="zone-modal-content"></div>
   </div>
 </div>
 
@@ -1065,7 +1115,10 @@ function renderZones(zones) {
   </li>`).join("");
 }
 
+let dashboardZones = [];
+
 function renderZoneCards(zones) {
+  dashboardZones = zones || [];
   const el = document.getElementById("zone-cards");
   if (!el) return;
   if (!zones || zones.length === 0) { el.innerHTML = '<div style="color:var(--muted);padding:20px">Keine Zonen konfiguriert.</div>'; return; }
@@ -1073,7 +1126,7 @@ function renderZoneCards(zones) {
     const roleChips = Object.entries(z.roles || {}).filter(([,c]) => c > 0).map(([r, c]) =>
       `<span class="zone-role">${ROLE_ICONS[r] || ""} ${r} (${c})</span>`
     ).join("");
-    return `<div class="zone-card" style="border-left:4px solid ${z.color || 'var(--surface2)'}">
+    return `<div class="zone-card" style="border-left:4px solid ${z.color || 'var(--surface2)'}" onclick="openZoneDetail('${z.id}')">
       <span class="zone-entity-count">${z.entity_count || 0} Entit&auml;ten</span>
       <div class="zone-header">
         <span class="zone-icon" style="background:${z.color || '#333'}20">${z.icon || ZONE_ICONS[z.id] || "\u{1F3E0}"}</span>
@@ -1085,6 +1138,51 @@ function renderZoneCards(zones) {
       <div class="zone-roles">${roleChips || '<span style="color:var(--muted);font-size:0.75rem">Keine Rollen</span>'}</div>
     </div>`;
   }).join("");
+}
+
+function openZoneDetail(zoneId) {
+  const z = dashboardZones.find(zz => zz.id === zoneId);
+  if (!z) return;
+  document.getElementById("zone-modal-title").innerHTML = `${z.icon || ZONE_ICONS[zoneId] || ''} ${z.name_de || zoneId}`;
+  let html = `<div style="margin-bottom:12px;font-size:0.82rem;color:var(--muted)">${z.name_en || ''} &middot; Priorit&auml;t ${z.priority || 0} &middot; ${z.entity_count || 0} Entit&auml;ten</div>`;
+
+  // Load entity details from example config via dashboard data
+  const roles = z.roles || {};
+  // Show role summary with entity counts
+  for (const [role, count] of Object.entries(roles)) {
+    if (count === 0) continue;
+    html += `<div class="entity-group">
+      <h4>${ROLE_ICONS[role] || ''} ${role} (${count})</h4>`;
+    // We don't have entity IDs in the dashboard data, but we show counts
+    html += `<div class="entity-item">${count} Entit&auml;t${count > 1 ? 'en' : ''} zugewiesen</div>`;
+    html += `</div>`;
+  }
+
+  // Quick actions
+  html += `<div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap">
+    <button class="btn-sm btn-primary" onclick="askStyxAboutZone('${zoneId}')">&#x1F4AC; Im Chat fragen</button>
+    <button class="btn-sm btn-secondary" onclick="mediaGroupZone('${zoneId}')">&#x1F50A; Gruppieren</button>
+  </div>`;
+
+  document.getElementById("zone-modal-content").innerHTML = html;
+  document.getElementById("zone-modal").classList.add("show");
+}
+
+function closeZoneModal() {
+  document.getElementById("zone-modal").classList.remove("show");
+}
+
+function askStyxAboutZone(zoneId) {
+  closeZoneModal();
+  // Switch to chat tab and pre-fill
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  document.querySelector('[data-tab="chat"]').classList.add('active');
+  document.getElementById('tab-chat').classList.add('active');
+  const input = document.getElementById("chat-input");
+  const z = dashboardZones.find(zz => zz.id === zoneId);
+  input.value = `Was ist der aktuelle Status der Zone "${z ? z.name_de : zoneId}"?`;
+  input.focus();
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1115,7 +1213,14 @@ function renderMediaZones(media) {
           <span class="mz-state idle">Idle</span>
         </div>
         <div style="font-size:0.78rem;color:var(--muted)">media_player.sonos_${zid.replace('room_','')}</div>
+        <div class="volume-row">
+          <span style="font-size:0.72rem;color:var(--muted)">&#x1F50A;</span>
+          <input type="range" min="0" max="100" value="30" onchange="mediaSetVolume('${zid}',this.value/100)" oninput="this.nextElementSibling.textContent=this.value+'%'"/>
+          <span class="vol-val">30%</span>
+        </div>
         <div class="mz-controls">
+          <button class="btn-sm btn-success" onclick="mediaPlayZone('${zid}')">&#x25B6;</button>
+          <button class="btn-sm btn-secondary" onclick="mediaPauseZone('${zid}')">&#x23F8;</button>
           <button class="btn-sm btn-secondary" onclick="mediaGroupZone('${zid}')">Gruppieren</button>
           <button class="btn-sm btn-secondary" onclick="mediaUngroupZone('${zid}')">Trennen</button>
         </div>
@@ -1127,6 +1232,7 @@ function renderMediaZones(media) {
   el.innerHTML = zones.map(z => {
     const state = z.state || "idle";
     const icon = ZONE_ICONS[z.zone_id] || "\u{1F3E0}";
+    const vol = Math.round((z.volume || 0.3) * 100);
     const trackInfo = z.media_title ? `<div style="font-size:0.78rem;margin-top:4px">\u{1F3B6} ${z.media_title}${z.media_artist ? ' &mdash; ' + z.media_artist : ''}</div>` : '';
     return `<div class="media-zone-card ${state}">
       <div class="mz-header">
@@ -1134,9 +1240,16 @@ function renderMediaZones(media) {
         <span style="font-weight:600;font-size:0.9rem">${z.zone_name || z.zone_id}</span>
         <span class="mz-state ${state}">${state === 'playing' ? 'Spielt' : state === 'paused' ? 'Pause' : 'Idle'}</span>
       </div>
-      <div style="font-size:0.78rem;color:var(--muted)">${z.primary_player || '—'}</div>
+      <div style="font-size:0.78rem;color:var(--muted)">${z.primary_player || '\u2014'}</div>
       ${trackInfo}
+      <div class="volume-row">
+        <span style="font-size:0.72rem;color:var(--muted)">&#x1F50A;</span>
+        <input type="range" min="0" max="100" value="${vol}" onchange="mediaSetVolume('${z.zone_id}',this.value/100)" oninput="this.nextElementSibling.textContent=this.value+'%'"/>
+        <span class="vol-val">${vol}%</span>
+      </div>
       <div class="mz-controls">
+        <button class="btn-sm btn-success" onclick="mediaPlayZone('${z.zone_id}')">&#x25B6;</button>
+        <button class="btn-sm btn-secondary" onclick="mediaPauseZone('${z.zone_id}')">&#x23F8;</button>
         <button class="btn-sm btn-secondary" onclick="mediaGroupZone('${z.zone_id}')">Gruppieren</button>
         <button class="btn-sm btn-secondary" onclick="mediaUngroupZone('${z.zone_id}')">Trennen</button>
       </div>
@@ -1168,37 +1281,63 @@ async function musikwolkeUngroupAll() {
   else showToast(`Fehler: ${result.error || 'Unbekannt'}`, 4000);
 }
 
+async function mediaPlayZone(zoneId) {
+  const result = await postJSON(`/api/v1/zones/${zoneId}/play`, {});
+  if (result.ok) showToast(`${zoneId}: Play`);
+}
+
+async function mediaPauseZone(zoneId) {
+  const result = await postJSON(`/api/v1/zones/${zoneId}/pause`, {});
+  if (result.ok) showToast(`${zoneId}: Pause`);
+}
+
+async function mediaSetVolume(zoneId, volume) {
+  const result = await postJSON(`/api/v1/zones/${zoneId}/volume`, {volume});
+  if (result.ok) showToast(`${zoneId}: ${Math.round(volume*100)}%`);
+}
+
 // ═══════════════════════════════════════════════════════════════
 // Suggestions
 // ═══════════════════════════════════════════════════════════════
 
+let sugAccepted = 0, sugTotal = 0;
+
 function renderSuggestionCards(suggestions) {
   const el = document.getElementById("suggestion-cards");
   if (!el) return;
+  sugTotal = (suggestions || []).length;
   if (!suggestions || suggestions.length === 0) {
     el.innerHTML = '<div style="color:var(--muted);padding:20px">Keine Vorschlaege vorhanden. Das System lernt noch...</div>';
+    updateSugCounts(0, 0);
     return;
   }
   const catColors = {comfort: "var(--green)", energy: "var(--orange)", health: "var(--accent)", security: "var(--red)"};
   const riskColors = {low: "var(--green)", medium: "var(--orange)", high: "var(--red)"};
 
-  el.innerHTML = suggestions.map(s => {
+  // Sort: high confidence first
+  const sorted = [...suggestions].sort((a, b) => (b.confidence || 0) - (a.confidence || 0));
+
+  el.innerHTML = sorted.map(s => {
     const confPct = Math.round((s.confidence || 0) * 100);
     const confColor = confPct >= 90 ? "var(--green)" : confPct >= 70 ? "var(--orange)" : "var(--red)";
     const catClass = `sug-cat-${s.category || 'comfort'}`;
     const catLabel = {comfort: "Komfort", energy: "Energie", health: "Gesundheit", security: "Sicherheit"}[s.category] || s.category;
     const savings = s.estimated_savings_eur ? `<span class="sug-tag" style="background:#1a3a2a;color:var(--green)">\u{1F4B6} ~${s.estimated_savings_eur.toFixed(2)}\u20AC/Mon</span>` : '';
+    const pattern = s.pattern ? `<div class="sug-pattern">${s.pattern}</div>` : '';
+    const moodTag = s.mood_type ? `<span class="sug-tag" style="background:var(--surface2);color:var(--purple)">\u{1F3AD} ${s.mood_type}</span>` : '';
 
-    return `<div class="suggestion-card ${catClass}">
+    return `<div class="suggestion-card ${catClass}" id="sug-${s.id}">
       <div class="sug-header">
         <span class="sug-title">${s.title || s.id}</span>
         <span class="sug-confidence" style="background:${confColor}20;color:${confColor}">${confPct}%</span>
       </div>
-      <div class="sug-desc">${s.description || '—'}</div>
+      <div class="sug-desc">${s.description || '\u2014'}</div>
+      ${pattern}
       <div class="sug-meta">
         <span class="sug-tag" style="background:${catColors[s.category] || '#888'}20;color:${catColors[s.category] || '#888'}">${catLabel}</span>
         <span class="sug-tag" style="background:${riskColors[s.risk_level] || '#888'}20;color:${riskColors[s.risk_level] || '#888'}">Risiko: ${s.risk_level || '?'}</span>
         ${s.zone_id && s.zone_id !== '_global' ? `<span class="sug-tag" style="background:var(--surface2);color:var(--text)">${ZONE_ICONS[s.zone_id] || ''} ${s.zone_id}</span>` : '<span class="sug-tag" style="background:var(--surface2);color:var(--text)">\u{1F30D} Global</span>'}
+        ${moodTag}
         ${s.support ? `<span class="sug-tag" style="background:var(--surface2);color:var(--muted)">${s.support}x erkannt</span>` : ''}
         ${savings}
       </div>
@@ -1209,24 +1348,88 @@ function renderSuggestionCards(suggestions) {
       </div>
     </div>`;
   }).join("");
+
+  updateSugCounts(sugTotal, sugAccepted);
+}
+
+function updateSugCounts(total, accepted) {
+  const pendingEl = document.getElementById("sug-count-pending");
+  const acceptedEl = document.getElementById("sug-count-accepted");
+  if (pendingEl) pendingEl.textContent = `${total} offen`;
+  if (acceptedEl) acceptedEl.textContent = `${accepted} angenommen`;
 }
 
 async function acceptSuggestion(id) {
   const result = await postJSON("/api/v1/suggestions/accept", {id});
-  if (result.ok) { showToast("Vorschlag angenommen!"); loadDashboard(); }
-  else showToast(`Fehler: ${result.error || 'Unbekannt'}`, 4000);
+  if (result.ok) {
+    showToast("Vorschlag angenommen!");
+    sugAccepted++;
+    const card = document.getElementById(`sug-${id}`);
+    if (card) { card.classList.add("accepted"); card.querySelector(".sug-actions").innerHTML = '<span style="color:var(--green);font-size:0.82rem">\u2705 Angenommen</span>'; }
+    updateSugCounts(sugTotal, sugAccepted);
+  } else showToast(`Fehler: ${result.error || 'Unbekannt'}`, 4000);
 }
 
 async function snoozeSuggestion(id) {
   const result = await postJSON("/api/v1/suggestions/snooze", {id});
-  if (result.ok) { showToast("Vorschlag zurueckgestellt."); loadDashboard(); }
-  else showToast(`Fehler: ${result.error || 'Unbekannt'}`, 4000);
+  if (result.ok) {
+    showToast("Vorschlag zurueckgestellt.");
+    const card = document.getElementById(`sug-${id}`);
+    if (card) { card.classList.add("snoozed"); card.querySelector(".sug-actions").innerHTML = '<span style="color:var(--muted);font-size:0.82rem">\u23F0 Zurueckgestellt</span>'; }
+  } else showToast(`Fehler: ${result.error || 'Unbekannt'}`, 4000);
 }
 
 async function rejectSuggestion(id) {
   const result = await postJSON("/api/v1/suggestions/reject", {id});
-  if (result.ok) { showToast("Vorschlag abgelehnt."); loadDashboard(); }
-  else showToast(`Fehler: ${result.error || 'Unbekannt'}`, 4000);
+  if (result.ok) {
+    showToast("Vorschlag abgelehnt.");
+    const card = document.getElementById(`sug-${id}`);
+    if (card) { card.classList.add("rejected"); card.querySelector(".sug-actions").innerHTML = '<span style="color:var(--red);font-size:0.82rem">\u274C Abgelehnt</span>'; }
+  } else showToast(`Fehler: ${result.error || 'Unbekannt'}`, 4000);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Overview Summary Strip
+// ═══════════════════════════════════════════════════════════════
+
+function renderSummaryStrip(dash) {
+  const el = document.getElementById("summary-strip");
+  if (!el) return;
+
+  const mood = dash.mood?.mood || "—";
+  const moodConf = Math.round((dash.mood?.confidence || 0) * 100);
+  const zoneCount = (dash.zones || []).length;
+  const totalEntities = (dash.zones || []).reduce((s, z) => s + (z.entity_count || 0), 0);
+  const sugCount = (dash.suggestions || []).length;
+  const neuronCount = dash.neurons?.total_count || 0;
+  const mediaSessions = dash.media?.active_sessions || 0;
+
+  el.innerHTML = `
+    <div class="summary-chip">
+      <div class="sc-label">Stimmung</div>
+      <div class="sc-value"><span class="mood-badge ${moodClass(mood)}" style="font-size:0.9rem;padding:2px 8px">${mood}</span></div>
+      <div class="sc-sub">${moodConf}% Konfidenz</div>
+    </div>
+    <div class="summary-chip">
+      <div class="sc-label">Zonen</div>
+      <div class="sc-value">${zoneCount}</div>
+      <div class="sc-sub">${totalEntities} Entit&auml;ten</div>
+    </div>
+    <div class="summary-chip">
+      <div class="sc-label">Vorschl&auml;ge</div>
+      <div class="sc-value">${sugCount}</div>
+      <div class="sc-sub">offen</div>
+    </div>
+    <div class="summary-chip">
+      <div class="sc-label">Neuronen</div>
+      <div class="sc-value">${neuronCount}</div>
+    </div>
+    <div class="summary-chip">
+      <div class="sc-label">Musikwolke</div>
+      <div class="sc-value">${mediaSessions}</div>
+      <div class="sc-sub">aktive Session${mediaSessions !== 1 ? 's' : ''}</div>
+    </div>
+  `;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1254,6 +1457,8 @@ async function loadDashboard() {
     renderZoneCards(dash.zones || []);
     renderMediaZones(dash.media || {});
     renderSuggestionCards(dash.suggestions || []);
+    // Summary strip
+    renderSummaryStrip(dash);
   } else {
     document.getElementById("status").textContent = "Fehler beim Laden";
   }

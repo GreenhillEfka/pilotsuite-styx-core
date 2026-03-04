@@ -41,13 +41,51 @@ def init_zone_dashboard_api() -> None:
 
 
 def _get_habitus_zones() -> List[Dict[str, Any]]:
-    """Get zones from habitus_zones module (lazy import to avoid circular deps)."""
+    """Get zones from habitus_zones module, enriched with example entities."""
+    zones = []
     try:
         from copilot_core.api.v1.habitus_zones import get_all_zones
-        return get_all_zones()
+        zones = get_all_zones()
     except ImportError:
         _LOGGER.warning("habitus_zones module not available")
-        return []
+
+    # Enrich with example entity data
+    try:
+        from copilot_core.example_config import EXAMPLE_ZONE_ENTITIES, ZONE_DISPLAY
+        enriched = []
+        for zone in zones:
+            # Handle both dict and dataclass objects
+            if isinstance(zone, dict):
+                zid = zone.get("zone_id", "")
+                zdict = zone
+            else:
+                zid = getattr(zone, "zone_type", getattr(zone, "zone_id", ""))
+                if hasattr(zid, "value"):
+                    zid = zid.value
+                zdict = {
+                    "zone_id": zid,
+                    "name": getattr(zone, "name_de", getattr(zone, "name", zid)),
+                    "zone_type": zid,
+                    "priority": getattr(zone, "priority", 0),
+                    "entity_ids": [],
+                    "entities": {},
+                    "enabled": True,
+                }
+            if zid in EXAMPLE_ZONE_ENTITIES and not zdict.get("entities"):
+                zdict["entities"] = EXAMPLE_ZONE_ENTITIES[zid]
+                zdict["entity_ids"] = [
+                    eid for role_list in EXAMPLE_ZONE_ENTITIES[zid].values()
+                    for eid in role_list
+                ]
+            if zid in ZONE_DISPLAY:
+                zdict.setdefault("icon", ZONE_DISPLAY[zid].get("icon", ""))
+                zdict.setdefault("color", ZONE_DISPLAY[zid].get("color", ""))
+            enriched.append(zdict)
+        zones = enriched
+    except ImportError:
+        pass
+
+    return zones
 
 
 def _get_zone_mood(zone_id: str) -> Dict[str, Any]:
