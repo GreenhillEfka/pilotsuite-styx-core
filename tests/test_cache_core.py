@@ -482,8 +482,9 @@ class TestCacheInvalidationSetup:
         
         # Should register two listeners
         assert mock_handler.register_listener.call_count == 2
-        mock_handler.register_listener.assert_any_call("state_changed", MagicMock())
-        mock_handler.register_listener.assert_any_call("entity_added", MagicMock())
+        call_args = [c[0][0] for c in mock_handler.register_listener.call_args_list]
+        assert "state_changed" in call_args
+        assert "entity_added" in call_args
     
     @pytest.mark.asyncio
     async def test_setup_cache_invalidation_no_register_listener(self):
@@ -510,15 +511,13 @@ class TestCacheInvalidationSetup:
             "total": 15,
             "hit_ratio": 0.67
         })
-        mock_cache.redis.get_stats = AsyncMock(return_value={"status": "connected"})
-        mock_cache.redis.is_connected = True
-        mock_cache.redis._redis = AsyncMock()
-        mock_cache.redis._redis.keys = AsyncMock(return_value=["key1", "key2", "key3"])
-        mock_cache.redis.key_prefix = "test:"
-        
+        mock_cache.redis.get_stats = AsyncMock(return_value={"status": "fallback", "using_fallback": True})
+        mock_cache.redis.is_connected = False
+        mock_cache.redis._fallback._store = {"key1": "v1", "key2": "v2", "key3": "v3"}
+
         with patch('copilot_core.cache.api_cache.get_api_cache', return_value=mock_cache):
             stats = await get_cache_stats()
-            
+
             assert stats["total_keys"] == 3
             assert stats["hits"] == 10
             assert stats["misses"] == 5
@@ -638,51 +637,51 @@ class TestRedisClientConnection:
         
         client = RedisClient()
         client._connected = False
-        await client._fallback.set("test:key", "value")
-        
+        await client._fallback.set("pilotsuite:key", "value")
+
         result = await client.get("key")
         assert result == "value"
-    
+
     @pytest.mark.asyncio
     async def test_set_with_fallback(self):
         """Test set method uses fallback."""
         from copilot_core.cache.redis_client import RedisClient
-        
+
         client = RedisClient()
         client._connected = False
-        
+
         result = await client.set("key", "value", ttl=60)
         assert result is True
-        
-        stored = await client._fallback.get("test:key")
+
+        stored = await client._fallback.get("pilotsuite:key")
         assert stored == "value"
-    
+
     @pytest.mark.asyncio
     async def test_delete_with_fallback(self):
         """Test delete method uses fallback."""
         from copilot_core.cache.redis_client import RedisClient
-        
+
         client = RedisClient()
         client._connected = False
-        await client._fallback.set("test:key", "value")
-        
+        await client._fallback.set("pilotsuite:key", "value")
+
         result = await client.delete("key")
         assert result is True
-        
-        stored = await client._fallback.get("test:key")
+
+        stored = await client._fallback.get("pilotsuite:key")
         assert stored is None
-    
+
     @pytest.mark.asyncio
     async def test_delete_pattern_with_fallback(self):
         """Test delete_pattern method uses fallback."""
         from copilot_core.cache.redis_client import RedisClient
-        
+
         client = RedisClient()
         client._connected = False
-        await client._fallback.set("test:entity:1", "val1")
-        await client._fallback.set("test:entity:2", "val2")
-        await client._fallback.set("test:state:1", "val3")
-        
+        await client._fallback.set("pilotsuite:entity:1", "val1")
+        await client._fallback.set("pilotsuite:entity:2", "val2")
+        await client._fallback.set("pilotsuite:state:1", "val3")
+
         count = await client.delete_pattern("entity:*")
         assert count == 2
     

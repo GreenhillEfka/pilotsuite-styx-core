@@ -1,312 +1,333 @@
 """
-ChatHandler für PilotSuite-Styx mit RAG-API Integration.
+ChatHandler fuer PilotSuite-Styx mit direkter RAG-Integration.
 
 Verarbeitet Chat-Queries mit kontextuellem Wissen aus:
 - Lokalen Datenquellen (HA-States, Dokumente, History)
 - Optional: Web-Suche via SearXNG
+- Direkte interne RAG-Pipeline (BM25 + Semantic + RRF)
+
+LLM-Fallback-Kette:
+  1. Ollama (lokal, offline, privacy-first)
+  2. Cloud API (OpenAI-kompatibel, konfigurierbar)
+  → Gesteuert ueber LLMProvider mit Runtime-Routing
 """
 
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, Optional
+import os
+import time
+from typing import Any, Dict, List, Optional
 
 import requests
 from requests import RequestException
 
 logger = logging.getLogger(__name__)
 
+# Default URLs from environment or fallback
+OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://127.0.0.1:11434")
+DEFAULT_MODEL = os.environ.get("STYX_LLM_MODEL", "qwen3:0.6b")
+
 
 class ChatHandler:
     """
-    Handler für Chat-Queries mit RAG-Kontext.
-    
-    Integration:
-    - RAG-API für kontextuelle Suche (lokal + optional Web)
-    - Ollama für lokale LLM-Inferenz
-    - Logging für History und zukünftigen RAG-Kontext
+    Handler fuer Chat-Queries mit direkter RAG-Pipeline-Integration.
+
+    Uses the internal BM25 + Semantic hybrid search directly instead
+    of making HTTP calls to a separate RAG service.
+
+    LLM inference uses LLMProvider for Ollama+Cloud fallback chain.
+    Falls back to direct Ollama /api/generate if LLMProvider unavailable.
     """
-    
-    def __init__(self, rag_api_url: str, ollama_url: str):
-        """
-        Initialisiere ChatHandler.
-        
-        Args:
-            rag_api_url: URL der RAG-API (z.B. http://localhost:8765)
-            ollama_url: URL von Ollama (z.B. http://localhost:11434)
-        """
-        self.rag_api_url = rag_api_url.rstrip("/")
-        self.ollama_url = ollama_url.rstrip("/")
+
+    def __init__(
+        self,
+        rag_api_url: Optional[str] = None,
+        ollama_url: Optional[str] = None,
+    ):
+        self.ollama_url = (ollama_url or OLLAMA_URL).rstrip("/")
+        self._bm25_index = None
+        self._searxng_client = None
+        self._llm_provider = None
+        self._initialized = False
         logger.info(
-            "ChatHandler initialized (rag_api_url=%s, ollama_url=%s)",
-            self.rag_api_url,
-            self.ollama_url
+            "ChatHandler initialized (ollama_url=%s, internal_rag=True)",
+            self.ollama_url,
         )
-    
+
+    def _ensure_initialized(self) -> None:
+        """Lazy-init RAG components and LLM provider on first use."""
+        if self._initialized:
+            return
+        try:
+            from copilot_core.rag.bm25 import BM25SqliteIndex
+            self._bm25_index = BM25SqliteIndex()
+            logger.info("BM25 index loaded (%d docs)", self._bm25_index.doc_count)
+        except Exception as exc:
+            logger.warning("BM25 index not available: %s", exc)
+            self._bm25_index = None
+
+        try:
+            from copilot_core.rag.searxng_client import get_searxng_client
+            self._searxng_client = get_searxng_client()
+        except Exception as exc:
+            logger.warning("SearXNG client not available: %s", exc)
+            self._searxng_client = None
+
+        # Initialize LLM provider with Ollama+Cloud fallback
+        try:
+            from copilot_core.llm_provider import LLMProvider
+            self._llm_provider = LLMProvider()
+            logger.info(
+                "LLMProvider loaded (primary=%s, model=%s, cloud=%s)",
+                self._llm_provider.primary_provider,
+                self._llm_provider.active_model,
+                self._llm_provider.has_cloud_fallback,
+            )
+        except Exception as exc:
+            logger.warning("LLMProvider not available, using direct Ollama: %s", exc)
+            self._llm_provider = None
+
+        self._initialized = True
+
+    # ── Public API ────────────────────────────────────────────────────
+
     def handle_query(
         self,
         query: str,
         user_id: str,
         use_web: bool = False,
-        model: str = "qwen3.5:397b-cloud"
+        model: str = "",
     ) -> Dict[str, Any]:
         """
-        Verarbeite Chat-Query mit RAG-Kontext.
-        
+        Process a chat query with RAG context.
+
         Args:
-            query: User-Frage
-            user_id: User-Identifier für History-Logging
-            use_web: Web-Suche aktivieren (SearXNG)
-            model: Ollama-Modell für Inferenz
-        
+            query: User question
+            user_id: User identifier for history
+            use_web: Enable web search via SearXNG
+            model: Ollama model for inference
+
         Returns:
-            Dict mit:
-            - response: LLM-Antwort
-            - sources: RAG-Sources (für UI-Anzeige)
-            - query_type: local|web|hybrid
+            Dict with response, sources, query_type, context_used
         """
+        model = model or DEFAULT_MODEL
+        start = time.perf_counter()
+
         logger.info(
-            "Handling query (user_id=%s, use_web=%s, query=%s)",
-            user_id,
-            use_web,
-            query[:100] if len(query) > 100 else query
+            "Chat query (user=%s, web=%s, model=%s): %s",
+            user_id, use_web, model, query[:120],
         )
-        
-        # 1. RAG-Suche (lokal + optional Web)
-        rag_results = self._search_rag(query, use_web)
-        
-        # 2. LLM-Prompt mit RAG-Kontext
+
+        # 1. Classify query
+        query_type = self._classify_query(query, use_web)
+
+        # 2. RAG search (internal)
+        rag_results = self._search_internal(query, use_web, query_type)
+
+        # 3. Build prompt with context
         prompt = self._build_prompt(query, rag_results)
-        
-        # 3. Ollama-Inferenz
-        response = self._call_ollama(prompt, model)
-        
-        # 4. Log für History
-        self._log_interaction(user_id, query, response, rag_results)
-        
+
+        # 4. LLM inference (Ollama → Cloud fallback)
+        response = self._call_llm(prompt, model)
+
+        elapsed_ms = (time.perf_counter() - start) * 1000
+        logger.info(
+            "Chat complete in %.0fms (sources=%d, type=%s)",
+            elapsed_ms, len(rag_results.get("sources", [])), query_type,
+        )
+
         return {
             "response": response,
             "sources": rag_results.get("sources", []),
-            "query_type": rag_results.get("query_type", "local"),
+            "query_type": query_type,
             "context_used": rag_results.get("results", []),
+            "elapsed_ms": round(elapsed_ms, 1),
         }
-    
-    def _search_rag(self, query: str, use_web: bool) -> Dict[str, Any]:
-        """
-        Suche in RAG-API.
-        
-        Args:
-            query: Suchanfrage
-            use_web: Web-Suche via SearXNG aktivieren
-        
-        Returns:
-            RAG-Ergebnisse mit Results, Sources und Query-Type
-        """
-        search_url = f"{self.rag_api_url}/api/rag/search"
-        
-        payload = {
-            "query": query,
-            "use_web": use_web,
-            "top_k": 10,
-            "include_text": True,
-            "include_metadata": True,
-        }
-        
-        logger.debug("RAG search request (url=%s, payload=%s)", search_url, payload)
-        
-        try:
-            resp = requests.post(
-                search_url,
-                json=payload,
-                timeout=30,
-            )
-            
-            if resp.status_code != 200:
-                logger.error(
-                    "RAG search failed (status=%s, url=%s)",
-                    resp.status_code,
-                    search_url
-                )
-                return {
-                    "results": [],
-                    "sources": [],
-                    "query_type": "local",
-                    "error": f"RAG API returned status {resp.status_code}",
-                }
-            
-            result = resp.json()
-            logger.info(
-                "RAG search completed (results_count=%s, query_type=%s)",
-                len(result.get("results", [])),
-                result.get("query_type", "local")
-            )
-            return result
-                    
-        except RequestException as exc:
-            logger.exception("RAG search request failed: %s", exc)
-            return {
-                "results": [],
-                "sources": [],
-                "query_type": "local",
-                "error": str(exc),
-            }
-        except Exception as exc:
-            logger.exception("Unexpected error in RAG search: %s", exc)
-            return {
-                "results": [],
-                "sources": [],
-                "query_type": "local",
-                "error": str(exc),
-            }
-    
-    def _build_prompt(self, query: str, rag_results: Dict[str, Any]) -> str:
-        """
-        Baue Prompt mit RAG-Kontext für LLM.
-        
-        Args:
-            query: User-Frage
-            rag_results: Ergebnisse der RAG-Suche
-        
-        Returns:
-            Formatierter Prompt für LLM
-        """
-        results = rag_results.get("results", [])
-        query_type = rag_results.get("query_type", "local")
-        
-        if not results:
-            # Kein Kontext verfügbar
-            logger.info("No RAG context available, using query-only prompt")
-            return f"""Beantworte die folgende Frage hilfreich, präzise und freundlich.
-Wenn du unsicher bist oder nicht genug Informationen hast, sage es offen.
 
-Frage: {query}"""
-        
-        # Kontext aus RAG-Ergebnissen extrahieren
+    # ── Internal RAG search ───────────────────────────────────────────
+
+    def _classify_query(self, query: str, use_web: bool) -> str:
+        """Classify query type using the internal query router."""
+        try:
+            from copilot_core.rag.query_router import classify_query
+            classification = classify_query(query)
+            if use_web or classification.use_web_search:
+                return classification.query_type.value
+            return "local"
+        except Exception:
+            return "web" if use_web else "local"
+
+    def _search_internal(
+        self, query: str, use_web: bool, query_type: str
+    ) -> Dict[str, Any]:
+        """Search using the internal RAG pipeline directly."""
+        self._ensure_initialized()
+
+        results: List[Dict[str, Any]] = []
+        sources: List[Dict[str, Any]] = []
+
+        # BM25 lexical search
+        if self._bm25_index is not None:
+            try:
+                bm25_hits = self._bm25_index.search(query, top_k=10)
+                for hit in bm25_hits:
+                    results.append({
+                        "content": hit.text,
+                        "score": hit.score,
+                        "source": hit.namespace,
+                        "doc_id": hit.doc_id,
+                        "search_type": "bm25",
+                    })
+                    sources.append({
+                        "id": hit.doc_id,
+                        "score": hit.score,
+                        "source": hit.namespace,
+                    })
+            except Exception as exc:
+                logger.warning("BM25 search failed: %s", exc)
+
+        # Semantic search via VectorStore
+        try:
+            from copilot_core.vector_store import get_vector_store, get_embedding_engine
+            vs = get_vector_store()
+            ee = get_embedding_engine()
+            if vs and ee:
+                embedding = ee.embed(query)
+                if embedding is not None:
+                    sem_hits = vs.search(embedding, top_k=10)
+                    for sh in sem_hits:
+                        results.append({
+                            "content": sh.get("text", ""),
+                            "score": sh.get("score", 0.0),
+                            "source": sh.get("namespace", "vector"),
+                            "doc_id": sh.get("id", ""),
+                            "search_type": "semantic",
+                        })
+                        sources.append({
+                            "id": sh.get("id", ""),
+                            "score": sh.get("score", 0.0),
+                            "source": "semantic",
+                        })
+        except Exception as exc:
+            logger.debug("Semantic search not available: %s", exc)
+
+        # Web search via SearXNG (optional)
+        if use_web and self._searxng_client:
+            try:
+                web_results = self._searxng_client.search(query, max_results=5)
+                for wr in web_results:
+                    results.append({
+                        "content": wr.snippet,
+                        "score": wr.score,
+                        "source": wr.url,
+                        "doc_id": wr.url,
+                        "search_type": "web",
+                    })
+                    sources.append({
+                        "id": wr.url,
+                        "score": wr.score,
+                        "source": "web",
+                    })
+            except Exception as exc:
+                logger.warning("Web search failed: %s", exc)
+
+        # Sort by score descending, take top 10
+        results.sort(key=lambda r: r.get("score", 0), reverse=True)
+        results = results[:10]
+        sources = sources[:10]
+
+        return {
+            "results": results,
+            "sources": sources,
+            "query_type": query_type,
+        }
+
+    # ── Prompt building ───────────────────────────────────────────────
+
+    def _build_prompt(self, query: str, rag_results: Dict[str, Any]) -> str:
+        """Build LLM prompt with RAG context."""
+        results = rag_results.get("results", [])
+
+        if not results:
+            return (
+                "Beantworte die folgende Frage hilfreich und praezise.\n"
+                "Wenn du unsicher bist, sage es offen.\n\n"
+                f"Frage: {query}"
+            )
+
         context_parts = []
-        for i, result in enumerate(results, start=1):
-            content = result.get("content") or result.get("text", "")
-            source = result.get("source", "Unknown")
+        for i, result in enumerate(results[:8], start=1):
+            content = result.get("content", "")
+            source = result.get("source", "unknown")
             score = result.get("score", 0)
-            
             if content:
                 context_parts.append(
                     f"[Quelle {i}] (Score: {score:.3f}, Quelle: {source})\n{content}"
                 )
-        
+
         context = "\n\n".join(context_parts)
-        
-        logger.info(
-            "Built prompt with context (query_type=%s, context_sources=%s)",
-            query_type,
-            len(context_parts)
+        return (
+            f"Basierend auf dem folgenden Kontext:\n\n{context}\n\n"
+            "Beantworte die Frage praezise und hilfreich.\n"
+            "- Nutze die Informationen aus dem Kontext\n"
+            "- Wenn der Kontext nicht ausreicht, sage es offen\n\n"
+            f"Frage: {query}"
         )
-        
-        return f"""Basierend auf dem folgenden Kontext:
 
-{context}
+    # ── LLM inference with fallback ─────────────────────────────────
 
-Beantworte die Frage präzise, hilfreich und freundlich.
-- Nutze die Informationen aus dem Kontext, wo relevant
-- Zitiere Quellen implizit (z.B. "Laut den Daten...")
-- Wenn der Kontext nicht ausreicht, sage es offen
-- Sei natürlich und konversationell
+    def _call_llm(self, prompt: str, model: str) -> str:
+        """Call LLM using LLMProvider (Ollama → Cloud fallback).
 
-Frage: {query}"""
-    
-    def _call_ollama(
-        self,
-        prompt: str,
-        model: str = "qwen3.5:397b-cloud"
-    ) -> str:
+        If LLMProvider is unavailable, falls back to direct Ollama /api/generate.
         """
-        Rufe Ollama für LLM-Inferenz auf.
-        
-        Args:
-            prompt: Prompt für LLM
-            model: Ollama-Modell
-        
-        Returns:
-            LLM-Antwort als String
-        """
+        self._ensure_initialized()
+
+        # Primary path: use LLMProvider with full fallback chain
+        if self._llm_provider is not None:
+            try:
+                messages = [{"role": "user", "content": prompt}]
+                result = self._llm_provider.chat(
+                    messages=messages,
+                    model=model or None,
+                    temperature=0.7,
+                )
+                content = result.get("content", "")
+                provider = result.get("provider", "unknown")
+                if content and provider != "none":
+                    logger.info("LLM response via %s (model=%s)", provider, model)
+                    return content
+                # Provider returned empty or "none" — fall through to direct call
+                logger.warning("LLMProvider returned empty (provider=%s), trying direct Ollama", provider)
+            except Exception as exc:
+                logger.warning("LLMProvider failed: %s, trying direct Ollama", exc)
+
+        # Fallback: direct Ollama /api/generate
+        return self._call_ollama_direct(prompt, model)
+
+    def _call_ollama_direct(self, prompt: str, model: str) -> str:
+        """Direct Ollama /api/generate call (fallback when LLMProvider unavailable)."""
         generate_url = f"{self.ollama_url}/api/generate"
-        
+
         payload = {
-            "model": model,
+            "model": model or DEFAULT_MODEL,
             "prompt": prompt,
             "stream": False,
             "options": {
                 "temperature": 0.7,
                 "top_p": 0.9,
-            }
+            },
         }
-        
-        logger.debug(
-            "Ollama generate request (model=%s, prompt_length=%s)",
-            model,
-            len(prompt)
-        )
-        
+
         try:
-            resp = requests.post(
-                generate_url,
-                json=payload,
-                timeout=60,
-            )
-            
+            resp = requests.post(generate_url, json=payload, timeout=120)
             if resp.status_code != 200:
-                logger.error(
-                    "Ollama generate failed (status=%s, model=%s)",
-                    resp.status_code,
-                    model
-                )
-                return f"Entschuldigung, ich konnte keine Antwort generieren (Ollama Status: {resp.status_code})."
-            
-            result = resp.json()
-            response_text = result.get("response", "")
-            
-            logger.info(
-                "Ollama generate completed (model=%s, response_length=%s)",
-                model,
-                len(response_text) if response_text else 0
-            )
-            return response_text
-                    
+                logger.error("Ollama failed (status=%s, model=%s)", resp.status_code, model)
+                return f"Entschuldigung, LLM nicht verfuegbar (Status: {resp.status_code})."
+
+            return resp.json().get("response", "")
+
         except RequestException as exc:
             logger.exception("Ollama request failed: %s", exc)
-            return f"Entschuldigung, es gab ein Problem mit der LLM-Verbindung: {exc}"
-        except Exception as exc:
-            logger.exception("Unexpected error in Ollama call: %s", exc)
-            return f"Entschuldigung, ein unerwarteter Fehler ist aufgetreten: {exc}"
-    
-    def _log_interaction(
-        self,
-        user_id: str,
-        query: str,
-        response: str,
-        rag_results: Dict[str, Any]
-    ) -> None:
-        """
-        Logge Interaktion für History und zukünftigen RAG-Kontext.
-        
-        Args:
-            user_id: User-Identifier
-            query: User-Frage
-            response: LLM-Antwort
-            rag_results: Verwendete RAG-Ergebnisse
-        """
-        # TODO: Implementiere persistentes Logging
-        # Optionen:
-        # 1. SQLite-DB (ähnlich wie BM25-Index)
-        # 2. HA Events (für Integration in HA-History)
-        # 3. File-based logging (einfach, aber weniger performant)
-        
-        logger.info(
-            "Interaction logged (user_id=%s, query_length=%s, response_length=%s, sources_count=%s)",
-            user_id,
-            len(query),
-            len(response),
-            len(rag_results.get("sources", []))
-        )
-        
-        # Placeholder für zukünftige Implementierung
-        # self._store_in_history_db(user_id, query, response, rag_results)
+            return f"Entschuldigung, LLM-Verbindung fehlgeschlagen: {exc}"

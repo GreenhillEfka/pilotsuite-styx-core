@@ -47,11 +47,14 @@ _CLOUD_MODEL_PREFIXES = (
 _PROVIDER_OFFLINE = "offline"
 _PROVIDER_CLOUD = "cloud"
 
-_DEFAULT_OLLAMA_MODEL = "qwen3:0.6b"
-_DEFAULT_CLOUD_MODEL = "gpt-4o-mini"
+_DEFAULT_OLLAMA_MODEL = "qwen3:4b"
+_DEFAULT_CLOUD_MODEL = "gpt-4.1-nano"
 _DEFAULT_OLLAMA_CLOUD_MODEL = "gpt-oss:20b"
 _DEFAULT_OLLAMA_CLOUD_MODELS = ("gpt-oss:120b", "gpt-oss:20b")
-_DEFAULT_OFFLINE_MODELS = ("qwen3:0.6b", "qwen3:4b", "llama3.2:3b", "mistral:7b")
+_DEFAULT_OFFLINE_MODELS = (
+    "qwen3:4b", "qwen3:1.7b", "qwen3:0.6b", "gemma3:4b",
+    "fixt/home-3b-v3", "llama3.2:3b", "mistral:7b", "phi4-mini",
+)
 _RUNTIME_SETTINGS_PATH = "/data/llm_runtime_settings.json"
 _CATALOG_CACHE_TTL_S = 45.0
 

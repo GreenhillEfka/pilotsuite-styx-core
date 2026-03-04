@@ -167,7 +167,7 @@ def create_app() -> Flask:
     # Multi-Home Synchronization API endpoints (/api/v1/multihome/*)
     try:
         from copilot_core.api.v1.multihome import bp as multihome_bp
-        app.register_blueprint(multihome_bp, url_prefix="/api/v1")
+        app.register_blueprint(multihome_bp, url_prefix="/api/v1/multihome")
         logging.getLogger(__name__).info("Multi-Home Synchronization API registered")
     except Exception:
         logging.getLogger(__name__).exception("Failed to register Multi-Home Synchronization API blueprint")

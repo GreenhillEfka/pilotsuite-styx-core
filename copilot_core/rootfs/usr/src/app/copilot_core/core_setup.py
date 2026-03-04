@@ -332,6 +332,100 @@ async def init_services(hass=None, config: dict = None):
     except Exception:
         _LOGGER.exception("Failed to init ModuleRegistry")
 
+    # Initialize Integration Bus and wire to existing services
+    try:
+        from copilot_core.integration.bus import IntegrationBus
+        from copilot_core.integration.feedback import FeedbackLoop
+        bus = IntegrationBus.get_instance()
+        services["integration_bus"] = bus
+
+        # Wire bus to NeuronManager
+        if services.get("neuron_manager"):
+            services["neuron_manager"].set_bus(bus)
+
+        # Wire bus to ModuleRegistry
+        if services.get("module_registry"):
+            services["module_registry"].set_bus(bus)
+
+        # Initialize feedback loop (BrainGraph weight adjustments)
+        if services.get("brain_graph_service"):
+            feedback_loop = FeedbackLoop(services["brain_graph_service"], bus)
+            services["feedback_loop"] = feedback_loop
+        else:
+            services["feedback_loop"] = None
+
+        # Initialize integration API
+        from copilot_core.integration.api import init_integration_api
+        init_integration_api(bus, services.get("feedback_loop"))
+
+        _LOGGER.info("IntegrationBus initialized and wired to services")
+    except Exception:
+        _LOGGER.exception("Failed to init IntegrationBus")
+
+    # Initialize Neuron Layers Visualization API
+    try:
+        from copilot_core.api.v1.neuron_layers import init_neuron_layers_api
+        if services.get("neuron_manager"):
+            init_neuron_layers_api(
+                services["neuron_manager"],
+                services.get("integration_bus"),
+            )
+            _LOGGER.info("Neuron Layers Visualization API initialized")
+    except Exception:
+        _LOGGER.exception("Failed to init Neuron Layers API")
+
+    # Initialize Hebbian Learning engine
+    try:
+        from copilot_core.neurons.learning import HebbianLearning
+        from copilot_core.api.v1.neuron_layers import SYNAPSE_TOPOLOGY
+        hebbian = HebbianLearning(
+            topology=SYNAPSE_TOPOLOGY,
+            persist_path="/data/synapse_weights.json",
+        )
+        services["hebbian_learning"] = hebbian
+
+        # Wire learning to bus: update weights on each evaluation
+        bus = services.get("integration_bus")
+        if bus:
+            def _on_eval_for_learning(event):
+                values = {}
+                for key in ("context_values", "state_values", "mood_values"):
+                    prefix = key.split("_")[0]
+                    for name, val in event.data.get(key, {}).items():
+                        values[f"{prefix}.{name}"] = val
+                hebbian.update_weights(values)
+
+            bus.subscribe("neuron.evaluated", _on_eval_for_learning)
+
+        _LOGGER.info("HebbianLearning initialized (%d synapses)", len(SYNAPSE_TOPOLOGY))
+    except Exception:
+        _LOGGER.exception("Failed to init HebbianLearning")
+
+    # Initialize Cross-Module Analyzer
+    try:
+        from copilot_core.integration.cross_module import CrossModuleAnalyzer
+        bus = services.get("integration_bus")
+        if bus:
+            analyzer = CrossModuleAnalyzer(bus)
+            services["cross_module_analyzer"] = analyzer
+            _LOGGER.info("CrossModuleAnalyzer initialized")
+    except Exception:
+        _LOGGER.exception("Failed to init CrossModuleAnalyzer")
+
+    # Initialize Module Health Dashboard API
+    try:
+        from copilot_core.api.v1.module_health import init_module_health_api
+        init_module_health_api(
+            module_registry=services.get("module_registry"),
+            integration_bus=services.get("integration_bus"),
+            hebbian_learning=services.get("hebbian_learning"),
+            cross_module_analyzer=services.get("cross_module_analyzer"),
+            feedback_loop=services.get("feedback_loop"),
+        )
+        _LOGGER.info("Module Health Dashboard API initialized")
+    except Exception:
+        _LOGGER.exception("Failed to init Module Health API")
+
     # Initialize Automation Creator
     try:
         services["automation_creator"] = AutomationCreator()
@@ -387,6 +481,69 @@ async def init_services(hass=None, config: dict = None):
         services["birthday_service"] = BirthdayService()
     except Exception:
         _LOGGER.exception("Failed to init BirthdayService")
+
+    # Initialize PilotSuite Hub engines
+    try:
+        from copilot_core.hub.dashboard import DashboardHub
+        from copilot_core.hub.plugin_manager import PluginManager
+        from copilot_core.hub.multi_home import MultiHomeManager
+        from copilot_core.hub.predictive_maintenance import PredictiveMaintenanceEngine
+        from copilot_core.hub.anomaly_detection import AnomalyDetector
+        from copilot_core.hub.habitus_zones import HabitusZoneEngine
+        from copilot_core.hub.light_intelligence import LightIntelligenceEngine
+        from copilot_core.hub.zone_modes import ZoneModeEngine
+        from copilot_core.hub.media_follow import MediaFollowEngine
+        from copilot_core.hub.energy_advisor import EnergyAdvisor
+        from copilot_core.hub.automation_templates import AutomationTemplateEngine
+        from copilot_core.hub.scene_intelligence import SceneIntelligenceEngine
+        from copilot_core.hub.presence_intelligence import PresenceIntelligenceEngine
+        from copilot_core.hub.notification_intelligence import NotificationIntelligenceEngine
+        from copilot_core.hub.system_integration import SystemIntegrationHub
+        from copilot_core.hub.brain_architecture import BrainArchitectureEngine
+        from copilot_core.hub.brain_activity import BrainActivityTracker
+
+        services["hub_dashboard"] = DashboardHub()
+        services["hub_plugin_manager"] = PluginManager()
+        services["hub_multi_home"] = MultiHomeManager()
+        services["hub_maintenance"] = PredictiveMaintenanceEngine()
+        services["hub_anomaly"] = AnomalyDetector()
+        services["hub_zones"] = HabitusZoneEngine()
+        services["hub_light"] = LightIntelligenceEngine()
+        services["hub_modes"] = ZoneModeEngine()
+        services["hub_media"] = MediaFollowEngine()
+        services["hub_energy"] = EnergyAdvisor()
+        services["hub_templates"] = AutomationTemplateEngine()
+        services["hub_scenes"] = SceneIntelligenceEngine()
+        services["hub_presence"] = PresenceIntelligenceEngine()
+        services["hub_notifications"] = NotificationIntelligenceEngine()
+        services["hub_integration"] = SystemIntegrationHub()
+        services["hub_brain_arch"] = BrainArchitectureEngine()
+        services["hub_brain_activity"] = BrainActivityTracker()
+
+        # Initialize Hub API with engines
+        from copilot_core.hub.api import init_hub_api
+        init_hub_api(
+            dashboard=services["hub_dashboard"],
+            plugin_manager=services["hub_plugin_manager"],
+            multi_home=services["hub_multi_home"],
+            maintenance_engine=services["hub_maintenance"],
+            anomaly_engine=services["hub_anomaly"],
+            zone_engine=services["hub_zones"],
+            light_engine=services["hub_light"],
+            mode_engine=services["hub_modes"],
+            media_engine=services["hub_media"],
+            energy_advisor=services["hub_energy"],
+            template_engine=services["hub_templates"],
+            scene_engine=services["hub_scenes"],
+            presence_engine=services["hub_presence"],
+            notification_engine=services["hub_notifications"],
+            integration_hub=services["hub_integration"],
+            brain_architecture=services["hub_brain_arch"],
+            brain_activity=services["hub_brain_activity"],
+        )
+        _LOGGER.info("Hub engines initialized (17 services)")
+    except Exception:
+        _LOGGER.exception("Failed to init Hub engines")
 
     # Calculate startup time
     services["startup_time_ms"] = (time.perf_counter() - start_time) * 1000
@@ -472,11 +629,59 @@ def register_blueprints(app: Flask, services: dict) -> None:
     
     # Register MCP REST API (standalone, absolute prefix /api/v1/mcp)
     app.register_blueprint(mcp_bp)
+
+    # Register Integration Bus API
+    from copilot_core.integration.api import integration_bp
+    app.register_blueprint(integration_bp)
+
+    # Register Neuron Layers Visualization API
+    from copilot_core.api.v1.neuron_layers import neuron_layers_bp
+    app.register_blueprint(neuron_layers_bp)
+
+    # Register Module Health Dashboard API
+    from copilot_core.api.v1.module_health import module_health_bp
+    app.register_blueprint(module_health_bp)
+
+    # Register Suggestions API
+    from copilot_core.api.v1.suggestions import suggestions_bp, init_suggestions_api
+    init_suggestions_api(services.get("suggestion_engine"))
+    app.register_blueprint(suggestions_bp)
+
+    # Register Zone Automation API (presence-based light + music + entity management)
+    from copilot_core.api.v1.zone_automation import zone_automation_bp, init_zone_automation_api
+    try:
+        from copilot_core.hub.zone_automation import ZoneAutomationController
+        zone_auto_ctrl = ZoneAutomationController()
+        services["zone_automation"] = zone_auto_ctrl
+        init_zone_automation_api(zone_auto_ctrl)
+    except Exception as exc:
+        _LOGGER.warning("Zone Automation init failed: %s", exc)
+        init_zone_automation_api(None)
+    app.register_blueprint(zone_automation_bp)
+
+    # Register Styx Dashboard API
+    from copilot_core.api.v1.styx_dashboard import styx_dashboard_bp, init_styx_dashboard_api
+    init_styx_dashboard_api(services)
+    app.register_blueprint(styx_dashboard_bp)
+
+    # Register Styx Voice API (STT + TTS)
+    from copilot_core.api.v1.styx_voice import styx_voice_bp
+    app.register_blueprint(styx_voice_bp)
+
+    # Serve Styx Dashboard SPA at /styx
+    @app.route("/styx")
+    def _serve_styx_dashboard():
+        from flask import render_template
+        return render_template("styx_dashboard.html")
     
+    # Register PilotSuite Hub API (standalone, absolute prefix /api/v1/hub)
+    from copilot_core.hub.api import hub_bp
+    app.register_blueprint(hub_bp)
+
     # Register PilotSuite Phase 5 APIs
     from copilot_core.sharing.api import sharing_bp
     from copilot_core.collective_intelligence.api import federated_bp
-    
+
     app.register_blueprint(sharing_bp, url_prefix="/api/v1")
     app.register_blueprint(federated_bp, url_prefix="/api/v1")
     

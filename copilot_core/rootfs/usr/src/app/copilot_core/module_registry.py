@@ -53,8 +53,14 @@ class ModuleRegistry:
     def __init__(self, db_path: str | None = None) -> None:
         self._db_path = db_path or DB_PATH
         self._lock = threading.Lock()
+        self._bus = None  # IntegrationBus (optional, wired via set_bus)
         self._init_db()
         _LOGGER.info("ModuleRegistry initialized at %s", self._db_path)
+
+    def set_bus(self, bus) -> None:
+        """Wire the integration bus for state-change events."""
+        self._bus = bus
+        _LOGGER.info("IntegrationBus wired to ModuleRegistry")
 
     # ------------------------------------------------------------------
     # Singleton access
@@ -165,6 +171,15 @@ class ModuleRegistry:
                 )
                 conn.commit()
                 _LOGGER.info("Module %s -> %s", module_id, state)
+                # Publish state change to integration bus
+                if self._bus:
+                    try:
+                        self._bus.publish("module.state_changed", {
+                            "module_id": module_id,
+                            "new_state": state,
+                        }, source="module_registry")
+                    except Exception:
+                        _LOGGER.exception("Failed to publish module.state_changed")
                 return True
             except sqlite3.Error:
                 _LOGGER.exception("Failed to persist state for %s", module_id)

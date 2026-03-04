@@ -1,5 +1,6 @@
 import json
 import os
+from collections import deque
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -74,7 +75,7 @@ class CandidateStore:
         self.persist = bool(persist)
         self.json_path = json_path
         self._items: dict[str, dict[str, Any]] = {}
-        self._order: list[str] = []
+        self._order: deque[str] = deque()
 
         if self.persist:
             self._load()
@@ -90,7 +91,7 @@ class CandidateStore:
                         cid = str(it["id"])
                         self._items[cid] = it
                         self._order.append(cid)
-        except Exception:
+        except (IOError, json.JSONDecodeError, KeyError, TypeError):
             return
 
     def _persist(self) -> None:
@@ -115,9 +116,9 @@ class CandidateStore:
             self._items[cid] = cand
             self._order.append(cid)
 
-        # evict if needed
+        # evict if needed (O(1) with deque.popleft)
         while len(self._order) > self.max_items:
-            victim = self._order.pop(0)
+            victim = self._order.popleft()
             self._items.pop(victim, None)
 
         self._persist()
@@ -130,12 +131,12 @@ class CandidateStore:
         if cid not in self._items:
             return False
         self._items.pop(cid, None)
-        self._order = [x for x in self._order if x != cid]
+        self._order = deque(x for x in self._order if x != cid)
         self._persist()
         return True
 
     def list(self, *, limit: int = 50, kind: Optional[str] = None) -> list[dict[str, Any]]:
-        ids = self._order
+        ids = list(self._order)
         if kind:
             ids = [cid for cid in ids if str(self._items.get(cid, {}).get("kind", "")) == kind]
         limit = max(1, min(int(limit), self.max_items))

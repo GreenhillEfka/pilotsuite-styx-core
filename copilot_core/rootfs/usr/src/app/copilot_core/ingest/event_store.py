@@ -103,8 +103,9 @@ class EventStore:
                     continue
         except FileNotFoundError:
             pass
-        except Exception:
-            pass
+        except (IOError, json.JSONDecodeError) as exc:
+            import logging
+            logging.getLogger(__name__).warning("Failed to load event store tail: %s", exc)
 
     def _prune_seen(self) -> None:
         """Remove ALL expired dedup entries (call under lock).
@@ -136,15 +137,15 @@ class EventStore:
             return True
 
         self._seen[key] = now + self._dedup_ttl
-        
-        # FIX: More aggressive bound enforcement
-        # Bound dedup map - keep it bounded to 2x max events
+
+        # Gradual eviction: remove oldest 25% when exceeding 2x max
+        # This avoids oscillation from the previous 50% drop strategy
         max_dedup_size = self._max * 2
         if len(self._seen) > max_dedup_size:
-            # Remove oldest 50% of entries
-            keys_to_remove = list(self._seen.keys())[:max_dedup_size // 2]
-            for key in keys_to_remove:
-                self._seen.pop(key, None)
+            evict_count = max_dedup_size // 4
+            keys_to_remove = list(self._seen.keys())[:evict_count]
+            for k in keys_to_remove:
+                self._seen.pop(k, None)
 
         return False
 
@@ -297,7 +298,7 @@ class EventStore:
             os.makedirs(os.path.dirname(self._path) or ".", exist_ok=True)
             with open(self._path, "a", encoding="utf-8") as fh:
                 fh.write(json.dumps(event, ensure_ascii=False) + "\n")
-        except Exception:
+        except OSError:
             pass  # Best-effort persistence
 
     def query(

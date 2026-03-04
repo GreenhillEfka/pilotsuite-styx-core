@@ -83,7 +83,7 @@ def _get_discovery() -> Optional[Any]:
 
 # ==================== Registry Endpoints ====================
 
-@sharing_bp.route('/api/v1/sharing/entities', methods=['GET'])
+@sharing_bp.route('/sharing/entities', methods=['GET'])
 @require_api_key
 def get_entities() -> tuple:
     """Get all registered shared entities.
@@ -102,7 +102,7 @@ def get_entities() -> tuple:
     })
 
 
-@sharing_bp.route('/api/v1/sharing/entities/shared', methods=['GET'])
+@sharing_bp.route('/sharing/entities/shared', methods=['GET'])
 @require_api_key
 def get_shared_entities() -> tuple:
     """Get all shared entities (filtered).
@@ -121,7 +121,7 @@ def get_shared_entities() -> tuple:
     })
 
 
-@sharing_bp.route('/api/v1/sharing/entities/<entity_id>', methods=['GET'])
+@sharing_bp.route('/sharing/entities/<entity_id>', methods=['GET'])
 @require_api_key
 def get_entity(entity_id: str) -> tuple:
     """Get a specific shared entity.
@@ -143,7 +143,7 @@ def get_entity(entity_id: str) -> tuple:
     return jsonify(entity.to_dict())
 
 
-@sharing_bp.route('/api/v1/sharing/entities', methods=['POST'])
+@sharing_bp.route('/sharing/entities', methods=['POST'])
 @require_api_key
 def register_entity() -> tuple:
     """Register an entity for sharing.
@@ -179,7 +179,7 @@ def register_entity() -> tuple:
     })
 
 
-@sharing_bp.route('/api/v1/sharing/entities/<entity_id>', methods=['PUT'])
+@sharing_bp.route('/sharing/entities/<entity_id>', methods=['PUT'])
 @require_api_key
 def update_entity(entity_id: str) -> tuple:
     """Update an entity's sharing configuration.
@@ -214,7 +214,7 @@ def update_entity(entity_id: str) -> tuple:
         return jsonify({'error': str(e)}), 404
 
 
-@sharing_bp.route('/api/v1/sharing/entities/<entity_id>', methods=['DELETE'])
+@sharing_bp.route('/sharing/entities/<entity_id>', methods=['DELETE'])
 @require_api_key
 def unregister_entity(entity_id: str) -> tuple:
     """Unregister an entity from sharing.
@@ -233,7 +233,7 @@ def unregister_entity(entity_id: str) -> tuple:
     return jsonify({'ok': True, 'entity_id': entity_id})
 
 
-@sharing_bp.route('/api/v1/sharing/entities/<entity_id>/share-with', methods=['POST'])
+@sharing_bp.route('/sharing/entities/<entity_id>/share-with', methods=['POST'])
 @require_api_key
 def share_with_home(entity_id: str) -> tuple:
     """Share an entity with another home.
@@ -264,7 +264,7 @@ def share_with_home(entity_id: str) -> tuple:
         return jsonify({'error': str(e)}), 404
 
 
-@sharing_bp.route('/api/v1/sharing/entities/<entity_id>/stop-sharing/<home_id>', methods=['POST'])
+@sharing_bp.route('/sharing/entities/<entity_id>/stop-sharing/<home_id>', methods=['POST'])
 @require_api_key
 def stop_sharing_with_home(entity_id: str, home_id: str) -> tuple:
     """Stop sharing an entity with a specific home.
@@ -287,7 +287,7 @@ def stop_sharing_with_home(entity_id: str, home_id: str) -> tuple:
         return jsonify({'error': str(e)}), 404
 
 
-@sharing_bp.route('/api/v1/sharing/entities/<entity_id>/shared-with', methods=['GET'])
+@sharing_bp.route('/sharing/entities/<entity_id>/shared-with', methods=['GET'])
 @require_api_key
 def get_shared_with(entity_id: str) -> tuple:
     """Get list of homes this entity is shared with.
@@ -312,7 +312,7 @@ def get_shared_with(entity_id: str) -> tuple:
 
 # ==================== Sync Endpoints ====================
 
-@sharing_bp.route('/api/v1/sharing/sync/status', methods=['GET'])
+@sharing_bp.route('/sharing/sync/status', methods=['GET'])
 @require_api_key
 def get_sync_status() -> tuple:
     """Get sync service status.
@@ -333,7 +333,7 @@ def get_sync_status() -> tuple:
     })
 
 
-@sharing_bp.route('/api/v1/sharing/sync/entities', methods=['GET'])
+@sharing_bp.route('/sharing/sync/entities', methods=['GET'])
 @require_api_key
 def get_synced_entities() -> tuple:
     """Get all synchronized entities from sync service.
@@ -352,7 +352,7 @@ def get_synced_entities() -> tuple:
     })
 
 
-@sharing_bp.route('/api/v1/sharing/sync/entities/<entity_id>', methods=['GET'])
+@sharing_bp.route('/sharing/sync/entities/<entity_id>', methods=['GET'])
 @require_api_key
 def get_synced_entity(entity_id: str) -> tuple:
     """Get a specific synchronized entity.
@@ -374,7 +374,7 @@ def get_synced_entity(entity_id: str) -> tuple:
     return jsonify(entity)
 
 
-@sharing_bp.route('/api/v1/sharing/sync/peers', methods=['GET'])
+@sharing_bp.route('/sharing/sync/peers', methods=['GET'])
 @require_api_key
 def get_sync_peers() -> tuple:
     """Get list of synchronized peers.
@@ -394,7 +394,7 @@ def get_sync_peers() -> tuple:
 
 # ==================== Discovery Endpoints ====================
 
-@sharing_bp.route('/api/v1/sharing/discovery/peers', methods=['GET'])
+@sharing_bp.route('/sharing/discovery/peers', methods=['GET'])
 @require_api_key
 def get_discovered_peers() -> tuple:
     """Get discovered CoPilot peers.
@@ -413,7 +413,7 @@ def get_discovered_peers() -> tuple:
     })
 
 
-@sharing_bp.route('/api/v1/sharing/discovery/local', methods=['GET'])
+@sharing_bp.route('/sharing/discovery/local', methods=['GET'])
 @require_api_key
 def get_local_peer_info() -> tuple:
     """Get local peer information.
@@ -430,7 +430,7 @@ def get_local_peer_info() -> tuple:
 
 # ==================== Combined Status ====================
 
-@sharing_bp.route('/api/v1/sharing', methods=['GET'])
+@sharing_bp.route('/sharing', methods=['GET'])
 @require_api_key
 def get_sharing_status() -> tuple:
     """Get overall sharing system status.

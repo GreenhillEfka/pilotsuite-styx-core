@@ -759,4 +759,185 @@ def get_paths():
         }), 500
 
 
+# =============================================================================
+# Neuron Configuration Editing Endpoints (Iteration 2)
+# =============================================================================
+
+@bp.route("/<neuron_id>/config", methods=["PATCH"])
+def update_neuron_config(neuron_id: str):
+    """Update a neuron's configuration parameters.
+
+    JSON body (all fields optional):
+        {
+            "threshold": 0.6,          # 0.0-1.0
+            "decay_rate": 0.15,        # 0.0-1.0
+            "smoothing_factor": 0.25,  # 0.0-1.0
+            "weights": {"energy": 0.5},
+            "enabled": true
+        }
+    """
+    if not validate_neuron_id(neuron_id):
+        return jsonify({"success": False, "error": "Invalid neuron_id format"}), 400
+
+    body = request.get_json(silent=True) or {}
+    if not body:
+        return jsonify({"success": False, "error": "Empty body"}), 400
+
+    try:
+        manager = get_neuron_manager()
+        # Try full ID, then short name
+        neuron = manager.get_neuron(neuron_id) or manager.get_neuron(
+            neuron_id.split(".")[-1] if "." in neuron_id else neuron_id
+        )
+        if not neuron:
+            return jsonify({"success": False, "error": f"Neuron not found: {neuron_id}"}), 404
+
+        config = neuron.config
+        changed = []
+
+        for key in ("threshold", "decay_rate", "smoothing_factor"):
+            if key in body:
+                val = float(body[key])
+                if not 0.0 <= val <= 1.0:
+                    return jsonify({"success": False, "error": f"{key} must be between 0.0 and 1.0"}), 400
+                setattr(config, key, val)
+                changed.append(key)
+
+        if "weights" in body and isinstance(body["weights"], dict):
+            config.weights.update({str(k): float(v) for k, v in body["weights"].items()})
+            changed.append("weights")
+
+        if "enabled" in body:
+            config.enabled = bool(body["enabled"])
+            changed.append("enabled")
+
+        # Persist if manager supports it
+        if hasattr(manager, "persist_neuron_config"):
+            manager.persist_neuron_config(neuron_id)
+
+        _LOGGER.info("Updated neuron %s config: %s", neuron_id, changed)
+
+        return jsonify({
+            "success": True,
+            "data": {
+                "neuron_id": neuron_id,
+                "changed": changed,
+                "config": config.to_dict(),
+            },
+        })
+    except (ValueError, TypeError) as e:
+        return jsonify({"success": False, "error": f"Invalid value: {e}"}), 400
+    except Exception as e:
+        _LOGGER.error("Error updating neuron %s config: %s", neuron_id, e)
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@bp.route("/<neuron_id>/enable", methods=["POST"])
+def enable_neuron(neuron_id: str):
+    """Enable a neuron."""
+    if not validate_neuron_id(neuron_id):
+        return jsonify({"success": False, "error": "Invalid neuron_id format"}), 400
+
+    try:
+        manager = get_neuron_manager()
+        neuron = manager.get_neuron(neuron_id) or manager.get_neuron(
+            neuron_id.split(".")[-1] if "." in neuron_id else neuron_id
+        )
+        if not neuron:
+            return jsonify({"success": False, "error": f"Neuron not found: {neuron_id}"}), 404
+
+        neuron.config.enabled = True
+        if hasattr(manager, "persist_neuron_config"):
+            manager.persist_neuron_config(neuron_id)
+
+        return jsonify({"success": True, "data": {"neuron_id": neuron_id, "enabled": True}})
+    except Exception as e:
+        _LOGGER.error("Error enabling neuron %s: %s", neuron_id, e)
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@bp.route("/<neuron_id>/disable", methods=["POST"])
+def disable_neuron(neuron_id: str):
+    """Disable a neuron."""
+    if not validate_neuron_id(neuron_id):
+        return jsonify({"success": False, "error": "Invalid neuron_id format"}), 400
+
+    try:
+        manager = get_neuron_manager()
+        neuron = manager.get_neuron(neuron_id) or manager.get_neuron(
+            neuron_id.split(".")[-1] if "." in neuron_id else neuron_id
+        )
+        if not neuron:
+            return jsonify({"success": False, "error": f"Neuron not found: {neuron_id}"}), 404
+
+        neuron.config.enabled = False
+        if hasattr(manager, "persist_neuron_config"):
+            manager.persist_neuron_config(neuron_id)
+
+        return jsonify({"success": True, "data": {"neuron_id": neuron_id, "enabled": False}})
+    except Exception as e:
+        _LOGGER.error("Error disabling neuron %s: %s", neuron_id, e)
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@bp.route("/batch-configure", methods=["POST"])
+def batch_configure_neurons():
+    """Configure multiple neurons in one request.
+
+    JSON body:
+        {
+            "neurons": {
+                "context.presence": {"threshold": 0.7},
+                "mood.focus": {"enabled": false, "decay_rate": 0.2}
+            }
+        }
+    """
+    body = request.get_json(silent=True) or {}
+    configs = body.get("neurons", {})
+    if not configs or not isinstance(configs, dict):
+        return jsonify({"success": False, "error": "Missing 'neurons' dict"}), 400
+
+    manager = get_neuron_manager()
+    results = {}
+    errors = {}
+
+    for nid, patch in configs.items():
+        if not validate_neuron_id(nid):
+            errors[nid] = "Invalid neuron_id format"
+            continue
+
+        neuron = manager.get_neuron(nid) or manager.get_neuron(
+            nid.split(".")[-1] if "." in nid else nid
+        )
+        if not neuron:
+            errors[nid] = "Neuron not found"
+            continue
+
+        try:
+            cfg = neuron.config
+            for key in ("threshold", "decay_rate", "smoothing_factor"):
+                if key in patch:
+                    val = float(patch[key])
+                    if not 0.0 <= val <= 1.0:
+                        errors[nid] = f"{key} must be 0.0-1.0"
+                        continue
+                    setattr(cfg, key, val)
+            if "weights" in patch and isinstance(patch["weights"], dict):
+                cfg.weights.update({str(k): float(v) for k, v in patch["weights"].items()})
+            if "enabled" in patch:
+                cfg.enabled = bool(patch["enabled"])
+
+            results[nid] = cfg.to_dict()
+        except (ValueError, TypeError) as e:
+            errors[nid] = str(e)
+
+    if hasattr(manager, "persist_all_neuron_configs"):
+        manager.persist_all_neuron_configs()
+
+    return jsonify({
+        "success": len(errors) == 0,
+        "data": {"updated": results, "errors": errors},
+    })
+
+
 __all__ = ["bp"]

@@ -183,5 +183,5 @@ Update CDN links in `index.html`:
 
 ## Support
 
-- GitHub Issues: https://github.com/pilotsuite/pilotsuite-styx-core/issues
+- GitHub Issues: https://github.com/GreenhillEfka/pilotsuite-styx-core/issues
 - Documentation: `/docs` directory

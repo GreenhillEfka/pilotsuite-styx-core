@@ -62,7 +62,7 @@ def _get_service() -> Optional[CollectiveIntelligenceService]:
     return get_federated_service()
 
 
-@federated_bp.route('/api/v1/federated', methods=['GET'])
+@federated_bp.route('/federated', methods=['GET'])
 @require_api_key
 def get_status() -> Tuple[Dict[str, Any], int]:
     """Get federated learning system status.
@@ -78,7 +78,7 @@ def get_status() -> Tuple[Dict[str, Any], int]:
     return jsonify(status.to_dict())
 
 
-@federated_bp.route('/api/v1/federated/start', methods=['POST'])
+@federated_bp.route('/federated/start', methods=['POST'])
 @require_api_key
 def start_service() -> Tuple[Dict[str, Any], int]:
     """Start the federated learning service.
@@ -94,7 +94,7 @@ def start_service() -> Tuple[Dict[str, Any], int]:
     return jsonify({'ok': True, 'message': 'Federated service started'})
 
 
-@federated_bp.route('/api/v1/federated/stop', methods=['POST'])
+@federated_bp.route('/federated/stop', methods=['POST'])
 @require_api_key
 def stop_service() -> Tuple[Dict[str, Any], int]:
     """Stop the federated learning service.
@@ -110,7 +110,7 @@ def stop_service() -> Tuple[Dict[str, Any], int]:
     return jsonify({'ok': True, 'message': 'Federated service stopped'})
 
 
-@federated_bp.route('/api/v1/federated/register', methods=['POST'])
+@federated_bp.route('/federated/register', methods=['POST'])
 @require_api_key
 def register_node() -> Tuple[Dict[str, Any], int]:
     """Register a new home node for federated learning.
@@ -143,7 +143,7 @@ def register_node() -> Tuple[Dict[str, Any], int]:
     })
 
 
-@federated_bp.route('/api/v1/federated/update', methods=['POST'])
+@federated_bp.route('/federated/update', methods=['POST'])
 @require_api_key
 def submit_update() -> Tuple[Dict[str, Any], int]:
     """Submit a local model update from a node.
@@ -182,7 +182,7 @@ def submit_update() -> Tuple[Dict[str, Any], int]:
         return jsonify({'ok': False, 'error': 'Failed to submit update'}), 500
 
 
-@federated_bp.route('/api/v1/federated/round', methods=['POST'])
+@federated_bp.route('/federated/round', methods=['POST'])
 @require_api_key
 def start_round() -> Tuple[Dict[str, Any], int]:
     """Start a new federated learning round.
@@ -205,7 +205,7 @@ def start_round() -> Tuple[Dict[str, Any], int]:
         return jsonify({'ok': False, 'error': 'Failed to start round'}), 500
 
 
-@federated_bp.route('/api/v1/federated/aggregate', methods=['POST'])
+@federated_bp.route('/federated/aggregate', methods=['POST'])
 @require_api_key
 def execute_aggregation() -> Tuple[Dict[str, Any], int]:
     """Execute aggregation for a round.
@@ -242,7 +242,7 @@ def execute_aggregation() -> Tuple[Dict[str, Any], int]:
         return jsonify({'ok': False, 'error': 'Failed to aggregate'}), 500
 
 
-@federated_bp.route('/api/v1/federated/knowledge', methods=['POST'])
+@federated_bp.route('/federated/knowledge', methods=['POST'])
 @require_api_key
 def extract_knowledge() -> Tuple[Dict[str, Any], int]:
     """Extract knowledge from a node for transfer.
@@ -283,7 +283,7 @@ def extract_knowledge() -> Tuple[Dict[str, Any], int]:
         return jsonify({'ok': False, 'error': 'Failed to extract knowledge'}), 500
 
 
-@federated_bp.route('/api/v1/federated/knowledge/<knowledge_id>/transfer', methods=['POST'])
+@federated_bp.route('/federated/knowledge/<knowledge_id>/transfer', methods=['POST'])
 @require_api_key
 def transfer_knowledge(knowledge_id: str) -> Tuple[Dict[str, Any], int]:
     """Transfer knowledge to another node.
@@ -318,7 +318,7 @@ def transfer_knowledge(knowledge_id: str) -> Tuple[Dict[str, Any], int]:
     })
 
 
-@federated_bp.route('/api/v1/federated/rounds', methods=['GET'])
+@federated_bp.route('/federated/rounds', methods=['GET'])
 @require_api_key
 def get_round_history() -> Tuple[Dict[str, Any], int]:
     """Get history of federated rounds.
@@ -338,7 +338,7 @@ def get_round_history() -> Tuple[Dict[str, Any], int]:
     })
 
 
-@federated_bp.route('/api/v1/federated/models', methods=['GET'])
+@federated_bp.route('/federated/models', methods=['GET'])
 @require_api_key
 def get_aggregated_models() -> Tuple[Dict[str, Any], int]:
     """Get all aggregated models.
@@ -358,7 +358,7 @@ def get_aggregated_models() -> Tuple[Dict[str, Any], int]:
     })
 
 
-@federated_bp.route('/api/v1/federated/knowledge-base', methods=['GET'])
+@federated_bp.route('/federated/knowledge-base', methods=['GET'])
 @require_api_key
 def get_knowledge_base() -> Tuple[Dict[str, Any], int]:
     """Get the knowledge transfer base.
@@ -378,7 +378,7 @@ def get_knowledge_base() -> Tuple[Dict[str, Any], int]:
     })
 
 
-@federated_bp.route('/api/v1/federated/statistics', methods=['GET'])
+@federated_bp.route('/federated/statistics', methods=['GET'])
 @require_api_key
 def get_statistics() -> Tuple[Dict[str, Any], int]:
     """Get comprehensive federated learning statistics.
@@ -393,7 +393,7 @@ def get_statistics() -> Tuple[Dict[str, Any], int]:
     return jsonify(service.get_statistics())
 
 
-@federated_bp.route('/api/v1/federated/save', methods=['POST'])
+@federated_bp.route('/federated/save', methods=['POST'])
 @require_api_key
 def save_state() -> Tuple[Dict[str, Any], int]:
     """Save system state to file.
@@ -423,7 +423,7 @@ def save_state() -> Tuple[Dict[str, Any], int]:
         return jsonify({'error': str(e)}), 500
 
 
-@federated_bp.route('/api/v1/federated/load', methods=['POST'])
+@federated_bp.route('/federated/load', methods=['POST'])
 @require_api_key
 def load_state() -> Tuple[Dict[str, Any], int]:
     """Load system state from file.

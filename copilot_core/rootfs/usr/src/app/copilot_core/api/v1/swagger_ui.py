@@ -11,7 +11,7 @@ from flask import Blueprint, jsonify, Response, redirect
 bp = Blueprint("swagger_ui", __name__, url_prefix="/docs")
 
 # Separate blueprint for /api/v1/openapi.json endpoint
-openapi_bp = Blueprint("openapi_spec", __name__, url_prefix="/api/v1")
+openapi_bp = Blueprint("openapi_spec", __name__)
 
 OPENAPI_SEARCH_PATHS = [
     "/usr/src/app/docs/openapi.yaml",

@@ -119,9 +119,9 @@ async def test_hnsw_basic():
     for path in ["/tmp/test_hnsw.db", "/tmp/test_hnsw.db.test.hnsw", "/tmp/test_hnsw.db.test.hnsw.map"]:
         try:
             os.remove(path)
-        except:
+        except OSError:
             pass
-    
+
     print("\n" + "=" * 60)
     print("✅ All tests passed!\n")
     

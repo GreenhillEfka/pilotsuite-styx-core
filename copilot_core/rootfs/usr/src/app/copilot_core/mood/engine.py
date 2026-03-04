@@ -21,6 +21,7 @@ class MoodState(str, Enum):
     RELAX = "relax"
     FOCUS = "focus"
     ACTIVE = "active"
+    STRESS = "stress"
     NEUTRAL = "neutral"  # fallback
 
 

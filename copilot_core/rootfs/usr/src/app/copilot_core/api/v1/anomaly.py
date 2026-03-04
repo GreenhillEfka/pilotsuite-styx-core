@@ -408,7 +408,7 @@ def get_model_status():
             "n_samples": detector._n_samples,
             "n_estimators": detector.config.n_estimators,
             "contamination": detector.config.contamination,
-            "feature_count": len(detector.get_feature_names()) if detector._is_fitted else 0,
+            "feature_count": len(detector._feature_names or []) if detector._is_fitted else 0,
             "sensors_tracked": len(detector._sensor_stats),
             "config": {
                 "n_estimators": detector.config.n_estimators,

@@ -22,7 +22,10 @@ Haushaltsbewusste Vorschlaege (wenn HouseholdProfile gesetzt):
 from __future__ import annotations
 
 import asyncio
+import collections
+import json as _json
 import logging
+import os
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Callable
@@ -110,15 +113,22 @@ class NeuronManager:
         # Last result
         self._last_result: Optional[NeuralPipelineResult] = None
         
-        # Mood history for smoothing
-        self._mood_history: List[Dict[str, float]] = []
-        self._history_max: int = 10
+        # Mood history for smoothing (deque for O(1) eviction)
+        self._mood_history: collections.deque[Dict[str, float]] = collections.deque(maxlen=10)
 
         # Proactive engine (optional, wired via set_proactive_engine)
         self._proactive_engine = None
 
+        # Integration bus (optional, wired via set_bus)
+        self._bus = None
+
         # Household profile (optional)
         self._household: Optional[HouseholdProfile] = None
+
+        # Neuron config persistence path
+        self._config_path = os.environ.get(
+            "NEURON_CONFIG_PATH", "/data/neuron_configs.json"
+        )
 
         _LOGGER.info("NeuronManager initialized")
     
@@ -336,9 +346,54 @@ class NeuronManager:
         return {}
     
     # -------------------------------------------------------------------------
+    # Neuron Config Persistence
+    # -------------------------------------------------------------------------
+
+    def persist_neuron_config(self, neuron_id: str) -> None:
+        """Persist a single neuron's config to disk."""
+        self.persist_all_neuron_configs()
+
+    def persist_all_neuron_configs(self) -> None:
+        """Persist all neuron configs to JSON file."""
+        all_neurons = self.get_all_neurons()
+        data = {}
+        for nid, neuron in all_neurons.items():
+            data[nid] = neuron.config.to_dict()
+        try:
+            os.makedirs(os.path.dirname(self._config_path), exist_ok=True)
+            with open(self._config_path, "w") as f:
+                _json.dump(data, f, indent=2)
+            _LOGGER.info("Persisted %d neuron configs to %s", len(data), self._config_path)
+        except Exception as e:
+            _LOGGER.warning("Failed to persist neuron configs: %s", e)
+
+    def load_neuron_configs(self) -> None:
+        """Load persisted neuron configs and apply overrides."""
+        try:
+            if not os.path.exists(self._config_path):
+                return
+            with open(self._config_path, "r") as f:
+                data = _json.load(f)
+            applied = 0
+            for nid, cfg_data in data.items():
+                neuron = self.get_neuron(nid) or self.get_neuron(
+                    nid.split(".")[-1] if "." in nid else nid
+                )
+                if neuron:
+                    for key in ("threshold", "decay_rate", "smoothing_factor", "enabled"):
+                        if key in cfg_data:
+                            setattr(neuron.config, key, cfg_data[key])
+                    if "weights" in cfg_data:
+                        neuron.config.weights.update(cfg_data["weights"])
+                    applied += 1
+            _LOGGER.info("Loaded %d/%d neuron configs from %s", applied, len(data), self._config_path)
+        except Exception as e:
+            _LOGGER.warning("Failed to load neuron configs: %s", e)
+
+    # -------------------------------------------------------------------------
     # State Updates
     # -------------------------------------------------------------------------
-    
+
     def update_states(self, ha_states: Dict[str, Any]) -> None:
         """Update Home Assistant states.
         
@@ -368,7 +423,16 @@ class NeuronManager:
         """
         self._household = profile
         _LOGGER.info("Household profile set with %d members", len(profile.members))
-    
+
+    def set_bus(self, bus) -> None:
+        """Wire the integration bus for event publishing.
+
+        When set, evaluate() publishes ``neuron.evaluated`` events and
+        mood changes publish ``mood.changed`` events.
+        """
+        self._bus = bus
+        _LOGGER.info("IntegrationBus wired to NeuronManager")
+
     # -------------------------------------------------------------------------
     # Pipeline Execution
     # -------------------------------------------------------------------------
@@ -480,22 +544,34 @@ class NeuronManager:
         # Stimmungswechsel pruefen und Callback auslösen
         if self._last_result and self._last_result.dominant_mood != dominant_mood:
             self._on_mood_changed(dominant_mood, confidence)
-        
+
         # Vorschlags-Callbacks ausfuehren
         for suggestion in suggestions:
             if self._on_suggestion:
                 self._on_suggestion(suggestion)
-        
+
         self._last_result = result
         self._mood_history.append(mood_values)
-        if len(self._mood_history) > self._history_max:
-            self._mood_history.pop(0)
-        
+
+        # Publish pipeline result to integration bus
+        if self._bus:
+            try:
+                self._bus.publish("neuron.evaluated", {
+                    "context_values": context_values,
+                    "state_values": state_values,
+                    "mood_values": mood_values,
+                    "dominant_mood": dominant_mood,
+                    "mood_confidence": confidence,
+                    "suggestions_count": len(suggestions),
+                }, source="neuron_manager")
+            except Exception:
+                _LOGGER.exception("Failed to publish neuron.evaluated event")
+
         _LOGGER.info(
             "Neural pipeline: mood=%s (%.2f), suggestions=%d",
             dominant_mood, confidence, len(suggestions)
         )
-        
+
         return result
     
     def _determine_mood(self, mood_values: Dict[str, float]) -> tuple:
@@ -514,7 +590,8 @@ class NeuronManager:
         if self._mood_history:
             smoothed = {}
             for mood, value in mood_values.items():
-                history_values = [h.get(mood, 0) for h in self._mood_history[-3:]]
+                recent = list(self._mood_history)[-3:]
+                history_values = [h.get(mood, 0) for h in recent]
                 history_values.append(value)
                 smoothed[mood] = sum(history_values) / len(history_values)
             mood_values = smoothed
@@ -776,12 +853,23 @@ class NeuronManager:
 
     def _on_mood_changed(self, new_mood: str, confidence: float) -> None:
         """Handle mood change."""
+        prev_mood = self._last_result.dominant_mood if self._last_result else ""
         _LOGGER.info("Mood changed to: %s (%.2f)", new_mood, confidence)
         if self._on_mood_change:
             try:
                 self._on_mood_change(new_mood, confidence)
             except Exception as e:
                 _LOGGER.error("Mood change callback error: %s", e)
+        # Publish mood change to integration bus
+        if self._bus:
+            try:
+                self._bus.publish("mood.changed", {
+                    "mood": new_mood,
+                    "confidence": confidence,
+                    "previous_mood": prev_mood,
+                }, source="neuron_manager")
+            except Exception:
+                _LOGGER.exception("Failed to publish mood.changed event")
         self._evaluate_proactive_suggestions(new_mood, confidence)
 
     def _evaluate_proactive_suggestions(self, new_mood: str, confidence: float) -> None:

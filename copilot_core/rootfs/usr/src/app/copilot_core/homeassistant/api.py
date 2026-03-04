@@ -63,7 +63,7 @@ async def _get_entity_mapper() -> EntityMapper:
     return _entity_mapper
 
 
-@ha_discovery_bp.route("/api/v1/ha/connect", methods=["POST"])
+@ha_discovery_bp.route("/ha/connect", methods=["POST"])
 @require_token
 async def connect_ha():
     """Establish connection to HomeAssistant.
@@ -160,7 +160,7 @@ async def connect_ha():
             }), 500
 
 
-@ha_discovery_bp.route("/api/v1/ha/status", methods=["GET"])
+@ha_discovery_bp.route("/ha/status", methods=["GET"])
 @require_token
 async def get_status():
     """Get current HA connection status.
@@ -196,7 +196,7 @@ async def get_status():
     })
 
 
-@ha_discovery_bp.route("/api/v1/ha/areas", methods=["GET"])
+@ha_discovery_bp.route("/ha/areas", methods=["GET"])
 @require_token
 async def get_areas():
     """Get all areas/zones from HomeAssistant.
@@ -243,7 +243,7 @@ async def get_areas():
         }), 500
 
 
-@ha_discovery_bp.route("/api/v1/ha/entities", methods=["GET"])
+@ha_discovery_bp.route("/ha/entities", methods=["GET"])
 @require_token
 async def get_entities():
     """Get all entities from HomeAssistant.
@@ -349,7 +349,7 @@ async def get_entities():
         }), 500
 
 
-@ha_discovery_bp.route("/api/v1/ha/entity/<entity_id>", methods=["GET"])
+@ha_discovery_bp.route("/ha/entity/<entity_id>", methods=["GET"])
 @require_token
 async def get_entity(entity_id: str):
     """Get single entity from HomeAssistant.
@@ -426,7 +426,7 @@ async def get_entity(entity_id: str):
         }), 500
 
 
-@ha_discovery_bp.route("/api/v1/ha/discover", methods=["POST"])
+@ha_discovery_bp.route("/ha/discover", methods=["POST"])
 @require_token
 async def discover_ha():
     """Discover HomeAssistant instances.
@@ -492,7 +492,7 @@ async def discover_ha():
         }), 500
 
 
-@ha_discovery_bp.route("/api/v1/ha/disconnect", methods=["POST"])
+@ha_discovery_bp.route("/ha/disconnect", methods=["POST"])
 @require_token
 async def disconnect_ha():
     """Disconnect from HomeAssistant.

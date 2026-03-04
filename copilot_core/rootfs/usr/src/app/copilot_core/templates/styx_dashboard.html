@@ -1,0 +1,1725 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Styx — PilotSuite Dashboard</title>
+<style>
+  :root {
+    --bg: #0f0f1a; --surface: #1a1a2e; --surface2: #222240;
+    --text: #e0e0f0; --muted: #888; --accent: #4fc3f7;
+    --green: #81c784; --orange: #ffb74d; --red: #ef5350;
+    --purple: #ce93d8; --radius: 12px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); color: var(--text); }
+  .app { max-width: 1400px; margin: 0 auto; padding: 16px; }
+  header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; padding: 12px 0; border-bottom: 1px solid var(--surface2); flex-wrap: wrap; }
+  header h1 { font-size: 1.4rem; font-weight: 700; background: linear-gradient(135deg, var(--accent), var(--purple)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+  header .status { margin-left: auto; font-size: 0.8rem; color: var(--muted); }
+  .refresh-countdown { font-size: 0.7rem; color: var(--muted); margin-left: 8px; }
+
+  /* ── Tab Navigation ─────────────────────────────── */
+  .tabs { display: flex; gap: 4px; margin-bottom: 16px; border-bottom: 2px solid var(--surface2); padding-bottom: 0; overflow-x: auto; }
+  .tab { padding: 10px 18px; cursor: pointer; font-size: 0.85rem; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -2px; white-space: nowrap; transition: all 0.2s; }
+  .tab:hover { color: var(--text); background: var(--surface); border-radius: 8px 8px 0 0; }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  /* ── Grid & Cards ───────────────────────────────── */
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
+  .card { background: var(--surface); border-radius: var(--radius); padding: 20px; border: 1px solid var(--surface2); }
+  .card h2 { font-size: 0.95rem; font-weight: 600; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+  .card h2 .icon { width: 20px; height: 20px; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; }
+  .wide { grid-column: span 2; }
+  @media (max-width: 700px) { .wide { grid-column: span 1; } .grid { grid-template-columns: 1fr; } }
+
+  /* ── Stats & Bars ───────────────────────────────── */
+  .stat { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--surface2); }
+  .stat:last-child { border-bottom: none; }
+  .stat .label { color: var(--muted); font-size: 0.85rem; }
+  .stat .value { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .bar-row { display: flex; align-items: center; gap: 8px; margin: 4px 0; }
+  .bar-label { flex: 0 0 100px; font-size: 0.8rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bar-track { flex: 1; height: 6px; background: var(--surface2); border-radius: 3px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 3px; transition: width 0.5s ease; }
+  .bar-value { flex: 0 0 40px; text-align: right; font-size: 0.8rem; font-variant-numeric: tabular-nums; }
+
+  /* ── Mood ────────────────────────────────────────── */
+  .mood-badge { display: inline-block; padding: 4px 12px; border-radius: 20px; font-weight: 600; font-size: 0.9rem; text-transform: capitalize; }
+  .mood-relax { background: #1a472a; color: var(--green); }
+  .mood-focus { background: #1a2e4a; color: var(--accent); }
+  .mood-active { background: #4a2a1a; color: var(--orange); }
+  .mood-sleep { background: #2a1a4a; color: var(--purple); }
+  .mood-alert { background: #4a1a1a; color: var(--red); }
+  .mood-away { background: #2a2a2a; color: var(--muted); }
+
+  /* ── Modules ────────────────────────────────────── */
+  .module-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px; }
+  .module-chip { padding: 10px 12px; border-radius: 8px; font-size: 0.8rem; display: flex; align-items: center; gap: 8px; cursor: pointer; transition: all 0.2s; }
+  .module-chip:hover { filter: brightness(1.2); transform: translateY(-1px); }
+  .module-chip .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .module-chip .module-name { flex: 1; }
+  .module-chip .module-state { font-size: 0.7rem; color: var(--muted); text-transform: uppercase; }
+  .module-chip.active { background: #1a3a2a; }
+  .module-chip.active .dot { background: var(--green); }
+  .module-chip.learning { background: #3a3a1a; }
+  .module-chip.learning .dot { background: var(--orange); }
+  .module-chip.off { background: #2a1a1a; }
+  .module-chip.off .dot { background: var(--red); }
+
+  /* ── Model Cards ────────────────────────────────── */
+  .model-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+  .model-card { background: var(--surface2); border-radius: 10px; padding: 14px; border: 1px solid transparent; transition: all 0.2s; position: relative; }
+  .model-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+  .model-card.active-model { border-color: var(--green); }
+  .model-card.active-model::after { content: "AKTIV"; position: absolute; top: 8px; right: 8px; background: var(--green); color: #000; font-size: 0.65rem; font-weight: 700; padding: 2px 6px; border-radius: 4px; }
+  .model-card .model-name { font-weight: 600; font-size: 0.9rem; margin-bottom: 4px; }
+  .model-card .model-desc { font-size: 0.78rem; color: var(--muted); line-height: 1.4; margin-bottom: 8px; }
+  .model-card .model-meta { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+  .model-card .tag { font-size: 0.65rem; padding: 2px 6px; border-radius: 4px; background: #2a2a4a; color: var(--accent); }
+  .model-card .tag.installed { background: #1a3a2a; color: var(--green); }
+  .model-card .tag.not-installed { background: #3a1a1a; color: var(--red); }
+  .model-card .model-actions { display: flex; gap: 6px; }
+  .btn-sm { padding: 6px 14px; border-radius: 6px; border: none; font-size: 0.78rem; cursor: pointer; font-weight: 600; transition: all 0.2s; }
+  .btn-sm:hover { filter: brightness(1.15); }
+  .btn-sm:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-primary { background: var(--accent); color: #0f0f1a; }
+  .btn-success { background: var(--green); color: #0f0f1a; }
+  .btn-danger { background: var(--red); color: #fff; }
+  .btn-secondary { background: var(--surface); color: var(--text); border: 1px solid var(--surface2); }
+
+  /* ── Provider Routing Panel ─────────────────────── */
+  .routing-panel { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+  .routing-box { background: var(--surface2); border-radius: 10px; padding: 16px; }
+  .routing-box h3 { font-size: 0.85rem; margin-bottom: 8px; color: var(--accent); }
+  .routing-box .provider-badge { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 0.78rem; font-weight: 600; }
+  .routing-box .provider-badge.offline { background: #1a3a2a; color: var(--green); }
+  .routing-box .provider-badge.cloud { background: #1a2a4a; color: var(--accent); }
+  .routing-box .provider-badge.none { background: #3a1a1a; color: var(--red); }
+  .routing-box select { background: var(--surface); color: var(--text); border: 1px solid var(--surface2); padding: 6px 10px; border-radius: 6px; font-size: 0.82rem; width: 100%; margin-top: 6px; }
+
+  /* ── Neuron Config Panel ────────────────────────── */
+  .neuron-config-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+  .neuron-cfg-card { background: var(--surface2); border-radius: 8px; padding: 12px; }
+  .neuron-cfg-card .neuron-id { font-weight: 600; font-size: 0.85rem; }
+  .neuron-cfg-card .neuron-type { font-size: 0.7rem; color: var(--muted); text-transform: uppercase; }
+  .neuron-cfg-card .slider-row { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+  .neuron-cfg-card .slider-row label { font-size: 0.72rem; color: var(--muted); flex: 0 0 70px; }
+  .neuron-cfg-card input[type="range"] { flex: 1; accent-color: var(--accent); height: 4px; }
+  .neuron-cfg-card .slider-val { flex: 0 0 32px; font-size: 0.72rem; text-align: right; font-variant-numeric: tabular-nums; }
+
+  /* ── Brain Canvas ───────────────────────────────── */
+  #brain-canvas { width: 100%; height: 400px; border-radius: 8px; background: #0a0a14; cursor: grab; }
+  #brain-canvas:active { cursor: grabbing; }
+  .brain-tooltip { position: absolute; background: rgba(0,0,0,0.92); color: #e0e0f0; padding: 6px 10px; border-radius: 6px; font-size: 0.75rem; pointer-events: none; opacity: 0; transition: opacity 0.15s; border: 1px solid var(--accent); z-index: 10; }
+
+  /* ── Chat ────────────────────────────────────────── */
+  .chat-wrap { display: flex; flex-direction: column; height: 400px; }
+  .chat-messages { flex: 1; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 8px; }
+  .chat-msg { max-width: 85%; padding: 8px 12px; border-radius: 12px; font-size: 0.85rem; line-height: 1.4; word-wrap: break-word; }
+  .chat-msg.user { align-self: flex-end; background: #1a3a5a; color: var(--accent); border-bottom-right-radius: 4px; }
+  .chat-msg.assistant { align-self: flex-start; background: var(--surface2); color: var(--text); border-bottom-left-radius: 4px; }
+  .chat-msg.system { align-self: center; background: transparent; color: var(--muted); font-size: 0.75rem; font-style: italic; }
+  .chat-input-row { display: flex; gap: 8px; padding: 8px 0 0 0; }
+  .chat-input { flex: 1; background: var(--surface2); border: 1px solid #333; border-radius: 8px; padding: 8px 12px; color: var(--text); font-size: 0.85rem; outline: none; resize: none; }
+  .chat-input:focus { border-color: var(--accent); }
+  .chat-send { background: var(--accent); color: #0f0f1a; border: none; border-radius: 8px; padding: 8px 16px; font-weight: 600; cursor: pointer; font-size: 0.85rem; }
+  .chat-send:hover { filter: brightness(1.1); }
+  .chat-send:disabled { opacity: 0.5; cursor: not-allowed; }
+  .chat-status { font-size: 0.7rem; color: var(--muted); padding: 4px 0; text-align: right; }
+
+  /* ── Misc ────────────────────────────────────────── */
+  .zone-list { list-style: none; }
+  .zone-item { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--surface2); }
+  .zone-item:last-child { border-bottom: none; }
+  .zone-icon { font-size: 1.1rem; width: 28px; text-align: center; }
+  .zone-name { flex: 1; font-size: 0.85rem; }
+  .zone-prio { font-size: 0.75rem; color: var(--muted); }
+  .candidate-item { padding: 8px; margin: 4px 0; background: var(--surface2); border-radius: 8px; font-size: 0.82rem; }
+  .candidate-item .label { font-weight: 500; }
+  .candidate-item .meta { color: var(--muted); font-size: 0.75rem; margin-top: 2px; }
+  .refresh-btn { background: var(--surface2); border: none; color: var(--accent); padding: 6px 14px; border-radius: 8px; cursor: pointer; font-size: 0.8rem; }
+  .refresh-btn:hover { background: var(--surface); }
+  .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+  .status-dot.ok { background: var(--green); }
+  .status-dot.warn { background: var(--orange); }
+  .status-dot.err { background: var(--red); }
+  .section-title { font-size: 0.9rem; font-weight: 600; margin: 16px 0 10px; color: var(--accent); }
+  .toast { position: fixed; bottom: 20px; right: 20px; background: var(--surface); border: 1px solid var(--accent); color: var(--text); padding: 12px 20px; border-radius: 8px; font-size: 0.82rem; z-index: 100; opacity: 0; transition: opacity 0.3s; pointer-events: none; box-shadow: 0 4px 16px rgba(0,0,0,0.4); }
+  .toast.show { opacity: 1; }
+
+  /* ── Loading Spinner ────────────────────────────── */
+  .loading { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--surface2); border-top: 2px solid var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-overlay { display: flex; align-items: center; justify-content: center; padding: 24px; color: var(--muted); gap: 8px; }
+
+  /* ── Smooth Transitions ─────────────────────────── */
+  .tab-content.active { animation: fadeIn 0.2s ease; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+  .neuron-cfg-card { transition: border-color 0.2s, background 0.2s; }
+  .neuron-cfg-card:hover { background: #282845; }
+  .model-card { transition: all 0.2s ease; }
+  .module-chip { transition: all 0.15s ease; user-select: none; }
+
+  /* ── Scrollbar Styling ──────────────────────────── */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--surface2); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
+  /* ── Zone Cards ──────────────────────────────── */
+  .zone-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+  .zone-card { background: var(--surface); border-radius: var(--radius); padding: 16px; border: 1px solid var(--surface2); transition: all 0.2s; cursor: pointer; position: relative; }
+  .zone-card:hover { border-color: var(--accent); transform: translateY(-2px); box-shadow: 0 4px 16px rgba(0,0,0,0.3); }
+  .zone-card .zone-header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .zone-card .zone-icon { font-size: 1.5rem; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border-radius: 10px; }
+  .zone-card .zone-title { font-weight: 600; font-size: 1rem; }
+  .zone-card .zone-subtitle { font-size: 0.75rem; color: var(--muted); }
+  .zone-card .zone-roles { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+  .zone-card .zone-role { font-size: 0.65rem; padding: 2px 8px; border-radius: 4px; background: var(--surface2); }
+  .zone-card .zone-entity-count { position: absolute; top: 12px; right: 12px; font-size: 0.75rem; color: var(--muted); }
+
+  /* ── Suggestion Cards ──────────────────────────── */
+  .suggestion-grid { display: flex; flex-direction: column; gap: 12px; }
+  .suggestion-card { background: var(--surface); border-radius: var(--radius); padding: 16px; border-left: 4px solid var(--accent); transition: all 0.2s; }
+  .suggestion-card:hover { background: var(--surface2); }
+  .suggestion-card .sug-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px; }
+  .suggestion-card .sug-title { font-weight: 600; font-size: 0.9rem; }
+  .suggestion-card .sug-confidence { font-size: 0.75rem; padding: 2px 8px; border-radius: 10px; font-weight: 600; }
+  .suggestion-card .sug-desc { font-size: 0.82rem; color: var(--muted); margin-bottom: 8px; line-height: 1.4; }
+  .suggestion-card .sug-meta { display: flex; gap: 6px; flex-wrap: wrap; }
+  .suggestion-card .sug-tag { font-size: 0.65rem; padding: 2px 6px; border-radius: 4px; }
+  .suggestion-card .sug-actions { display: flex; gap: 6px; margin-top: 10px; }
+  .sug-cat-comfort { border-left-color: var(--green); }
+  .sug-cat-energy { border-left-color: var(--orange); }
+  .sug-cat-health { border-left-color: var(--accent); }
+
+  /* ── Media/Musikwolke ──────────────────────────── */
+  .media-zone-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
+  .media-zone-card { background: var(--surface); border-radius: var(--radius); padding: 16px; border: 1px solid var(--surface2); }
+  .media-zone-card.playing { border-color: var(--green); }
+  .media-zone-card .mz-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .media-zone-card .mz-state { font-size: 0.75rem; padding: 2px 8px; border-radius: 10px; }
+  .media-zone-card .mz-state.playing { background: #1a3a2a; color: var(--green); }
+  .media-zone-card .mz-state.paused { background: #3a3a1a; color: var(--orange); }
+  .media-zone-card .mz-state.idle { background: var(--surface2); color: var(--muted); }
+  .media-zone-card .mz-controls { display: flex; gap: 6px; margin-top: 8px; }
+  .musikwolke-panel { background: linear-gradient(135deg, #1a1a3a, #2a1a4a); border-radius: var(--radius); padding: 20px; margin-bottom: 16px; border: 1px solid #3a2a5a; }
+  .musikwolke-panel h3 { color: var(--purple); margin-bottom: 8px; }
+
+  /* ── Zone Detail Modal ──────────────────────────── */
+  .modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 50; align-items: center; justify-content: center; }
+  .modal-overlay.show { display: flex; }
+  .modal { background: var(--surface); border-radius: var(--radius); padding: 24px; max-width: 600px; width: 90%; max-height: 80vh; overflow-y: auto; border: 1px solid var(--surface2); animation: fadeIn 0.2s ease; }
+  .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+  .modal-header h3 { font-size: 1.1rem; font-weight: 600; }
+  .modal-close { background: none; border: none; color: var(--muted); font-size: 1.3rem; cursor: pointer; padding: 4px 8px; }
+  .modal-close:hover { color: var(--text); }
+  .entity-group { margin-bottom: 14px; }
+  .entity-group h4 { font-size: 0.82rem; color: var(--accent); margin-bottom: 6px; text-transform: capitalize; }
+  .entity-group .entity-item { font-size: 0.78rem; padding: 4px 8px; background: var(--surface2); border-radius: 4px; margin: 2px 0; color: var(--muted); }
+
+  /* ── Volume Slider ──────────────────────────────── */
+  .volume-row { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+  .volume-row input[type="range"] { flex: 1; accent-color: var(--green); height: 4px; }
+  .volume-row .vol-val { font-size: 0.72rem; color: var(--muted); width: 32px; text-align: right; }
+
+  /* ── Overview Summary Cards ──────────────────────── */
+  .summary-strip { display: flex; gap: 12px; margin-bottom: 16px; overflow-x: auto; padding-bottom: 4px; }
+  .summary-chip { background: var(--surface); border-radius: 10px; padding: 12px 16px; min-width: 140px; border: 1px solid var(--surface2); flex-shrink: 0; }
+  .summary-chip .sc-label { font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+  .summary-chip .sc-value { font-size: 1.3rem; font-weight: 700; margin-top: 2px; font-variant-numeric: tabular-nums; }
+  .summary-chip .sc-sub { font-size: 0.72rem; color: var(--muted); margin-top: 2px; }
+
+  /* ── Suggestion Enhanced ──────────────────────────── */
+  .suggestion-card.accepted { opacity: 0.5; border-left-color: var(--green); }
+  .suggestion-card.rejected { opacity: 0.3; border-left-color: var(--red); }
+  .suggestion-card.snoozed { opacity: 0.6; border-left-color: var(--muted); }
+  .sug-pattern { font-family: monospace; font-size: 0.72rem; color: var(--purple); background: var(--surface2); padding: 4px 8px; border-radius: 4px; margin-top: 6px; word-break: break-all; }
+
+  /* ── Automation Config ───────────────────────────── */
+  .auto-zone-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; margin-top: 12px; }
+  .auto-zone-card { background: var(--surface); border-radius: var(--radius); padding: 16px; border: 1px solid var(--surface2); }
+  .auto-zone-card h3 { font-size: 1rem; margin-bottom: 12px; }
+  .auto-section { margin-bottom: 14px; }
+  .auto-section-title { font-size: 0.78rem; font-weight: 600; color: var(--accent); margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+  .slider-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 0.78rem; }
+  .slider-row label { min-width: 140px; color: var(--muted); }
+  .slider-row input[type="range"] { flex: 1; accent-color: var(--accent); height: 6px; }
+  .slider-row .slider-val { min-width: 40px; text-align: right; font-variant-numeric: tabular-nums; color: var(--text); }
+  .toggle-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 0.78rem; }
+  .toggle-switch { position: relative; width: 36px; height: 20px; }
+  .toggle-switch input { opacity: 0; width: 0; height: 0; }
+  .toggle-switch .slider { position: absolute; cursor: pointer; inset: 0; background: var(--surface2); border-radius: 20px; transition: 0.3s; }
+  .toggle-switch .slider::before { content: ""; position: absolute; height: 16px; width: 16px; left: 2px; bottom: 2px; background: var(--muted); border-radius: 50%; transition: 0.3s; }
+  .toggle-switch input:checked + .slider { background: var(--accent); }
+  .toggle-switch input:checked + .slider::before { transform: translateX(16px); background: #fff; }
+  .entity-list { margin-top: 8px; }
+  .entity-item { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 0.78rem; border-bottom: 1px solid var(--surface2); }
+  .entity-item:last-child { border-bottom: none; }
+  .entity-role-badge { font-size: 0.65rem; padding: 2px 6px; border-radius: 4px; background: var(--surface2); color: var(--accent); }
+  .entity-tag { font-size: 0.6rem; padding: 1px 5px; border-radius: 3px; margin-left: 2px; }
+  .entity-add-row { display: flex; gap: 6px; margin-top: 8px; }
+  .entity-add-row input { flex: 1; padding: 6px 10px; font-size: 0.78rem; background: var(--surface2); border: 1px solid var(--surface2); border-radius: 6px; color: var(--text); }
+  .entity-add-row button { padding: 6px 12px; font-size: 0.78rem; background: var(--accent); color: #000; border: none; border-radius: 6px; cursor: pointer; }
+  .entity-remove-btn { background: none; border: none; color: var(--red); cursor: pointer; font-size: 0.9rem; padding: 0 4px; }
+
+  /* ── Keyboard Hint ──────────────────────────────── */
+  .kbd-hint { display: inline-block; font-size: 0.6rem; color: var(--muted); background: var(--surface2); padding: 1px 4px; border-radius: 3px; margin-left: 4px; vertical-align: middle; }
+
+  /* ── Responsive ──────────────────────────────────── */
+  @media (max-width: 700px) {
+    .routing-panel { grid-template-columns: 1fr; }
+    .neuron-config-grid { grid-template-columns: 1fr; }
+    .zone-grid { grid-template-columns: 1fr; }
+    .summary-strip { flex-direction: column; }
+    .app { padding: 8px; }
+    header h1 { font-size: 1.1rem; }
+    .tabs { gap: 2px; }
+    .tab { padding: 8px 12px; font-size: 0.78rem; }
+    .kbd-hint { display: none; }
+    .modal { max-width: 95%; padding: 16px; }
+    .grid { grid-template-columns: 1fr; }
+    .wide { grid-column: span 1; }
+    .media-zone-grid { grid-template-columns: 1fr; }
+    .model-grid { grid-template-columns: 1fr; }
+  }
+  @media (min-width: 1200px) {
+    .zone-grid { grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>&#x1F9E0; Styx Dashboard</h1>
+    <button class="refresh-btn" onclick="loadAll()">&#x21BB; Aktualisieren</button>
+    <div class="status" id="status">Laden...</div>
+    <span class="refresh-countdown" id="refresh-countdown"></span>
+  </header>
+
+  <!-- Tab Navigation -->
+  <div class="tabs" id="tabs">
+    <div class="tab active" data-tab="overview">&#x1F4CA; Uebersicht <span class="kbd-hint">1</span></div>
+    <div class="tab" data-tab="zones">&#x1F3E0; Zonen <span class="kbd-hint">2</span></div>
+    <div class="tab" data-tab="media">&#x1F3B5; Musikwolke <span class="kbd-hint">3</span></div>
+    <div class="tab" data-tab="suggestions">&#x1F4A1; Vorschlaege <span class="kbd-hint">4</span></div>
+    <div class="tab" data-tab="automation">&#x2699;&#xFE0F; Automation <span class="kbd-hint">5</span></div>
+    <div class="tab" data-tab="llm">&#x1F916; KI / LLM <span class="kbd-hint">6</span></div>
+    <div class="tab" data-tab="modules">&#x1F527; Module <span class="kbd-hint">7</span></div>
+    <div class="tab" data-tab="neurons">&#x26A1; Neuronen <span class="kbd-hint">8</span></div>
+    <div class="tab" data-tab="chat">&#x1F4AC; Chat <span class="kbd-hint">9</span></div>
+  </div>
+
+  <!-- ═══════════════ TAB: Overview ═══════════════ -->
+  <div class="tab-content active" id="tab-overview">
+    <div class="summary-strip" id="summary-strip"></div>
+    <div class="grid">
+      <div class="card">
+        <h2><span class="icon" style="background:#1a3a4a">&#x1F3AD;</span> Stimmung</h2>
+        <div id="mood-content">&ndash;</div>
+      </div>
+      <div class="card">
+        <h2><span class="icon" style="background:#1a2a4a">&#x1F916;</span> LLM Status</h2>
+        <div id="llm-status-mini">&ndash;</div>
+      </div>
+      <div class="card">
+        <h2><span class="icon" style="background:#2a1a4a">&#x26A1;</span> Neuronen</h2>
+        <div id="neuron-content">&ndash;</div>
+      </div>
+      <div class="card">
+        <h2><span class="icon" style="background:#1a2a3a">&#x1F578;&#xFE0F;</span> Brain Graph</h2>
+        <div id="graph-content">&ndash;</div>
+      </div>
+      <div class="card">
+        <h2><span class="icon" style="background:#1a3a2a">&#x1F4E1;</span> Integration Bus</h2>
+        <div id="bus-content">&ndash;</div>
+      </div>
+      <div class="card">
+        <h2><span class="icon" style="background:#2a3a1a">&#x1F3E0;</span> Habitus-Zonen</h2>
+        <ul class="zone-list" id="zones-content"></ul>
+      </div>
+      <div class="card wide">
+        <h2><span class="icon" style="background:#1a2a4a">&#x1F52C;</span> Neuronen-Brain Visualisierung</h2>
+        <canvas id="brain-canvas"></canvas>
+        <div class="brain-tooltip" id="brain-tooltip"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════ TAB: Zonen ═══════════════ -->
+  <div class="tab-content" id="tab-zones">
+    <div class="section-title">&#x1F3E0; Habitus-Zonen &#x2014; Raum&uuml;bersicht</div>
+    <div class="zone-grid" id="zone-cards"></div>
+  </div>
+
+  <!-- ═══════════════ TAB: Musikwolke ═══════════════ -->
+  <div class="tab-content" id="tab-media">
+    <div class="musikwolke-panel">
+      <h3>&#x2601;&#xFE0F; Musikwolke</h3>
+      <p style="font-size:0.82rem;color:var(--muted);margin-bottom:12px">Audio-Follows-User &mdash; Musik folgt dir automatisch durch die Zonen.</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap" id="musikwolke-controls">
+        <button class="btn-sm btn-primary" onclick="musikwolkeGroupAll()">Alle Zonen gruppieren</button>
+        <button class="btn-sm btn-secondary" onclick="musikwolkeUngroupAll()">Alle trennen</button>
+      </div>
+      <div id="musikwolke-status" style="margin-top:10px;font-size:0.78rem;color:var(--muted)"></div>
+    </div>
+    <div class="section-title">&#x1F50A; Zonen-Player</div>
+    <div class="media-zone-grid" id="media-zone-cards"></div>
+  </div>
+
+  <!-- ═══════════════ TAB: Vorschlaege ═══════════════ -->
+  <div class="tab-content" id="tab-suggestions">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div>
+        <div class="section-title" style="margin:0">&#x1F4A1; Automations-Vorschl&auml;ge</div>
+        <p style="font-size:0.82rem;color:var(--muted);margin-top:4px">Basierend auf erkannten Mustern und Verhaltensanalyse. Konfidenz &ge; 70% werden empfohlen.</p>
+      </div>
+      <div style="display:flex;gap:6px">
+        <span class="sug-tag" style="background:var(--green)20;color:var(--green);padding:4px 10px;border-radius:6px;font-size:0.75rem" id="sug-count-pending">0 offen</span>
+        <span class="sug-tag" style="background:var(--surface2);color:var(--muted);padding:4px 10px;border-radius:6px;font-size:0.75rem" id="sug-count-accepted">0 angenommen</span>
+      </div>
+    </div>
+    <div class="suggestion-grid" id="suggestion-cards"></div>
+  </div>
+
+  <!-- ═══════════════ TAB: LLM / KI ═══════════════ -->
+  <div class="tab-content" id="tab-llm">
+    <!-- Provider Routing -->
+    <div class="routing-panel" id="routing-panel">
+      <div class="routing-box">
+        <h3>&#x1F3E0; Primaerer Provider</h3>
+        <div id="primary-provider-info"></div>
+        <select id="sel-primary" onchange="updateRouting()">
+          <option value="offline">Offline (Ollama)</option>
+          <option value="cloud">Cloud API</option>
+        </select>
+      </div>
+      <div class="routing-box">
+        <h3>&#x2601;&#xFE0F; Sekundaerer Provider (Fallback)</h3>
+        <div id="secondary-provider-info"></div>
+        <select id="sel-secondary" onchange="updateRouting()">
+          <option value="cloud">Cloud API</option>
+          <option value="offline">Offline (Ollama)</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Offline Models -->
+    <div class="section-title">&#x1F4E6; Offline-Modelle (Ollama)</div>
+    <div class="model-grid" id="offline-models"></div>
+
+    <!-- Cloud Models -->
+    <div class="section-title">&#x2601;&#xFE0F; Cloud-Modelle</div>
+    <div class="model-grid" id="cloud-models"></div>
+  </div>
+
+  <!-- ═══════════════ TAB: Modules ═══════════════ -->
+  <div class="tab-content" id="tab-modules">
+    <div class="card wide">
+      <h2><span class="icon" style="background:#3a2a1a">&#x1F527;</span> Module &mdash; Klicken zum Umschalten</h2>
+      <div class="module-grid" id="modules-content">&ndash;</div>
+    </div>
+    <div class="grid" style="margin-top:16px">
+      <div class="card">
+        <h2><span class="icon" style="background:#4a1a3a">&#x1F393;</span> Hebbian Learning</h2>
+        <div id="learning-content">&ndash;</div>
+      </div>
+      <div class="card">
+        <h2><span class="icon" style="background:#2a2a1a">&#x1F4A1;</span> Letzte Kandidaten</h2>
+        <div id="candidates-content">&ndash;</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════ TAB: Neurons ═══════════════ -->
+  <div class="tab-content" id="tab-neurons">
+    <div class="card wide">
+      <h2><span class="icon" style="background:#1a2a4a">&#x1F52C;</span> Brain Visualisierung</h2>
+      <canvas id="brain-canvas-2"></canvas>
+      <div class="brain-tooltip" id="brain-tooltip-2"></div>
+    </div>
+    <div class="section-title">Neuronen-Konfiguration</div>
+    <div class="neuron-config-grid" id="neuron-config"></div>
+
+    <div class="section-title" style="margin-top:20px">&#x1F517; Synapsen-Gewichte</div>
+    <div class="card wide" style="margin-top:8px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <span style="font-size:0.82rem;color:var(--muted)">Verbindungsgewichte zwischen Neuronen-Schichten. Werte &gt; 0 = erregend, &lt; 0 = hemmend.</span>
+        <button class="btn-sm btn-secondary" onclick="resetAllSynapses()">Alle zuruecksetzen</button>
+      </div>
+      <div id="synapse-list" style="max-height:400px;overflow-y:auto"></div>
+    </div>
+  </div>
+
+  <!-- ═══════════════ TAB: Automation ═══════════════ -->
+  <div class="tab-content" id="tab-automation">
+    <div class="card wide">
+      <h2><span class="icon" style="background:#1a2a3a">&#x2699;&#xFE0F;</span> Zone Automation</h2>
+      <p style="color:var(--muted);font-size:0.82rem;margin-bottom:12px">
+        Praesenzabhaengige Licht- und Musiksteuerung pro Zone. Slider fuer Verzoegerung, Helligkeit, Daempfung.
+      </p>
+      <div id="automation-zones" class="auto-zone-grid"></div>
+    </div>
+    <div class="card wide" style="margin-top:16px">
+      <h2><span class="icon" style="background:#2a1a3a">&#x1F3F7;&#xFE0F;</span> Entitaeten &amp; Tags</h2>
+      <p style="color:var(--muted);font-size:0.82rem;margin-bottom:12px">
+        Entitaeten zu Zonen hinzufuegen/entfernen. Rollen und Tags zuweisen.
+      </p>
+      <div id="entity-management"></div>
+    </div>
+  </div>
+
+  <!-- ═══════════════ TAB: Chat ═══════════════ -->
+  <div class="tab-content" id="tab-chat">
+    <div class="card wide">
+      <h2><span class="icon" style="background:#2a1a3a">&#x1F4AC;</span> Styx Chat</h2>
+      <div class="chat-wrap">
+        <div class="chat-messages" id="chat-messages">
+          <div class="chat-msg system">Willkommen bei Styx. Stelle eine Frage...</div>
+        </div>
+        <div class="chat-status" id="chat-status"></div>
+        <div class="chat-input-row">
+          <textarea class="chat-input" id="chat-input" rows="1" placeholder="Nachricht eingeben..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChat()}"></textarea>
+          <button class="chat-send" id="chat-send" onclick="sendChat()">Senden</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Zone Detail Modal -->
+<div class="modal-overlay" id="zone-modal" onclick="if(event.target===this)closeZoneModal()">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="zone-modal-title">Zone</h3>
+      <button class="modal-close" onclick="closeZoneModal()">&times;</button>
+    </div>
+    <div id="zone-modal-content"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const BASE = location.origin;
+const TOKEN = new URLSearchParams(location.search).get("token") || "";
+const HEADERS = TOKEN ? {"X-Auth-Token": TOKEN} : {};
+
+// ═══════════════════════════════════════════════════════════════
+// Utilities
+// ═══════════════════════════════════════════════════════════════
+
+async function fetchJSON(path) {
+  const r = await fetch(BASE + path, {headers: HEADERS});
+  if (!r.ok) return null;
+  return r.json();
+}
+
+async function postJSON(path, body) {
+  const r = await fetch(BASE + path, {
+    method: "POST",
+    headers: {...HEADERS, "Content-Type": "application/json"},
+    body: JSON.stringify(body),
+  });
+  return r.json();
+}
+
+function showToast(msg, ms) {
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  setTimeout(() => t.classList.remove("show"), ms || 3000);
+}
+
+function barHTML(label, value, color) {
+  const pct = Math.round((value || 0) * 100);
+  return `<div class="bar-row">
+    <span class="bar-label">${label}</span>
+    <span class="bar-track"><span class="bar-fill" style="width:${pct}%;background:${color}"></span></span>
+    <span class="bar-value">${pct}%</span>
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Tab Navigation
+// ═══════════════════════════════════════════════════════════════
+
+function switchTab(tabName) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  const tab = document.querySelector(`.tab[data-tab="${tabName}"]`);
+  if (tab) tab.classList.add('active');
+  const content = document.getElementById('tab-' + tabName);
+  if (content) content.classList.add('active');
+  if (tabName === 'neurons') { initBrain('brain-canvas-2', 'brain-tooltip-2'); drawBrain(); loadSynapses(); }
+  if (tabName === 'overview') { initBrain('brain-canvas', 'brain-tooltip'); drawBrain(); }
+  try { localStorage.setItem('styx-active-tab', tabName); } catch(e) {}
+}
+
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => switchTab(tab.dataset.tab));
+});
+
+// Restore last active tab
+try {
+  const saved = localStorage.getItem('styx-active-tab');
+  if (saved && document.getElementById('tab-' + saved)) switchTab(saved);
+} catch(e) {}
+
+// Keyboard shortcuts: 1-8 for tabs, Escape for modal
+const TAB_KEYS = ['overview','zones','media','suggestions','automation','llm','modules','neurons','chat'];
+document.addEventListener('keydown', (e) => {
+  // Don't capture when typing in input/textarea
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
+  const num = parseInt(e.key);
+  if (num >= 1 && num <= TAB_KEYS.length) { e.preventDefault(); switchTab(TAB_KEYS[num - 1]); }
+  if (e.key === 'Escape') closeZoneModal();
+  if (e.key === 'r' && !e.ctrlKey && !e.metaKey) loadAll();
+});
+
+// ═══════════════════════════════════════════════════════════════
+// Overview Tab Renderers
+// ═══════════════════════════════════════════════════════════════
+
+function moodClass(mood) {
+  const m = (mood || "").toLowerCase();
+  if (m.includes("relax")) return "mood-relax";
+  if (m.includes("focus")) return "mood-focus";
+  if (m.includes("active")) return "mood-active";
+  if (m.includes("sleep")) return "mood-sleep";
+  if (m.includes("alert")) return "mood-alert";
+  return "mood-away";
+}
+
+function renderMood(mood) {
+  if (!mood || !mood.mood) return "Kein Mood-Daten";
+  const conf = Math.round((mood.confidence || 0) * 100);
+  let html = `<span class="mood-badge ${moodClass(mood.mood)}">${mood.mood}</span>
+    <span style="margin-left:8px;color:var(--muted);font-size:0.85rem">${conf}% Konfidenz</span>`;
+  if (mood.mood_values) {
+    const colors = {relax:"#81c784",focus:"#4fc3f7",active:"#ffb74d",sleep:"#ce93d8",alert:"#ef5350",away:"#888",social:"#ff8a65",recovery:"#a5d6a7"};
+    html += '<div style="margin-top:12px">';
+    for (const [k, v] of Object.entries(mood.mood_values)) html += barHTML(k, v, colors[k] || "#4fc3f7");
+    html += '</div>';
+  }
+  return html;
+}
+
+function renderNeurons(neurons) {
+  if (!neurons || !neurons.summary) return "Keine Neuron-Daten";
+  const s = neurons.summary;
+  const counts = {context: Object.keys(s.context || {}).length, state: Object.keys(s.state || {}).length, mood: Object.keys(s.mood || {}).length};
+  return `<div class="stat"><span class="label">Kontext</span><span class="value">${counts.context}</span></div>
+    <div class="stat"><span class="label">Zustand</span><span class="value">${counts.state}</span></div>
+    <div class="stat"><span class="label">Stimmung</span><span class="value">${counts.mood}</span></div>
+    <div class="stat"><span class="label">Gesamt</span><span class="value">${neurons.total_count}</span></div>`;
+}
+
+function renderGraph(graph) {
+  if (!graph || !graph.total_nodes) return "Kein Graph-Daten";
+  let html = `<div class="stat"><span class="label">Knoten</span><span class="value">${graph.total_nodes}</span></div>
+    <div class="stat"><span class="label">Kanten</span><span class="value">${graph.total_edges}</span></div>`;
+  if (graph.nodes_by_kind) for (const [k, v] of Object.entries(graph.nodes_by_kind)) html += `<div class="stat"><span class="label" style="padding-left:12px">\u2192 ${k}</span><span class="value">${v}</span></div>`;
+  return html;
+}
+
+function renderBus(bus) {
+  if (!bus || bus.events_published === undefined) return "Bus nicht aktiv";
+  const errorRate = bus.events_published > 0 ? ((bus.errors / bus.events_published) * 100).toFixed(1) : "0.0";
+  return `<div class="stat"><span class="label">Veroeffentlicht</span><span class="value">${bus.events_published}</span></div>
+    <div class="stat"><span class="label">Zugestellt</span><span class="value">${bus.events_delivered}</span></div>
+    <div class="stat"><span class="label">Fehler</span><span class="value" style="color:${bus.errors>0?'var(--red)':'inherit'}">${bus.errors}</span></div>
+    <div class="stat"><span class="label">Dead Letters</span><span class="value">${bus.dead_letter_count || 0}</span></div>
+    <div class="stat"><span class="label">Fehlerrate</span><span class="value">${errorRate}%</span></div>`;
+}
+
+function renderLLMStatusMini(status) {
+  if (!status) return "LLM nicht verfuegbar";
+  const dot = status.active_provider !== "none" ? "ok" : "err";
+  const provider = status.active_provider === "ollama" ? "Ollama" : status.active_provider === "cloud" ? "Cloud" : "Keiner";
+  return `<div class="stat"><span class="label"><span class="status-dot ${dot}"></span>Provider</span><span class="value">${provider}</span></div>
+    <div class="stat"><span class="label">Modell</span><span class="value">${status.primary_model || "—"}</span></div>
+    <div class="stat"><span class="label">Ollama</span><span class="value">${status.ollama_available ? "\u2705" : "\u274C"}</span></div>
+    <div class="stat"><span class="label">Cloud</span><span class="value">${status.cloud_configured ? "\u2705" : "Nicht konfiguriert"}</span></div>
+    <div class="stat"><span class="label">Fallback</span><span class="value">${status.secondary_provider || "—"}</span></div>`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// LLM Tab
+// ═══════════════════════════════════════════════════════════════
+
+let llmRecommended = {offline: [], cloud: [], status: {}};
+
+async function loadLLM() {
+  const data = await fetchJSON("/chat/models/recommended");
+  if (!data || !data.ok) return;
+  llmRecommended = data;
+
+  // Update routing selectors
+  const st = data.status;
+  document.getElementById("sel-primary").value = st.primary_provider;
+  document.getElementById("sel-secondary").value = st.secondary_provider;
+
+  const pInfo = document.getElementById("primary-provider-info");
+  pInfo.innerHTML = `<span class="provider-badge ${st.primary_provider}">${st.primary_provider === "offline" ? "Ollama" : "Cloud"}</span>
+    <span style="margin-left:8px;font-size:0.82rem">${st.primary_model || ""}</span>`;
+
+  const sInfo = document.getElementById("secondary-provider-info");
+  sInfo.innerHTML = `<span class="provider-badge ${st.secondary_provider}">${st.secondary_provider === "offline" ? "Ollama" : "Cloud"}</span>
+    <span style="margin-left:8px;font-size:0.82rem">${st.secondary_model || ""}</span>`;
+
+  // Render offline models
+  const offEl = document.getElementById("offline-models");
+  offEl.innerHTML = data.offline.map(m => {
+    const isActive = m.active;
+    const installedTag = m.installed
+      ? '<span class="tag installed">Installiert</span>'
+      : '<span class="tag not-installed">Nicht installiert</span>';
+    const sizeTag = m.size_mb ? `<span class="tag">${m.size_mb >= 1000 ? (m.size_mb/1000).toFixed(1)+"GB" : m.size_mb+"MB"}</span>` : '';
+    const toolTag = m.supports_tools ? '<span class="tag">Tool-Calling</span>' : '';
+    const recTag = (m.tags || []).includes("recommended") ? '<span class="tag" style="background:#2a3a1a;color:#81c784">Empfohlen</span>' : '';
+
+    const pullBtn = m.installed
+      ? `<button class="btn-sm btn-success" onclick="activateModel('${m.id}','offline')" ${isActive ? 'disabled' : ''}>${isActive ? 'Aktiv' : 'Aktivieren'}</button>`
+      : `<button class="btn-sm btn-primary" onclick="pullModel('${m.id}',this)">Herunterladen</button>`;
+    const deleteBtn = m.installed && !isActive
+      ? `<button class="btn-sm btn-danger" onclick="deleteModel('${m.id}',this)">&#x1F5D1;</button>` : '';
+
+    return `<div class="model-card ${isActive ? 'active-model' : ''}">
+      <div class="model-name">${m.name}</div>
+      <div class="model-desc">${m.description}</div>
+      <div class="model-meta">${recTag}${installedTag}${sizeTag}${toolTag}</div>
+      <div class="model-actions">${pullBtn}${deleteBtn}</div>
+    </div>`;
+  }).join("");
+
+  // Render cloud models
+  const cloudEl = document.getElementById("cloud-models");
+  if (!st.cloud_configured) {
+    cloudEl.innerHTML = `<div class="model-card"><div class="model-name">Cloud nicht konfiguriert</div>
+      <div class="model-desc">Setze CLOUD_API_URL und CLOUD_API_KEY in der Addon-Konfiguration.</div></div>`;
+    return;
+  }
+  cloudEl.innerHTML = data.cloud.map(m => {
+    const isActive = m.active;
+    const priceTag = m.price_input_1m != null ? `<span class="tag">$${m.price_input_1m}/$${m.price_output_1m} /1M</span>` : '';
+    const recTag = (m.tags || []).includes("recommended") ? '<span class="tag" style="background:#2a3a1a;color:#81c784">Empfohlen</span>' : '';
+    const activateBtn = `<button class="btn-sm btn-success" onclick="activateModel('${m.id}','cloud')" ${isActive ? 'disabled' : ''}>${isActive ? 'Aktiv' : 'Aktivieren'}</button>`;
+
+    return `<div class="model-card ${isActive ? 'active-model' : ''}">
+      <div class="model-name">${m.name}</div>
+      <div class="model-desc">${m.description}</div>
+      <div class="model-meta">${recTag}${priceTag}</div>
+      <div class="model-actions">${activateBtn}</div>
+    </div>`;
+  }).join("");
+
+  // Also update mini status on overview
+  document.getElementById("llm-status-mini").innerHTML = renderLLMStatusMini(st);
+}
+
+async function pullModel(modelId, btn) {
+  btn.disabled = true;
+  btn.textContent = "Lade...";
+  showToast(`Lade ${modelId} herunter... Das kann mehrere Minuten dauern.`);
+  const result = await postJSON("/chat/models/pull", {model: modelId});
+  if (result.ok) {
+    showToast(`${modelId} erfolgreich heruntergeladen!`);
+    await loadLLM();
+  } else {
+    showToast(`Fehler: ${result.error}`, 5000);
+    btn.disabled = false;
+    btn.textContent = "Herunterladen";
+  }
+}
+
+async function deleteModel(modelId, btn) {
+  if (!confirm(`Modell "${modelId}" wirklich loeschen?`)) return;
+  btn.disabled = true;
+  const result = await postJSON("/chat/models/delete", {model: modelId});
+  if (result.ok) {
+    showToast(`${modelId} geloescht.`);
+    await loadLLM();
+  } else {
+    showToast(`Fehler: ${result.error}`, 5000);
+    btn.disabled = false;
+  }
+}
+
+async function activateModel(modelId, provider) {
+  const body = provider === "cloud" ? {cloud_model: modelId} : {offline_model: modelId};
+  const result = await postJSON("/chat/routing", body);
+  if (result.ok) {
+    showToast(`${modelId} als ${provider === "cloud" ? "Cloud" : "Offline"}-Modell aktiviert.`);
+    await loadLLM();
+  } else {
+    showToast("Fehler beim Aktivieren.", 4000);
+  }
+}
+
+async function updateRouting() {
+  const primary = document.getElementById("sel-primary").value;
+  const secondary = document.getElementById("sel-secondary").value;
+  await postJSON("/chat/routing", {primary_provider: primary, secondary_provider: secondary});
+  showToast("Routing aktualisiert.");
+  await loadLLM();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Modules Tab
+// ═══════════════════════════════════════════════════════════════
+
+const MODULE_STATES = ["active", "learning", "off"];
+let moduleStates = {};
+
+function renderModules(modules) {
+  if (!modules || Object.keys(modules).length === 0) return "Keine Module konfiguriert";
+  moduleStates = modules;
+  let html = "";
+  for (const [id, state] of Object.entries(modules)) {
+    const label = id.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+    const stateLabel = state === "active" ? "Aktiv" : state === "learning" ? "Lernend" : "Aus";
+    html += `<div class="module-chip ${state}" onclick="cycleModule('${id}')" title="Klicken: ${id} umschalten">
+      <span class="dot"></span>
+      <span class="module-name">${label}</span>
+      <span class="module-state">${stateLabel}</span>
+    </div>`;
+  }
+  return html;
+}
+
+async function cycleModule(moduleId) {
+  const current = moduleStates[moduleId] || "active";
+  const idx = MODULE_STATES.indexOf(current);
+  const next = MODULE_STATES[(idx + 1) % MODULE_STATES.length];
+  const result = await postJSON(`/api/v1/modules/${moduleId}/configure`, {state: next});
+  if (result.ok) {
+    moduleStates[moduleId] = next;
+    document.getElementById("modules-content").innerHTML = renderModules(moduleStates);
+    showToast(`${moduleId}: ${next}`);
+  }
+}
+
+function renderLearning(learning) {
+  if (!learning || !learning.total_synapses) return "Nicht aktiv";
+  let html = `<div class="stat"><span class="label">Synapsen</span><span class="value">${learning.total_synapses}</span></div>`;
+  if (learning.top_drifts) {
+    html += '<div style="margin-top:8px;font-size:0.8rem;color:var(--muted)">Top Drift:</div>';
+    for (const d of learning.top_drifts) html += barHTML(d.synapse.split(":").pop(), Math.min(d.drift, 1), "#ce93d8");
+  }
+  return html;
+}
+
+function renderCandidates(candidates) {
+  if (!candidates || candidates.length === 0) return "Keine Kandidaten";
+  return candidates.map(c => `<div class="candidate-item">
+    <div class="label">${c.label || c.id}</div>
+    <div class="meta">${c.kind || "—"} · Score: ${(c.score || 0).toFixed(2)} · ${c.source || ""}</div>
+  </div>`).join("");
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Neurons Tab — Config Cards with Editable Parameters
+// ═══════════════════════════════════════════════════════════════
+
+let neuronConfigs = {};
+
+async function loadNeuronConfigs() {
+  const data = await fetchJSON("/neurons");
+  if (!data || !data.success) return;
+  neuronConfigs = {};
+  for (const layer of ["context", "state", "mood"]) {
+    const neurons = data.data?.[layer] || {};
+    for (const [k, v] of Object.entries(neurons)) {
+      const nid = `${layer}.${k}`;
+      neuronConfigs[nid] = {
+        value: typeof v === "number" ? v : (v?.value || 0),
+        config: v?.config || {threshold: 0.5, decay_rate: 0.1, smoothing_factor: 0.3, enabled: true},
+        layer,
+      };
+    }
+  }
+}
+
+function renderNeuronConfig(dashData) {
+  const summary = dashData.neurons?.summary || {};
+  const el = document.getElementById("neuron-config");
+  let html = "";
+  for (const layer of ["context", "state", "mood"]) {
+    const vals = summary[layer] || {};
+    const layerColor = layer === "context" ? "#4fc3f7" : layer === "state" ? "#81c784" : "#ce93d8";
+    for (const [k, v] of Object.entries(vals)) {
+      const nid = `${layer}.${k}`;
+      const val = typeof v === "number" ? v : (v?.value || 0);
+      const pct = (val * 100).toFixed(0);
+      const cfg = neuronConfigs[nid]?.config || v?.config || {};
+      const threshold = ((cfg.threshold || 0.5) * 100).toFixed(0);
+      const decay = ((cfg.decay_rate || 0.1) * 100).toFixed(0);
+      const smoothing = ((cfg.smoothing_factor || 0.3) * 100).toFixed(0);
+      const enabled = cfg.enabled !== false;
+
+      html += `<div class="neuron-cfg-card" id="ncfg-${nid.replace('.','_')}" style="border-left:3px solid ${layerColor}">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span class="neuron-id" style="color:${layerColor}">${k}</span>
+          <div style="display:flex;gap:6px;align-items:center">
+            <span class="neuron-type">${layer}</span>
+            <button class="btn-sm ${enabled ? 'btn-success' : 'btn-danger'}" style="padding:3px 8px;font-size:0.65rem" onclick="toggleNeuron('${nid}',${!enabled})">${enabled ? 'AN' : 'AUS'}</button>
+          </div>
+        </div>
+        ${barHTML("Wert", val, layerColor)}
+        <div class="slider-row"><label>Schwelle</label>
+          <input type="range" min="0" max="100" value="${threshold}" oninput="this.nextElementSibling.textContent=this.value+'%'" onchange="updateNeuronCfg('${nid}','threshold',this.value/100)"/>
+          <span class="slider-val">${threshold}%</span>
+        </div>
+        <div class="slider-row"><label>Abklingen</label>
+          <input type="range" min="0" max="100" value="${decay}" oninput="this.nextElementSibling.textContent=this.value+'%'" onchange="updateNeuronCfg('${nid}','decay_rate',this.value/100)"/>
+          <span class="slider-val">${decay}%</span>
+        </div>
+        <div class="slider-row"><label>Glaettung</label>
+          <input type="range" min="0" max="100" value="${smoothing}" oninput="this.nextElementSibling.textContent=this.value+'%'" onchange="updateNeuronCfg('${nid}','smoothing_factor',this.value/100)"/>
+          <span class="slider-val">${smoothing}%</span>
+        </div>
+      </div>`;
+    }
+  }
+  el.innerHTML = html || "Keine Neuron-Daten. Pipeline noch nicht evaluiert.";
+}
+
+async function updateNeuronCfg(nid, key, value) {
+  const result = await fetch(BASE + `/neurons/${nid}/config`, {
+    method: "PATCH",
+    headers: {...HEADERS, "Content-Type": "application/json"},
+    body: JSON.stringify({[key]: value}),
+  }).then(r => r.json());
+  if (result.success) {
+    showToast(`${nid}: ${key} = ${(value*100).toFixed(0)}%`);
+  } else {
+    showToast(`Fehler: ${result.error}`, 4000);
+  }
+}
+
+async function toggleNeuron(nid, enable) {
+  const endpoint = enable ? "enable" : "disable";
+  const result = await postJSON(`/neurons/${nid}/${endpoint}`, {});
+  if (result.success) {
+    showToast(`${nid}: ${enable ? "Aktiviert" : "Deaktiviert"}`);
+    loadDashboard();
+  } else {
+    showToast(`Fehler: ${result.error}`, 4000);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Synapse Configuration
+// ═══════════════════════════════════════════════════════════════
+
+async function loadSynapses() {
+  const data = await fetchJSON("/api/v1/neurons/layers/synapses");
+  if (!data || !data.success) return;
+  const el = document.getElementById("synapse-list");
+  if (!el) return;
+  el.innerHTML = data.data.map(s => {
+    const pct = Math.round((s.weight + 1) * 50); // map -1..1 to 0..100
+    const color = s.weight > 0 ? "#81c784" : s.weight < 0 ? "#ef5350" : "#888";
+    const overrideTag = s.overridden ? '<span style="font-size:0.65rem;color:var(--orange);margin-left:4px">geaendert</span>' : '';
+    return `<div class="bar-row" style="margin:3px 0">
+      <span class="bar-label" style="flex:0 0 180px;font-size:0.72rem">${s.from.split('.')[1]} &#x2192; ${s.to.split('.')[1]}${overrideTag}</span>
+      <input type="range" min="-100" max="100" value="${Math.round(s.weight*100)}" style="flex:1;accent-color:${color};height:4px"
+        oninput="this.nextElementSibling.textContent=(this.value/100).toFixed(2)"
+        onchange="updateSynapse('${s.from}','${s.to}',this.value/100)"/>
+      <span class="bar-value" style="flex:0 0 44px;font-size:0.72rem;color:${color}">${s.weight.toFixed(2)}</span>
+    </div>`;
+  }).join("");
+}
+
+async function updateSynapse(from, to, weight) {
+  const result = await postJSON("/api/v1/neurons/layers/synapses/update", {from, to, weight});
+  if (result.success) showToast(`Synapse ${from.split('.')[1]} -> ${to.split('.')[1]}: ${weight.toFixed(2)}`);
+  else showToast(`Fehler: ${result.error}`, 4000);
+}
+
+async function resetAllSynapses() {
+  if (!confirm("Alle Synapsen-Gewichte auf Standard zuruecksetzen?")) return;
+  const result = await postJSON("/api/v1/neurons/layers/synapses/reset", {all: true});
+  if (result.success) { showToast("Alle Synapsen zurueckgesetzt."); loadSynapses(); }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Brain Canvas Visualization
+// ═══════════════════════════════════════════════════════════════
+
+const BRAIN_NEURONS = [
+  {id:"context.presence",label:"Presence",layer:0,x:0.12,y:0.2},
+  {id:"context.time_of_day",label:"Time",layer:0,x:0.12,y:0.35},
+  {id:"context.light_level",label:"Light",layer:0,x:0.12,y:0.5},
+  {id:"context.weather",label:"Weather",layer:0,x:0.12,y:0.65},
+  {id:"context.activity",label:"Activity",layer:0,x:0.12,y:0.8},
+  {id:"state.energy_level",label:"Energy",layer:1,x:0.42,y:0.15},
+  {id:"state.comfort",label:"Comfort",layer:1,x:0.42,y:0.32},
+  {id:"state.productivity",label:"Productivity",layer:1,x:0.42,y:0.5},
+  {id:"state.relaxation",label:"Relaxation",layer:1,x:0.42,y:0.67},
+  {id:"state.social",label:"Social",layer:1,x:0.42,y:0.84},
+  {id:"mood.focus",label:"Focus",layer:2,x:0.72,y:0.2},
+  {id:"mood.relax",label:"Relax",layer:2,x:0.72,y:0.4},
+  {id:"mood.energy",label:"Energy",layer:2,x:0.72,y:0.6},
+  {id:"mood.calm",label:"Calm",layer:2,x:0.72,y:0.8},
+];
+
+const BRAIN_EDGES = [
+  ["context.presence","state.energy_level",0.3],["context.presence","state.comfort",0.2],
+  ["context.time_of_day","state.energy_level",0.4],["context.time_of_day","state.relaxation",0.3],
+  ["context.light_level","state.comfort",0.5],["context.light_level","state.productivity",0.3],
+  ["context.weather","state.comfort",0.2],["context.weather","state.energy_level",0.1],
+  ["context.activity","state.productivity",0.4],["context.activity","state.social",0.3],
+  ["state.energy_level","mood.energy",0.6],["state.energy_level","mood.focus",0.3],
+  ["state.comfort","mood.relax",0.5],["state.comfort","mood.calm",0.4],
+  ["state.productivity","mood.focus",0.5],["state.relaxation","mood.relax",0.6],
+  ["state.relaxation","mood.calm",0.3],["state.social","mood.energy",0.2],
+];
+
+const LAYER_COLORS = ["#4fc3f7","#81c784","#ce93d8"];
+const LAYER_LABELS = ["Kontext","Zustand","Stimmung"];
+
+let brainNodeValues = {};
+let hoveredNode = null;
+let activeCanvasId = "brain-canvas";
+let activeTooltipId = "brain-tooltip";
+
+function initBrain(canvasId, tooltipId) {
+  activeCanvasId = canvasId;
+  activeTooltipId = tooltipId;
+  const canvas = document.getElementById(canvasId);
+  const tooltip = document.getElementById(tooltipId);
+  if (!canvas || canvas._brainInit) return;
+  canvas._brainInit = true;
+
+  canvas.addEventListener("mousemove", function(e) {
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+    const W = canvas.width, H = canvas.height;
+    let found = null;
+    for (const n of BRAIN_NEURONS) {
+      const nx = n.x * W, ny = n.y * H;
+      if (Math.hypot(mx - nx, my - ny) < 22) { found = n; break; }
+    }
+    if (found) {
+      hoveredNode = found.id;
+      const val = brainNodeValues[found.id] || 0;
+      tooltip.textContent = `${found.id}: ${(val * 100).toFixed(1)}%`;
+      tooltip.style.left = (e.clientX + 12) + "px";
+      tooltip.style.top = (e.clientY - 28) + "px";
+      tooltip.style.opacity = "1";
+    } else {
+      hoveredNode = null;
+      tooltip.style.opacity = "0";
+    }
+    drawBrainOn(canvasId);
+  });
+  canvas.addEventListener("mouseleave", function() {
+    hoveredNode = null;
+    tooltip.style.opacity = "0";
+    drawBrainOn(canvasId);
+  });
+}
+
+function updateBrainViz(dashData) {
+  brainNodeValues = {};
+  const summary = dashData.neurons?.summary || {};
+  for (const layer of ["context","state","mood"]) {
+    const vals = summary[layer] || {};
+    for (const [k, v] of Object.entries(vals))
+      brainNodeValues[`${layer}.${k}`] = typeof v === "number" ? v : (v?.value || 0);
+  }
+  drawBrain();
+}
+
+function drawBrain() { drawBrainOn(activeCanvasId); }
+
+function drawBrainOn(canvasId) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas || !canvas.offsetParent) return;
+  const rect = canvas.parentElement.getBoundingClientRect();
+  canvas.width = rect.width - 42;
+  canvas.height = 400;
+  const ctx = canvas.getContext("2d");
+  const W = canvas.width, H = canvas.height;
+
+  ctx.fillStyle = "#0a0a14";
+  ctx.fillRect(0, 0, W, H);
+
+  ctx.font = "bold 11px Inter, sans-serif";
+  ctx.textAlign = "center";
+  for (let i = 0; i < 3; i++) {
+    ctx.fillStyle = LAYER_COLORS[i];
+    ctx.globalAlpha = 0.5;
+    ctx.fillText(LAYER_LABELS[i], [0.12, 0.42, 0.72][i] * W, 20);
+    ctx.globalAlpha = 1;
+  }
+
+  for (const [src, tgt, weight] of BRAIN_EDGES) {
+    const sn = BRAIN_NEURONS.find(n => n.id === src);
+    const tn = BRAIN_NEURONS.find(n => n.id === tgt);
+    if (!sn || !tn) continue;
+    const sx = sn.x * W, sy = sn.y * H, tx = tn.x * W, ty = tn.y * H;
+    const srcVal = brainNodeValues[src] || 0;
+    const sig = srcVal * Math.abs(weight);
+    const isActive = sig > 0.1;
+
+    ctx.beginPath();
+    ctx.moveTo(sx, sy);
+    ctx.bezierCurveTo((sx+tx)/2, sy, (sx+tx)/2, ty, tx, ty);
+    ctx.strokeStyle = weight > 0 ? (isActive ? "#34D399" : "#1a3a2a") : (isActive ? "#F87171" : "#3a1a1a");
+    ctx.lineWidth = isActive ? 1 + sig * 3 : 0.5;
+    ctx.globalAlpha = isActive ? 0.4 + sig * 0.6 : 0.15;
+    ctx.setLineDash(weight <= 0 ? [4, 4] : []);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.setLineDash([]);
+
+    if (isActive) {
+      const t = (Date.now() % 2000) / 2000;
+      ctx.beginPath();
+      ctx.arc(sx + (tx-sx)*t, sy + (ty-sy)*t, 2, 0, Math.PI*2);
+      ctx.fillStyle = weight > 0 ? "#34D399" : "#F87171";
+      ctx.globalAlpha = 0.6;
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  for (const n of BRAIN_NEURONS) {
+    const x = n.x * W, y = n.y * H;
+    const val = brainNodeValues[n.id] || 0;
+    const r = 18 + val * 8;
+    const isHovered = hoveredNode === n.id;
+
+    if (val > 0.3) {
+      ctx.beginPath();
+      ctx.arc(x, y, r + 8, 0, Math.PI * 2);
+      const glow = ctx.createRadialGradient(x, y, r, x, y, r + 8);
+      glow.addColorStop(0, LAYER_COLORS[n.layer] + "40");
+      glow.addColorStop(1, "transparent");
+      ctx.fillStyle = glow;
+      ctx.fill();
+    }
+
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fillStyle = val < 0.2 ? "#3a3a4a" : val < 0.5 ? LAYER_COLORS[n.layer] + "aa" : LAYER_COLORS[n.layer];
+    ctx.fill();
+    ctx.strokeStyle = isHovered ? "#fff" : LAYER_COLORS[n.layer];
+    ctx.lineWidth = isHovered ? 2 : 1;
+    ctx.stroke();
+
+    ctx.fillStyle = val > 0.3 ? "#fff" : "#aaa";
+    ctx.font = "bold 10px Inter, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText((val * 100).toFixed(0), x, y);
+
+    ctx.fillStyle = isHovered ? "#fff" : "#888";
+    ctx.font = "9px Inter, sans-serif";
+    ctx.fillText(n.label, x, y + r + 12);
+  }
+
+  const dominant = Object.entries(brainNodeValues).filter(([k]) => k.startsWith("mood.")).sort((a, b) => b[1] - a[1])[0];
+  if (dominant && dominant[1] > 0) {
+    ctx.fillStyle = LAYER_COLORS[2];
+    ctx.font = "bold 13px Inter, sans-serif";
+    ctx.textAlign = "center";
+    const mName = dominant[0].split(".")[1];
+    ctx.fillText("\u2192 " + mName.charAt(0).toUpperCase() + mName.slice(1), 0.9 * W, H / 2);
+    ctx.font = "11px Inter, sans-serif";
+    ctx.fillStyle = "#888";
+    ctx.fillText((dominant[1] * 100).toFixed(0) + "%", 0.9 * W, H / 2 + 18);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Chat Interface
+// ═══════════════════════════════════════════════════════════════
+
+let chatBusy = false;
+
+function appendChatMsg(role, text) {
+  const el = document.getElementById("chat-messages");
+  const div = document.createElement("div");
+  div.className = "chat-msg " + role;
+  div.textContent = text;
+  el.appendChild(div);
+  el.scrollTop = el.scrollHeight;
+}
+
+async function sendChat() {
+  if (chatBusy) return;
+  const input = document.getElementById("chat-input");
+  const query = input.value.trim();
+  if (!query) return;
+
+  input.value = "";
+  appendChatMsg("user", query);
+  chatBusy = true;
+  document.getElementById("chat-send").disabled = true;
+  document.getElementById("chat-status").textContent = "Styx denkt nach...";
+
+  try {
+    const resp = await fetch(BASE + "/api/styx/chat", {
+      method: "POST",
+      headers: {...HEADERS, "Content-Type": "application/json"},
+      body: JSON.stringify({query, user_id: "styx-dashboard", use_web: false}),
+    });
+    const data = await resp.json();
+    if (data.ok && data.response) {
+      appendChatMsg("assistant", data.response);
+      const srcCount = (data.sources || []).length;
+      document.getElementById("chat-status").textContent = `${data.query_type || "local"} · ${srcCount} Quellen · ${data.elapsed_ms || 0}ms`;
+    } else {
+      appendChatMsg("system", "Fehler: " + (data.error || "Unbekannter Fehler"));
+      document.getElementById("chat-status").textContent = "";
+    }
+  } catch (err) {
+    appendChatMsg("system", "Verbindungsfehler: " + err.message);
+    document.getElementById("chat-status").textContent = "";
+  }
+  chatBusy = false;
+  document.getElementById("chat-send").disabled = false;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Zones
+// ═══════════════════════════════════════════════════════════════
+
+const ZONE_ICONS = {living:"\u{1F6CB}\uFE0F",bath:"\u{1F6BF}",kitchen:"\u{1F373}",office:"\u{1F4BC}",hallway:"\u{1F6AA}",bedroom:"\u{1F6CF}\uFE0F",room_mira:"\u{1F467}",room_paul:"\u{1F466}",terrace:"\u{1F33F}",outside:"\u{1F333}"};
+
+const ROLE_ICONS = {lights:"\u{1F4A1}",motion:"\u{1F6B6}",media:"\u{1F3B5}",climate:"\u{1F321}\uFE0F",sensors:"\u{1F4E1}",cover:"\u{1FA9F}"};
+
+function renderZones(zones) {
+  const el = document.getElementById("zones-content");
+  if (!zones || zones.length === 0) { el.innerHTML = '<li style="color:var(--muted);padding:8px">Keine Zonen</li>'; return; }
+  el.innerHTML = zones.map(z => `<li class="zone-item">
+    <span class="zone-icon">${ZONE_ICONS[z.id] || "\u{1F3E0}"}</span>
+    <span class="zone-name">${z.name_de || z.id}</span>
+    <span class="zone-prio">P${z.priority || 0}</span>
+  </li>`).join("");
+}
+
+let dashboardZones = [];
+
+function renderZoneCards(zones) {
+  dashboardZones = zones || [];
+  const el = document.getElementById("zone-cards");
+  if (!el) return;
+  if (!zones || zones.length === 0) { el.innerHTML = '<div style="color:var(--muted);padding:20px">Keine Zonen konfiguriert.</div>'; return; }
+  el.innerHTML = zones.map(z => {
+    const roleChips = Object.entries(z.roles || {}).filter(([,c]) => c > 0).map(([r, c]) =>
+      `<span class="zone-role">${ROLE_ICONS[r] || ""} ${r} (${c})</span>`
+    ).join("");
+    return `<div class="zone-card" style="border-left:4px solid ${z.color || 'var(--surface2)'}" onclick="openZoneDetail('${z.id}')">
+      <span class="zone-entity-count">${z.entity_count || 0} Entit&auml;ten</span>
+      <div class="zone-header">
+        <span class="zone-icon" style="background:${z.color || '#333'}20">${z.icon || ZONE_ICONS[z.id] || "\u{1F3E0}"}</span>
+        <div>
+          <div class="zone-title">${z.name_de || z.id}</div>
+          <div class="zone-subtitle">${z.name_en || z.id} &middot; Priorit&auml;t ${z.priority || 0}</div>
+        </div>
+      </div>
+      <div class="zone-roles">${roleChips || '<span style="color:var(--muted);font-size:0.75rem">Keine Rollen</span>'}</div>
+    </div>`;
+  }).join("");
+}
+
+function openZoneDetail(zoneId) {
+  const z = dashboardZones.find(zz => zz.id === zoneId);
+  if (!z) return;
+  document.getElementById("zone-modal-title").innerHTML = `${z.icon || ZONE_ICONS[zoneId] || ''} ${z.name_de || zoneId}`;
+  let html = `<div style="margin-bottom:12px;font-size:0.82rem;color:var(--muted)">${z.name_en || ''} &middot; Priorit&auml;t ${z.priority || 0} &middot; ${z.entity_count || 0} Entit&auml;ten</div>`;
+
+  // Load entity details from example config via dashboard data
+  const roles = z.roles || {};
+  // Show role summary with entity counts
+  for (const [role, count] of Object.entries(roles)) {
+    if (count === 0) continue;
+    html += `<div class="entity-group">
+      <h4>${ROLE_ICONS[role] || ''} ${role} (${count})</h4>`;
+    // We don't have entity IDs in the dashboard data, but we show counts
+    html += `<div class="entity-item">${count} Entit&auml;t${count > 1 ? 'en' : ''} zugewiesen</div>`;
+    html += `</div>`;
+  }
+
+  // Quick actions
+  html += `<div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap">
+    <button class="btn-sm btn-primary" onclick="askStyxAboutZone('${zoneId}')">&#x1F4AC; Im Chat fragen</button>
+    <button class="btn-sm btn-secondary" onclick="mediaGroupZone('${zoneId}')">&#x1F50A; Gruppieren</button>
+  </div>`;
+
+  document.getElementById("zone-modal-content").innerHTML = html;
+  document.getElementById("zone-modal").classList.add("show");
+}
+
+function closeZoneModal() {
+  document.getElementById("zone-modal").classList.remove("show");
+}
+
+function askStyxAboutZone(zoneId) {
+  closeZoneModal();
+  // Switch to chat tab and pre-fill
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  document.querySelector('[data-tab="chat"]').classList.add('active');
+  document.getElementById('tab-chat').classList.add('active');
+  const input = document.getElementById("chat-input");
+  const z = dashboardZones.find(zz => zz.id === zoneId);
+  input.value = `Was ist der aktuelle Status der Zone "${z ? z.name_de : zoneId}"?`;
+  input.focus();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Musikwolke / Media Zones
+// ═══════════════════════════════════════════════════════════════
+
+function renderMediaZones(media) {
+  const el = document.getElementById("media-zone-cards");
+  if (!el) return;
+  const zones = media.zones || [];
+  const statusEl = document.getElementById("musikwolke-status");
+
+  if (media.active_sessions > 0 && statusEl) {
+    statusEl.innerHTML = `<span style="color:var(--green)">\u25CF</span> ${media.active_sessions} aktive Musikwolke-Session(s) &middot; ${media.total_players || 0} Player gesamt`;
+  } else if (statusEl) {
+    statusEl.innerHTML = `<span style="color:var(--muted)">\u25CB</span> Keine aktiven Sessions &middot; ${media.total_players || 0} Player gesamt`;
+  }
+
+  if (zones.length === 0) {
+    // Fallback: render from zone data with Sonos example
+    const exampleZones = ["living","kitchen","bath","bedroom","office","room_mira","room_paul","terrace"];
+    el.innerHTML = exampleZones.map(zid => {
+      const icon = ZONE_ICONS[zid] || "\u{1F3E0}";
+      return `<div class="media-zone-card">
+        <div class="mz-header">
+          <span style="font-size:1.2rem">${icon}</span>
+          <span style="font-weight:600;font-size:0.9rem">${zid}</span>
+          <span class="mz-state idle">Idle</span>
+        </div>
+        <div style="font-size:0.78rem;color:var(--muted)">media_player.sonos_${zid.replace('room_','')}</div>
+        <div class="volume-row">
+          <span style="font-size:0.72rem;color:var(--muted)">&#x1F50A;</span>
+          <input type="range" min="0" max="100" value="30" onchange="mediaSetVolume('${zid}',this.value/100)" oninput="this.nextElementSibling.textContent=this.value+'%'"/>
+          <span class="vol-val">30%</span>
+        </div>
+        <div class="mz-controls">
+          <button class="btn-sm btn-success" onclick="mediaPlayZone('${zid}')">&#x25B6;</button>
+          <button class="btn-sm btn-secondary" onclick="mediaPauseZone('${zid}')">&#x23F8;</button>
+          <button class="btn-sm btn-secondary" onclick="mediaGroupZone('${zid}')">Gruppieren</button>
+          <button class="btn-sm btn-secondary" onclick="mediaUngroupZone('${zid}')">Trennen</button>
+        </div>
+      </div>`;
+    }).join("");
+    return;
+  }
+
+  el.innerHTML = zones.map(z => {
+    const state = z.state || "idle";
+    const icon = ZONE_ICONS[z.zone_id] || "\u{1F3E0}";
+    const vol = Math.round((z.volume || 0.3) * 100);
+    const trackInfo = z.media_title ? `<div style="font-size:0.78rem;margin-top:4px">\u{1F3B6} ${z.media_title}${z.media_artist ? ' &mdash; ' + z.media_artist : ''}</div>` : '';
+    return `<div class="media-zone-card ${state}">
+      <div class="mz-header">
+        <span style="font-size:1.2rem">${icon}</span>
+        <span style="font-weight:600;font-size:0.9rem">${z.zone_name || z.zone_id}</span>
+        <span class="mz-state ${state}">${state === 'playing' ? 'Spielt' : state === 'paused' ? 'Pause' : 'Idle'}</span>
+      </div>
+      <div style="font-size:0.78rem;color:var(--muted)">${z.primary_player || '\u2014'}</div>
+      ${trackInfo}
+      <div class="volume-row">
+        <span style="font-size:0.72rem;color:var(--muted)">&#x1F50A;</span>
+        <input type="range" min="0" max="100" value="${vol}" onchange="mediaSetVolume('${z.zone_id}',this.value/100)" oninput="this.nextElementSibling.textContent=this.value+'%'"/>
+        <span class="vol-val">${vol}%</span>
+      </div>
+      <div class="mz-controls">
+        <button class="btn-sm btn-success" onclick="mediaPlayZone('${z.zone_id}')">&#x25B6;</button>
+        <button class="btn-sm btn-secondary" onclick="mediaPauseZone('${z.zone_id}')">&#x23F8;</button>
+        <button class="btn-sm btn-secondary" onclick="mediaGroupZone('${z.zone_id}')">Gruppieren</button>
+        <button class="btn-sm btn-secondary" onclick="mediaUngroupZone('${z.zone_id}')">Trennen</button>
+      </div>
+    </div>`;
+  }).join("");
+}
+
+async function mediaGroupZone(zoneId) {
+  const result = await postJSON("/api/v1/zones/group", {zone_id: zoneId});
+  if (result.ok) showToast(`Zone ${zoneId} gruppiert.`);
+  else showToast(`Fehler: ${result.error || 'Unbekannt'}`, 4000);
+}
+
+async function mediaUngroupZone(zoneId) {
+  const result = await postJSON("/api/v1/zones/ungroup", {zone_id: zoneId});
+  if (result.ok) showToast(`Zone ${zoneId} getrennt.`);
+  else showToast(`Fehler: ${result.error || 'Unbekannt'}`, 4000);
+}
+
+async function musikwolkeGroupAll() {
+  const result = await postJSON("/api/v1/zones/group-all", {});
+  if (result.ok) showToast("Alle Zonen gruppiert (Musikwolke).");
+  else showToast(`Fehler: ${result.error || 'Unbekannt'}`, 4000);
+}
+
+async function musikwolkeUngroupAll() {
+  const result = await postJSON("/api/v1/zones/ungroup-all", {});
+  if (result.ok) showToast("Alle Zonen getrennt.");
+  else showToast(`Fehler: ${result.error || 'Unbekannt'}`, 4000);
+}
+
+async function mediaPlayZone(zoneId) {
+  const result = await postJSON(`/api/v1/zones/${zoneId}/play`, {});
+  if (result.ok) showToast(`${zoneId}: Play`);
+}
+
+async function mediaPauseZone(zoneId) {
+  const result = await postJSON(`/api/v1/zones/${zoneId}/pause`, {});
+  if (result.ok) showToast(`${zoneId}: Pause`);
+}
+
+async function mediaSetVolume(zoneId, volume) {
+  const result = await postJSON(`/api/v1/zones/${zoneId}/volume`, {volume});
+  if (result.ok) showToast(`${zoneId}: ${Math.round(volume*100)}%`);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Suggestions
+// ═══════════════════════════════════════════════════════════════
+
+let sugAccepted = 0, sugTotal = 0;
+
+function renderSuggestionCards(suggestions) {
+  const el = document.getElementById("suggestion-cards");
+  if (!el) return;
+  sugTotal = (suggestions || []).length;
+  if (!suggestions || suggestions.length === 0) {
+    el.innerHTML = '<div style="color:var(--muted);padding:20px">Keine Vorschlaege vorhanden. Das System lernt noch...</div>';
+    updateSugCounts(0, 0);
+    return;
+  }
+  const catColors = {comfort: "var(--green)", energy: "var(--orange)", health: "var(--accent)", security: "var(--red)"};
+  const riskColors = {low: "var(--green)", medium: "var(--orange)", high: "var(--red)"};
+
+  // Sort: high confidence first
+  const sorted = [...suggestions].sort((a, b) => (b.confidence || 0) - (a.confidence || 0));
+
+  el.innerHTML = sorted.map(s => {
+    const confPct = Math.round((s.confidence || 0) * 100);
+    const confColor = confPct >= 90 ? "var(--green)" : confPct >= 70 ? "var(--orange)" : "var(--red)";
+    const catClass = `sug-cat-${s.category || 'comfort'}`;
+    const catLabel = {comfort: "Komfort", energy: "Energie", health: "Gesundheit", security: "Sicherheit"}[s.category] || s.category;
+    const savings = s.estimated_savings_eur ? `<span class="sug-tag" style="background:#1a3a2a;color:var(--green)">\u{1F4B6} ~${s.estimated_savings_eur.toFixed(2)}\u20AC/Mon</span>` : '';
+    const pattern = s.pattern ? `<div class="sug-pattern">${s.pattern}</div>` : '';
+    const moodTag = s.mood_type ? `<span class="sug-tag" style="background:var(--surface2);color:var(--purple)">\u{1F3AD} ${s.mood_type}</span>` : '';
+
+    return `<div class="suggestion-card ${catClass}" id="sug-${s.id}">
+      <div class="sug-header">
+        <span class="sug-title">${s.title || s.id}</span>
+        <span class="sug-confidence" style="background:${confColor}20;color:${confColor}">${confPct}%</span>
+      </div>
+      <div class="sug-desc">${s.description || '\u2014'}</div>
+      ${pattern}
+      <div class="sug-meta">
+        <span class="sug-tag" style="background:${catColors[s.category] || '#888'}20;color:${catColors[s.category] || '#888'}">${catLabel}</span>
+        <span class="sug-tag" style="background:${riskColors[s.risk_level] || '#888'}20;color:${riskColors[s.risk_level] || '#888'}">Risiko: ${s.risk_level || '?'}</span>
+        ${s.zone_id && s.zone_id !== '_global' ? `<span class="sug-tag" style="background:var(--surface2);color:var(--text)">${ZONE_ICONS[s.zone_id] || ''} ${s.zone_id}</span>` : '<span class="sug-tag" style="background:var(--surface2);color:var(--text)">\u{1F30D} Global</span>'}
+        ${moodTag}
+        ${s.support ? `<span class="sug-tag" style="background:var(--surface2);color:var(--muted)">${s.support}x erkannt</span>` : ''}
+        ${savings}
+      </div>
+      <div class="sug-actions">
+        <button class="btn-sm btn-success" onclick="acceptSuggestion('${s.id}')">Annehmen</button>
+        <button class="btn-sm btn-secondary" onclick="snoozeSuggestion('${s.id}')">Sp&auml;ter</button>
+        <button class="btn-sm btn-danger" onclick="rejectSuggestion('${s.id}')" style="padding:6px 10px">\u2715</button>
+      </div>
+    </div>`;
+  }).join("");
+
+  updateSugCounts(sugTotal, sugAccepted);
+}
+
+function updateSugCounts(total, accepted) {
+  const pendingEl = document.getElementById("sug-count-pending");
+  const acceptedEl = document.getElementById("sug-count-accepted");
+  if (pendingEl) pendingEl.textContent = `${total} offen`;
+  if (acceptedEl) acceptedEl.textContent = `${accepted} angenommen`;
+}
+
+async function acceptSuggestion(id) {
+  const result = await postJSON("/api/v1/suggestions/accept", {id});
+  if (result.ok) {
+    showToast("Vorschlag angenommen!");
+    sugAccepted++;
+    const card = document.getElementById(`sug-${id}`);
+    if (card) { card.classList.add("accepted"); card.querySelector(".sug-actions").innerHTML = '<span style="color:var(--green);font-size:0.82rem">\u2705 Angenommen</span>'; }
+    updateSugCounts(sugTotal, sugAccepted);
+  } else showToast(`Fehler: ${result.error || 'Unbekannt'}`, 4000);
+}
+
+async function snoozeSuggestion(id) {
+  const result = await postJSON("/api/v1/suggestions/snooze", {id});
+  if (result.ok) {
+    showToast("Vorschlag zurueckgestellt.");
+    const card = document.getElementById(`sug-${id}`);
+    if (card) { card.classList.add("snoozed"); card.querySelector(".sug-actions").innerHTML = '<span style="color:var(--muted);font-size:0.82rem">\u23F0 Zurueckgestellt</span>'; }
+  } else showToast(`Fehler: ${result.error || 'Unbekannt'}`, 4000);
+}
+
+async function rejectSuggestion(id) {
+  const result = await postJSON("/api/v1/suggestions/reject", {id});
+  if (result.ok) {
+    showToast("Vorschlag abgelehnt.");
+    const card = document.getElementById(`sug-${id}`);
+    if (card) { card.classList.add("rejected"); card.querySelector(".sug-actions").innerHTML = '<span style="color:var(--red);font-size:0.82rem">\u274C Abgelehnt</span>'; }
+  } else showToast(`Fehler: ${result.error || 'Unbekannt'}`, 4000);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Overview Summary Strip
+// ═══════════════════════════════════════════════════════════════
+
+function renderSummaryStrip(dash) {
+  const el = document.getElementById("summary-strip");
+  if (!el) return;
+
+  const mood = dash.mood?.mood || "—";
+  const moodConf = Math.round((dash.mood?.confidence || 0) * 100);
+  const zoneCount = (dash.zones || []).length;
+  const totalEntities = (dash.zones || []).reduce((s, z) => s + (z.entity_count || 0), 0);
+  const sugCount = (dash.suggestions || []).length;
+  const neuronCount = dash.neurons?.total_count || 0;
+  const mediaSessions = dash.media?.active_sessions || 0;
+
+  el.innerHTML = `
+    <div class="summary-chip">
+      <div class="sc-label">Stimmung</div>
+      <div class="sc-value"><span class="mood-badge ${moodClass(mood)}" style="font-size:0.9rem;padding:2px 8px">${mood}</span></div>
+      <div class="sc-sub">${moodConf}% Konfidenz</div>
+    </div>
+    <div class="summary-chip">
+      <div class="sc-label">Zonen</div>
+      <div class="sc-value">${zoneCount}</div>
+      <div class="sc-sub">${totalEntities} Entit&auml;ten</div>
+    </div>
+    <div class="summary-chip">
+      <div class="sc-label">Vorschl&auml;ge</div>
+      <div class="sc-value">${sugCount}</div>
+      <div class="sc-sub">offen</div>
+    </div>
+    <div class="summary-chip">
+      <div class="sc-label">Neuronen</div>
+      <div class="sc-value">${neuronCount}</div>
+    </div>
+    <div class="summary-chip">
+      <div class="sc-label">Musikwolke</div>
+      <div class="sc-value">${mediaSessions}</div>
+      <div class="sc-sub">aktive Session${mediaSessions !== 1 ? 's' : ''}</div>
+    </div>
+  `;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Automation Tab
+// ═══════════════════════════════════════════════════════════════
+
+let automationData = null;
+
+async function loadAutomation() {
+  const data = await fetchJSON("/api/v1/zone-automation/dashboard");
+  if (!data || !data.ok) return;
+  automationData = data;
+  renderAutomationZones(data.zones || []);
+  renderEntityManagement(data.zones || []);
+}
+
+function renderAutomationZones(zones) {
+  const el = document.getElementById("automation-zones");
+  if (!el) return;
+  if (!zones.length) { el.innerHTML = '<p style="color:var(--muted)">Keine Zonen konfiguriert. Importiere Beispieldaten:</p><button onclick="importExampleEntities()" style="margin-top:8px;padding:8px 16px;background:var(--accent);color:#000;border:none;border-radius:6px;cursor:pointer">Beispielkonfiguration importieren</button>'; return; }
+  el.innerHTML = zones.map(z => {
+    const c = z.config || {};
+    const lc = c.light || {};
+    const mc = c.music || {};
+    const st = z.state || {};
+    const zid = z.zone_id;
+    return `<div class="auto-zone-card" id="auto-zone-${zid}">
+      <h3>${c.zone_name || zid} ${st.occupied ? '<span style="color:var(--green)">&#x25CF; Besetzt</span>' : '<span style="color:var(--muted)">&#x25CB;</span>'}</h3>
+      <div class="auto-section">
+        <div class="auto-section-title">&#x1F4A1; Lichtautomatisierung
+          <label class="toggle-switch"><input type="checkbox" ${lc.enabled ? 'checked' : ''} onchange="toggleAutoLight('${zid}',this.checked)"><span class="slider"></span></label>
+        </div>
+        ${lc.enabled ? `
+        <div class="slider-row"><label>Praesenz-Delay</label><input type="range" min="0" max="120" value="${lc.presence_delay_s||5}" onchange="updateLightConfig('${zid}','presence_delay_s',+this.value);this.nextElementSibling.textContent=this.value+'s'"><span class="slider-val">${lc.presence_delay_s||5}s</span></div>
+        <div class="slider-row"><label>Abschalt-Delay</label><input type="range" min="0" max="600" step="10" value="${lc.absence_delay_s||120}" onchange="updateLightConfig('${zid}','absence_delay_s',+this.value);this.nextElementSibling.textContent=this.value+'s'"><span class="slider-val">${lc.absence_delay_s||120}s</span></div>
+        <div class="slider-row"><label>Raumausleuchtung</label><input type="range" min="0" max="100" value="${lc.brightness_target_pct||80}" onchange="updateLightConfig('${zid}','brightness_target_pct',+this.value);this.nextElementSibling.textContent=this.value+'%'"><span class="slider-val">${lc.brightness_target_pct||80}%</span></div>
+        <div class="slider-row"><label>Min. Helligkeit</label><input type="range" min="0" max="100" value="${lc.brightness_min_pct||0}" onchange="updateLightConfig('${zid}','brightness_min_pct',+this.value);this.nextElementSibling.textContent=this.value+'%'"><span class="slider-val">${lc.brightness_min_pct||0}%</span></div>
+        <div class="slider-row"><label>Daempfung (Hysterese)</label><input type="range" min="0" max="50" value="${lc.dampening_band_pct||10}" onchange="updateLightConfig('${zid}','dampening_band_pct',+this.value);this.nextElementSibling.textContent=this.value+'%'"><span class="slider-val">${lc.dampening_band_pct||10}%</span></div>
+        <div class="toggle-row"><label class="toggle-switch"><input type="checkbox" ${lc.lux_outdoor_compensation ? 'checked' : ''} onchange="updateLightConfig('${zid}','lux_outdoor_compensation',this.checked)"><span class="slider"></span></label><span style="color:var(--muted);font-size:0.78rem">Innen/Aussen-Kompensation</span></div>
+        ` : '<p style="color:var(--muted);font-size:0.75rem;margin-top:4px">Deaktiviert</p>'}
+      </div>
+      <div class="auto-section">
+        <div class="auto-section-title">&#x1F3B5; Musikwolke
+          <label class="toggle-switch"><input type="checkbox" ${mc.enabled ? 'checked' : ''} onchange="toggleAutoMusic('${zid}',this.checked)"><span class="slider"></span></label>
+        </div>
+        ${mc.enabled ? `
+        <div class="toggle-row"><label class="toggle-switch"><input type="checkbox" ${mc.presence_auto_play ? 'checked' : ''} onchange="updateMusicConfig('${zid}','presence_auto_play',this.checked)"><span class="slider"></span></label><span style="color:var(--muted);font-size:0.78rem">Auto-Play bei Praesenz</span></div>
+        <div class="slider-row"><label>Praesenz-Delay</label><input type="range" min="0" max="120" value="${mc.presence_delay_s||10}" onchange="updateMusicConfig('${zid}','presence_delay_s',+this.value);this.nextElementSibling.textContent=this.value+'s'"><span class="slider-val">${mc.presence_delay_s||10}s</span></div>
+        <div class="slider-row"><label>Pause-Delay</label><input type="range" min="0" max="600" step="10" value="${mc.absence_pause_s||300}" onchange="updateMusicConfig('${zid}','absence_pause_s',+this.value);this.nextElementSibling.textContent=this.value+'s'"><span class="slider-val">${mc.absence_pause_s||300}s</span></div>
+        <div class="slider-row"><label>Standard-Lautstaerke</label><input type="range" min="0" max="100" value="${mc.default_volume_pct||30}" onchange="updateMusicConfig('${zid}','default_volume_pct',+this.value);this.nextElementSibling.textContent=this.value+'%'"><span class="slider-val">${mc.default_volume_pct||30}%</span></div>
+        <div class="toggle-row"><label class="toggle-switch"><input type="checkbox" ${mc.follow_mode ? 'checked' : ''} onchange="updateMusicConfig('${zid}','follow_mode',this.checked)"><span class="slider"></span></label><span style="color:var(--muted);font-size:0.78rem">Follow-Modus (Musik folgt)</span></div>
+        ` : '<p style="color:var(--muted);font-size:0.75rem;margin-top:4px">Deaktiviert</p>'}
+      </div>
+      ${st.lights_on ? `<div style="font-size:0.75rem;color:var(--green);margin-top:4px">&#x1F4A1; Licht AN (${st.current_brightness_pct}%)</div>` : ''}
+      ${st.music_playing ? `<div style="font-size:0.75rem;color:var(--accent);margin-top:2px">&#x1F3B5; Musik laeuft</div>` : ''}
+    </div>`;
+  }).join("");
+}
+
+function renderEntityManagement(zones) {
+  const el = document.getElementById("entity-management");
+  if (!el) return;
+  if (!zones.length) { el.innerHTML = ''; return; }
+  let html = '<div class="auto-zone-grid">';
+  for (const z of zones) {
+    const zid = z.zone_id;
+    const entities = z.config?.entities || [];
+    html += `<div class="auto-zone-card">
+      <h3>${z.config?.zone_name || zid}</h3>
+      <div class="entity-list" id="entity-list-${zid}">Lade...</div>
+      <div class="entity-add-row">
+        <input type="text" id="entity-input-${zid}" placeholder="entity_id (z.B. light.xyz)">
+        <button onclick="addEntityToZone('${zid}')">+</button>
+      </div>
+    </div>`;
+  }
+  html += '</div>';
+  el.innerHTML = html;
+  // Load entities for each zone
+  zones.forEach(z => loadZoneEntities(z.zone_id));
+}
+
+async function loadZoneEntities(zoneId) {
+  const data = await fetchJSON(`/api/v1/zone-automation/zones/${zoneId}/entities?by_role=true`);
+  const el = document.getElementById(`entity-list-${zoneId}`);
+  if (!el || !data || !data.ok) { if (el) el.innerHTML = '<span style="color:var(--muted);font-size:0.75rem">Keine Entitaeten</span>'; return; }
+  const byRole = data.entities_by_role || {};
+  let html = '';
+  for (const [role, entities] of Object.entries(byRole)) {
+    html += `<div style="margin-bottom:6px"><span class="entity-role-badge">${role}</span></div>`;
+    for (const e of entities) {
+      const tags = (e.tags || []).map(t => `<span class="entity-tag" style="background:${getTagColor(t)}">${t}</span>`).join('');
+      html += `<div class="entity-item"><span style="flex:1">${e.entity_id}</span>${tags}<button class="entity-remove-btn" onclick="removeEntityFromZone('${zoneId}','${e.entity_id}')">&times;</button></div>`;
+    }
+  }
+  if (!html) html = '<span style="color:var(--muted);font-size:0.75rem">Keine Entitaeten</span>';
+  el.innerHTML = html;
+}
+
+function getTagColor(tag) {
+  const colors = {licht:'#fbbf2433',praesenz:'#a78bfa33',medien:'#60a5fa33',klima:'#34d39933',sensor:'#f472b633',rollladen:'#fb923c33',energie:'#4ade8033',styx:'#8b5cf633'};
+  return colors[tag] || '#6366f133';
+}
+
+async function updateLightConfig(zoneId, key, value) {
+  await postJSON(`/api/v1/zone-automation/zones/${zoneId}/config`, {light: {[key]: value}});
+}
+
+async function updateMusicConfig(zoneId, key, value) {
+  await postJSON(`/api/v1/zone-automation/zones/${zoneId}/config`, {music: {[key]: value}});
+}
+
+async function toggleAutoLight(zoneId, enabled) {
+  await postJSON(`/api/v1/zone-automation/zones/${zoneId}/override`, {light_enabled: enabled});
+  loadAutomation();
+}
+
+async function toggleAutoMusic(zoneId, enabled) {
+  await postJSON(`/api/v1/zone-automation/zones/${zoneId}/override`, {music_enabled: enabled});
+  loadAutomation();
+}
+
+async function addEntityToZone(zoneId) {
+  const input = document.getElementById(`entity-input-${zoneId}`);
+  if (!input || !input.value.trim()) return;
+  await postJSON(`/api/v1/zone-automation/zones/${zoneId}/entities`, {entity_id: input.value.trim()});
+  input.value = '';
+  loadZoneEntities(zoneId);
+}
+
+async function removeEntityFromZone(zoneId, entityId) {
+  await fetch(BASE + `/api/v1/zone-automation/zones/${zoneId}/entities/${entityId}`, {method:'DELETE', headers: HEADERS});
+  loadZoneEntities(zoneId);
+}
+
+async function importExampleEntities() {
+  const result = await postJSON('/api/v1/zone-automation/import', {source: 'example'});
+  if (result && result.ok) {
+    showToast(`${result.imported} Entitaeten importiert`);
+    loadAutomation();
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Main Load
+// ═══════════════════════════════════════════════════════════════
+
+async function loadDashboard() {
+  document.getElementById("status").textContent = "Laden...";
+  const [dash, conf] = await Promise.all([
+    fetchJSON("/api/v1/styx/dashboard"),
+    fetchJSON("/api/v1/styx/config"),
+  ]);
+  if (dash && dash.ok) {
+    document.getElementById("mood-content").innerHTML = renderMood(dash.mood);
+    document.getElementById("neuron-content").innerHTML = renderNeurons(dash.neurons);
+    document.getElementById("graph-content").innerHTML = renderGraph(dash.graph);
+    document.getElementById("bus-content").innerHTML = renderBus(dash.bus);
+    document.getElementById("modules-content").innerHTML = renderModules(dash.modules);
+    document.getElementById("learning-content").innerHTML = renderLearning(dash.learning);
+    document.getElementById("candidates-content").innerHTML = renderCandidates(dash.candidates);
+    document.getElementById("status").textContent = `${dash.render_ms}ms · ${new Date(dash.timestamp).toLocaleTimeString("de-DE")}`;
+    updateBrainViz(dash);
+    renderNeuronConfig(dash);
+    // New tabs
+    renderZoneCards(dash.zones || []);
+    renderMediaZones(dash.media || {});
+    renderSuggestionCards(dash.suggestions || []);
+    // Summary strip
+    renderSummaryStrip(dash);
+  } else {
+    document.getElementById("status").textContent = "Fehler beim Laden";
+  }
+  if (conf && conf.ok) renderZones(conf.habitus_zones);
+}
+
+async function loadAll() {
+  await Promise.all([loadDashboard(), loadLLM(), loadAutomation()]);
+}
+
+// Initialize
+initBrain("brain-canvas", "brain-tooltip");
+loadAll();
+
+// Auto-refresh with countdown
+let refreshInterval = 30;
+let refreshCountdown = refreshInterval;
+setInterval(() => {
+  refreshCountdown--;
+  const el = document.getElementById("refresh-countdown");
+  if (el) el.textContent = refreshCountdown > 0 ? `(${refreshCountdown}s)` : "";
+  if (refreshCountdown <= 0) {
+    refreshCountdown = refreshInterval;
+    loadDashboard();
+  }
+}, 1000);
+
+// Animation loop
+(function animateBrain() { drawBrain(); requestAnimationFrame(animateBrain); })();
+</script>
+</body>
+</html>

@@ -2,6 +2,156 @@
 
 Alle wesentlichen Änderungen am PilotSuite Styx Core werden in dieser Datei dokumentiert.
 
+## [v13.3.0] - 2026-03-04
+
+### Zone Automation — Praesenzabhaengige Licht- & Musiksteuerung, Entity-Management
+
+#### Praesenzabhaengige Lichtsteuerung
+- **Presence Delay Slider** (0-120s): Konfigurierbare Verzoegerung vor Lichtaktivierung
+- **Absence Delay Slider** (0-600s): Konfigurierbare Verzoegerung vor Abschaltung
+- **Raumausleuchtung** (0-100%): Ziel-Helligkeit mit Indoor/Outdoor-Kompensation
+- **Min. Helligkeit** (0-100%): Mindesthelligkeit wenn Licht aktiv
+- **Hysterese/Daempfung** (0-50%): Dead-Band zur Vermeidung von Flackern bei Wolkendurchzug
+- **Innen/Aussen-Kompensation**: Automatische Anpassung basierend auf Aussen-Lux
+- **Override Switch**: Lichtautomatisierung pro Zone aktivieren/deaktivieren
+
+#### Praesenzabhaengige Musikwolke
+- **Auto-Play bei Praesenz**: Musik startet automatisch bei Zonenbetreten
+- **Presence Delay Slider** (0-120s): Verzoegerung vor Musikstart
+- **Pause Delay Slider** (0-600s): Verzoegerung vor Pause bei Abwesenheit
+- **Standard-Lautstaerke** (0-100%): Konfigurierbare Startlautstaerke
+- **Follow-Modus**: Musik folgt automatisch zwischen Zonen
+- **Override Switch**: Musikautomatisierung pro Zone aktivieren/deaktivieren
+
+#### Entity-Management & Tag-System
+- **Entitaeten hinzufuegen/entfernen**: Pro Zone ueber Dashboard oder API
+- **Auto-Rollenerkennung**: Domain + Name-basierte Rollenzuweisung (lights, motion, media, etc.)
+- **Auto-Tagging**: Automatische Tags basierend auf Entity-Name (licht, praesenz, klima, etc.)
+- **13 Tag-Definitionen**: licht, praesenz, bewegung, medien, klima, sensor, rollladen, schloss, tuer, fenster, energie, sicherheit, styx
+- **11 Entity-Rollen**: lights, motion, media, climate, sensors, cover, lock, door, window, energy, other
+- **Import aus Beispielkonfiguration**: Alle 10 Zonen mit ~80 Entitaeten importierbar
+- **Suche**: Entitaeten ueber alle Zonen durchsuchbar
+
+#### Styx Dashboard — Neuer Automation-Tab (Tab 5)
+- **Zone Automation Cards**: Pro-Zone Konfiguration mit Slider-UI
+- **Toggle Switches**: Aktivieren/Deaktivieren von Licht- und Musikautomatisierung
+- **Entity-Management UI**: Entitaeten hinzufuegen/entfernen mit Rollen-Badges und Tag-Anzeige
+- **Beispiel-Import Button**: Ein-Klick Import der Beispielkonfiguration
+- **9 Tabs**: Overview, Zonen, Musikwolke, Vorschlaege, **Automation (NEU)**, KI/LLM, Module, Neuronen, Chat
+
+#### REST API — 16 neue Endpoints
+- `GET /api/v1/zone-automation/dashboard` — Automation Dashboard
+- `GET/POST /api/v1/zone-automation/zones/<id>/config` — Zone Config CRUD
+- `POST /api/v1/zone-automation/zones/<id>/override` — Toggle Override
+- `POST /api/v1/zone-automation/zones/<id>/presence` — Presence Event
+- `POST /api/v1/zone-automation/zones/<id>/brightness` — Brightness Update
+- `GET/POST/DELETE /api/v1/zone-automation/zones/<id>/entities` — Entity CRUD
+- `POST /api/v1/zone-automation/zones/<id>/entities/<eid>/tags` — Tag Update
+- `POST /api/v1/zone-automation/zones/<id>/entities/<eid>/role` — Role Update
+- `GET /api/v1/zone-automation/tags` — Tag Definitionen
+- `GET /api/v1/zone-automation/roles` — Rollen-Liste
+- `GET /api/v1/zone-automation/entities/search` — Entity-Suche
+- `POST /api/v1/zone-automation/import` — Import
+
+#### Test Coverage
+- **3720+ Tests** passed, 0 failed
+- **38 neue Tests** fuer Zone Automation Controller + API
+
+---
+
+## [v13.2.0] - 2026-03-04
+
+### Styx Dashboard — Zonen, Musikwolke & Vorschlagssystem (3 Iterationen)
+
+#### Iteration 1: Zonen, Musikwolke & Vorschläge
+
+- **Example Config**: Vollständige Beispielkonfiguration mit 10 Habituszonen, echten HA-Entitäten (Lights, Motion, Media, Climate, Sensors, Cover), Sonos-Player-Mapping und 7 Automationsvorschlägen
+- **Suggestions API**: Neuer Blueprint `/api/v1/suggestions` mit Accept/Reject/Snooze-Lifecycle und Fallback auf Beispieldaten
+- **Musikwolke Sonos**: `group_zone_players()`, `ungroup_zone_players()`, `group_multi_zone()` für Sonos-Gruppierung/Entgruppierung
+- **Media Group/Ungroup Endpoints**: POST `/api/v1/zones/group`, `/zones/ungroup`, `/zones/group-all`, `/zones/ungroup-all`
+- **Styx Dashboard Erweiterung**: Zonen, Media und Suggestions in `full_dashboard()` Response integriert
+- **24 neue Tests**: ExampleConfig, SuggestionsAPI, MediaGroupUngroup, DashboardPayload
+
+#### Iteration 2: Dashboard Enrichment & Cross-Module Links
+
+- **3 neue Dashboard-Tabs**: Zonen (Karten-Grid mit Klick→Detail), Musikwolke (Volume-Slider, Play/Pause), Vorschläge (sortiert nach Konfidenz)
+- **Zone Detail Modal**: Entity-Rollen, "Im Chat fragen" Cross-Module-Link zum Chat-Tab
+- **Musikwolke Panel**: Group-All/Ungroup-All, Per-Zone Volume-Slider + Play/Pause-Buttons
+- **Summary Strip**: Stimmung, Zonen, Vorschläge, Neuronen, Musikwolke auf dem Overview-Tab
+- **Suggestion Workflow**: Inline Visual Feedback (Opacity + Status-Text) bei Accept/Reject/Snooze
+- **Zone Dashboard Enrichment**: Zones mit Example-Entity-Daten angereichert (HabitusZone Dataclass + Dict Support)
+- **12 neue Tests**: ZoneDashboardEnrichment, SuggestionsStateMgmt, MediaPlayPauseVolume, DashboardPayload
+
+#### Iteration 3: UX-Polish & Responsive Design
+
+- **Gradient Header**: Accent→Purple Gradient-Titel
+- **Keyboard Shortcuts**: 1-8 für Tabs, Escape schließt Modal, r aktualisiert Dashboard
+- **Tab Persistence**: Aktiver Tab über localStorage gespeichert (`styx-active-tab`)
+- **Auto-Refresh**: 30s Countdown mit sichtbarem Indikator
+- **Keyboard Hint Badges**: Nummern-Badges auf jedem Tab (mobile ausgeblendet)
+- **Responsive CSS**: Mobile-optimiert (kleinere Paddings, einspaltiges Grid)
+- **`switchTab()` Funktion**: Zentrale Tab-Navigation ersetzt Inline-Logik
+- **15 neue Tests**: KeyboardShortcuts, TabPersistence, AutoRefresh, DesignPolish
+
+#### Test Coverage
+
+- **Core**: 3667+ Tests passed, 0 failed
+- **51 neue Tests** für die 3 Iterationen
+
+---
+
+## [v13.1.1] - 2026-03-04
+
+### Bug Fixes & Test Stabilization
+
+#### Production Code Fixes
+- **RAG Cache Key Bug**: Cache key now includes `include_text`/`include_metadata` flags — previously cached results could return text even when `include_text=False`
+- **AnomalyDetector.get_feature_names()**: Fixed AttributeError — method exists on FeatureExtractor, not AnomalyDetector; now uses `_feature_names` attribute
+- **Multihome Blueprint url_prefix**: Corrected from `/api/v1` to `/api/v1/multihome`
+- **RAG cache.get() async**: Added missing `asyncio.run()` wrapper for async cache access
+
+#### Test Isolation Fixes (25 Failures → 0)
+- **Rate Limiter Reset**: Fixed `_windows.clear()` → `get_rate_limiter().reset()` (correct API)
+- **RAG Cache Singleton**: Reset `_rag_cache = None` between tests to prevent cross-test pollution
+- **psutil Mock Leak**: `test_dev_surface_simple.py` now saves/restores original psutil module
+- **Auth Env-Var Pollution**: Switched from `os.environ.setdefault()` to `monkeypatch.setenv()`
+
+#### Test Coverage
+- **Full Suite**: 3464 passed, 0 failed, 118 skipped
+
+---
+
+## [v13.1.0] - 2026-03-03
+
+### Production Readiness Release — Bug Fixes, Hub Integration & RAG Pipeline
+
+#### Critical Bug Fixes ✅
+
+- **37 Broken API Routes**: Double-prefix `/api/v1/api/v1/...` korrigiert:
+  - `sharing/api.py`: 16 Routes — Pfade von `/api/v1/sharing/...` zu `/sharing/...`
+  - `collective_intelligence/api.py`: 15 Routes — Pfade von `/api/v1/federated/...` zu `/federated/...`
+  - `homeassistant/api.py`: 7 Routes — Pfade von `/api/v1/ha/...` zu `/ha/...`
+  - `swagger_ui.py`: openapi_bp `url_prefix="/api/v1"` entfernt (redundant unter api_v1)
+- **RAG Chat Pipeline**: `styx/chat_handler.py` komplett umgeschrieben:
+  - Nutzt jetzt interne RAG Pipeline (BM25 + Semantic + SearXNG) direkt
+  - Kein externer HTTP-Call zu `localhost:8765` mehr
+  - Lazy-Init für RAG Komponenten
+- **12 Test Failures**: Cache-Prefix und Alert-Thresholds korrigiert
+
+#### Hub Module Integration ✅ NEW
+
+- **17 Hub Engines initialisiert** in `core_setup.py::init_services()`
+- **hub_bp registriert** in `register_blueprints()` — 100+ API Routes unter `/api/v1/hub/*`
+- **init_hub_api()** wird jetzt mit allen Engine-Instanzen aufgerufen
+
+#### Test Coverage
+
+- **Core**: 241 passed, 4 skipped
+- **Monitoring**: 54 passed
+- **Total**: 295 passed, 0 failed
+
+---
+
 ## [v13.0.4] - 2026-03-03
 
 ### Module Registry & Test Coverage 100%

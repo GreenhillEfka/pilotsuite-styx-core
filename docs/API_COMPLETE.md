@@ -1003,6 +1003,6 @@ Features:
 
 ## Support
 
-- **GitHub:** https://github.com/pilotsuite/pilotsuite-styx-core
+- **GitHub:** https://github.com/GreenhillEfka/pilotsuite-styx-core
 - **Dokumentation:** `/docs` Verzeichnis im Repository
 - **Issues:** GitHub Issues Tracker

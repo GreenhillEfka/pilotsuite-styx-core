@@ -208,7 +208,7 @@ async def benchmark_search_performance(
     for path in ["/tmp/vector_benchmark_hnsw.db", "/tmp/vector_benchmark_flat.db"]:
         try:
             os.remove(path)
-        except:
+        except OSError:
             pass
     
     return results
@@ -283,7 +283,7 @@ async def benchmark_batch_search(
     # Cleanup
     try:
         os.remove("/tmp/vector_benchmark_batch.db")
-    except:
+    except OSError:
         pass
     
     return results
