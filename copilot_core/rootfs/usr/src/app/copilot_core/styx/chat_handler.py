@@ -5,6 +5,11 @@ Verarbeitet Chat-Queries mit kontextuellem Wissen aus:
 - Lokalen Datenquellen (HA-States, Dokumente, History)
 - Optional: Web-Suche via SearXNG
 - Direkte interne RAG-Pipeline (BM25 + Semantic + RRF)
+
+LLM-Fallback-Kette:
+  1. Ollama (lokal, offline, privacy-first)
+  2. Cloud API (OpenAI-kompatibel, konfigurierbar)
+  → Gesteuert ueber LLMProvider mit Runtime-Routing
 """
 
 from __future__ import annotations
@@ -30,6 +35,9 @@ class ChatHandler:
 
     Uses the internal BM25 + Semantic hybrid search directly instead
     of making HTTP calls to a separate RAG service.
+
+    LLM inference uses LLMProvider for Ollama+Cloud fallback chain.
+    Falls back to direct Ollama /api/generate if LLMProvider unavailable.
     """
 
     def __init__(
@@ -40,6 +48,7 @@ class ChatHandler:
         self.ollama_url = (ollama_url or OLLAMA_URL).rstrip("/")
         self._bm25_index = None
         self._searxng_client = None
+        self._llm_provider = None
         self._initialized = False
         logger.info(
             "ChatHandler initialized (ollama_url=%s, internal_rag=True)",
@@ -47,7 +56,7 @@ class ChatHandler:
         )
 
     def _ensure_initialized(self) -> None:
-        """Lazy-init RAG components on first use."""
+        """Lazy-init RAG components and LLM provider on first use."""
         if self._initialized:
             return
         try:
@@ -64,6 +73,20 @@ class ChatHandler:
         except Exception as exc:
             logger.warning("SearXNG client not available: %s", exc)
             self._searxng_client = None
+
+        # Initialize LLM provider with Ollama+Cloud fallback
+        try:
+            from copilot_core.llm_provider import LLMProvider
+            self._llm_provider = LLMProvider()
+            logger.info(
+                "LLMProvider loaded (primary=%s, model=%s, cloud=%s)",
+                self._llm_provider.primary_provider,
+                self._llm_provider.active_model,
+                self._llm_provider.has_cloud_fallback,
+            )
+        except Exception as exc:
+            logger.warning("LLMProvider not available, using direct Ollama: %s", exc)
+            self._llm_provider = None
 
         self._initialized = True
 
@@ -105,8 +128,8 @@ class ChatHandler:
         # 3. Build prompt with context
         prompt = self._build_prompt(query, rag_results)
 
-        # 4. LLM inference
-        response = self._call_ollama(prompt, model)
+        # 4. LLM inference (Ollama → Cloud fallback)
+        response = self._call_llm(prompt, model)
 
         elapsed_ms = (time.perf_counter() - start) * 1000
         logger.info(
@@ -252,14 +275,43 @@ class ChatHandler:
             f"Frage: {query}"
         )
 
-    # ── Ollama LLM call ──────────────────────────────────────────────
+    # ── LLM inference with fallback ─────────────────────────────────
 
-    def _call_ollama(self, prompt: str, model: str) -> str:
-        """Call Ollama for LLM inference."""
+    def _call_llm(self, prompt: str, model: str) -> str:
+        """Call LLM using LLMProvider (Ollama → Cloud fallback).
+
+        If LLMProvider is unavailable, falls back to direct Ollama /api/generate.
+        """
+        self._ensure_initialized()
+
+        # Primary path: use LLMProvider with full fallback chain
+        if self._llm_provider is not None:
+            try:
+                messages = [{"role": "user", "content": prompt}]
+                result = self._llm_provider.chat(
+                    messages=messages,
+                    model=model or None,
+                    temperature=0.7,
+                )
+                content = result.get("content", "")
+                provider = result.get("provider", "unknown")
+                if content and provider != "none":
+                    logger.info("LLM response via %s (model=%s)", provider, model)
+                    return content
+                # Provider returned empty or "none" — fall through to direct call
+                logger.warning("LLMProvider returned empty (provider=%s), trying direct Ollama", provider)
+            except Exception as exc:
+                logger.warning("LLMProvider failed: %s, trying direct Ollama", exc)
+
+        # Fallback: direct Ollama /api/generate
+        return self._call_ollama_direct(prompt, model)
+
+    def _call_ollama_direct(self, prompt: str, model: str) -> str:
+        """Direct Ollama /api/generate call (fallback when LLMProvider unavailable)."""
         generate_url = f"{self.ollama_url}/api/generate"
 
         payload = {
-            "model": model,
+            "model": model or DEFAULT_MODEL,
             "prompt": prompt,
             "stream": False,
             "options": {

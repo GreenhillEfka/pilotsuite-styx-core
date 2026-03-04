@@ -135,33 +135,33 @@ class TestBuildPrompt:
 
 
 class TestCallOllama:
-    def test_call_ollama_success(self, chat_handler, mock_ollama_response):
+    def test_call_ollama_direct_success(self, chat_handler, mock_ollama_response):
         with patch("copilot_core.styx.chat_handler.requests") as mock_req:
             mock_resp = MagicMock(status_code=200)
             mock_resp.json.return_value = mock_ollama_response
             mock_req.post.return_value = mock_resp
-            assert chat_handler._call_ollama("test", "qwen3:0.6b") == "Der Energieverbrauch gestern betrug 12.5 kWh."
+            assert chat_handler._call_ollama_direct("test", "qwen3:0.6b") == "Der Energieverbrauch gestern betrug 12.5 kWh."
 
-    def test_call_ollama_error(self, chat_handler):
+    def test_call_ollama_direct_error(self, chat_handler):
         with patch("copilot_core.styx.chat_handler.requests") as mock_req:
             mock_req.post.return_value = MagicMock(status_code=500)
-            response = chat_handler._call_ollama("test", "qwen3:0.6b")
+            response = chat_handler._call_ollama_direct("test", "qwen3:0.6b")
             assert "Entschuldigung" in response
             assert "500" in response
 
-    def test_call_ollama_custom_model(self, chat_handler, mock_ollama_response):
+    def test_call_ollama_direct_custom_model(self, chat_handler, mock_ollama_response):
         with patch("copilot_core.styx.chat_handler.requests") as mock_req:
             mock_resp = MagicMock(status_code=200)
             mock_resp.json.return_value = mock_ollama_response
             mock_req.post.return_value = mock_resp
-            chat_handler._call_ollama("test", "llama3.2:3b")
+            chat_handler._call_ollama_direct("test", "llama3.2:3b")
             assert mock_req.post.call_args[1]["json"]["model"] == "llama3.2:3b"
 
 
 class TestHandleQuery:
     def test_handle_query_local(self, chat_handler, mock_rag_results, mock_ollama_response):
         with patch.object(chat_handler, "_search_internal", return_value=mock_rag_results):
-            with patch.object(chat_handler, "_call_ollama", return_value=mock_ollama_response["response"]):
+            with patch.object(chat_handler, "_call_llm", return_value=mock_ollama_response["response"]):
                 result = chat_handler.handle_query("Energieverbrauch?", "test_user", use_web=False)
                 assert result["query_type"] == "local"
                 assert len(result["sources"]) == 2
@@ -169,14 +169,14 @@ class TestHandleQuery:
     def test_handle_query_web(self, chat_handler, mock_ollama_response):
         web_results = {"results": [{"content": "Web", "source": "web", "score": 0.9}], "sources": [{"id": "1", "score": 0.9, "source": "web"}], "query_type": "web"}
         with patch.object(chat_handler, "_search_internal", return_value=web_results):
-            with patch.object(chat_handler, "_call_ollama", return_value=mock_ollama_response["response"]):
+            with patch.object(chat_handler, "_call_llm", return_value=mock_ollama_response["response"]):
                 result = chat_handler.handle_query("Wetter?", "test_user", use_web=True)
                 assert result["query_type"] == "web"
 
     def test_handle_query_logs_interaction(self, chat_handler, mock_rag_results, mock_ollama_response):
         """Test: handle_query completes without error and returns result."""
         with patch.object(chat_handler, "_search_internal", return_value=mock_rag_results):
-            with patch.object(chat_handler, "_call_ollama", return_value=mock_ollama_response["response"]):
+            with patch.object(chat_handler, "_call_llm", return_value=mock_ollama_response["response"]):
                 result = chat_handler.handle_query("Testfrage", "test_user_123", use_web=False)
                 assert "response" in result
                 assert "elapsed_ms" in result
@@ -234,19 +234,19 @@ class TestEdgeCases:
     def test_empty_rag_results(self, chat_handler, mock_ollama_response):
         empty = {"results": [], "sources": [], "query_type": "local"}
         with patch.object(chat_handler, "_search_internal", return_value=empty):
-            with patch.object(chat_handler, "_call_ollama", return_value=mock_ollama_response["response"]):
+            with patch.object(chat_handler, "_call_llm", return_value=mock_ollama_response["response"]):
                 result = chat_handler.handle_query("test", "u", use_web=False)
                 assert len(result["sources"]) == 0
 
     def test_very_long_query(self, chat_handler, mock_rag_results, mock_ollama_response):
         with patch.object(chat_handler, "_search_internal", return_value=mock_rag_results):
-            with patch.object(chat_handler, "_call_ollama", return_value=mock_ollama_response["response"]):
+            with patch.object(chat_handler, "_call_llm", return_value=mock_ollama_response["response"]):
                 result = chat_handler.handle_query("Frage " * 1000, "u", use_web=False)
                 assert result["response"] == mock_ollama_response["response"]
 
     def test_special_characters_in_query(self, chat_handler, mock_rag_results, mock_ollama_response):
         with patch.object(chat_handler, "_search_internal", return_value=mock_rag_results):
-            with patch.object(chat_handler, "_call_ollama", return_value=mock_ollama_response["response"]):
+            with patch.object(chat_handler, "_call_llm", return_value=mock_ollama_response["response"]):
                 result = chat_handler.handle_query("Test <>&\"' aoeue", "u", use_web=False)
                 assert result["response"] == mock_ollama_response["response"]
 
@@ -255,14 +255,14 @@ class TestQueryTypes:
     def test_local_query_type(self, chat_handler):
         mock_r = {"results": [{"content": "L", "source": "ha", "score": 0.9}], "sources": [{"id": "1", "score": 0.9, "source": "ha"}], "query_type": "local"}
         with patch.object(chat_handler, "_search_internal", return_value=mock_r):
-            with patch.object(chat_handler, "_call_ollama", return_value="Antwort"):
+            with patch.object(chat_handler, "_call_llm", return_value="Antwort"):
                 assert chat_handler.handle_query("test", "u", use_web=False)["query_type"] == "local"
 
     def test_web_query_type(self, chat_handler):
         mock_r = {"results": [{"content": "W", "source": "web", "score": 0.9}], "sources": [{"id": "1", "score": 0.9, "source": "web"}], "query_type": "web"}
         with patch.object(chat_handler, "_classify_query", return_value="web"):
             with patch.object(chat_handler, "_search_internal", return_value=mock_r):
-                with patch.object(chat_handler, "_call_ollama", return_value="Antwort"):
+                with patch.object(chat_handler, "_call_llm", return_value="Antwort"):
                     assert chat_handler.handle_query("test", "u", use_web=True)["query_type"] == "web"
 
 

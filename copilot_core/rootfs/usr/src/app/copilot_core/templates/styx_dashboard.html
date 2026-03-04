@@ -62,71 +62,105 @@
   .refresh-btn:hover { background: var(--surface); }
   .svg-container { text-align: center; margin-top: 8px; }
   .svg-container img { max-width: 100%; height: auto; border-radius: 8px; }
+
+  /* ── Brain Canvas Visualization ────────────────── */
+  #brain-canvas { width: 100%; height: 400px; border-radius: 8px; background: #0a0a14; cursor: grab; }
+  #brain-canvas:active { cursor: grabbing; }
+  .brain-tooltip { position: absolute; background: rgba(0,0,0,0.9); color: #e0e0f0; padding: 6px 10px; border-radius: 6px; font-size: 0.75rem; pointer-events: none; opacity: 0; transition: opacity 0.15s; border: 1px solid var(--accent); z-index: 10; }
+
+  /* ── Chat Interface ────────────────────────────── */
+  .chat-wrap { display: flex; flex-direction: column; height: 400px; }
+  .chat-messages { flex: 1; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 8px; }
+  .chat-msg { max-width: 85%; padding: 8px 12px; border-radius: 12px; font-size: 0.85rem; line-height: 1.4; word-wrap: break-word; }
+  .chat-msg.user { align-self: flex-end; background: #1a3a5a; color: var(--accent); border-bottom-right-radius: 4px; }
+  .chat-msg.assistant { align-self: flex-start; background: var(--surface2); color: var(--text); border-bottom-left-radius: 4px; }
+  .chat-msg.system { align-self: center; background: transparent; color: var(--muted); font-size: 0.75rem; font-style: italic; }
+  .chat-input-row { display: flex; gap: 8px; padding: 8px 0 0 0; }
+  .chat-input { flex: 1; background: var(--surface2); border: 1px solid #333; border-radius: 8px; padding: 8px 12px; color: var(--text); font-size: 0.85rem; outline: none; resize: none; }
+  .chat-input:focus { border-color: var(--accent); }
+  .chat-send { background: var(--accent); color: #0f0f1a; border: none; border-radius: 8px; padding: 8px 16px; font-weight: 600; cursor: pointer; font-size: 0.85rem; }
+  .chat-send:hover { filter: brightness(1.1); }
+  .chat-send:disabled { opacity: 0.5; cursor: not-allowed; }
+  .chat-status { font-size: 0.7rem; color: var(--muted); padding: 4px 0; text-align: right; }
 </style>
 </head>
 <body>
 <div class="app">
   <header>
-    <h1>🧠 Styx Dashboard</h1>
-    <button class="refresh-btn" onclick="loadDashboard()">↻ Refresh</button>
-    <div class="status" id="status">Laden…</div>
+    <h1>&#x1F9E0; Styx Dashboard</h1>
+    <button class="refresh-btn" onclick="loadDashboard()">&#x21BB; Refresh</button>
+    <div class="status" id="status">Laden...</div>
   </header>
 
   <div class="grid">
     <!-- Mood Card -->
     <div class="card">
-      <h2><span class="icon" style="background:#1a3a4a">🎭</span> Stimmung</h2>
-      <div id="mood-content">–</div>
+      <h2><span class="icon" style="background:#1a3a4a">&#x1F3AD;</span> Stimmung</h2>
+      <div id="mood-content">&ndash;</div>
     </div>
 
     <!-- Neurons Card -->
     <div class="card">
-      <h2><span class="icon" style="background:#2a1a4a">⚡</span> Neuronen</h2>
-      <div id="neuron-content">–</div>
+      <h2><span class="icon" style="background:#2a1a4a">&#x26A1;</span> Neuronen</h2>
+      <div id="neuron-content">&ndash;</div>
     </div>
 
     <!-- Brain Graph Card -->
     <div class="card">
-      <h2><span class="icon" style="background:#1a2a3a">🕸️</span> Brain Graph</h2>
-      <div id="graph-content">–</div>
+      <h2><span class="icon" style="background:#1a2a3a">&#x1F578;&#xFE0F;</span> Brain Graph</h2>
+      <div id="graph-content">&ndash;</div>
     </div>
 
     <!-- Integration Bus Card -->
     <div class="card">
-      <h2><span class="icon" style="background:#1a3a2a">📡</span> Integration Bus</h2>
-      <div id="bus-content">–</div>
+      <h2><span class="icon" style="background:#1a3a2a">&#x1F4E1;</span> Integration Bus</h2>
+      <div id="bus-content">&ndash;</div>
     </div>
 
     <!-- Modules Card -->
     <div class="card wide">
-      <h2><span class="icon" style="background:#3a2a1a">🔧</span> Module</h2>
-      <div class="module-grid" id="modules-content">–</div>
+      <h2><span class="icon" style="background:#3a2a1a">&#x1F527;</span> Module</h2>
+      <div class="module-grid" id="modules-content">&ndash;</div>
+    </div>
+
+    <!-- Brain Visualization Canvas -->
+    <div class="card wide">
+      <h2><span class="icon" style="background:#1a2a4a">&#x1F52C;</span> Neuronen-Brain Visualisierung</h2>
+      <canvas id="brain-canvas"></canvas>
+      <div class="brain-tooltip" id="brain-tooltip"></div>
+    </div>
+
+    <!-- Chat Interface -->
+    <div class="card wide">
+      <h2><span class="icon" style="background:#2a1a3a">&#x1F4AC;</span> Styx Chat</h2>
+      <div class="chat-wrap">
+        <div class="chat-messages" id="chat-messages">
+          <div class="chat-msg system">Willkommen bei Styx. Stelle eine Frage...</div>
+        </div>
+        <div class="chat-status" id="chat-status"></div>
+        <div class="chat-input-row">
+          <textarea class="chat-input" id="chat-input" rows="1" placeholder="Nachricht eingeben..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChat()}"></textarea>
+          <button class="chat-send" id="chat-send" onclick="sendChat()">Senden</button>
+        </div>
+      </div>
     </div>
 
     <!-- Habitus Zones Card -->
     <div class="card">
-      <h2><span class="icon" style="background:#2a3a1a">🏠</span> Habitus-Zonen</h2>
+      <h2><span class="icon" style="background:#2a3a1a">&#x1F3E0;</span> Habitus-Zonen</h2>
       <ul class="zone-list" id="zones-content"></ul>
     </div>
 
     <!-- Hebbian Learning Card -->
     <div class="card">
-      <h2><span class="icon" style="background:#4a1a3a">🎓</span> Hebbian Learning</h2>
-      <div id="learning-content">–</div>
-    </div>
-
-    <!-- Neural Visualization -->
-    <div class="card wide">
-      <h2><span class="icon" style="background:#1a2a4a">🔬</span> Neural Pipeline Visualisierung</h2>
-      <div class="svg-container" id="svg-container">
-        <img id="neuron-svg" alt="Neural Pipeline" />
-      </div>
+      <h2><span class="icon" style="background:#4a1a3a">&#x1F393;</span> Hebbian Learning</h2>
+      <div id="learning-content">&ndash;</div>
     </div>
 
     <!-- Recent Candidates Card -->
     <div class="card">
-      <h2><span class="icon" style="background:#2a2a1a">💡</span> Letzte Kandidaten</h2>
-      <div id="candidates-content">–</div>
+      <h2><span class="icon" style="background:#2a2a1a">&#x1F4A1;</span> Letzte Kandidaten</h2>
+      <div id="candidates-content">&ndash;</div>
     </div>
   </div>
 </div>
@@ -194,7 +228,7 @@ function renderGraph(graph) {
     <div class="stat"><span class="label">Kanten</span><span class="value">${graph.total_edges}</span></div>`;
   if (graph.nodes_by_kind) {
     for (const [k, v] of Object.entries(graph.nodes_by_kind)) {
-      html += `<div class="stat"><span class="label" style="padding-left:12px">↳ ${k}</span><span class="value">${v}</span></div>`;
+      html += `<div class="stat"><span class="label" style="padding-left:12px">\u2192 ${k}</span><span class="value">${v}</span></div>`;
     }
   }
   return html;
@@ -203,7 +237,7 @@ function renderGraph(graph) {
 function renderBus(bus) {
   if (!bus || bus.events_published === undefined) return "Bus nicht aktiv";
   const errorRate = bus.events_published > 0 ? ((bus.errors / bus.events_published) * 100).toFixed(1) : "0.0";
-  return `<div class="stat"><span class="label">Veröffentlicht</span><span class="value">${bus.events_published}</span></div>
+  return `<div class="stat"><span class="label">Veroeffentlicht</span><span class="value">${bus.events_published}</span></div>
     <div class="stat"><span class="label">Zugestellt</span><span class="value">${bus.events_delivered}</span></div>
     <div class="stat"><span class="label">Fehler</span><span class="value" style="color:${bus.errors>0?'var(--red)':'inherit'}">${bus.errors}</span></div>
     <div class="stat"><span class="label">Dead Letters</span><span class="value">${bus.dead_letter_count || 0}</span></div>
@@ -238,24 +272,24 @@ function renderCandidates(candidates) {
   if (!candidates || candidates.length === 0) return "Keine Kandidaten";
   return candidates.map(c => `<div class="candidate-item">
     <div class="label">${c.label || c.id}</div>
-    <div class="meta">${c.kind || "–"} · Score: ${(c.score || 0).toFixed(2)} · ${c.source || ""}</div>
+    <div class="meta">${c.kind || "\u2013"} \u00B7 Score: ${(c.score || 0).toFixed(2)} \u00B7 ${c.source || ""}</div>
   </div>`).join("");
 }
 
-const ZONE_ICONS = {living:"🛋️",bath:"🚿",kitchen:"🍳",office:"💼",hallway:"🚪",bedroom:"🛏️",room_mira:"👧",room_paul:"👦",terrace:"🌿",outside:"🌳"};
+const ZONE_ICONS = {living:"\u{1F6CB}\uFE0F",bath:"\u{1F6BF}",kitchen:"\u{1F373}",office:"\u{1F4BC}",hallway:"\u{1F6AA}",bedroom:"\u{1F6CF}\uFE0F",room_mira:"\u{1F467}",room_paul:"\u{1F466}",terrace:"\u{1F33F}",outside:"\u{1F333}"};
 
 function renderZones(zones) {
   const el = document.getElementById("zones-content");
   if (!zones || zones.length === 0) { el.innerHTML = '<li style="color:var(--muted);padding:8px">Keine Zonen</li>'; return; }
   el.innerHTML = zones.map(z => `<li class="zone-item">
-    <span class="zone-icon">${ZONE_ICONS[z.id] || "🏠"}</span>
+    <span class="zone-icon">${ZONE_ICONS[z.id] || "\u{1F3E0}"}</span>
     <span class="zone-name">${z.name_de || z.id}</span>
     <span class="zone-prio">P${z.priority || 0}</span>
   </li>`).join("");
 }
 
 async function loadDashboard() {
-  document.getElementById("status").textContent = "Laden…";
+  document.getElementById("status").textContent = "Laden...";
   const [dash, conf] = await Promise.all([
     fetchJSON("/api/v1/styx/dashboard"),
     fetchJSON("/api/v1/styx/config"),
@@ -269,7 +303,9 @@ async function loadDashboard() {
     document.getElementById("modules-content").innerHTML = renderModules(dash.modules);
     document.getElementById("learning-content").innerHTML = renderLearning(dash.learning);
     document.getElementById("candidates-content").innerHTML = renderCandidates(dash.candidates);
-    document.getElementById("status").textContent = `${dash.render_ms}ms · ${new Date(dash.timestamp).toLocaleTimeString("de-DE")}`;
+    document.getElementById("status").textContent = `${dash.render_ms}ms \u00B7 ${new Date(dash.timestamp).toLocaleTimeString("de-DE")}`;
+    // Update brain visualization with neuron data
+    updateBrainViz(dash);
   } else {
     document.getElementById("status").textContent = "Fehler beim Laden";
   }
@@ -277,13 +313,283 @@ async function loadDashboard() {
   if (conf && conf.ok) {
     renderZones(conf.habitus_zones);
   }
-
-  // Load neural SVG
-  const svgImg = document.getElementById("neuron-svg");
-  svgImg.src = BASE + "/api/v1/neurons/layers/snapshot.svg?" + Date.now();
 }
 
-// Initial load + auto-refresh
+// ═══════════════════════════════════════════════════════════════════════
+// Brain Canvas Visualization — Interactive Neuron Network
+// ═══════════════════════════════════════════════════════════════════════
+
+const BRAIN_NEURONS = [
+  // Context Layer (left)
+  {id:"context.presence",    label:"Presence",    layer:0, x:0.12, y:0.2},
+  {id:"context.time_of_day", label:"Time",        layer:0, x:0.12, y:0.35},
+  {id:"context.light_level", label:"Light",       layer:0, x:0.12, y:0.5},
+  {id:"context.weather",     label:"Weather",     layer:0, x:0.12, y:0.65},
+  {id:"context.activity",    label:"Activity",    layer:0, x:0.12, y:0.8},
+  // State Layer (center)
+  {id:"state.energy_level",  label:"Energy",      layer:1, x:0.42, y:0.15},
+  {id:"state.comfort",       label:"Comfort",     layer:1, x:0.42, y:0.32},
+  {id:"state.productivity",  label:"Productivity",layer:1, x:0.42, y:0.5},
+  {id:"state.relaxation",    label:"Relaxation",  layer:1, x:0.42, y:0.67},
+  {id:"state.social",        label:"Social",      layer:1, x:0.42, y:0.84},
+  // Mood Layer (right)
+  {id:"mood.focus",          label:"Focus",       layer:2, x:0.72, y:0.2},
+  {id:"mood.relax",          label:"Relax",       layer:2, x:0.72, y:0.4},
+  {id:"mood.energy",         label:"Energy",      layer:2, x:0.72, y:0.6},
+  {id:"mood.calm",           label:"Calm",        layer:2, x:0.72, y:0.8},
+];
+
+const BRAIN_EDGES = [
+  // Context -> State
+  ["context.presence","state.energy_level",0.3],["context.presence","state.comfort",0.2],
+  ["context.time_of_day","state.energy_level",0.4],["context.time_of_day","state.relaxation",0.3],
+  ["context.light_level","state.comfort",0.5],["context.light_level","state.productivity",0.3],
+  ["context.weather","state.comfort",0.2],["context.weather","state.energy_level",0.1],
+  ["context.activity","state.productivity",0.4],["context.activity","state.social",0.3],
+  // State -> Mood
+  ["state.energy_level","mood.energy",0.6],["state.energy_level","mood.focus",0.3],
+  ["state.comfort","mood.relax",0.5],["state.comfort","mood.calm",0.4],
+  ["state.productivity","mood.focus",0.5],["state.relaxation","mood.relax",0.6],
+  ["state.relaxation","mood.calm",0.3],["state.social","mood.energy",0.2],
+];
+
+const LAYER_COLORS = ["#4fc3f7","#81c784","#ce93d8"];
+const LAYER_LABELS = ["Kontext","Zustand","Stimmung"];
+
+let brainNodeValues = {};
+let hoveredNode = null;
+
+function updateBrainViz(dashData) {
+  // Extract neuron values from dashboard data
+  brainNodeValues = {};
+  const summary = dashData.neurons?.summary || {};
+  for (const layer of ["context","state","mood"]) {
+    const vals = summary[layer] || {};
+    for (const [k, v] of Object.entries(vals)) {
+      brainNodeValues[`${layer}.${k}`] = typeof v === "number" ? v : (v?.value || 0);
+    }
+  }
+  drawBrain();
+}
+
+function drawBrain() {
+  const canvas = document.getElementById("brain-canvas");
+  if (!canvas) return;
+  const rect = canvas.parentElement.getBoundingClientRect();
+  canvas.width = rect.width - 42;
+  canvas.height = 400;
+  const ctx = canvas.getContext("2d");
+  const W = canvas.width, H = canvas.height;
+
+  // Background
+  ctx.fillStyle = "#0a0a14";
+  ctx.fillRect(0, 0, W, H);
+
+  // Layer labels
+  ctx.font = "bold 11px Inter, sans-serif";
+  ctx.textAlign = "center";
+  for (let i = 0; i < 3; i++) {
+    const x = [0.12, 0.42, 0.72][i] * W;
+    ctx.fillStyle = LAYER_COLORS[i];
+    ctx.globalAlpha = 0.5;
+    ctx.fillText(LAYER_LABELS[i], x, 20);
+    ctx.globalAlpha = 1;
+  }
+
+  // Draw edges
+  for (const [src, tgt, weight] of BRAIN_EDGES) {
+    const sn = BRAIN_NEURONS.find(n => n.id === src);
+    const tn = BRAIN_NEURONS.find(n => n.id === tgt);
+    if (!sn || !tn) continue;
+
+    const sx = sn.x * W, sy = sn.y * H;
+    const tx = tn.x * W, ty = tn.y * H;
+    const srcVal = brainNodeValues[src] || 0;
+    const signalStrength = srcVal * Math.abs(weight);
+
+    ctx.beginPath();
+    // Bezier curve for smooth connections
+    const cpx = (sx + tx) / 2;
+    ctx.moveTo(sx, sy);
+    ctx.bezierCurveTo(cpx, sy, cpx, ty, tx, ty);
+
+    const isActive = signalStrength > 0.1;
+    ctx.strokeStyle = weight > 0 ? (isActive ? "#34D399" : "#1a3a2a") : (isActive ? "#F87171" : "#3a1a1a");
+    ctx.lineWidth = isActive ? 1 + signalStrength * 3 : 0.5;
+    ctx.globalAlpha = isActive ? 0.4 + signalStrength * 0.6 : 0.15;
+    if (weight <= 0) ctx.setLineDash([4, 4]);
+    else ctx.setLineDash([]);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.setLineDash([]);
+
+    // Signal pulse animation dot
+    if (isActive) {
+      const t = (Date.now() % 2000) / 2000;
+      const px = sx + (tx - sx) * t;
+      const py = sy + (ty - sy) * t;
+      ctx.beginPath();
+      ctx.arc(px, py, 2, 0, Math.PI * 2);
+      ctx.fillStyle = weight > 0 ? "#34D399" : "#F87171";
+      ctx.globalAlpha = 0.6;
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  // Draw nodes
+  for (const n of BRAIN_NEURONS) {
+    const x = n.x * W, y = n.y * H;
+    const val = brainNodeValues[n.id] || 0;
+    const r = 18 + val * 8;
+    const isHovered = hoveredNode === n.id;
+
+    // Glow for active neurons
+    if (val > 0.3) {
+      ctx.beginPath();
+      ctx.arc(x, y, r + 8, 0, Math.PI * 2);
+      const glow = ctx.createRadialGradient(x, y, r, x, y, r + 8);
+      glow.addColorStop(0, LAYER_COLORS[n.layer] + "40");
+      glow.addColorStop(1, "transparent");
+      ctx.fillStyle = glow;
+      ctx.fill();
+    }
+
+    // Node circle
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    const nodeColor = val < 0.2 ? "#3a3a4a" : val < 0.5 ? LAYER_COLORS[n.layer] + "aa" : LAYER_COLORS[n.layer];
+    ctx.fillStyle = nodeColor;
+    ctx.fill();
+    ctx.strokeStyle = isHovered ? "#fff" : LAYER_COLORS[n.layer];
+    ctx.lineWidth = isHovered ? 2 : 1;
+    ctx.stroke();
+
+    // Value text
+    ctx.fillStyle = val > 0.3 ? "#fff" : "#aaa";
+    ctx.font = "bold 10px Inter, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText((val * 100).toFixed(0), x, y);
+
+    // Label below
+    ctx.fillStyle = isHovered ? "#fff" : "#888";
+    ctx.font = "9px Inter, sans-serif";
+    ctx.fillText(n.label, x, y + r + 12);
+  }
+
+  // Mood output indicator (right side)
+  const dominant = Object.entries(brainNodeValues)
+    .filter(([k]) => k.startsWith("mood."))
+    .sort((a, b) => b[1] - a[1])[0];
+  if (dominant && dominant[1] > 0) {
+    ctx.fillStyle = LAYER_COLORS[2];
+    ctx.font = "bold 13px Inter, sans-serif";
+    ctx.textAlign = "center";
+    const moodName = dominant[0].split(".")[1];
+    ctx.fillText("\u2192 " + moodName.charAt(0).toUpperCase() + moodName.slice(1), 0.9 * W, H / 2);
+    ctx.font = "11px Inter, sans-serif";
+    ctx.fillStyle = "#888";
+    ctx.fillText((dominant[1] * 100).toFixed(0) + "%", 0.9 * W, H / 2 + 18);
+  }
+}
+
+// Canvas hover for tooltips
+(function() {
+  const canvas = document.getElementById("brain-canvas");
+  const tooltip = document.getElementById("brain-tooltip");
+  if (!canvas) return;
+
+  canvas.addEventListener("mousemove", function(e) {
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+    const W = canvas.width, H = canvas.height;
+    let found = null;
+    for (const n of BRAIN_NEURONS) {
+      const nx = n.x * W, ny = n.y * H;
+      if (Math.hypot(mx - nx, my - ny) < 22) { found = n; break; }
+    }
+    if (found) {
+      hoveredNode = found.id;
+      const val = brainNodeValues[found.id] || 0;
+      tooltip.textContent = `${found.id}: ${(val * 100).toFixed(1)}%`;
+      tooltip.style.left = (e.clientX + 12) + "px";
+      tooltip.style.top = (e.clientY - 28) + "px";
+      tooltip.style.opacity = "1";
+    } else {
+      hoveredNode = null;
+      tooltip.style.opacity = "0";
+    }
+    drawBrain();
+  });
+  canvas.addEventListener("mouseleave", function() {
+    hoveredNode = null;
+    tooltip.style.opacity = "0";
+    drawBrain();
+  });
+})();
+
+// Animation loop for signal pulses
+let _brainAnimFrame;
+function animateBrain() {
+  drawBrain();
+  _brainAnimFrame = requestAnimationFrame(animateBrain);
+}
+animateBrain();
+
+// ═══════════════════════════════════════════════════════════════════════
+// Chat Interface — Styx Chat with RAG
+// ═══════════════════════════════════════════════════════════════════════
+
+let chatBusy = false;
+
+function appendChatMsg(role, text) {
+  const el = document.getElementById("chat-messages");
+  const div = document.createElement("div");
+  div.className = "chat-msg " + role;
+  div.textContent = text;
+  el.appendChild(div);
+  el.scrollTop = el.scrollHeight;
+}
+
+async function sendChat() {
+  if (chatBusy) return;
+  const input = document.getElementById("chat-input");
+  const query = input.value.trim();
+  if (!query) return;
+
+  input.value = "";
+  appendChatMsg("user", query);
+  chatBusy = true;
+  document.getElementById("chat-send").disabled = true;
+  document.getElementById("chat-status").textContent = "Styx denkt nach...";
+
+  try {
+    const resp = await fetch(BASE + "/api/styx/chat", {
+      method: "POST",
+      headers: {...HEADERS, "Content-Type": "application/json"},
+      body: JSON.stringify({query: query, user_id: "styx-dashboard", use_web: false}),
+    });
+    const data = await resp.json();
+    if (data.ok && data.response) {
+      appendChatMsg("assistant", data.response);
+      const srcCount = (data.sources || []).length;
+      const qType = data.query_type || "local";
+      document.getElementById("chat-status").textContent = `${qType} \u00B7 ${srcCount} Quellen \u00B7 ${data.elapsed_ms || 0}ms`;
+    } else {
+      appendChatMsg("system", "Fehler: " + (data.error || "Unbekannter Fehler"));
+      document.getElementById("chat-status").textContent = "";
+    }
+  } catch (err) {
+    appendChatMsg("system", "Verbindungsfehler: " + err.message);
+    document.getElementById("chat-status").textContent = "";
+  }
+
+  chatBusy = false;
+  document.getElementById("chat-send").disabled = false;
+}
+
+// Initial load + auto-refresh (data cards only, not chat)
 loadDashboard();
 setInterval(loadDashboard, 30000);
 </script>

@@ -647,6 +647,10 @@ def register_blueprints(app: Flask, services: dict) -> None:
     init_styx_dashboard_api(services)
     app.register_blueprint(styx_dashboard_bp)
 
+    # Register Styx Voice API (STT + TTS)
+    from copilot_core.api.v1.styx_voice import styx_voice_bp
+    app.register_blueprint(styx_voice_bp)
+
     # Serve Styx Dashboard SPA at /styx
     @app.route("/styx")
     def _serve_styx_dashboard():
