@@ -2,6 +2,47 @@
 
 Alle wesentlichen Änderungen am PilotSuite Styx Core werden in dieser Datei dokumentiert.
 
+## [v13.2.0] - 2026-03-04
+
+### Styx Dashboard — Zonen, Musikwolke & Vorschlagssystem (3 Iterationen)
+
+#### Iteration 1: Zonen, Musikwolke & Vorschläge
+
+- **Example Config**: Vollständige Beispielkonfiguration mit 10 Habituszonen, echten HA-Entitäten (Lights, Motion, Media, Climate, Sensors, Cover), Sonos-Player-Mapping und 7 Automationsvorschlägen
+- **Suggestions API**: Neuer Blueprint `/api/v1/suggestions` mit Accept/Reject/Snooze-Lifecycle und Fallback auf Beispieldaten
+- **Musikwolke Sonos**: `group_zone_players()`, `ungroup_zone_players()`, `group_multi_zone()` für Sonos-Gruppierung/Entgruppierung
+- **Media Group/Ungroup Endpoints**: POST `/api/v1/zones/group`, `/zones/ungroup`, `/zones/group-all`, `/zones/ungroup-all`
+- **Styx Dashboard Erweiterung**: Zonen, Media und Suggestions in `full_dashboard()` Response integriert
+- **24 neue Tests**: ExampleConfig, SuggestionsAPI, MediaGroupUngroup, DashboardPayload
+
+#### Iteration 2: Dashboard Enrichment & Cross-Module Links
+
+- **3 neue Dashboard-Tabs**: Zonen (Karten-Grid mit Klick→Detail), Musikwolke (Volume-Slider, Play/Pause), Vorschläge (sortiert nach Konfidenz)
+- **Zone Detail Modal**: Entity-Rollen, "Im Chat fragen" Cross-Module-Link zum Chat-Tab
+- **Musikwolke Panel**: Group-All/Ungroup-All, Per-Zone Volume-Slider + Play/Pause-Buttons
+- **Summary Strip**: Stimmung, Zonen, Vorschläge, Neuronen, Musikwolke auf dem Overview-Tab
+- **Suggestion Workflow**: Inline Visual Feedback (Opacity + Status-Text) bei Accept/Reject/Snooze
+- **Zone Dashboard Enrichment**: Zones mit Example-Entity-Daten angereichert (HabitusZone Dataclass + Dict Support)
+- **12 neue Tests**: ZoneDashboardEnrichment, SuggestionsStateMgmt, MediaPlayPauseVolume, DashboardPayload
+
+#### Iteration 3: UX-Polish & Responsive Design
+
+- **Gradient Header**: Accent→Purple Gradient-Titel
+- **Keyboard Shortcuts**: 1-8 für Tabs, Escape schließt Modal, r aktualisiert Dashboard
+- **Tab Persistence**: Aktiver Tab über localStorage gespeichert (`styx-active-tab`)
+- **Auto-Refresh**: 30s Countdown mit sichtbarem Indikator
+- **Keyboard Hint Badges**: Nummern-Badges auf jedem Tab (mobile ausgeblendet)
+- **Responsive CSS**: Mobile-optimiert (kleinere Paddings, einspaltiges Grid)
+- **`switchTab()` Funktion**: Zentrale Tab-Navigation ersetzt Inline-Logik
+- **15 neue Tests**: KeyboardShortcuts, TabPersistence, AutoRefresh, DesignPolish
+
+#### Test Coverage
+
+- **Core**: 3667+ Tests passed, 0 failed
+- **51 neue Tests** für die 3 Iterationen
+
+---
+
 ## [v13.1.1] - 2026-03-04
 
 ### Bug Fixes & Test Stabilization
