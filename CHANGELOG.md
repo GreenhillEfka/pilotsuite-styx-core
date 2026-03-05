@@ -2,6 +2,62 @@
 
 Alle wesentlichen Änderungen am PilotSuite Styx Core werden in dieser Datei dokumentiert.
 
+## [v13.5.0] - 2026-03-05
+
+### Sonos-Modul, Alarm/Wecker, Dashboard-APIs, Error Digest
+
+#### Sonos-Modul (NEU)
+- **SonosHTTPClient**: Python-Wrapper fuer node-sonos-http-api (Port 5005)
+  - Play/Pause/Stop, Volume, Favorites, Playlists, Queue, Join/Leave, TTS (say/sayall), Presets, Sleep, Shuffle
+- **SonosIntelligence**: Intelligenz-Schicht ueber dem Client
+  - 4 zeit-abhaengige Lautstaerkeprofile (Morgen 20%, Tag 35%, Abend 25%, Nacht 10%)
+  - Volume-Ceiling pro Tageszeit (verhindert zu laute Musik nachts)
+  - Fallback-Playlists pro Zone (konfigurierbar)
+  - Praesenz → Auto-Play (startet Musik bei Zonenbetreten)
+  - Persistierte Presets (JSON unter /data/sonos_presets/)
+  - Zone-Registry fuer Sonos-Room → Habitus-Zone Mapping
+- **37 REST-Endpoints** unter `/api/v1/sonos/`
+- **node-sonos-http-api** im Container (Dockerfile + start_dual.sh)
+- `host_network: true` fuer UPnP/SSDP Sonos-Discovery
+- **60 Tests** (Client, Intelligence, API)
+
+#### Alarm/Wecker-Modul (NEU)
+- **AlarmEngine**: Zeitgesteuerte Wecker mit Smart-Wakeup-Kurven
+  - 4 Wakeup-Kurven: gentle, standard, energetic, urgent (konfig. Dauer 5-30min)
+  - Snooze-Logik (max 3x, konfigurierbar)
+  - Recurring-Wecker (Wochentag-Filter, naechste Ausloesungsberechnung)
+  - Sonos-TTS-Integration (Durchsage bei Wecker-Trigger)
+- **Alarm-Presets**: Vorkonfigurierte Wecker-Templates (Werktagswecker, Wochenende, etc.)
+- **19 REST-Endpoints** unter `/api/v1/alarm/`
+- **84 Tests** (Models, Engine, Curves, API)
+
+#### Conversation History API (NEU)
+- `GET /api/v1/conversation/history` — Chat-Verlauf (limit/offset/role-Filter)
+- `GET /api/v1/conversation/history/<id>` — Einzelne Konversation
+- `GET /api/v1/conversation/preferences` — Gelernte Praeferenzen
+- `GET /api/v1/conversation/stats` — Nachrichtenstatistiken
+- Input-Validierung (int-Parameter, role-Whitelist)
+- **16 Tests**
+
+#### Error Digest API (NEU)
+- `GET /api/v1/errors/digest` — Aggregierte Fehler mit Kategorisierung
+  - 12 bekannte Repair-Patterns (Connectivity, Security, Config, System, DB, Automation, Device)
+  - Severity-Filter (low/medium/high/critical), Kategorie-Filter, Zeitfenster
+- `GET /api/v1/errors/digest/categories` — Verfuegbare Kategorien
+- `POST /api/v1/errors/repair-suggestions` — Pattern-Match + LLM-Fallback
+- Severity-Validierung, Type-Safety fuer LLM-Responses
+- **29 Tests**
+
+#### Styx Dashboard Erweiterung
+- **Musikwolke-Tab**: Sonos Health-Badge, Room-Uebersicht, Favorites, TTS, Presets, Volume-Profile
+- **Automation-Tab**: Wecker-Verwaltung mit Preset-Auswahl, Snooze-Timer, Recurring-Config
+
+#### Metriken
+- **596 API-Routen** (vorher 533 → +63 neue)
+- **3813 Tests** bestanden (vorher 3569 → +244 neue)
+
+---
+
 ## [v13.4.0] - 2026-03-04
 
 ### Styx Dashboard — Enhanced Zone Detail, Scenes, Sonos Favorites, Brain Viz

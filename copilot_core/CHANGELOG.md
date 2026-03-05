@@ -3,6 +3,31 @@
 This file exists so Home Assistant can show an add-on changelog.
 For full history, see the repository-level `CHANGELOG.md`.
 
+## 13.5.0 (2026-03-05)
+- **Sonos-Modul**: Vollstaendige Sonos-Steuerung via node-sonos-http-api
+  - SonosHTTPClient: Play, Pause, Volume, Favorites, Playlists, TTS, Presets, Queue
+  - SonosIntelligence: Zeit-abhaengige Lautstaerke, Fallback-Playlists, Praesenz → Auto-Play
+  - 37 REST-Endpoints, 60 Tests
+- **Alarm/Wecker-Modul**: Smart-Wakeup mit Sonos-TTS-Integration
+  - 4 Wakeup-Kurven, Snooze-Logik, Recurring-Wecker, Presets
+  - 19 REST-Endpoints, 84 Tests
+- **Conversation History API**: Chat-Verlauf + Praeferenzen (4 Endpoints)
+- **Error Digest API**: Fehler-Aggregation, 12 Repair-Patterns, LLM-Fallback (3 Endpoints)
+- **596 API-Routen**, 3813 Tests bestanden
+- **Neue Config-Optionen**: `sonos_enabled`, `sonos_port`
+
+## 13.4.0 (2026-03-04)
+- **Zone Detail Modal**: Entity-Statistiken, Mood-Ringe, Szenen, Medien, Quick-Actions
+- **Sonos Favorites**: Source-Auswahl pro Zone via HA source_list
+- **Brain Visualization**: 3-Layer Neural Viz mit Signal-Partikeln und Firing-Animationen
+- **HomeKit QR-Codes**: Deterministische QR-Generierung pro Zone
+- **3569 Tests** bestanden
+
+## 13.3.0 (2026-03-04)
+- **Zone Automation Controller**: Praesenzabhaengige Licht- & Musiksteuerung
+- **Entity-Management**: Auto-Rollenerkennung, 13 Tags, 11 Rollen
+- **Styx Dashboard Automation-Tab**: Hysterese, Dead-Band, Override
+
 ## 12.8.1 (2026-03-02)
 - **Connection Pooling für HA-Supervisor und Ollama**: Wiederverwendbare aiohttp.ClientSession-Connections statt Neuverbindung pro Request
   - `copilot_core/connection_pool.py`: Zentraler ConnectionPoolManager mit konfigurierbarer Pool-Größe (default: 10 Connections)
