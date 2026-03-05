@@ -1,8 +1,8 @@
 """Webhook Pusher -- Ereignisse an den HACS-Integrations-Webhook senden.
 
 Sendet typisierte Umschlag-Payloads (Envelope) an den HA-Webhook-Endpunkt.
-Jeder Versand erfolgt in einem Daemon-Thread, damit die Haupt-Pipeline
-niemals blockiert wird (nicht-blockierende Zustellung).
+Die Zustellung laeuft ueber eine zentrale DeliveryQueue mit festem Worker-Pool,
+sodass kein Thread-pro-Event Muster mehr entsteht.
 
 Envelope-Format (muss mit dem webhook.py-Handler uebereinstimmen)::
 
@@ -14,27 +14,41 @@ from __future__ import annotations
 
 import json
 import logging
-import threading
 import urllib.request
 import urllib.error
 from typing import Any, Dict, Optional
+
+from copilot_core.webhook_delivery import WebhookDeliveryQueue
 
 _LOGGER = logging.getLogger(__name__)
 
 
 class WebhookPusher:
-    """Nicht-blockierender Webhook-Push-Client (nur stdlib, keine externen Abhaengigkeiten).
+    """Nicht-blockierender Webhook-Push-Client (nur stdlib, keine externen Abhaengigkeiten)."""
 
-    Jeder Push wird in einem eigenen Daemon-Thread ausgefuehrt.
-    Daemon-Threads werden beim Beenden des Prozesses automatisch gestoppt,
-    sodass kein explizites Shutdown noetig ist.
-    """
-
-    def __init__(self, webhook_url: str, webhook_token: str = "") -> None:
+    def __init__(
+        self,
+        webhook_url: str,
+        webhook_token: str = "",
+        worker_count: int = 2,
+        max_queue_size: int = 256,
+        backpressure_policy: str = "drop_newest",
+        block_timeout_seconds: float = 0.1,
+    ) -> None:
         self._url = webhook_url
         self._token = webhook_token
         # Pusher ist nur aktiv, wenn eine webhook_url konfiguriert wurde
         self._enabled = bool(webhook_url)
+        self._delivery_queue: Optional[WebhookDeliveryQueue] = None
+
+        if self._enabled:
+            self._delivery_queue = WebhookDeliveryQueue(
+                send_func=self._do_post,
+                worker_count=worker_count,
+                max_queue_size=max_queue_size,
+                backpressure_policy=backpressure_policy,
+                block_timeout_seconds=block_timeout_seconds,
+            )
 
     @property
     def enabled(self) -> bool:
@@ -60,31 +74,34 @@ class WebhookPusher:
         """Sendet ein suggestion-Ereignis (Vorschlag) an die HACS-Integration."""
         self._send_envelope("suggestion", suggestion)
 
+    def stop(self, drain_timeout: Optional[float] = 1.0) -> None:
+        """Stoppt die DeliveryQueue kontrolliert (idempotent)."""
+        if self._delivery_queue is None:
+            return
+        self._delivery_queue.stop(drain_timeout=drain_timeout)
+
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
 
     def _send_envelope(self, event_type: str, data: Dict[str, Any]) -> None:
-        """Fire-and-Forget POST in einem Daemon-Thread.
-
-        Baut den Umschlag {"type": event_type, "data": data} und startet
-        einen Daemon-Thread fuer die HTTP-Zustellung. Der Thread wird nicht
-        ueberwacht -- Fehler werden nur geloggt.
-        """
+        """Umschlag bauen und in die DeliveryQueue enqueuen."""
         if not self._enabled:
             return
 
         envelope = {"type": event_type, "data": data}
 
-        t = threading.Thread(
-            target=self._do_post,
-            args=(envelope,),
-            daemon=True,
-        )
-        t.start()
+        queue_ref = self._delivery_queue
+        if queue_ref is None:
+            _LOGGER.warning("Webhook pusher enabled but delivery queue missing")
+            return
+
+        accepted = queue_ref.enqueue(envelope)
+        if not accepted:
+            _LOGGER.warning("Webhook envelope dropped by backpressure policy: %s", event_type)
 
     def _do_post(self, envelope: Dict[str, Any]) -> None:
-        """Fuehrt den eigentlichen HTTP-POST aus (laeuft im Hintergrund-Thread)."""
+        """Fuehrt den eigentlichen HTTP-POST aus (laeuft im Delivery-Worker)."""
         body = json.dumps(envelope, default=str).encode("utf-8")
 
         req = urllib.request.Request(
