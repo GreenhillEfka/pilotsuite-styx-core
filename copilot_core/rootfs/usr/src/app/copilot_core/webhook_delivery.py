@@ -61,6 +61,14 @@ class WebhookDeliveryQueue:
         self._stop_event = threading.Event()
         self._started = False
 
+        self._stats_lock = threading.Lock()
+        self._stats: dict[str, int] = {
+            "enqueued_total": 0,
+            "dropped_total": 0,
+            "delivered_total": 0,
+            "failed_total": 0,
+        }
+
     def start(self) -> None:
         """Startet den festen Worker-Pool (idempotent)."""
         with self._lock:
@@ -120,38 +128,58 @@ class WebhookDeliveryQueue:
             return self._enqueue_drop_oldest(envelope)
         return self._enqueue_block_timeout(envelope)
 
+    def _increment_stat(self, stat_key: str, amount: int = 1) -> None:
+        with self._stats_lock:
+            self._stats[stat_key] += amount
+
+    def _get_stats_snapshot(self) -> dict[str, int]:
+        with self._stats_lock:
+            return dict(self._stats)
+
     def _enqueue_drop_newest(self, envelope: Envelope) -> bool:
         try:
             self._queue.put_nowait(envelope)
+            self._increment_stat("enqueued_total")
             return True
         except queue.Full:
+            self._increment_stat("dropped_total")
             _LOGGER.warning("Delivery queue full; dropped newest webhook event")
             return False
 
     def _enqueue_drop_oldest(self, envelope: Envelope) -> bool:
         try:
             self._queue.put_nowait(envelope)
+            self._increment_stat("enqueued_total")
             return True
         except queue.Full:
+            dropped_oldest = False
             try:
                 self._queue.get_nowait()
                 self._queue.task_done()
+                dropped_oldest = True
+                self._increment_stat("dropped_total")
             except queue.Empty:
                 pass
 
             try:
                 self._queue.put_nowait(envelope)
+                self._increment_stat("enqueued_total")
                 _LOGGER.warning("Delivery queue full; dropped oldest webhook event")
                 return True
             except queue.Full:
+                # Entweder nur das neue Event verworfen, oder (bei Race) zusaetzlich
+                # zum bereits verworfenen oldest auch das aktuelle newest verloren.
+                self._increment_stat("dropped_total")
                 _LOGGER.warning("Delivery queue still full; dropped newest webhook event")
                 return False
 
     def _enqueue_block_timeout(self, envelope: Envelope) -> bool:
         try:
             self._queue.put(envelope, timeout=self._block_timeout_seconds)
+            self._increment_stat("enqueued_total")
             return True
         except queue.Full:
+            self._increment_stat("dropped_total")
             _LOGGER.warning("Delivery queue full after block_timeout; dropped webhook event")
             return False
 
@@ -168,7 +196,9 @@ class WebhookDeliveryQueue:
             try:
                 # PS-P0-009: Single attempt only (Retry kommt in PS-P0-012).
                 self._send_func(envelope)
+                self._increment_stat("delivered_total")
             except Exception as exc:  # noqa: BLE001
+                self._increment_stat("failed_total")
                 _LOGGER.warning(
                     "Webhook delivery failed for %s: %s",
                     envelope.get("type"),
