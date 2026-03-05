@@ -6,14 +6,20 @@ an Hintergrund-Workern und eine gemeinsame Queue.
 PS-P0-009 Scope:
 - DeliveryQueue-Grundgeruest mit start()/stop()/enqueue()
 - konfigurierbare Workeranzahl, Queue-Groesse und Backpressure-Policy
-- Single-Attempt Versand (noch ohne Retry-Logik)
+
+PS-P0-012 Scope:
+- Retry bei transienten Fehlern (Timeout/5xx/Netzwerk)
+- kein Retry bei 4xx
+- Exponential Backoff + Jitter
 """
 from __future__ import annotations
 
 import logging
 import queue
+import random
 import threading
 import time
+import urllib.error
 from typing import Any, Callable, Dict, Optional
 
 _LOGGER = logging.getLogger(__name__)
@@ -38,6 +44,10 @@ class WebhookDeliveryQueue:
         max_queue_size: int = 256,
         backpressure_policy: str = "drop_newest",
         block_timeout_seconds: float = 0.1,
+        max_retries: int = 2,
+        retry_base_delay_seconds: float = 0.2,
+        retry_max_delay_seconds: float = 5.0,
+        retry_jitter_seconds: float = 0.1,
     ) -> None:
         if worker_count <= 0:
             raise ValueError("worker_count must be > 0")
@@ -49,12 +59,25 @@ class WebhookDeliveryQueue:
                 f"{backpressure_policy!r}; expected one of "
                 f"{sorted(self.SUPPORTED_BACKPRESSURE_POLICIES)}"
             )
+        if max_retries < 0:
+            raise ValueError("max_retries must be >= 0")
+        if retry_base_delay_seconds < 0:
+            raise ValueError("retry_base_delay_seconds must be >= 0")
+        if retry_max_delay_seconds < 0:
+            raise ValueError("retry_max_delay_seconds must be >= 0")
+        if retry_jitter_seconds < 0:
+            raise ValueError("retry_jitter_seconds must be >= 0")
 
         self._send_func = send_func
         self._worker_count = worker_count
         self._queue: queue.Queue[Envelope] = queue.Queue(maxsize=max_queue_size)
         self._backpressure_policy = backpressure_policy
         self._block_timeout_seconds = max(0.0, block_timeout_seconds)
+
+        self._max_retries = max_retries
+        self._retry_base_delay_seconds = retry_base_delay_seconds
+        self._retry_max_delay_seconds = retry_max_delay_seconds
+        self._retry_jitter_seconds = retry_jitter_seconds
 
         self._workers: list[threading.Thread] = []
         self._lock = threading.Lock()
@@ -67,6 +90,7 @@ class WebhookDeliveryQueue:
             "dropped_total": 0,
             "delivered_total": 0,
             "failed_total": 0,
+            "retry_total": 0,
         }
 
     def start(self) -> None:
@@ -152,11 +176,9 @@ class WebhookDeliveryQueue:
             self._increment_stat("enqueued_total")
             return True
         except queue.Full:
-            dropped_oldest = False
             try:
                 self._queue.get_nowait()
                 self._queue.task_done()
-                dropped_oldest = True
                 self._increment_stat("dropped_total")
             except queue.Empty:
                 pass
@@ -194,15 +216,78 @@ class WebhookDeliveryQueue:
                 continue
 
             try:
-                # PS-P0-009: Single attempt only (Retry kommt in PS-P0-012).
-                self._send_func(envelope)
-                self._increment_stat("delivered_total")
+                self._deliver_with_retry(envelope)
             except Exception as exc:  # noqa: BLE001
-                self._increment_stat("failed_total")
+                # Safety fallback: sollte durch _deliver_with_retry bereits
+                # abgefangen sein.
                 _LOGGER.warning(
-                    "Webhook delivery failed for %s: %s",
+                    "Webhook delivery failed unexpectedly for %s: %s",
                     envelope.get("type"),
                     exc,
                 )
             finally:
                 self._queue.task_done()
+
+    def _deliver_with_retry(self, envelope: Envelope) -> None:
+        """Fuehrt Zustellung mit Fehlerklassifikation und Retry durch."""
+        retries_done = 0
+
+        while True:
+            try:
+                self._send_func(envelope)
+                self._increment_stat("delivered_total")
+                return
+            except Exception as exc:  # noqa: BLE001
+                should_retry = self._is_transient_error(exc)
+                if should_retry and retries_done < self._max_retries:
+                    retries_done += 1
+                    self._increment_stat("retry_total")
+                    backoff_seconds = self._compute_retry_delay_seconds(retries_done)
+                    _LOGGER.warning(
+                        "Webhook delivery transient failure for %s: %s (retry %d/%d in %.3fs)",
+                        envelope.get("type"),
+                        exc,
+                        retries_done,
+                        self._max_retries,
+                        backoff_seconds,
+                    )
+                    time.sleep(backoff_seconds)
+                    continue
+
+                self._increment_stat("failed_total")
+                _LOGGER.warning(
+                    "Webhook delivery failed for %s after %d attempt(s): %s",
+                    envelope.get("type"),
+                    retries_done + 1,
+                    exc,
+                )
+                return
+
+    def _compute_retry_delay_seconds(self, retry_number: int) -> float:
+        """Exponential Backoff + Jitter fuer den naechsten Retry."""
+        exponential = self._retry_base_delay_seconds * (2 ** max(0, retry_number - 1))
+        capped = min(exponential, self._retry_max_delay_seconds)
+        jitter = random.uniform(0.0, self._retry_jitter_seconds)
+        return capped + jitter
+
+    @staticmethod
+    def _is_transient_error(exc: Exception) -> bool:
+        """Klassifiziert transiente Fehler (retrybar)."""
+        if isinstance(exc, urllib.error.HTTPError):
+            # 4xx -> fail-fast, 5xx -> transient
+            return 500 <= int(exc.code) <= 599
+
+        if isinstance(exc, urllib.error.URLError):
+            return True
+
+        if isinstance(exc, (TimeoutError, ConnectionError, OSError)):
+            return True
+
+        status_code = getattr(exc, "status_code", None)
+        if isinstance(status_code, int):
+            if 500 <= status_code <= 599:
+                return True
+            if 400 <= status_code <= 499:
+                return False
+
+        return False

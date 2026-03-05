@@ -126,5 +126,7 @@ class WebhookPusher:
             _LOGGER.warning(
                 "Webhook push %s failed: HTTP %d", envelope.get("type"), exc.code
             )
+            raise
         except Exception as exc:  # noqa: BLE001
             _LOGGER.warning("Webhook push %s failed: %s", envelope.get("type"), exc)
+            raise
