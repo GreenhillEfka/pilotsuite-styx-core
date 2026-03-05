@@ -120,7 +120,7 @@ class TestHttpRequest:
     @patch("copilot_core.webhook_pusher.urllib.request.urlopen")
     @patch("copilot_core.webhook_pusher.urllib.request.Request")
     def test_do_post_request_format(self, mock_request_cls, mock_urlopen, pusher):
-        """_do_post erstellt korrekte HTTP Request mit Token-Header."""
+        """_do_post erstellt korrekte HTTP Request mit Auth-Headern."""
         envelope = {"type": "mood_changed", "data": {"mood": "relax"}}
         mock_req = MagicMock()
         mock_request_cls.return_value = mock_req
@@ -136,7 +136,9 @@ class TestHttpRequest:
         assert call_kwargs[1]["method"] == "POST"
         body = json.loads(call_kwargs[1]["data"].decode("utf-8"))
         assert body["type"] == "mood_changed"
-        mock_req.add_header.assert_called_once_with("X-CoPilot-Token", "secret-token")
+        mock_req.add_header.assert_any_call("X-Auth-Token", "secret-token")
+        mock_req.add_header.assert_any_call("Authorization", "Bearer secret-token")
+        assert mock_req.add_header.call_count == 2
 
     @patch("copilot_core.webhook_pusher.urllib.request.urlopen")
     @patch("copilot_core.webhook_pusher.urllib.request.Request")

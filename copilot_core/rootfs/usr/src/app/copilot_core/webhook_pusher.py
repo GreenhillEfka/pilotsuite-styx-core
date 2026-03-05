@@ -96,7 +96,9 @@ class WebhookPusher:
             },
         )
         if self._token:
-            req.add_header("X-CoPilot-Token", self._token)
+            # Contract: send both headers for compatibility across Core/HA clients.
+            req.add_header("X-Auth-Token", self._token)
+            req.add_header("Authorization", f"Bearer {self._token}")
 
         try:
             with urllib.request.urlopen(req, timeout=10) as resp:
