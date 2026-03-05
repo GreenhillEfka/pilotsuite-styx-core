@@ -438,6 +438,29 @@ async def init_services(hass=None, config: dict = None):
     except Exception:
         _LOGGER.exception("Failed to init MediaZoneManager")
 
+    # Initialize Sonos Client + Intelligence
+    try:
+        from copilot_core.sonos.client import SonosHTTPClient
+        from copilot_core.sonos.intelligence import SonosIntelligence
+        sonos_port = config.get("sonos_port", 5005) if config else 5005
+        sonos_client = SonosHTTPClient(f"http://127.0.0.1:{sonos_port}")
+        sonos_intel = SonosIntelligence(sonos_client)
+        services["sonos_client"] = sonos_client
+        services["sonos_intelligence"] = sonos_intel
+        _LOGGER.info("Sonos Client + Intelligence initialized (port %s)", sonos_port)
+    except Exception:
+        _LOGGER.exception("Failed to init Sonos services")
+
+    # Initialize Alarm Engine (Lichtwecker)
+    try:
+        from copilot_core.alarm.engine import AlarmEngine
+        alarm_engine = AlarmEngine(sonos_client=services.get("sonos_client"))
+        alarm_engine.start()
+        services["alarm_engine"] = alarm_engine
+        _LOGGER.info("AlarmEngine initialized and scheduler started")
+    except Exception:
+        _LOGGER.exception("Failed to init AlarmEngine")
+
     # Initialize Proactive Engine with lazy loading
     try:
         if lazy_load_enabled:
@@ -581,7 +604,7 @@ def register_blueprints(app: Flask, services: dict) -> None:
     from copilot_core.api.v1.energy_forecast import energy_forecast_bp
     from copilot_core.api.v1.habitus_zones import bp as habitus_zones_bp
     from copilot_core.api.v1.zone_editor import zone_editor_bp
-    from copilot_core.api.v1.media_zones import media_zones_bp
+    from copilot_core.api.v1.media_zones import media_zones_bp, init_media_zones_api
     from copilot_core.api.v1.tag_system import bp as tag_bp
     from copilot_core.api.v1.multihome import bp as multihome_bp
     from copilot_core.api.v1.module_control import module_control_bp
@@ -608,6 +631,7 @@ def register_blueprints(app: Flask, services: dict) -> None:
     app.register_blueprint(energy_forecast_bp) # prefix: /api/v1/energy
     app.register_blueprint(habitus_zones_bp)   # prefix: /api/v1/habitus/zones
     app.register_blueprint(zone_editor_bp)     # prefix: /api/v1/zone-editor
+    init_media_zones_api(services.get("media_zone_manager"), services.get("proactive_engine"))
     app.register_blueprint(media_zones_bp)     # prefix: /api/v1/media
     app.register_blueprint(tag_bp)             # prefix: /api/v1/tag-system
     app.register_blueprint(multihome_bp)       # prefix: /api/v1/multihome
@@ -672,6 +696,26 @@ def register_blueprints(app: Flask, services: dict) -> None:
         from flask import render_template
         return render_template("styx_dashboard.html")
     
+    # Register Sonos API (native Sonos control via node-sonos-http-api)
+    from copilot_core.api.v1.sonos import sonos_bp, init_sonos_api
+    init_sonos_api(services.get("sonos_client"), services.get("sonos_intelligence"))
+    app.register_blueprint(sonos_bp)           # prefix: /api/v1/sonos
+
+    # Register Alarm API (Lichtwecker mit Sunrise/Sunset)
+    from copilot_core.api.v1.alarm import alarm_bp, init_alarm_api
+    init_alarm_api(services.get("alarm_engine"))
+    app.register_blueprint(alarm_bp)           # prefix: /api/v1/alarm
+
+    # Register Conversation History API
+    from copilot_core.api.v1.conversation_history import conversation_history_bp, init_conversation_history_api
+    init_conversation_history_api(services.get("conversation_memory"))
+    app.register_blueprint(conversation_history_bp)  # prefix: /api/v1/conversation
+
+    # Register Error Digest API
+    from copilot_core.api.v1.error_digest import error_digest_bp, init_error_digest_api
+    init_error_digest_api(llm_provider=services.get("llm_provider"))
+    app.register_blueprint(error_digest_bp)    # prefix: /api/v1/errors
+
     # Register PilotSuite Hub API (standalone, absolute prefix /api/v1/hub)
     from copilot_core.hub.api import hub_bp
     app.register_blueprint(hub_bp)

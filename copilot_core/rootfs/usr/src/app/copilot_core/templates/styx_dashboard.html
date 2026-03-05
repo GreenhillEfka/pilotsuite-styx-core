@@ -484,15 +484,41 @@
   <!-- ═══════════════ TAB: Musikwolke ═══════════════ -->
   <div class="tab-content" id="tab-media">
     <div class="musikwolke-panel">
-      <h3>&#x2601;&#xFE0F; Musikwolke</h3>
+      <h3>&#x2601;&#xFE0F; Musikwolke <span id="sonos-health-badge" style="font-size:0.7rem;padding:2px 8px;border-radius:8px;margin-left:8px;vertical-align:middle"></span></h3>
       <p style="font-size:0.82rem;color:var(--muted);margin-bottom:12px">Audio-Follows-User &mdash; Musik folgt dir automatisch durch die Zonen.</p>
       <div style="display:flex;gap:8px;flex-wrap:wrap" id="musikwolke-controls">
         <button class="btn-sm btn-primary" onclick="musikwolkeGroupAll()">Alle Zonen gruppieren</button>
         <button class="btn-sm btn-secondary" onclick="musikwolkeUngroupAll()">Alle trennen</button>
+        <button class="btn-sm btn-secondary" onclick="sonosPauseAll()">Alle pausieren</button>
+        <button class="btn-sm btn-secondary" onclick="sonosResumeAll()">Alle fortsetzen</button>
       </div>
       <div id="musikwolke-status" style="margin-top:10px;font-size:0.78rem;color:var(--muted)"></div>
     </div>
-    <div class="section-title">&#x1F50A; Zonen-Player</div>
+
+    <!-- Sonos Volume Profile -->
+    <div class="section-title">&#x23F0; Lautst&auml;rke-Profil</div>
+    <div id="sonos-volume-profiles" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px"></div>
+
+    <!-- Sonos TTS -->
+    <div class="section-title">&#x1F4E2; TTS-Durchsage</div>
+    <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+      <input type="text" id="sonos-tts-text" placeholder="Durchsage-Text..." style="flex:1;min-width:200px;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface2);color:var(--text);font-size:0.85rem"/>
+      <select id="sonos-tts-room" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface2);color:var(--text);font-size:0.85rem">
+        <option value="">Alle R&auml;ume</option>
+      </select>
+      <button class="btn-sm btn-primary" onclick="sonosSay()">Senden</button>
+    </div>
+
+    <!-- Sonos Rooms -->
+    <div class="section-title">&#x1F50A; Sonos-R&auml;ume</div>
+    <div class="media-zone-grid" id="sonos-room-cards"></div>
+
+    <!-- Sonos Presets -->
+    <div class="section-title" style="margin-top:16px">&#x2B50; Presets</div>
+    <div id="sonos-presets" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px"></div>
+
+    <!-- Zone-Player (existing) -->
+    <div class="section-title" style="margin-top:16px">&#x1F3B5; Zonen-Player</div>
     <div class="media-zone-grid" id="media-zone-cards"></div>
   </div>
 
@@ -614,6 +640,32 @@
       </p>
       <div id="automation-zones" class="auto-zone-grid"></div>
     </div>
+    <!-- Wecker / Alarm Section -->
+    <div class="card wide" style="margin-top:16px">
+      <h2><span class="icon" style="background:#3a2a1a">&#x23F0;</span> Lichtwecker</h2>
+      <p style="color:var(--muted);font-size:0.82rem;margin-bottom:12px">
+        Sunrise/Sunset Lichtwecker mit Musiksteuerung. Verlaeufe, Presets und Zeitplaene.
+      </p>
+      <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+        <button onclick="showAlarmCreate()" style="padding:6px 14px;background:var(--accent);color:#000;border:none;border-radius:6px;cursor:pointer;font-size:0.82rem">+ Neuer Wecker</button>
+        <button onclick="loadAlarmData()" style="padding:6px 14px;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:6px;cursor:pointer;font-size:0.82rem">Aktualisieren</button>
+      </div>
+      <div id="alarm-list" style="margin-bottom:16px"></div>
+      <div id="alarm-presets" style="margin-bottom:12px"></div>
+      <div id="alarm-curves" style="margin-bottom:8px"></div>
+    </div>
+
+    <!-- Alarm Create/Edit Modal -->
+    <div class="modal-overlay" id="alarm-modal" style="display:none" onclick="if(event.target===this)this.style.display='none'">
+      <div class="modal" style="max-width:580px;max-height:85vh;overflow-y:auto">
+        <div class="modal-header">
+          <h3 id="alarm-modal-title">Neuer Wecker</h3>
+          <button class="modal-close" onclick="document.getElementById('alarm-modal').style.display='none'">&times;</button>
+        </div>
+        <div id="alarm-modal-content"></div>
+      </div>
+    </div>
+
     <div class="card wide" style="margin-top:16px">
       <h2><span class="icon" style="background:#2a1a3a">&#x1F3F7;&#xFE0F;</span> Entitaeten &amp; Tags</h2>
       <p style="color:var(--muted);font-size:0.82rem;margin-bottom:12px">
@@ -707,6 +759,8 @@ function switchTab(tabName) {
   if (content) content.classList.add('active');
   if (tabName === 'neurons') { initBrain('brain-canvas-2', 'brain-tooltip-2'); drawBrain(); loadSynapses(); }
   if (tabName === 'overview') { initBrain('brain-canvas', 'brain-tooltip'); drawBrain(); }
+  if (tabName === 'media') { loadSonosData(); }
+  if (tabName === 'automation') { loadAlarmData(); }
   try { localStorage.setItem('styx-active-tab', tabName); } catch(e) {}
 }
 
@@ -1717,6 +1771,167 @@ function askStyxAboutZone(zoneId) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// Sonos Native Control
+// ═══════════════════════════════════════════════════════════════
+
+async function loadSonosData() {
+  // Health badge
+  const health = await fetchJSON("/api/v1/sonos/health");
+  const badge = document.getElementById("sonos-health-badge");
+  if (badge) {
+    if (health && health.healthy) {
+      badge.textContent = "Sonos Online";
+      badge.style.background = "var(--green)20";
+      badge.style.color = "var(--green)";
+    } else {
+      badge.textContent = "Sonos Offline";
+      badge.style.background = "var(--danger)20";
+      badge.style.color = "var(--danger)";
+    }
+  }
+
+  // Rooms -> TTS dropdown + room cards
+  const roomsResp = await fetchJSON("/api/v1/sonos/rooms");
+  const rooms = (roomsResp && roomsResp.rooms) || [];
+  const sel = document.getElementById("sonos-tts-room");
+  if (sel) {
+    sel.innerHTML = '<option value="">Alle R\u00e4ume</option>' +
+      rooms.map(r => `<option value="${r}">${r}</option>`).join("");
+  }
+
+  // Room cards with now-playing
+  const cardsEl = document.getElementById("sonos-room-cards");
+  if (cardsEl && rooms.length > 0) {
+    const cards = [];
+    for (const room of rooms) {
+      const st = await fetchJSON(`/api/v1/sonos/rooms/${encodeURIComponent(room)}/state`);
+      const state = (st && st.state) || {};
+      const pb = (state.playbackState || state.currentState || "STOPPED").toUpperCase();
+      const vol = state.volume || 0;
+      const track = state.currentTrack || {};
+      const title = track.title || track.artist || "";
+      const stClass = pb === "PLAYING" ? "playing" : pb === "PAUSED_PLAYBACK" ? "paused" : "idle";
+      const stLabel = pb === "PLAYING" ? "Spielt" : pb === "PAUSED_PLAYBACK" ? "Pause" : "Idle";
+      cards.push(`<div class="media-zone-card ${stClass}">
+        <div class="mz-header">
+          <span style="font-size:1.2rem">&#x1F50A;</span>
+          <span style="font-weight:600;font-size:0.9rem">${room}</span>
+          <span class="mz-state ${stClass}">${stLabel}</span>
+        </div>
+        ${title ? `<div style="font-size:0.78rem;margin-top:4px">&#x1F3B6; ${title}${track.artist ? ' &mdash; ' + track.artist : ''}</div>` : ''}
+        <div class="volume-row">
+          <span style="font-size:0.72rem;color:var(--muted)">&#x1F50A;</span>
+          <input type="range" min="0" max="100" value="${vol}" onchange="sonosSetVolume('${room}',this.value)" oninput="this.nextElementSibling.textContent=this.value+'%'"/>
+          <span class="vol-val">${vol}%</span>
+        </div>
+        <div class="mz-controls">
+          <button class="btn-sm btn-success" onclick="sonosPlay('${room}')">&#x25B6;</button>
+          <button class="btn-sm btn-secondary" onclick="sonosPause('${room}')">&#x23F8;</button>
+          <button class="btn-sm btn-secondary" onclick="sonosNext('${room}')">&#x23ED;</button>
+          <select style="font-size:0.75rem;padding:2px 6px;border:1px solid var(--border);border-radius:4px;background:var(--surface2);color:var(--text)" onchange="sonosPlayFavorite('${room}',this.value);this.selectedIndex=0" id="sonos-fav-${room.replace(/\\s/g,'_')}">
+            <option value="">Favoriten...</option>
+          </select>
+        </div>
+      </div>`);
+    }
+    cardsEl.innerHTML = cards.join("");
+
+    // Load favorites per room
+    for (const room of rooms) {
+      const favResp = await fetchJSON(`/api/v1/sonos/rooms/${encodeURIComponent(room)}/favorites`);
+      const favs = (favResp && favResp.favorites) || [];
+      const favSel = document.getElementById(`sonos-fav-${room.replace(/\s/g,'_')}`);
+      if (favSel && favs.length > 0) {
+        favSel.innerHTML = '<option value="">Favoriten...</option>' +
+          favs.map(f => `<option value="${f.title || f.name || f}">${f.title || f.name || f}</option>`).join("");
+      }
+    }
+  } else if (cardsEl) {
+    cardsEl.innerHTML = '<div style="color:var(--muted);font-size:0.85rem;padding:12px">Keine Sonos-R&auml;ume gefunden</div>';
+  }
+
+  // Volume profiles
+  const vpResp = await fetchJSON("/api/v1/sonos/volume-profiles");
+  const profiles = (vpResp && vpResp.profiles) || [];
+  const vpEl = document.getElementById("sonos-volume-profiles");
+  if (vpEl) {
+    vpEl.innerHTML = profiles.map(p =>
+      `<div style="padding:8px 14px;border-radius:8px;font-size:0.82rem;border:1px solid ${p.active ? 'var(--accent)' : 'var(--border)'};background:${p.active ? 'var(--accent)15' : 'var(--surface2)'};color:${p.active ? 'var(--accent)' : 'var(--muted)'}">
+        <div style="font-weight:${p.active ? '600' : '400'}">${p.label_de || p.name}</div>
+        <div style="font-size:0.72rem">${p.start_hour}:00&ndash;${p.end_hour}:00 &middot; ${p.volume_pct}% (max ${p.max_volume_pct}%)</div>
+      </div>`
+    ).join("");
+  }
+
+  // Presets
+  const prResp = await fetchJSON("/api/v1/sonos/presets");
+  const presets = (prResp && prResp.presets) || [];
+  const prEl = document.getElementById("sonos-presets");
+  if (prEl) {
+    if (presets.length > 0) {
+      prEl.innerHTML = presets.map(p =>
+        `<button class="btn-sm btn-secondary" onclick="sonosApplyPreset('${p.preset_id}')">${p.label || p.preset_id}</button>`
+      ).join("");
+    } else {
+      prEl.innerHTML = '<span style="color:var(--muted);font-size:0.82rem">Keine Presets gespeichert</span>';
+    }
+  }
+}
+
+async function sonosPlay(room) {
+  await postJSON(`/api/v1/sonos/rooms/${encodeURIComponent(room)}/play`, {});
+  showToast(`${room}: Play`);
+}
+
+async function sonosPause(room) {
+  await postJSON(`/api/v1/sonos/rooms/${encodeURIComponent(room)}/pause`, {});
+  showToast(`${room}: Pause`);
+}
+
+async function sonosNext(room) {
+  await postJSON(`/api/v1/sonos/rooms/${encodeURIComponent(room)}/next`, {});
+  showToast(`${room}: N\u00e4chster Titel`);
+}
+
+async function sonosSetVolume(room, vol) {
+  await postJSON(`/api/v1/sonos/rooms/${encodeURIComponent(room)}/volume`, {volume: parseInt(vol)});
+}
+
+async function sonosPlayFavorite(room, name) {
+  if (!name) return;
+  await postJSON(`/api/v1/sonos/rooms/${encodeURIComponent(room)}/favorite`, {name});
+  showToast(`${room}: ${name}`);
+}
+
+async function sonosSay() {
+  const text = document.getElementById("sonos-tts-text").value.trim();
+  if (!text) return showToast("Bitte Text eingeben");
+  const room = document.getElementById("sonos-tts-room").value;
+  if (room) {
+    await postJSON(`/api/v1/sonos/rooms/${encodeURIComponent(room)}/say`, {text});
+  } else {
+    await postJSON("/api/v1/sonos/sayall", {text});
+  }
+  showToast("Durchsage gesendet");
+  document.getElementById("sonos-tts-text").value = "";
+}
+
+async function sonosPauseAll() {
+  await postJSON("/api/v1/sonos/pauseall", {});
+  showToast("Alle pausiert");
+}
+
+async function sonosResumeAll() {
+  await postJSON("/api/v1/sonos/resumeall", {});
+  showToast("Alle fortgesetzt");
+}
+
+async function sonosApplyPreset(presetId) {
+  const r = await postJSON(`/api/v1/sonos/presets/${presetId}/apply`, {});
+  showToast(r.ok ? `Preset ${presetId} angewendet` : "Fehler beim Anwenden");
+}
+
+// ═══════════════════════════════════════════════════════════════
 // Musikwolke / Media Zones
 // ═══════════════════════════════════════════════════════════════
 
@@ -2105,6 +2320,206 @@ async function importExampleEntities() {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// Alarm / Lichtwecker
+// ═══════════════════════════════════════════════════════════════
+
+let alarmDashboard = null;
+
+async function loadAlarmData() {
+  const data = await fetchJSON("/api/v1/alarm/dashboard");
+  if (!data || !data.ok) return;
+  alarmDashboard = data;
+  renderAlarmList(data.alarms || []);
+  renderAlarmPresets(data.presets || []);
+  renderAlarmCurves(data.curves || []);
+}
+
+function renderAlarmList(alarms) {
+  const el = document.getElementById("alarm-list");
+  if (!el) return;
+  if (!alarms.length) { el.innerHTML = '<p style="color:var(--muted);font-size:0.82rem">Keine Wecker konfiguriert. Erstelle einen neuen oder verwende ein Preset.</p>'; return; }
+  el.innerHTML = alarms.map(a => {
+    const rt = a.runtime || {};
+    const sched = a.schedule || {};
+    const stateColors = {running:'var(--green)',snoozed:'var(--accent)',armed:'var(--blue,#60a5fa)',idle:'var(--muted)',completed:'var(--muted)',cancelled:'var(--red,#f87171)'};
+    const stateLabels = {running:'Laeuft',snoozed:'Snooze',armed:'Aktiv',idle:'Inaktiv',completed:'Fertig',cancelled:'Abgebrochen'};
+    const stateColor = stateColors[rt.state] || 'var(--muted)';
+    const stateLabel = stateLabels[rt.state] || rt.state;
+    const modeIcon = a.mode === 'wake' ? '&#x1F305;' : '&#x1F307;';
+    const modeLabel = a.mode === 'wake' ? 'Aufwachen' : 'Einschlafen';
+    const days = (sched.days || []).map(d => d.substring(0,2).toUpperCase()).join(' ');
+    const progress = rt.state === 'running' ? `<div style="margin-top:6px;background:var(--border);border-radius:4px;height:6px;overflow:hidden"><div style="width:${rt.progress_pct||0}%;height:100%;background:var(--accent);transition:width 1s"></div></div>` : '';
+    return `<div class="auto-zone-card" style="position:relative">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <h3>${modeIcon} ${a.name || 'Wecker'}</h3>
+        <span style="color:${stateColor};font-size:0.75rem;font-weight:600">${stateLabel}</span>
+      </div>
+      <div style="color:var(--muted);font-size:0.78rem;margin:4px 0">
+        ${sched.time || '--:--'} &middot; ${days} &middot; ${modeLabel}
+        ${a.zone_id ? ` &middot; Zone: ${a.zone_id}` : ''}
+      </div>
+      <div style="font-size:0.75rem;color:var(--muted)">
+        Kurve: ${a.light?.curve_type || 'quadratic'} &middot; ${a.light?.duration_minutes || 30} Min &middot; ${a.light?.cct_start_k || 1800}K&#x2192;${a.light?.cct_end_k || 5000}K
+      </div>
+      ${progress}
+      <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+        ${rt.state === 'running' || rt.state === 'snoozed' ? `
+          <button onclick="alarmSnooze('${a.alarm_id}')" style="padding:4px 10px;background:var(--accent);color:#000;border:none;border-radius:4px;cursor:pointer;font-size:0.75rem">Snooze</button>
+          <button onclick="alarmCancel('${a.alarm_id}')" style="padding:4px 10px;background:var(--red,#f87171);color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:0.75rem">Stop</button>
+        ` : `
+          <button onclick="alarmTrigger('${a.alarm_id}')" style="padding:4px 10px;background:var(--green);color:#000;border:none;border-radius:4px;cursor:pointer;font-size:0.75rem">Starten</button>
+        `}
+        <button onclick="alarmDelete('${a.alarm_id}')" style="padding:4px 10px;background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:4px;cursor:pointer;font-size:0.75rem">Loeschen</button>
+      </div>
+    </div>`;
+  }).join("");
+}
+
+function renderAlarmPresets(presets) {
+  const el = document.getElementById("alarm-presets");
+  if (!el || !presets.length) { if(el) el.innerHTML = ''; return; }
+  let html = '<div style="font-size:0.82rem;font-weight:600;margin-bottom:6px;color:var(--text)">Presets</div><div class="auto-zone-grid">';
+  html += presets.map(p => {
+    const modeIcon = p.mode === 'wake' ? '&#x1F305;' : '&#x1F307;';
+    return `<div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px;font-size:0.78rem">
+      <div style="font-weight:600">${modeIcon} ${p.label}</div>
+      <div style="color:var(--muted);margin:3px 0">${p.description || ''}</div>
+      <button onclick="alarmFromPreset('${p.preset_id}')" style="margin-top:4px;padding:3px 10px;background:var(--accent);color:#000;border:none;border-radius:4px;cursor:pointer;font-size:0.72rem">Wecker erstellen</button>
+    </div>`;
+  }).join("");
+  html += '</div>';
+  el.innerHTML = html;
+}
+
+function renderAlarmCurves(curves) {
+  const el = document.getElementById("alarm-curves");
+  if (!el || !curves.length) { if(el) el.innerHTML = ''; return; }
+  let html = '<div style="font-size:0.82rem;font-weight:600;margin-bottom:6px;color:var(--text)">Kurventypen</div><div style="display:flex;gap:8px;flex-wrap:wrap">';
+  html += curves.map(c => {
+    const pts = c.samples.map((v, i) => `${i*10},${100-v*100}`).join(' ');
+    return `<div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:8px;text-align:center;min-width:100px">
+      <svg viewBox="0 0 100 100" style="width:60px;height:40px;display:block;margin:0 auto"><polyline points="${pts}" fill="none" stroke="var(--accent)" stroke-width="2"/></svg>
+      <div style="font-size:0.72rem;font-weight:600;margin-top:2px">${c.type}</div>
+      <div style="font-size:0.65rem;color:var(--muted)">${c.description.split('—')[0].trim()}</div>
+    </div>`;
+  }).join("");
+  html += '</div>';
+  el.innerHTML = html;
+}
+
+async function alarmTrigger(alarmId) {
+  const r = await postJSON(`/api/v1/alarm/alarms/${alarmId}/trigger`, {});
+  if (r && r.ok) { showToast('Wecker gestartet'); loadAlarmData(); }
+}
+
+async function alarmSnooze(alarmId) {
+  const r = await postJSON(`/api/v1/alarm/alarms/${alarmId}/snooze`, {});
+  if (r && r.ok) showToast(`Snooze (${r.snooze_minutes} Min)`);
+  loadAlarmData();
+}
+
+async function alarmCancel(alarmId) {
+  const r = await postJSON(`/api/v1/alarm/alarms/${alarmId}/cancel`, {});
+  if (r && r.ok) showToast('Wecker gestoppt');
+  loadAlarmData();
+}
+
+async function alarmDelete(alarmId) {
+  if (!confirm('Wecker loeschen?')) return;
+  await fetch(BASE + `/api/v1/alarm/alarms/${alarmId}`, {method:'DELETE', headers: HEADERS});
+  showToast('Wecker geloescht');
+  loadAlarmData();
+}
+
+async function alarmFromPreset(presetId) {
+  const r = await postJSON(`/api/v1/alarm/presets/${presetId}/create-alarm`, {
+    schedule: {time: '07:00', days: ['mon','tue','wed','thu','fri']},
+  });
+  if (r && r.ok) { showToast('Wecker aus Preset erstellt'); loadAlarmData(); }
+}
+
+function showAlarmCreate() {
+  const modal = document.getElementById('alarm-modal');
+  const content = document.getElementById('alarm-modal-content');
+  if (!modal || !content) return;
+  document.getElementById('alarm-modal-title').textContent = 'Neuer Wecker';
+  const curves = (alarmDashboard?.curves || []).map(c => `<option value="${c.type}">${c.type} — ${c.description.split('—')[0].trim()}</option>`).join('');
+  content.innerHTML = `
+    <div style="display:flex;flex-direction:column;gap:10px;padding:8px 0">
+      <label style="font-size:0.82rem;font-weight:600">Name</label>
+      <input id="alarm-new-name" type="text" value="Wecker" style="padding:6px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:4px">
+      <label style="font-size:0.82rem;font-weight:600">Modus</label>
+      <select id="alarm-new-mode" style="padding:6px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:4px">
+        <option value="wake">Aufwachen (Sunrise)</option>
+        <option value="sleep">Einschlafen (Sunset)</option>
+      </select>
+      <label style="font-size:0.82rem;font-weight:600">Zeit</label>
+      <input id="alarm-new-time" type="time" value="07:00" style="padding:6px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:4px">
+      <label style="font-size:0.82rem;font-weight:600">Tage</label>
+      <div id="alarm-new-days" style="display:flex;gap:4px;flex-wrap:wrap">
+        ${['mon','tue','wed','thu','fri','sat','sun'].map(d => `<label style="font-size:0.78rem;display:flex;align-items:center;gap:2px"><input type="checkbox" value="${d}" ${['mon','tue','wed','thu','fri'].includes(d)?'checked':''}>${d.toUpperCase()}</label>`).join('')}
+      </div>
+      <label style="font-size:0.82rem;font-weight:600">Lichtkurve</label>
+      <select id="alarm-new-curve" style="padding:6px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:4px">${curves}</select>
+      <label style="font-size:0.82rem;font-weight:600">Dauer (Min)</label>
+      <input id="alarm-new-duration" type="number" value="30" min="5" max="120" style="padding:6px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:4px">
+      <label style="font-size:0.82rem;font-weight:600">Snooze (Min)</label>
+      <input id="alarm-new-snooze" type="number" value="9" min="1" max="30" style="padding:6px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:4px">
+      <label style="font-size:0.82rem;font-weight:600">Licht-Entitaeten (kommagetrennt)</label>
+      <input id="alarm-new-lights" type="text" placeholder="light.schlafzimmer, light.nachttisch" style="padding:6px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:4px">
+      <label style="font-size:0.82rem;font-weight:600">Sonos-Raum (optional)</label>
+      <input id="alarm-new-sonos" type="text" placeholder="Schlafzimmer" style="padding:6px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:4px">
+      <label style="font-size:0.82rem;font-weight:600">Sonos Favorit (optional)</label>
+      <input id="alarm-new-fav" type="text" placeholder="Morning Jazz" style="padding:6px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:4px">
+      <button onclick="submitAlarmCreate()" style="padding:10px;background:var(--accent);color:#000;border:none;border-radius:6px;cursor:pointer;font-weight:600;margin-top:8px">Wecker erstellen</button>
+    </div>`;
+  modal.style.display = 'flex';
+}
+
+async function submitAlarmCreate() {
+  const name = document.getElementById('alarm-new-name')?.value || 'Wecker';
+  const mode = document.getElementById('alarm-new-mode')?.value || 'wake';
+  const time = document.getElementById('alarm-new-time')?.value || '07:00';
+  const days = [...document.querySelectorAll('#alarm-new-days input:checked')].map(c => c.value);
+  const curve = document.getElementById('alarm-new-curve')?.value || 'quadratic';
+  const duration = parseInt(document.getElementById('alarm-new-duration')?.value || '30');
+  const snooze = parseInt(document.getElementById('alarm-new-snooze')?.value || '9');
+  const lights = (document.getElementById('alarm-new-lights')?.value || '').split(',').map(s=>s.trim()).filter(Boolean);
+  const sonos = document.getElementById('alarm-new-sonos')?.value || '';
+  const fav = document.getElementById('alarm-new-fav')?.value || '';
+
+  const isWake = mode === 'wake';
+  const data = {
+    name, mode,
+    schedule: {time, days, enabled: true},
+    light: {
+      entity_ids: lights,
+      curve_type: curve,
+      duration_minutes: duration,
+      brightness_start_pct: isWake ? 0 : 80,
+      brightness_end_pct: isWake ? 100 : 0,
+      cct_start_k: isWake ? 1800 : 3000,
+      cct_end_k: isWake ? 5000 : 1800,
+    },
+    music: {
+      source_type: 'favorite',
+      source_name: fav,
+      sonos_room: sonos,
+      volume_start_pct: isWake ? 5 : 30,
+      volume_end_pct: isWake ? 40 : 5,
+      enabled: !!(sonos || fav),
+    },
+    snooze_minutes: snooze,
+  };
+  const r = await postJSON('/api/v1/alarm/alarms', data);
+  if (r && r.ok) {
+    showToast('Wecker erstellt');
+    document.getElementById('alarm-modal').style.display = 'none';
+    loadAlarmData();
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
 // HomeKit per Zone
 // ═══════════════════════════════════════════════════════════════
 
@@ -2267,7 +2682,7 @@ async function loadDashboard() {
 }
 
 async function loadAll() {
-  await Promise.all([loadDashboard(), loadLLM(), loadAutomation(), loadHomeKit(), loadZoneDashboard()]);
+  await Promise.all([loadDashboard(), loadLLM(), loadAutomation(), loadAlarmData(), loadHomeKit(), loadZoneDashboard()]);
 }
 
 // Initialize

@@ -29,6 +29,14 @@ RUN apk add --no-cache \
     # Remove build deps to keep image small
     apk del gcc g++ musl-dev python3-dev linux-headers
 
+# ── Node.js + node-sonos-http-api (Sonos native control) ────────────────────
+RUN apk add --no-cache nodejs npm && \
+    mkdir -p /usr/src/sonos && \
+    cd /usr/src/sonos && \
+    npm init -y && \
+    npm install --omit=dev sonos-http-api && \
+    mkdir -p presets cache clips
+
 # ── Ollama (optional — LLM features) ────────────────────────────────────────
 # Try Alpine edge package first, fall back to binary download
 RUN echo "@edge-community https://dl-cdn.alpinelinux.org/alpine/edge/community" >> /etc/apk/repositories && \
