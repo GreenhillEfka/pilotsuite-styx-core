@@ -46,6 +46,7 @@ class WebhookDeliveryQueue:
     - retry_base_delay_seconds: Startwert fuer Exponential Backoff.
     - retry_max_delay_seconds: Obergrenze fuer Backoff.
     - retry_jitter_seconds: zusaetzlicher Zufallsanteil fuer Entkopplung.
+    - delivery_deadline_seconds: Harte Obergrenze fuer die Gesamtdauer inkl. Backoff.
     """
 
     SUPPORTED_BACKPRESSURE_POLICIES = {
