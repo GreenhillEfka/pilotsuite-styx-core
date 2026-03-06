@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pilotsuite.local/schemas/webhook-envelope.schema.json",
+  "title": "PilotSuite Webhook Envelope",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["type", "data"],
+  "properties": {
+    "type": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Event type. Canonical types are the Core↔HA contract. Legacy aliases may be accepted depending on HA runtime mode (PILOTSUITE_WEBHOOK_ALIAS_MODE).",
+      "enum": [
+        "mood",
+        "neuron",
+        "suggestion",
+        "status",
+        "mood_changed",
+        "neuron_update",
+        "suggestion_new"
+      ]
+    },
+    "data": {
+      "type": "object",
+      "description": "Type-specific event payload.",
+      "additionalProperties": true
+    }
+  }
+}
