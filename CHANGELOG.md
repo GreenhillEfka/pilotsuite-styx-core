@@ -4,6 +4,17 @@ Alle wesentlichen Änderungen am PilotSuite Styx Core werden in dieser Datei dok
 
 ## [Unreleased]
 
+## [13.5.1] - 2026-03-06
+
+### Compatibility
+- Core v13.5.1 ↔ HA v13.5.1
+- Protocol/API contract: X-Auth-Token; Webhook envelope {type,data}; event types mood|neuron|suggestion|status
+- Test gate: /config/clawd/pilotsuite_ops/AEGIS_SMOKE_GATE_DUAL_REPO.md
+- Migration required: no
+
+### Fixed
+- Core boot: Anomaly API blueprint ist jetzt **optional**. Wenn `sklearn` nicht installiert ist, startet der Core trotzdem (Anomaly-Endpoints sind dann deaktiviert).
+
 ## [13.5.0] - 2026-03-05
 
 ### Compatibility
