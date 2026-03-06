@@ -332,3 +332,104 @@ class TestWebhookDeliveryQueueRetries:
         assert delay_1 == pytest.approx(0.25)  # 0.2 + 0.05
         assert delay_2 == pytest.approx(0.45)  # 0.4 + 0.05
         assert delay_5 == pytest.approx(1.05)  # capped to 1.0 + 0.05
+
+
+class TestWebhookDeliveryQueueRetryEdgecases:
+    def test_transient_then_nontransient_final_fail_stops_without_extra_retry(self) -> None:
+        """Wenn ein transienter Fehler in einen nicht-transienten Fehler muendet,
+        darf der letzte Fehler nicht mehr geretryt werden.
+
+        PS-QA-024: non-transient final fail.
+        """
+        calls = {"count": 0}
+
+        def _send(_envelope: dict) -> None:
+            calls["count"] += 1
+            if calls["count"] == 1:
+                raise TimeoutError("timeout")
+            raise urllib.error.HTTPError(
+                url="http://example.test/hook",
+                code=404,
+                msg="not found",
+                hdrs=None,
+                fp=None,
+            )
+
+        queue = WebhookDeliveryQueue(
+            send_func=_send,
+            worker_count=1,
+            max_queue_size=4,
+            max_retries=3,
+            retry_base_delay_seconds=0.0,
+            retry_jitter_seconds=0.0,
+        )
+        queue.start()
+
+        assert queue.enqueue({"type": "status", "data": {}}) is True
+        queue.stop(drain_timeout=1.0)
+
+        stats = queue._get_stats_snapshot()
+        assert calls["count"] == 2
+        assert stats["delivered_total"] == 0
+        assert stats["failed_total"] == 1
+        assert stats["retry_total"] == 1
+
+    def test_retry_total_stops_at_max_retries_without_off_by_one(self) -> None:
+        """retry_total darf bei ausgeschöpftem Retry-Budget nicht ueberlaufen."""
+        calls = {"count": 0}
+
+        def _send(_envelope: dict) -> None:
+            calls["count"] += 1
+            raise TimeoutError("timeout")
+
+        queue = WebhookDeliveryQueue(
+            send_func=_send,
+            worker_count=1,
+            max_queue_size=4,
+            max_retries=2,
+            retry_base_delay_seconds=0.0,
+            retry_jitter_seconds=0.0,
+        )
+        queue.start()
+
+        assert queue.enqueue({"type": "neuron", "data": {}}) is True
+        queue.stop(drain_timeout=1.0)
+
+        stats = queue._get_stats_snapshot()
+        assert calls["count"] == 3  # 1 initial + 2 retries
+        assert stats["delivered_total"] == 0
+        assert stats["failed_total"] == 1
+        assert stats["retry_total"] == 2
+
+    def test_http_4xx_fails_fast_even_with_retry_budget(self) -> None:
+        """4xx-Fehler sind non-transient und duerfen nie geretryt werden."""
+        calls = {"count": 0}
+
+        def _send(_envelope: dict) -> None:
+            calls["count"] += 1
+            raise urllib.error.HTTPError(
+                url="http://example.test/hook",
+                code=429,
+                msg="too many requests",
+                hdrs=None,
+                fp=None,
+            )
+
+        queue = WebhookDeliveryQueue(
+            send_func=_send,
+            worker_count=1,
+            max_queue_size=4,
+            max_retries=5,
+            retry_base_delay_seconds=0.0,
+            retry_jitter_seconds=0.0,
+        )
+        queue.start()
+
+        assert queue.enqueue({"type": "suggestion", "data": {}}) is True
+        queue.stop(drain_timeout=1.0)
+
+        stats = queue._get_stats_snapshot()
+        assert calls["count"] == 1
+        assert stats["delivered_total"] == 0
+        assert stats["failed_total"] == 1
+        assert stats["retry_total"] == 0
