@@ -99,6 +99,30 @@ class TestQueueIntegration:
             {"type": "mood", "data": {"mood": "relax", "confidence": 0.5}}
         )
 
+    def test_payload_oversize_is_dropped_before_enqueue(self):
+        p = WebhookPusher("http://example.test/hook", "token", max_payload_bytes=64)
+        queue_mock = MagicMock()
+        queue_mock.enqueue.return_value = True
+        queue_mock.get_stats.return_value = {
+            "enqueued_total": 0,
+            "dropped_total": 0,
+            "delivered_total": 0,
+            "failed_total": 0,
+            "retry_total": 0,
+            "deadline_exceeded_total": 0,
+            "queue_size": 0,
+            "worker_count": 1,
+            "workers_alive": 1,
+            "started": 1,
+        }
+        p._delivery_queue = queue_mock
+
+        p.push_suggestion({"blob": "x" * 256})
+
+        queue_mock.enqueue.assert_not_called()
+        stats = p.get_stats()
+        assert stats["payload_oversize_total"] == 1
+
     def test_stop_forwards_to_queue(self, pusher):
         queue_mock = MagicMock()
         pusher._delivery_queue = queue_mock
@@ -137,6 +161,8 @@ class TestQueueIntegration:
         assert stats["worker_count"] == 0
         assert stats["workers_alive"] == 0
         assert stats["started"] == 0
+        assert stats["deadline_exceeded_total"] == 0
+        assert stats["payload_oversize_total"] == 0
 
 
 # ---------------------------------------------------------------------------
@@ -173,6 +199,7 @@ class TestHttpRequest:
 
         pusher._do_post(envelope)
 
+        mock_urlopen.assert_called_once_with(mock_req, timeout=pusher._request_timeout_seconds)
         mock_request_cls.assert_called_once()
         call_kwargs = mock_request_cls.call_args
         assert call_kwargs[1]["method"] == "POST"
