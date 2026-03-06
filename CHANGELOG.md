@@ -2,161 +2,69 @@
 
 Alle wesentlichen Änderungen am PilotSuite Styx Core werden in dieser Datei dokumentiert.
 
-## [v13.5.0] - 2026-03-05
+## [Unreleased]
 
-### Sonos-Modul, Alarm/Wecker, Dashboard-APIs, Error Digest
+## [13.5.0] - 2026-03-05
 
-#### Sonos-Modul (NEU)
-- **SonosHTTPClient**: Python-Wrapper fuer node-sonos-http-api (Port 5005)
-  - Play/Pause/Stop, Volume, Favorites, Playlists, Queue, Join/Leave, TTS (say/sayall), Presets, Sleep, Shuffle
-- **SonosIntelligence**: Intelligenz-Schicht ueber dem Client
-  - 4 zeit-abhaengige Lautstaerkeprofile (Morgen 20%, Tag 35%, Abend 25%, Nacht 10%)
-  - Volume-Ceiling pro Tageszeit (verhindert zu laute Musik nachts)
-  - Fallback-Playlists pro Zone (konfigurierbar)
-  - Praesenz → Auto-Play (startet Musik bei Zonenbetreten)
-  - Persistierte Presets (JSON unter /data/sonos_presets/)
-  - Zone-Registry fuer Sonos-Room → Habitus-Zone Mapping
-- **37 REST-Endpoints** unter `/api/v1/sonos/`
-- **node-sonos-http-api** im Container (Dockerfile + start_dual.sh)
-- `host_network: true` fuer UPnP/SSDP Sonos-Discovery
-- **60 Tests** (Client, Intelligence, API)
+### Compatibility
+- Core v13.5.0 ↔ HA v13.5.0
+- Protocol/API contract: X-Auth-Token; Webhook envelope {type,data}; event types mood|neuron|suggestion|status
+- Test gate: /config/clawd/pilotsuite_ops/AEGIS_SMOKE_GATE_DUAL_REPO.md
+- Migration required: no
 
-#### Alarm/Wecker-Modul (NEU)
-- **AlarmEngine**: Zeitgesteuerte Wecker mit Smart-Wakeup-Kurven
-  - 4 Wakeup-Kurven: gentle, standard, energetic, urgent (konfig. Dauer 5-30min)
-  - Snooze-Logik (max 3x, konfigurierbar)
-  - Recurring-Wecker (Wochentag-Filter, naechste Ausloesungsberechnung)
-  - Sonos-TTS-Integration (Durchsage bei Wecker-Trigger)
-- **Alarm-Presets**: Vorkonfigurierte Wecker-Templates (Werktagswecker, Wochenende, etc.)
-- **19 REST-Endpoints** unter `/api/v1/alarm/`
-- **84 Tests** (Models, Engine, Curves, API)
+### Added
+- Sonos-Modul: SonosHTTPClient + SonosIntelligence; REST unter `/api/v1/sonos/` (37 Endpoints).
+- Alarm/Wecker-Modul: AlarmEngine + Presets; REST unter `/api/v1/alarm/` (19 Endpoints).
+- Conversation History API: `/api/v1/conversation/history` (+ `/<id>`, `preferences`, `stats`).
+- Error Digest API: `/api/v1/errors/digest` (+ `categories`, `repair-suggestions`).
 
-#### Conversation History API (NEU)
-- `GET /api/v1/conversation/history` — Chat-Verlauf (limit/offset/role-Filter)
-- `GET /api/v1/conversation/history/<id>` — Einzelne Konversation
-- `GET /api/v1/conversation/preferences` — Gelernte Praeferenzen
-- `GET /api/v1/conversation/stats` — Nachrichtenstatistiken
-- Input-Validierung (int-Parameter, role-Whitelist)
-- **16 Tests**
+### Changed
+- Styx Dashboard erweitert: Musikwolke-Tab (Sonos Health/Favorites/TTS/Presets/Volume-Profile) + Automation-Tab (Wecker-Verwaltung).
 
-#### Error Digest API (NEU)
-- `GET /api/v1/errors/digest` — Aggregierte Fehler mit Kategorisierung
-  - 12 bekannte Repair-Patterns (Connectivity, Security, Config, System, DB, Automation, Device)
-  - Severity-Filter (low/medium/high/critical), Kategorie-Filter, Zeitfenster
-- `GET /api/v1/errors/digest/categories` — Verfuegbare Kategorien
-- `POST /api/v1/errors/repair-suggestions` — Pattern-Match + LLM-Fallback
-- Severity-Validierung, Type-Safety fuer LLM-Responses
-- **29 Tests**
-
-#### Styx Dashboard Erweiterung
-- **Musikwolke-Tab**: Sonos Health-Badge, Room-Uebersicht, Favorites, TTS, Presets, Volume-Profile
-- **Automation-Tab**: Wecker-Verwaltung mit Preset-Auswahl, Snooze-Timer, Recurring-Config
-
-#### Metriken
-- **596 API-Routen** (vorher 533 → +63 neue)
-- **3813 Tests** bestanden (vorher 3569 → +244 neue)
+### Ops
+- `node-sonos-http-api` im Container integriert; `host_network: true` für UPnP/SSDP Sonos-Discovery.
+- Stats: 596 API-Routen (533 → 596); 3813 Tests bestanden (3569 → 3813).
 
 ---
 
-## [v13.4.0] - 2026-03-04
+## [13.4.0] - 2026-03-04
 
-### Styx Dashboard — Enhanced Zone Detail, Scenes, Sonos Favorites, Brain Viz
+### Compatibility
+- Core v13.4.0
+- HA version: n/a (kein gekoppelt getaggtes HA Release)
+- Protocol/API contract: unverändert (X-Auth-Token; Webhook envelope {type,data}; event types mood|neuron|suggestion|status)
+- Test gate: /config/clawd/pilotsuite_ops/AEGIS_SMOKE_GATE_DUAL_REPO.md
+- Migration required: no
 
-#### Zone Detail Modal (komplett neu)
-- **Entity-Statistiken**: Aggregierte Darstellung nach Domain (light, sensor, climate, media_player, etc.) mit Icons und Counts
-- **Entity-Liste nach Rolle**: Alle Entity-IDs pro Rolle (lights, motion, media, climate, ...) mit Klick-Tags
-- **Mood-Ringe**: Conic-Gradient Visualisierung fuer Komfort, Freude, Sparsamkeit (0-100%)
-- **Szenen-Sektion**: 8 Built-in Presets (Morgen, Tag, Abend, Nacht, Film, Party, Konzentration, Abwesend) + gespeicherte Szenen mit Apply-Button
-- **Szene speichern**: Button zum Erfassen des aktuellen Zonenzustands mit Benennung
-- **Medien & Musikwolke**: Now-Playing Anzeige, Sonos Favorites/Source-Auswahl Dropdown
-- **Quick-Actions**: Licht an/aus, Komfort, Stimmung, Zone Toggle direkt im Modal
-- **Async Loading**: Zone-Detail wird asynchron per API geladen, nicht nur aus Cache
+### Added
+- Zone Detail Modal (komplett neu) mit Domain-Stats, Rollen-Liste, Mood-Ringen, Szenen, Medien & Quick-Actions.
+- Sonos Favorites Endpoints: `GET /api/v1/media/zones/<zone_id>/favorites`, `POST /api/v1/media/zones/<zone_id>/select-source`.
+- HomeKit QR-Codes im Zonen-Tab (SHA256-basierte Setup Codes).
+- Brain Visualization (Enhanced) mit 3-Layer Viz, Signal-Partikeln, Firing-Animations und Stats Panel.
 
-#### Sonos Favorites Endpoint (NEU)
-- `GET /api/v1/media/zones/<zone_id>/favorites` — Source-Liste aller Player einer Zone
-- `POST /api/v1/media/zones/<zone_id>/select-source` — Source/Favorit auf allen Playern setzen
-- `MediaZoneManager.get_zone_favorites()` — HA source_list Attribut abfragen
-- `MediaZoneManager.select_source()` — Source auf Zone-Playern setzen
+### Fixed
+- Zone Dashboard API: Zone-ID Normalisierung (mit/ohne `zone:` Prefix), Domain Aggregates + Szenen-Integration; `zone_dashboard_bp` in `core_setup.py` registriert.
 
-#### Brain Visualization (Enhanced)
-- **3-Layer Neural Viz**: Context, State, Mood Layer mit CSS-Gradient Hintergruenden
-- **Signal-Partikel**: Animierte Partikel fliessen entlang Bezier-Kurven zwischen Neuronen
-- **Firing Animations**: Pulse-Ringe und Glow-Effekte bei hochaktiven Neuronen
-- **Stats Panel**: 6 Echtzeit-Metriken (Neuronen, Aktiv, Feuern, Synapsen, Mood, Signalstaerke)
-
-#### HomeKit QR-Codes (NEU im Dashboard)
-- **Zonen-Tab**: HomeKit-Sektion mit QR-Code-Karten pro Zone
-- **Setup Codes**: Deterministische QR-Code Generierung mit SHA256
-- **Toggle**: HomeKit pro Zone ein-/ausschalten
-
-#### Zone Dashboard API Fix
-- **Zone-ID Normalisierung**: Lookup funktioniert mit/ohne `zone:` Prefix (war broken)
-- **Domain Aggregates**: Neue `domain_entities` Map im Zone-Detail-Response
-- **Szenen-Integration**: Zone-Detail liefert zugehoerige Szenen mit
-- **zone_dashboard_bp**: War NICHT in core_setup.py registriert — jetzt gefixt
-
-#### Versions-Harmonisierung
-- Alle VERSION-Dateien (3x), config.yaml, manifest.json, README, openapi.yaml auf 13.4.0 aligned
-
-#### Test Coverage
-- **3569+ Tests** passed, 0 neue Failures
+### Ops
+- Version Harmonisierung auf 13.4.0 (VERSION-Dateien, config.yaml, manifest.json, README, openapi.yaml).
+- Test Coverage: 3569+ Tests passed.
 
 ---
 
-## [v13.3.0] - 2026-03-04
+## [13.3.0] - 2026-03-04
 
-### Zone Automation — Praesenzabhaengige Licht- & Musiksteuerung, Entity-Management
+### Compatibility
+- Core v13.3.0 ↔ HA v13.3.0
+- Protocol/API contract: X-Auth-Token; Webhook envelope {type,data}; event types mood|neuron|suggestion|status
+- Test gate: /config/clawd/pilotsuite_ops/AEGIS_SMOKE_GATE_DUAL_REPO.md
+- Migration required: no
 
-#### Praesenzabhaengige Lichtsteuerung
-- **Presence Delay Slider** (0-120s): Konfigurierbare Verzoegerung vor Lichtaktivierung
-- **Absence Delay Slider** (0-600s): Konfigurierbare Verzoegerung vor Abschaltung
-- **Raumausleuchtung** (0-100%): Ziel-Helligkeit mit Indoor/Outdoor-Kompensation
-- **Min. Helligkeit** (0-100%): Mindesthelligkeit wenn Licht aktiv
-- **Hysterese/Daempfung** (0-50%): Dead-Band zur Vermeidung von Flackern bei Wolkendurchzug
-- **Innen/Aussen-Kompensation**: Automatische Anpassung basierend auf Aussen-Lux
-- **Override Switch**: Lichtautomatisierung pro Zone aktivieren/deaktivieren
+### Added
+- Zone Automation (praesenzabhaengige Licht-/Musiksteuerung) inkl. Dashboard UI (Tab 5) + REST API (16 Endpoints) unter `/api/v1/zone-automation/*`.
+- Entity-Management & Tag-System (Auto-Rollenerkennung, Auto-Tagging, Tag-/Rollen-Listen, Import-Beispielkonfiguration, globale Suche).
 
-#### Praesenzabhaengige Musikwolke
-- **Auto-Play bei Praesenz**: Musik startet automatisch bei Zonenbetreten
-- **Presence Delay Slider** (0-120s): Verzoegerung vor Musikstart
-- **Pause Delay Slider** (0-600s): Verzoegerung vor Pause bei Abwesenheit
-- **Standard-Lautstaerke** (0-100%): Konfigurierbare Startlautstaerke
-- **Follow-Modus**: Musik folgt automatisch zwischen Zonen
-- **Override Switch**: Musikautomatisierung pro Zone aktivieren/deaktivieren
-
-#### Entity-Management & Tag-System
-- **Entitaeten hinzufuegen/entfernen**: Pro Zone ueber Dashboard oder API
-- **Auto-Rollenerkennung**: Domain + Name-basierte Rollenzuweisung (lights, motion, media, etc.)
-- **Auto-Tagging**: Automatische Tags basierend auf Entity-Name (licht, praesenz, klima, etc.)
-- **13 Tag-Definitionen**: licht, praesenz, bewegung, medien, klima, sensor, rollladen, schloss, tuer, fenster, energie, sicherheit, styx
-- **11 Entity-Rollen**: lights, motion, media, climate, sensors, cover, lock, door, window, energy, other
-- **Import aus Beispielkonfiguration**: Alle 10 Zonen mit ~80 Entitaeten importierbar
-- **Suche**: Entitaeten ueber alle Zonen durchsuchbar
-
-#### Styx Dashboard — Neuer Automation-Tab (Tab 5)
-- **Zone Automation Cards**: Pro-Zone Konfiguration mit Slider-UI
-- **Toggle Switches**: Aktivieren/Deaktivieren von Licht- und Musikautomatisierung
-- **Entity-Management UI**: Entitaeten hinzufuegen/entfernen mit Rollen-Badges und Tag-Anzeige
-- **Beispiel-Import Button**: Ein-Klick Import der Beispielkonfiguration
-- **9 Tabs**: Overview, Zonen, Musikwolke, Vorschlaege, **Automation (NEU)**, KI/LLM, Module, Neuronen, Chat
-
-#### REST API — 16 neue Endpoints
-- `GET /api/v1/zone-automation/dashboard` — Automation Dashboard
-- `GET/POST /api/v1/zone-automation/zones/<id>/config` — Zone Config CRUD
-- `POST /api/v1/zone-automation/zones/<id>/override` — Toggle Override
-- `POST /api/v1/zone-automation/zones/<id>/presence` — Presence Event
-- `POST /api/v1/zone-automation/zones/<id>/brightness` — Brightness Update
-- `GET/POST/DELETE /api/v1/zone-automation/zones/<id>/entities` — Entity CRUD
-- `POST /api/v1/zone-automation/zones/<id>/entities/<eid>/tags` — Tag Update
-- `POST /api/v1/zone-automation/zones/<id>/entities/<eid>/role` — Role Update
-- `GET /api/v1/zone-automation/tags` — Tag Definitionen
-- `GET /api/v1/zone-automation/roles` — Rollen-Liste
-- `GET /api/v1/zone-automation/entities/search` — Entity-Suche
-- `POST /api/v1/zone-automation/import` — Import
-
-#### Test Coverage
-- **3720+ Tests** passed, 0 failed
-- **38 neue Tests** fuer Zone Automation Controller + API
+### Ops
+- Test Coverage: 3720+ Tests passed (38 neue Tests für Zone Automation Controller + API).
 
 ---
 
