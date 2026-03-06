@@ -11,6 +11,11 @@ PS-P0-012 Scope:
 - Retry bei transienten Fehlern (Timeout/5xx/Netzwerk)
 - kein Retry bei 4xx
 - Exponential Backoff + Jitter
+
+PS-P0-013 Scope:
+- Graceful Shutdown mit Drain-Deadline
+- oeffentliche Queue-Observability via get_stats()/stats
+- Dokumentation der Betriebsparameter
 """
 from __future__ import annotations
 
@@ -29,7 +34,19 @@ SendFunc = Callable[[Envelope], None]
 
 
 class WebhookDeliveryQueue:
-    """Feste Worker-Queue fuer nicht-blockierende Webhook-Zustellung."""
+    """Feste Worker-Queue fuer nicht-blockierende Webhook-Zustellung.
+
+    Betriebsparameter:
+    - worker_count: Anzahl gleichzeitiger Zustell-Worker.
+    - max_queue_size: Maximale Anzahl gepufferter Envelopes.
+    - backpressure_policy: Verhalten bei voller Queue
+      (drop_newest | drop_oldest | block_timeout).
+    - block_timeout_seconds: Blockierdauer fuer block_timeout.
+    - max_retries: Retry-Budget pro Envelope bei transienten Fehlern.
+    - retry_base_delay_seconds: Startwert fuer Exponential Backoff.
+    - retry_max_delay_seconds: Obergrenze fuer Backoff.
+    - retry_jitter_seconds: zusaetzlicher Zufallsanteil fuer Entkopplung.
+    """
 
     SUPPORTED_BACKPRESSURE_POLICIES = {
         "drop_oldest",
@@ -113,7 +130,14 @@ class WebhookDeliveryQueue:
             self._started = True
 
     def stop(self, drain_timeout: Optional[float] = 1.0) -> None:
-        """Stoppt Worker; versucht vorher Queue bis zum Timeout zu drainen."""
+        """Stoppt Worker; versucht vorher Queue bis zur Drain-Deadline zu drainen.
+
+        Args:
+            drain_timeout:
+                - ``None``: unbegrenzt warten, bis alle enqueueten Aufgaben fertig sind.
+                - ``0``: nicht auf Drain warten, Shutdown sofort fortsetzen.
+                - ``>0``: maximal diese Sekunden auf Queue-Drain warten.
+        """
         with self._lock:
             if not self._started:
                 return
@@ -126,11 +150,22 @@ class WebhookDeliveryQueue:
 
         while self._queue.unfinished_tasks > 0:
             if deadline is not None and time.monotonic() >= deadline:
+                _LOGGER.warning(
+                    "Delivery queue drain deadline reached with %d unfinished task(s)",
+                    self._queue.unfinished_tasks,
+                )
                 break
             time.sleep(0.01)
 
         for worker in workers:
-            worker.join(timeout=0.2)
+            if deadline is None:
+                join_timeout = 0.2
+            else:
+                join_timeout = min(0.2, max(0.0, deadline - time.monotonic()))
+            worker.join(timeout=join_timeout)
+
+            if worker.is_alive():
+                _LOGGER.warning("Delivery worker %s did not stop before deadline", worker.name)
 
         with self._lock:
             self._workers = []
@@ -159,6 +194,25 @@ class WebhookDeliveryQueue:
     def _get_stats_snapshot(self) -> dict[str, int]:
         with self._stats_lock:
             return dict(self._stats)
+
+    def get_stats(self) -> dict[str, int]:
+        """Liefert einen thread-sicheren Snapshot der Delivery-Metriken."""
+        snapshot = self._get_stats_snapshot()
+        snapshot["queue_size"] = self._queue.qsize()
+
+        with self._lock:
+            workers = list(self._workers)
+            started = self._started
+
+        snapshot["worker_count"] = len(workers)
+        snapshot["workers_alive"] = sum(1 for worker in workers if worker.is_alive())
+        snapshot["started"] = int(started)
+        return snapshot
+
+    @property
+    def stats(self) -> dict[str, int]:
+        """Kurzform fuer get_stats()."""
+        return self.get_stats()
 
     def _enqueue_drop_newest(self, envelope: Envelope) -> bool:
         try:

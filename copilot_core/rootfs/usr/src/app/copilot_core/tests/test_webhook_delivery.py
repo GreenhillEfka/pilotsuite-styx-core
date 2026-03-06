@@ -1,7 +1,8 @@
-"""Tests fuer die WebhookDeliveryQueue (PS-P0-009..PS-P0-012)."""
+"""Tests fuer die WebhookDeliveryQueue (PS-P0-009..PS-P0-013)."""
 from __future__ import annotations
 
 import threading
+import time
 import urllib.error
 from unittest.mock import MagicMock, patch
 
@@ -144,6 +145,55 @@ class TestWebhookDeliveryQueueBehavior:
         assert stats["enqueued_total"] == 1
         assert stats["dropped_total"] == 1
         assert stats["retry_total"] == 0
+
+    @patch("copilot_core.webhook_delivery.threading.Thread")
+    def test_get_stats_and_stats_property(self, mock_thread_cls) -> None:
+        mock_worker = MagicMock()
+        mock_worker.is_alive.return_value = True
+        mock_thread_cls.return_value = mock_worker
+
+        queue = WebhookDeliveryQueue(
+            send_func=lambda _envelope: None,
+            worker_count=1,
+            max_queue_size=4,
+        )
+
+        assert queue.enqueue({"type": "queued", "data": {}}) is True
+
+        stats = queue.get_stats()
+        assert stats["enqueued_total"] == 1
+        assert stats["queue_size"] == 1
+        assert stats["worker_count"] == 1
+        assert stats["workers_alive"] == 1
+        assert stats["started"] == 1
+
+        assert queue.stats["enqueued_total"] == 1
+
+    def test_stop_respects_drain_deadline(self) -> None:
+        started = threading.Event()
+        release = threading.Event()
+
+        def _slow_send(_envelope: dict) -> None:
+            started.set()
+            release.wait(timeout=1.0)
+
+        queue = WebhookDeliveryQueue(
+            send_func=_slow_send,
+            worker_count=1,
+            max_queue_size=4,
+        )
+        queue.start()
+
+        assert queue.enqueue({"type": "slow", "data": {}}) is True
+        assert started.wait(timeout=1.0)
+
+        t0 = time.monotonic()
+        queue.stop(drain_timeout=0.01)
+        elapsed = time.monotonic() - t0
+
+        release.set()
+
+        assert elapsed < 0.15
 
     def test_stats_track_delivered_and_failed(self) -> None:
         calls = {"count": 0}

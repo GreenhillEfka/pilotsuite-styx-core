@@ -107,6 +107,37 @@ class TestQueueIntegration:
 
         queue_mock.stop.assert_called_once_with(drain_timeout=2.5)
 
+    def test_get_stats_forwards_to_queue(self, pusher):
+        queue_mock = MagicMock()
+        queue_mock.get_stats.return_value = {
+            "enqueued_total": 3,
+            "dropped_total": 1,
+            "delivered_total": 2,
+            "failed_total": 0,
+            "retry_total": 1,
+            "queue_size": 0,
+            "worker_count": 2,
+            "workers_alive": 2,
+            "started": 1,
+        }
+        pusher._delivery_queue = queue_mock
+
+        assert pusher.get_stats()["enqueued_total"] == 3
+        assert pusher.stats["retry_total"] == 1
+
+    def test_get_stats_when_disabled_returns_zeroes(self, disabled_pusher):
+        stats = disabled_pusher.get_stats()
+
+        assert stats["enqueued_total"] == 0
+        assert stats["dropped_total"] == 0
+        assert stats["delivered_total"] == 0
+        assert stats["failed_total"] == 0
+        assert stats["retry_total"] == 0
+        assert stats["queue_size"] == 0
+        assert stats["worker_count"] == 0
+        assert stats["workers_alive"] == 0
+        assert stats["started"] == 0
+
 
 # ---------------------------------------------------------------------------
 # Confidence Rounding

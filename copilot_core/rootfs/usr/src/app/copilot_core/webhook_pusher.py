@@ -80,6 +80,27 @@ class WebhookPusher:
             return
         self._delivery_queue.stop(drain_timeout=drain_timeout)
 
+    def get_stats(self) -> Dict[str, int]:
+        """Liefert Delivery-Queue-Metriken fuer Observability/Monitoring."""
+        if self._delivery_queue is None:
+            return {
+                "enqueued_total": 0,
+                "dropped_total": 0,
+                "delivered_total": 0,
+                "failed_total": 0,
+                "retry_total": 0,
+                "queue_size": 0,
+                "worker_count": 0,
+                "workers_alive": 0,
+                "started": 0,
+            }
+        return self._delivery_queue.get_stats()
+
+    @property
+    def stats(self) -> Dict[str, int]:
+        """Kurzform fuer get_stats()."""
+        return self.get_stats()
+
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
