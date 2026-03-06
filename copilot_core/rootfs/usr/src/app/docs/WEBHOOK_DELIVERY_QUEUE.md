@@ -139,10 +139,23 @@ Der HA/Consumer-Vertrag sollte mindestens folgende Checks implementieren:
 
 Core-Konfigurations-Optionen (Core-Seite):
 
-- `webhook_signing_secret` (String, optional)
+- `webhook_signing_secret_primary` (String, optional)
+  - Primary key (Sender signiert immer mit **primary**).
   - leer/`None` => Signieren deaktiviert.
+- `webhook_signing_secret_secondary` (String, optional)
+  - Optionaler Secondary-Key fuer Rotation (Receiver **sollte** primary+secondary akzeptieren).
+  - Wird vom Core aktuell nicht zum Signieren verwendet, ist aber Teil des Rotations-Vertrags.
+- `webhook_signing_secret` (String, optional; **legacy alias**)
+  - Alias fuer `webhook_signing_secret_primary` (Kompatibilitaet mit alten Configs).
+  - Sollte nicht gleichzeitig mit `webhook_signing_secret_primary` gesetzt werden.
 - `webhook_signing_timestamp_ttl_seconds` (Default: `300`)
   - Wert wird aktuell auf dem Core validiert und fuer den Verifikationsvertrag mitgegeben.
+
+Rotationsempfehlung (high-level):
+
+1) New key ausrollen: setze `webhook_signing_secret_primary=<NEW>`,
+   `webhook_signing_secret_secondary=<OLD>`.
+2) Wenn alle Consumer `secondary` akzeptieren: `secondary` entfernen.
 
 ## Shutdown-Verhalten
 

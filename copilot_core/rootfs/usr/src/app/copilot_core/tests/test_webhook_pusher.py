@@ -440,6 +440,47 @@ class TestHttpRequest:
 
     @patch("copilot_core.webhook_pusher.urllib.request.urlopen")
     @patch("copilot_core.webhook_pusher.urllib.request.Request")
+    @patch("copilot_core.webhook_pusher.uuid.uuid4")
+    @patch("copilot_core.webhook_pusher.time.time")
+    def test_do_post_request_format_with_signing_key_rotation_primary_used(
+        self,
+        mock_time,
+        mock_uuid4,
+        mock_request_cls,
+        mock_urlopen,
+    ):
+        """Bei Rotation wird immer mit primary signiert (secondary ist nur Verify-Kompat)."""
+        envelope = {"type": "mood", "data": {"mood": "relax"}}
+        mock_req = MagicMock()
+        mock_request_cls.return_value = mock_req
+        mock_urlopen.return_value.__enter__ = MagicMock(return_value=MagicMock(status=200))
+        mock_urlopen.return_value.__exit__ = MagicMock(return_value=False)
+        mock_time.return_value = 1710000000.0
+        mock_uuid4.return_value.hex = "7c9f86d4e0d948f2a9d4a4b1f7b1f2f1"
+
+        p = WebhookPusher(
+            "http://example.com/hook",
+            "secret-token",
+            webhook_signing_secret_primary="primary-secret",
+            webhook_signing_secret_secondary="secondary-secret",
+        )
+
+        p._do_post(envelope)
+
+        call_kwargs = mock_request_cls.call_args[1]
+        body = call_kwargs[1]["data"]
+        timestamp = "1710000000"
+        expected_signature = WebhookPusher._build_signature(
+            "primary-secret",
+            body=body,
+            timestamp=timestamp,
+            nonce="7c9f86d4e0d948f2a9d4a4b1f7b1f2f1",
+        )
+
+        mock_req.add_header.assert_any_call("X-Webhook-Signature", expected_signature)
+
+    @patch("copilot_core.webhook_pusher.urllib.request.urlopen")
+    @patch("copilot_core.webhook_pusher.urllib.request.Request")
     def test_do_post_no_token_or_signing_headers_when_secret_missing(
         self,
         mock_request_cls,

@@ -257,7 +257,14 @@ async def init_services(hass=None, config: dict = None):
     try:
         webhook_url = config.get("webhook_url", "") if config else ""
         webhook_token = config.get("webhook_token", "") if config else ""
+        # Signing key rotation: legacy `webhook_signing_secret` stays supported.
         webhook_signing_secret = config.get("webhook_signing_secret", "") if config else ""
+        webhook_signing_secret_primary = (
+            config.get("webhook_signing_secret_primary", "") if config else ""
+        )
+        webhook_signing_secret_secondary = (
+            config.get("webhook_signing_secret_secondary", "") if config else ""
+        )
         webhook_signing_timestamp_ttl_seconds = _safe_int(
             config.get("webhook_signing_timestamp_ttl_seconds", 300) if config else 300,
             default=300,
@@ -306,6 +313,8 @@ async def init_services(hass=None, config: dict = None):
             webhook_url,
             webhook_token,
             webhook_signing_secret=webhook_signing_secret,
+            webhook_signing_secret_primary=webhook_signing_secret_primary,
+            webhook_signing_secret_secondary=webhook_signing_secret_secondary,
             webhook_signing_timestamp_ttl_seconds=webhook_signing_timestamp_ttl_seconds,
             destination_max_concurrency=destination_max_concurrency,
             destination_rate_limit_per_second=destination_rate_limit_per_second,

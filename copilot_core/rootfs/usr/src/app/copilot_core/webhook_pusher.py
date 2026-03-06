@@ -12,8 +12,6 @@ Kanonische event_type-Werte: "status", "mood", "neuron", "suggestion".
 """
 from __future__ import annotations
 
-import hashlib
-import hmac
 import json
 import logging
 import threading
@@ -28,6 +26,7 @@ from copilot_core.webhook_delivery import WebhookDeliveryQueue
 from copilot_core.webhook_destination_policy import (
     default_webhook_destination_policy_from_env,
 )
+from copilot_core.webhook_signing import build_webhook_signature
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -56,7 +55,9 @@ class WebhookPusher:
         destination_rate_limit_per_second: Optional[float] = None,
         destination_rate_limit_burst: int = 1,
         destination_policy: Optional[Callable[[str], bool]] = None,
-        webhook_signing_secret: str = "",
+        webhook_signing_secret: str = "",  # legacy alias for *_primary
+        webhook_signing_secret_primary: str = "",
+        webhook_signing_secret_secondary: str = "",
         webhook_signing_timestamp_ttl_seconds: int = 300,
     ) -> None:
         self._url = webhook_url
@@ -65,9 +66,32 @@ class WebhookPusher:
         self._enabled = bool(webhook_url)
         self._delivery_queue: Optional[WebhookDeliveryQueue] = None
         self._destination_policy = destination_policy
-        self._signing_secret = webhook_signing_secret or ""
 
-        if self._signing_secret:
+        # Signing key rotation:
+        # - legacy `webhook_signing_secret` is an alias for `*_primary`
+        # - sender always signs with primary
+        # - receiver should verify with (primary, secondary)
+        legacy_secret = webhook_signing_secret or ""
+        primary_secret = webhook_signing_secret_primary or legacy_secret
+        secondary_secret = webhook_signing_secret_secondary or ""
+
+        if (
+            webhook_signing_secret_primary
+            and legacy_secret
+            and webhook_signing_secret_primary != legacy_secret
+        ):
+            raise ValueError(
+                "webhook_signing_secret is a legacy alias; do not set it together with webhook_signing_secret_primary"
+            )
+        if secondary_secret and not primary_secret:
+            raise ValueError(
+                "webhook_signing_secret_primary must be set when webhook_signing_secret_secondary is set"
+            )
+
+        self._signing_secret_primary = primary_secret
+        self._signing_secret_secondary = secondary_secret
+
+        if self._signing_secret_primary:
             try:
                 ttl_seconds = int(webhook_signing_timestamp_ttl_seconds)
             except (TypeError, ValueError) as exc:  # noqa: BLE001
@@ -226,13 +250,14 @@ class WebhookPusher:
         timestamp: str,
         nonce: str,
     ) -> str:
-        signing_payload = f"{timestamp}.{nonce}.".encode("utf-8") + body
-        digest = hmac.new(
-            secret.encode("utf-8"),
-            signing_payload,
-            hashlib.sha256,
-        ).hexdigest()
-        return f"sha256={digest}"
+        # Legacy shim (kept for callers/tests): canonical implementation lives in
+        # `copilot_core.webhook_signing`.
+        return build_webhook_signature(
+            secret,
+            body=body,
+            timestamp=timestamp,
+            nonce=nonce,
+        )
 
     def _send_envelope(self, event_type: str, data: Dict[str, Any]) -> None:
         """Umschlag bauen und in die DeliveryQueue enqueuen."""
@@ -293,11 +318,11 @@ class WebhookPusher:
             req.add_header("X-Auth-Token", self._token)
             req.add_header("Authorization", f"Bearer {self._token}")
 
-        if self._signing_secret:
+        if self._signing_secret_primary:
             timestamp = str(int(time.time()))
             nonce = uuid.uuid4().hex
             signature = self._build_signature(
-                self._signing_secret,
+                self._signing_secret_primary,
                 body=body,
                 timestamp=timestamp,
                 nonce=nonce,
