@@ -1191,6 +1191,15 @@ paths:
                       message: Webhook envelope must include a non-empty 'type' field.
                       details:
                         required_field: type
+                missing_data:
+                  summary: Missing envelope data
+                  value:
+                    ok: false
+                    error:
+                      code: missing_data
+                      message: Webhook envelope must include a 'data' field.
+                      details:
+                        required_field: data
                 unknown_type:
                   summary: Unsupported event type
                   value:
