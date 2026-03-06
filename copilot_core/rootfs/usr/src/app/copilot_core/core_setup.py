@@ -653,7 +653,8 @@ def register_blueprints(app: Flask, services: dict) -> None:
     from copilot_core.api.v1.events_ingest import bp as events_ingest_bp
     from copilot_core.api.v1.sensors import bp as sensors_bp
     from copilot_core.api.v1.homekit import homekit_bp
-    from copilot_core.api.v1.anomaly import anomaly_bp
+    # Optional: anomaly blueprint requires optional ML deps (e.g. sklearn).
+    # Import/registration is handled below with a soft-fail to keep the Core API bootable.
     from copilot_core.api.v1.calendar import calendar_bp
     from copilot_core.api.v1.energy_forecast import energy_forecast_bp
     from copilot_core.api.v1.habitus_zones import bp as habitus_zones_bp
@@ -680,7 +681,15 @@ def register_blueprints(app: Flask, services: dict) -> None:
     app.register_blueprint(events_ingest_bp)   # no prefix, routes use /api/v1/events
     app.register_blueprint(sensors_bp)         # prefix: /api/v1/sensors
     app.register_blueprint(homekit_bp)         # prefix: /api/v1/homekit
-    app.register_blueprint(anomaly_bp, url_prefix="/api/v1")  # no prefix, routes: /anomaly/*
+    # Optional: Anomaly API (depends on optional ML deps like scikit-learn)
+    try:
+        from copilot_core.api.v1.anomaly import anomaly_bp
+        app.register_blueprint(anomaly_bp, url_prefix="/api/v1")  # no prefix, routes: /anomaly/*
+        _LOGGER.info("Anomaly blueprint enabled")
+    except ModuleNotFoundError as exc:
+        _LOGGER.warning("Anomaly blueprint disabled (missing optional dependency): %s", exc)
+    except Exception as exc:
+        _LOGGER.warning("Anomaly blueprint disabled (import/register failed): %s", exc)
     app.register_blueprint(calendar_bp)        # prefix: /api/v1/calendar
     app.register_blueprint(energy_forecast_bp) # prefix: /api/v1/energy
     app.register_blueprint(habitus_zones_bp)   # prefix: /api/v1/habitus/zones
