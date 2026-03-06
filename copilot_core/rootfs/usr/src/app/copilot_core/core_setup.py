@@ -256,7 +256,20 @@ async def init_services(hass=None, config: dict = None):
     try:
         webhook_url = config.get("webhook_url", "") if config else ""
         webhook_token = config.get("webhook_token", "") if config else ""
-        services["webhook_pusher"] = WebhookPusher(webhook_url, webhook_token)
+        webhook_signing_secret = config.get("webhook_signing_secret", "") if config else ""
+        webhook_signing_timestamp_ttl_seconds = _safe_int(
+            config.get("webhook_signing_timestamp_ttl_seconds", 300) if config else 300,
+            default=300,
+            minimum=1,
+            maximum=60 * 60 * 24,
+        )
+
+        services["webhook_pusher"] = WebhookPusher(
+            webhook_url,
+            webhook_token,
+            webhook_signing_secret=webhook_signing_secret,
+            webhook_signing_timestamp_ttl_seconds=webhook_signing_timestamp_ttl_seconds,
+        )
     except Exception:
         _LOGGER.exception("Failed to init WebhookPusher")
 

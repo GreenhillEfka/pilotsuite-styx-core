@@ -1,6 +1,6 @@
 """Webhook Pusher -- Ereignisse an den HACS-Integrations-Webhook senden.
 
-Sendet typisierte Umschlag-Payloads (Envelope) an den HA-Webhook-Endpunkt.
+Sendet typisierte Umschlag-Payloads (Envelope) an den HA-Webhooks-Endpunkt.
 Die Zustellung laeuft ueber eine zentrale DeliveryQueue mit festem Worker-Pool,
 sodass kein Thread-pro-Event Muster mehr entsteht.
 
@@ -12,12 +12,16 @@ Kanonische event_type-Werte: "status", "mood", "neuron", "suggestion".
 """
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
 import logging
 import threading
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
 from typing import Any, Callable, Dict, Optional
 
 from copilot_core.webhook_delivery import WebhookDeliveryQueue
@@ -49,6 +53,8 @@ class WebhookPusher:
         request_timeout_seconds: float = 10.0,
         delivery_deadline_seconds: Optional[float] = 60.0,
         destination_policy: Optional[Callable[[str], bool]] = None,
+        webhook_signing_secret: str = "",
+        webhook_signing_timestamp_ttl_seconds: int = 300,
     ) -> None:
         self._url = webhook_url
         self._token = webhook_token
@@ -56,6 +62,21 @@ class WebhookPusher:
         self._enabled = bool(webhook_url)
         self._delivery_queue: Optional[WebhookDeliveryQueue] = None
         self._destination_policy = destination_policy
+        self._signing_secret = webhook_signing_secret or ""
+
+        if self._signing_secret:
+            try:
+                ttl_seconds = int(webhook_signing_timestamp_ttl_seconds)
+            except (TypeError, ValueError) as exc:  # noqa: BLE001
+                raise ValueError(
+                    "webhook_signing_timestamp_ttl_seconds must be a positive int"
+                ) from exc
+            if ttl_seconds <= 0:
+                raise ValueError("webhook_signing_timestamp_ttl_seconds must be > 0")
+            self._signing_timestamp_ttl_seconds = ttl_seconds
+        else:
+            self._signing_timestamp_ttl_seconds = 0
+
         if self._enabled and self._destination_policy is None:
             # Default SSRF guardrails (configurable via env); can be overridden by callers.
             self._destination_policy = default_webhook_destination_policy_from_env()
@@ -192,6 +213,21 @@ class WebhookPusher:
 
         return parsed
 
+    @staticmethod
+    def _build_signature(
+        secret: str,
+        body: bytes,
+        timestamp: str,
+        nonce: str,
+    ) -> str:
+        signing_payload = f"{timestamp}.{nonce}.".encode("utf-8") + body
+        digest = hmac.new(
+            secret.encode("utf-8"),
+            signing_payload,
+            hashlib.sha256,
+        ).hexdigest()
+        return f"sha256={digest}"
+
     def _send_envelope(self, event_type: str, data: Dict[str, Any]) -> None:
         """Umschlag bauen und in die DeliveryQueue enqueuen."""
         if not self._enabled:
@@ -251,14 +287,31 @@ class WebhookPusher:
             req.add_header("X-Auth-Token", self._token)
             req.add_header("Authorization", f"Bearer {self._token}")
 
+        if self._signing_secret:
+            timestamp = str(int(time.time()))
+            nonce = uuid.uuid4().hex
+            signature = self._build_signature(
+                self._signing_secret,
+                body=body,
+                timestamp=timestamp,
+                nonce=nonce,
+            )
+            req.add_header("X-Webhook-Timestamp", timestamp)
+            req.add_header("X-Webhook-Nonce", nonce)
+            req.add_header("X-Webhook-Signature", signature)
+
         try:
             with urllib.request.urlopen(req, timeout=self._request_timeout_seconds) as resp:
                 _LOGGER.debug(
-                    "Webhook push %s → %d", envelope.get("type"), resp.status
+                    "Webhook push %s → %d",
+                    envelope.get("type"),
+                    resp.status,
                 )
         except urllib.error.HTTPError as exc:
             _LOGGER.warning(
-                "Webhook push %s failed: HTTP %d", envelope.get("type"), exc.code
+                "Webhook push %s failed: HTTP %d",
+                envelope.get("type"),
+                exc.code,
             )
             raise
         except Exception as exc:  # noqa: BLE001

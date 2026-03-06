@@ -91,6 +91,38 @@ Optional kann weiterhin eine eigene `destination_policy` (Callable) uebergeben w
 - `destination_policy(url) -> bool`
 - `False` fuehrt zu `ValueError` und verhindert die Initialisierung
 
+## WebhookPusher: Optionales HMAC-Signing + Replay-Schutz (PS-HEPH-024)
+
+Wenn `webhook_signing_secret` gesetzt ist, werden bei jedem ausgehenden Webhook-POST
+folgende Header gesendet:
+
+- `X-Webhook-Timestamp` (z. B. `1710000000`)
+- `X-Webhook-Nonce` (zufaelliger UUID4 Hex-String)
+- `X-Webhook-Signature` mit Schema `sha256=<hexdigest>`
+
+Signatur-Basis auf Core-Seite:
+
+- `body = json.dumps(envelope, default=str).encode("utf-8")`
+- `timestamp = str(int(time.time()))`
+- `nonce = uuid.uuid4().hex`
+- `signing_input = f"{timestamp}.{nonce}.".encode("utf-8") + body`
+- `signature = hmac.new(secret.encode("utf-8"), signing_input, hashlib.sha256).hexdigest()`
+
+Der HA/Consumer-Vertrag sollte mindestens folgende Checks implementieren:
+
+- Timestamp-Skala darf nicht älter/frueher als
+  `webhook_signing_timestamp_ttl_seconds` sein (`abs(now - int(timestamp)) <= ttl`).
+- Nonce pro Endpoint/Token gegen Replay in einem kurzzeitigen Cache nachweisen.
+- Signatur mit `hmac.compare_digest` gegen erneut berechnete Signatur validieren.
+- Bei Verifikationsfehler: `401 invalid_signature`/`unauthorized`-Response.
+
+Core-Konfigurations-Optionen (Core-Seite):
+
+- `webhook_signing_secret` (String, optional)
+  - leer/`None` => Signieren deaktiviert.
+- `webhook_signing_timestamp_ttl_seconds` (Default: `300`)
+  - Wert wird aktuell auf dem Core validiert und fuer den Verifikationsvertrag mitgegeben.
+
 ## Shutdown-Verhalten
 
 `stop(drain_timeout=...)` unterstuetzt eine definierte Drain-Deadline:
