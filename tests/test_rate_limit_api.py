@@ -171,6 +171,34 @@ def test_cleanup_rate_limit_max_age_accepts_valid_boundaries():
     assert store.cleanup_calls == [1, 604800]
 
 
+def test_cleanup_rate_limit_defaults_to_one_hour_when_payload_absent_or_empty():
+    """Validate /rate-limit/cleanup defaults max_age_seconds to one hour."""
+    client = _build_client()
+    store = _RateLimitStoreSpy(all_status={"client-a": {}, "client-b": {}})
+
+    with patch(
+        "copilot_core.api.security.get_auth_token", return_value="secret-token"
+    ), patch("copilot_core.api.v1.rate_limit.get_rate_limit_store", return_value=store):
+        response_no_payload = client.post(
+            "/rate-limit/cleanup",
+            headers={"X-Auth-Token": "secret-token"},
+        )
+        assert response_no_payload.status_code == 200
+        assert response_no_payload.get_json()["max_age_seconds"] == 3600
+        assert response_no_payload.get_json()["buckets_removed"] == len(store.all_status)
+
+        response_empty_payload = client.post(
+            "/rate-limit/cleanup",
+            json={},
+            headers={"X-Auth-Token": "secret-token"},
+        )
+        assert response_empty_payload.status_code == 200
+        assert response_empty_payload.get_json()["max_age_seconds"] == 3600
+        assert response_empty_payload.get_json()["buckets_removed"] == len(store.all_status)
+
+    assert store.cleanup_calls == [3600, 3600]
+
+
 def test_mutating_endpoints_require_admin_token_and_allow_valid_token():
     """Mutating routes must require admin auth and accept valid tokens."""
     client = _build_client()
