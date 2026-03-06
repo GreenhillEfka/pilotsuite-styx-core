@@ -549,6 +549,43 @@ class TestA09Logging:
         assert "INJECTION_ATTEMPT" in call_args
         assert "sql_injection" in call_args
 
+    @patch('logging.Logger.warning')
+    def test_log_ssrf_attempt_redacts_secrets(self, mock_warning):
+        """SSRF logs must not leak secrets embedded in URLs or payloads."""
+        if not OWASP_AVAILABLE:
+            pytest.skip("OWASP middleware not available")
+
+        logger = EnhancedSecurityLogger()
+
+        # 1) Direct URL string with secret-bearing query parameter
+        logger.log_ssrf_attempt(
+            client="ip:192.168.1.1",
+            url="https://example.com/hook?token=supersecret&ok=1",
+            reason="blocked",
+        )
+
+        assert mock_warning.called
+        call_args = mock_warning.call_args[0][0]
+        assert "supersecret" not in call_args
+        assert "REDACTED" in call_args
+
+        mock_warning.reset_mock()
+
+        # 2) Payload object containing URL + auth header
+        logger.log_ssrf_attempt(
+            client="ip:192.168.1.1",
+            url={
+                "webhook": "https://example.com/hook?token=supersecret&ok=1",
+                "Authorization": "Bearer anothersecret",
+            },
+            reason="blocked",
+        )
+
+        call_args = mock_warning.call_args[0][0]
+        assert "supersecret" not in call_args
+        assert "anothersecret" not in call_args
+        assert "REDACTED" in call_args
+
 
 # ============================================================================
 # Integration Tests
