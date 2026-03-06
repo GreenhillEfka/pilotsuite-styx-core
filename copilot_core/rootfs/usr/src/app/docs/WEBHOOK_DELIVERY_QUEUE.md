@@ -24,6 +24,19 @@ arbeitet mit einem festen Worker-Pool statt Thread-pro-Event.
   - Obere Backoff-Grenze.
 - `retry_jitter_seconds` (Default: `0.1`)
   - Zufaelliger Zusatz zur Lastverteilung bei gleichzeitigen Retries.
+- `delivery_deadline_seconds` (Default: `60.0`)
+  - Harte Obergrenze fuer die Gesamtdauer einer Zustellung inkl. Backoff (Retry-Kette).
+  - `None` deaktiviert die Deadline.
+
+## WebhookPusher: Timeout & Payload Limits
+
+Zusaetzlich erzwingt `WebhookPusher`:
+
+- `request_timeout_seconds` (Default: `10.0`)
+  - Socket-Timeout fuer `urllib.request.urlopen(...)`.
+- `max_payload_bytes` (Default: `65536`)
+  - Maximale Groesse des serialisierten Envelopes (UTF-8). Bei Ueberschreitung wird
+    das Envelope vor `enqueue()` verworfen; Zaehler: `payload_oversize_total`.
 
 ## Shutdown-Verhalten
 
@@ -45,6 +58,7 @@ Folgende Metriken stehen ueber `get_stats()` bzw. `stats` zur Verfuegung:
 - `delivered_total`
 - `failed_total`
 - `retry_total`
+- `deadline_exceeded_total`
 - `queue_size`
 - `worker_count`
 - `workers_alive`
