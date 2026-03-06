@@ -26,6 +26,13 @@ class TestWebhookDeliveryQueueConfig:
                 max_retries=-1,
             )
 
+    def test_invalid_delivery_deadline_raises(self) -> None:
+        with pytest.raises(ValueError, match="delivery_deadline_seconds must be"):
+            WebhookDeliveryQueue(
+                send_func=lambda _envelope: None,
+                delivery_deadline_seconds=-0.1,
+            )
+
 
 class TestWebhookDeliveryQueueWorkers:
     @patch("copilot_core.webhook_delivery.threading.Thread")
@@ -315,6 +322,34 @@ class TestWebhookDeliveryQueueRetries:
         assert stats["delivered_total"] == 0
         assert stats["failed_total"] == 1
         assert stats["retry_total"] == 2
+
+    def test_delivery_deadline_prevents_retry_even_with_budget(self) -> None:
+        calls = {"count": 0}
+
+        def _send(_envelope: dict) -> None:
+            calls["count"] += 1
+            raise TimeoutError("socket timeout")
+
+        queue = WebhookDeliveryQueue(
+            send_func=_send,
+            worker_count=1,
+            max_queue_size=4,
+            max_retries=5,
+            retry_base_delay_seconds=0.0,
+            retry_jitter_seconds=0.0,
+            delivery_deadline_seconds=0.0,
+        )
+        queue.start()
+
+        assert queue.enqueue({"type": "neuron", "data": {}}) is True
+        queue.stop(drain_timeout=1.0)
+
+        stats = queue._get_stats_snapshot()
+        assert calls["count"] == 1
+        assert stats["delivered_total"] == 0
+        assert stats["failed_total"] == 1
+        assert stats["retry_total"] == 0
+        assert stats["deadline_exceeded_total"] == 1
 
     def test_retry_delay_uses_exponential_backoff_plus_jitter(self) -> None:
         queue = WebhookDeliveryQueue(

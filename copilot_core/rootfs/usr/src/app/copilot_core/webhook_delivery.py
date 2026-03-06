@@ -65,6 +65,7 @@ class WebhookDeliveryQueue:
         retry_base_delay_seconds: float = 0.2,
         retry_max_delay_seconds: float = 5.0,
         retry_jitter_seconds: float = 0.1,
+        delivery_deadline_seconds: Optional[float] = 60.0,
     ) -> None:
         if worker_count <= 0:
             raise ValueError("worker_count must be > 0")
@@ -84,6 +85,8 @@ class WebhookDeliveryQueue:
             raise ValueError("retry_max_delay_seconds must be >= 0")
         if retry_jitter_seconds < 0:
             raise ValueError("retry_jitter_seconds must be >= 0")
+        if delivery_deadline_seconds is not None and delivery_deadline_seconds < 0:
+            raise ValueError("delivery_deadline_seconds must be >= 0 or None")
 
         self._send_func = send_func
         self._worker_count = worker_count
@@ -95,6 +98,7 @@ class WebhookDeliveryQueue:
         self._retry_base_delay_seconds = retry_base_delay_seconds
         self._retry_max_delay_seconds = retry_max_delay_seconds
         self._retry_jitter_seconds = retry_jitter_seconds
+        self._delivery_deadline_seconds = delivery_deadline_seconds
 
         self._workers: list[threading.Thread] = []
         self._lock = threading.Lock()
@@ -108,6 +112,7 @@ class WebhookDeliveryQueue:
             "delivered_total": 0,
             "failed_total": 0,
             "retry_total": 0,
+            "deadline_exceeded_total": 0,
         }
 
     def start(self) -> None:
@@ -283,8 +288,13 @@ class WebhookDeliveryQueue:
                 self._queue.task_done()
 
     def _deliver_with_retry(self, envelope: Envelope) -> None:
-        """Fuehrt Zustellung mit Fehlerklassifikation und Retry durch."""
+        """Fuehrt Zustellung mit Fehlerklassifikation, Retry und Deadline durch."""
         retries_done = 0
+        started_at = time.monotonic()
+
+        deadline_at: Optional[float] = None
+        if self._delivery_deadline_seconds is not None:
+            deadline_at = started_at + max(0.0, self._delivery_deadline_seconds)
 
         while True:
             try:
@@ -294,9 +304,39 @@ class WebhookDeliveryQueue:
             except Exception as exc:  # noqa: BLE001
                 should_retry = self._is_transient_error(exc)
                 if should_retry and retries_done < self._max_retries:
-                    retries_done += 1
+                    now = time.monotonic()
+                    if deadline_at is not None:
+                        remaining = deadline_at - now
+                        if remaining <= 0:
+                            self._increment_stat("failed_total")
+                            self._increment_stat("deadline_exceeded_total")
+                            _LOGGER.warning(
+                                "Webhook delivery deadline exceeded for %s after %d attempt(s): %s",
+                                envelope.get("type"),
+                                retries_done + 1,
+                                exc,
+                            )
+                            return
+
+                    next_retry_number = retries_done + 1
+                    backoff_seconds = self._compute_retry_delay_seconds(next_retry_number)
+
+                    if deadline_at is not None:
+                        now = time.monotonic()
+                        remaining = deadline_at - now
+                        if remaining <= 0 or backoff_seconds > remaining:
+                            self._increment_stat("failed_total")
+                            self._increment_stat("deadline_exceeded_total")
+                            _LOGGER.warning(
+                                "Webhook delivery deadline exceeded for %s after %d attempt(s): %s",
+                                envelope.get("type"),
+                                retries_done + 1,
+                                exc,
+                            )
+                            return
+
+                    retries_done = next_retry_number
                     self._increment_stat("retry_total")
-                    backoff_seconds = self._compute_retry_delay_seconds(retries_done)
                     _LOGGER.warning(
                         "Webhook delivery transient failure for %s: %s (retry %d/%d in %.3fs)",
                         envelope.get("type"),

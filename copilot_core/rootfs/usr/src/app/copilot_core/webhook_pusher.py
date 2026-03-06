@@ -14,8 +14,9 @@ from __future__ import annotations
 
 import json
 import logging
-import urllib.request
+import threading
 import urllib.error
+import urllib.request
 from typing import Any, Dict, Optional
 
 from copilot_core.webhook_delivery import WebhookDeliveryQueue
@@ -40,12 +41,25 @@ class WebhookPusher:
         max_queue_size: int = 256,
         backpressure_policy: str = "drop_newest",
         block_timeout_seconds: float = 0.1,
+        max_payload_bytes: Optional[int] = 65536,
+        request_timeout_seconds: float = 10.0,
+        delivery_deadline_seconds: Optional[float] = 60.0,
     ) -> None:
         self._url = webhook_url
         self._token = webhook_token
         # Pusher ist nur aktiv, wenn eine webhook_url konfiguriert wurde
         self._enabled = bool(webhook_url)
         self._delivery_queue: Optional[WebhookDeliveryQueue] = None
+
+        if max_payload_bytes is not None and max_payload_bytes <= 0:
+            raise ValueError("max_payload_bytes must be > 0 or None")
+        if request_timeout_seconds <= 0:
+            raise ValueError("request_timeout_seconds must be > 0")
+
+        self._max_payload_bytes = max_payload_bytes
+        self._request_timeout_seconds = request_timeout_seconds
+        self._payload_stats_lock = threading.Lock()
+        self._payload_oversize_total = 0
 
         if self._enabled:
             self._delivery_queue = WebhookDeliveryQueue(
@@ -54,6 +68,7 @@ class WebhookPusher:
                 max_queue_size=max_queue_size,
                 backpressure_policy=backpressure_policy,
                 block_timeout_seconds=block_timeout_seconds,
+                delivery_deadline_seconds=delivery_deadline_seconds,
             )
 
     @property
@@ -95,12 +110,18 @@ class WebhookPusher:
                 "delivered_total": 0,
                 "failed_total": 0,
                 "retry_total": 0,
+                "deadline_exceeded_total": 0,
+                "payload_oversize_total": 0,
                 "queue_size": 0,
                 "worker_count": 0,
                 "workers_alive": 0,
                 "started": 0,
             }
-        return self._delivery_queue.get_stats()
+
+        stats = self._delivery_queue.get_stats()
+        with self._payload_stats_lock:
+            stats["payload_oversize_total"] = self._payload_oversize_total
+        return stats
 
     @property
     def stats(self) -> Dict[str, int]:
@@ -122,6 +143,19 @@ class WebhookPusher:
         if queue_ref is None:
             _LOGGER.warning("Webhook pusher enabled but delivery queue missing")
             return
+
+        if self._max_payload_bytes is not None:
+            serialized = json.dumps(envelope, default=str).encode("utf-8")
+            if len(serialized) > self._max_payload_bytes:
+                with self._payload_stats_lock:
+                    self._payload_oversize_total += 1
+                _LOGGER.warning(
+                    "Webhook envelope oversized for %s (%d bytes > %d); dropped",
+                    event_type,
+                    len(serialized),
+                    self._max_payload_bytes,
+                )
+                return
 
         accepted = queue_ref.enqueue(envelope)
         if not accepted:
@@ -145,7 +179,7 @@ class WebhookPusher:
             req.add_header("Authorization", f"Bearer {self._token}")
 
         try:
-            with urllib.request.urlopen(req, timeout=10) as resp:
+            with urllib.request.urlopen(req, timeout=self._request_timeout_seconds) as resp:
                 _LOGGER.debug(
                     "Webhook push %s → %d", envelope.get("type"), resp.status
                 )
