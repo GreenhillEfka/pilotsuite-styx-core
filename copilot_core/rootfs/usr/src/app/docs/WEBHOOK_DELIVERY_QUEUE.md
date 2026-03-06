@@ -38,6 +38,22 @@ Zusaetzlich erzwingt `WebhookPusher`:
   - Maximale Groesse des serialisierten Envelopes (UTF-8). Bei Ueberschreitung wird
     das Envelope vor `enqueue()` verworfen; Zaehler: `payload_oversize_total`.
 
+## WebhookPusher: Destination Policy / URL Validation (SSRF Guardrails)
+
+Beim Initialisieren validiert `WebhookPusher` die konfigurierte `webhook_url`, um
+triviale SSRF-/Scheme-Footguns zu vermeiden (``urllib`` kann je nach Scheme auch
+lokale Ressourcen oeffnen).
+
+Enforced Guardrails:
+- nur `http`/`https` erlaubt (kein `file://`, `ftp://`, ...)
+- URL muss absolut sein und einen Host enthalten
+- keine URL-Credentials (`user:pass@host`)
+- kein URL-Fragment (`#...`)
+
+Optional kann eine `destination_policy` (Callable) uebergeben werden:
+- `destination_policy(url) -> bool`
+- `False` fuehrt zu `ValueError` und verhindert die Initialisierung
+
 ## Shutdown-Verhalten
 
 `stop(drain_timeout=...)` unterstuetzt eine definierte Drain-Deadline:

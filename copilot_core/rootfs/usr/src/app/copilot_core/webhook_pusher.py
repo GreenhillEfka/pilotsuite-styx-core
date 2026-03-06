@@ -16,8 +16,9 @@ import json
 import logging
 import threading
 import urllib.error
+import urllib.parse
 import urllib.request
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Dict, Optional
 
 from copilot_core.webhook_delivery import WebhookDeliveryQueue
 
@@ -44,12 +45,29 @@ class WebhookPusher:
         max_payload_bytes: Optional[int] = 65536,
         request_timeout_seconds: float = 10.0,
         delivery_deadline_seconds: Optional[float] = 60.0,
+        destination_policy: Optional[Callable[[str], bool]] = None,
     ) -> None:
         self._url = webhook_url
         self._token = webhook_token
         # Pusher ist nur aktiv, wenn eine webhook_url konfiguriert wurde
         self._enabled = bool(webhook_url)
         self._delivery_queue: Optional[WebhookDeliveryQueue] = None
+        self._destination_policy = destination_policy
+        self._parsed_url: Optional[urllib.parse.ParseResult] = None
+
+        if self._enabled:
+            self._parsed_url = self._validate_webhook_url(self._url)
+
+            if self._destination_policy is not None:
+                try:
+                    allowed = bool(self._destination_policy(self._url))
+                except Exception as exc:  # noqa: BLE001
+                    raise ValueError(
+                        "destination_policy raised while validating webhook_url"
+                    ) from exc
+
+                if not allowed:
+                    raise ValueError("webhook_url rejected by destination_policy")
 
         if max_payload_bytes is not None and max_payload_bytes <= 0:
             raise ValueError("max_payload_bytes must be > 0 or None")
@@ -131,6 +149,34 @@ class WebhookPusher:
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _validate_webhook_url(webhook_url: str) -> urllib.parse.ParseResult:
+        """Validiert webhook_url gegen triviale SSRF-/Scheme-Footguns.
+
+        Motivation:
+        - ``urllib.request`` kann (je nach Scheme) auch lokale Ressourcen oeffnen
+          (z. B. ``file://``). Diese Guardrails verhindern, dass ein falsch
+          konfigurierter URL zu einem lokalen File-Read oder zu einem ungewuenschten
+          Protokollwechsel fuehrt.
+
+        Diese Funktion ist absichtlich konservativ, aber kompatibel mit typischen
+        HA-Webhooks (http/https).
+        """
+        if "\r" in webhook_url or "\n" in webhook_url:
+            raise ValueError("webhook_url must not contain CR/LF")
+
+        parsed = urllib.parse.urlparse(webhook_url)
+        if parsed.scheme not in ("http", "https"):
+            raise ValueError("webhook_url must use http or https")
+        if not parsed.netloc:
+            raise ValueError("webhook_url must be absolute and include a host")
+        if parsed.username or parsed.password:
+            raise ValueError("webhook_url must not include credentials")
+        if parsed.fragment:
+            raise ValueError("webhook_url must not include a fragment")
+
+        return parsed
 
     def _send_envelope(self, event_type: str, data: Dict[str, Any]) -> None:
         """Umschlag bauen und in die DeliveryQueue enqueuen."""

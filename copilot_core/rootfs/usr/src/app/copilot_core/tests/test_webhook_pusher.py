@@ -47,6 +47,37 @@ class TestEnabled:
 
 
 # ---------------------------------------------------------------------------
+# URL Validation / Destination Policy
+# ---------------------------------------------------------------------------
+
+class TestUrlValidation:
+
+    def test_rejects_file_scheme(self):
+        with pytest.raises(ValueError):
+            WebhookPusher("file:///etc/passwd", "token")
+
+    def test_rejects_ftp_scheme(self):
+        with pytest.raises(ValueError):
+            WebhookPusher("ftp://example.test/hook", "token")
+
+    def test_rejects_credentials_in_url(self):
+        with pytest.raises(ValueError):
+            WebhookPusher("http://user:pass@example.test/hook", "token")
+
+    def test_rejects_fragment_in_url(self):
+        with pytest.raises(ValueError):
+            WebhookPusher("http://example.test/hook#frag", "token")
+
+    def test_destination_policy_can_block_url(self):
+        def deny_all(url: str) -> bool:
+            assert url.startswith("http")
+            return False
+
+        with pytest.raises(ValueError):
+            WebhookPusher("http://example.test/hook", "token", destination_policy=deny_all)
+
+
+# ---------------------------------------------------------------------------
 # Envelope Format
 # ---------------------------------------------------------------------------
 
