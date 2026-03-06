@@ -4,6 +4,19 @@ Alle wesentlichen Änderungen am PilotSuite Styx Core werden in dieser Datei dok
 
 ## [Unreleased]
 
+## [13.5.2] - 2026-03-06
+
+### Compatibility
+- Core v13.5.2 ↔ HA v13.5.2
+- Protocol/API contract: X-Auth-Token; Webhook envelope {type,data}; event types mood|neuron|suggestion|status
+- Migration required: no
+
+### Fixed
+- Version consistency: `copilot_core/manifest.json` ist jetzt mit dem Release synchron (kein 13.5.0 Drift mehr).
+
+### Ops
+- PS-REL-017: Release-Commit verweist auf Smoke/Tag Gate Report (siehe Dossier/Evidence).
+
 ## [13.5.1] - 2026-03-06
 
 ### Compatibility
