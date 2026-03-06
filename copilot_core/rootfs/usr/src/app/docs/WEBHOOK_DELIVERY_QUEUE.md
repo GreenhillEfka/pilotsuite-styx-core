@@ -28,6 +28,28 @@ arbeitet mit einem festen Worker-Pool statt Thread-pro-Event.
   - Harte Obergrenze fuer die Gesamtdauer einer Zustellung inkl. Backoff (Retry-Kette).
   - `None` deaktiviert die Deadline.
 
+## PS-HEPH-023: Per-Destination Limits (DoS/Backpressure)
+
+Die Queue kann optional pro "Destination" limitieren. Das ist abwaertskompatibel
+und in der Default-Integration (ein `WebhookPusher` pro URL) praktisch eine
+Safety-Rail fuer spaetere Multi-Destination Erweiterungen.
+
+- `destination_key_func` (Default: `None`)
+  - Callable `envelope -> str`, das die Destination bestimmt (z. B. URL, Host,
+    Tenant-Key).
+  - Falls `None`, nutzt die Queue den Key `"default"`.
+
+- `destination_max_concurrency` (Default: `None`)
+  - Wenn gesetzt: max. gleichzeitige In-Flight Zustellungen pro Destination.
+  - Implementiert via Semaphore pro Destination.
+  - Retries/Backoff halten keinen Slot dauerhaft: pro Attempt wird neu acquired.
+
+- `destination_rate_limit_per_second` (Default: `None`)
+  - Wenn gesetzt: Token-Bucket Rate pro Destination.
+
+- `destination_rate_limit_burst` (Default: `1`)
+  - Burst-Kapazitaet fuer den Token-Bucket.
+
 ## WebhookPusher: Timeout & Payload Limits
 
 Zusaetzlich erzwingt `WebhookPusher`:
@@ -84,15 +106,21 @@ best effort fortgesetzt.
 
 Folgende Metriken stehen ueber `get_stats()` bzw. `stats` zur Verfuegung:
 
+Queue-Core:
 - `enqueued_total`
 - `dropped_total`
 - `delivered_total`
 - `failed_total`
 - `retry_total`
 - `deadline_exceeded_total`
-- `payload_oversize_total` (WebhookPusher)
-- `destination_rejected_total` (WebhookPusher)
+- `rate_limited_total` (PS-HEPH-023)
+- `destination_concurrency_wait_total` (PS-HEPH-023)
+- `destination_concurrency_timeout_total` (PS-HEPH-023)
 - `queue_size`
 - `worker_count`
 - `workers_alive`
 - `started` (0/1)
+
+Pusher-zusaetzlich:
+- `payload_oversize_total`
+- `destination_rejected_total`

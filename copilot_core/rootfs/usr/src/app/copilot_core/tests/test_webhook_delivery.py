@@ -1,4 +1,4 @@
-"""Tests fuer die WebhookDeliveryQueue (PS-P0-009..PS-P0-013)."""
+"""Tests fuer die WebhookDeliveryQueue (PS-P0-009..PS-P0-013 + PS-HEPH-023)."""
 from __future__ import annotations
 
 import threading
@@ -31,6 +31,27 @@ class TestWebhookDeliveryQueueConfig:
             WebhookDeliveryQueue(
                 send_func=lambda _envelope: None,
                 delivery_deadline_seconds=-0.1,
+            )
+
+    def test_invalid_destination_max_concurrency_raises(self) -> None:
+        with pytest.raises(ValueError, match="destination_max_concurrency must be"):
+            WebhookDeliveryQueue(
+                send_func=lambda _envelope: None,
+                destination_max_concurrency=0,
+            )
+
+    def test_invalid_destination_rate_limit_raises(self) -> None:
+        with pytest.raises(ValueError, match="destination_rate_limit_per_second"):
+            WebhookDeliveryQueue(
+                send_func=lambda _envelope: None,
+                destination_rate_limit_per_second=0,
+            )
+
+        with pytest.raises(ValueError, match="destination_rate_limit_burst"):
+            WebhookDeliveryQueue(
+                send_func=lambda _envelope: None,
+                destination_rate_limit_per_second=1.0,
+                destination_rate_limit_burst=0,
             )
 
 
@@ -468,3 +489,83 @@ class TestWebhookDeliveryQueueRetryEdgecases:
         assert stats["delivered_total"] == 0
         assert stats["failed_total"] == 1
         assert stats["retry_total"] == 0
+
+
+class TestWebhookDeliveryQueuePerDestinationLimits:
+    def test_destination_max_concurrency_limits_parallel_delivery(self) -> None:
+        """PS-HEPH-023: pro destination max 1 inflight."""
+        started = threading.Event()
+        release = threading.Event()
+        lock = threading.Lock()
+        inflight = {"current": 0, "max": 0}
+
+        def _send(_envelope: dict) -> None:
+            with lock:
+                inflight["current"] += 1
+                inflight["max"] = max(inflight["max"], inflight["current"])
+                started.set()
+            release.wait(timeout=1.0)
+            with lock:
+                inflight["current"] -= 1
+
+        queue = WebhookDeliveryQueue(
+            send_func=_send,
+            worker_count=2,
+            max_queue_size=8,
+            destination_key_func=lambda _env: "dest-1",
+            destination_max_concurrency=1,
+        )
+        queue.start()
+
+        assert queue.enqueue({"type": "a", "data": {}}) is True
+        assert queue.enqueue({"type": "b", "data": {}}) is True
+
+        assert started.wait(timeout=1.0)
+        # Allow the second worker to contend.
+        time.sleep(0.05)
+        with lock:
+            assert inflight["max"] == 1
+
+        release.set()
+        queue.stop(drain_timeout=1.0)
+
+        stats = queue._get_stats_snapshot()
+        assert stats["delivered_total"] == 2
+        assert stats["destination_concurrency_wait_total"] >= 1
+
+    def test_destination_rate_limit_delays_second_send_and_counts_metric(self) -> None:
+        """PS-HEPH-023: token bucket erzwingt Delay und zaehlt rate_limited_total."""
+        sent_at: list[float] = []
+        fake_clock = {"now": 0.0}
+
+        def _send(_envelope: dict) -> None:
+            sent_at.append(fake_clock["now"])
+
+        def _monotonic() -> float:
+            return fake_clock["now"]
+
+        def _sleep(dt: float) -> None:
+            fake_clock["now"] += dt
+
+        with patch("copilot_core.webhook_delivery.time.monotonic", side_effect=_monotonic):
+            with patch("copilot_core.webhook_delivery.time.sleep", side_effect=_sleep):
+                queue = WebhookDeliveryQueue(
+                    send_func=_send,
+                    worker_count=1,
+                    max_queue_size=8,
+                    destination_key_func=lambda _env: "dest-1",
+                    destination_rate_limit_per_second=10.0,
+                    destination_rate_limit_burst=1,
+                )
+                queue.start()
+
+                assert queue.enqueue({"type": "a", "data": {}}) is True
+                assert queue.enqueue({"type": "b", "data": {}}) is True
+
+                queue.stop(drain_timeout=1.0)
+
+                assert len(sent_at) == 2
+                assert sent_at[1] > sent_at[0]
+
+                stats = queue._get_stats_snapshot()
+                assert stats["rate_limited_total"] >= 1

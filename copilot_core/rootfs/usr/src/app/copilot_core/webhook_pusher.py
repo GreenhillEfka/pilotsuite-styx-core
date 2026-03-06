@@ -136,6 +136,11 @@ class WebhookPusher:
                 "failed_total": 0,
                 "retry_total": 0,
                 "deadline_exceeded_total": 0,
+                # PS-HEPH-023
+                "rate_limited_total": 0,
+                "destination_concurrency_wait_total": 0,
+                "destination_concurrency_timeout_total": 0,
+                # Pusher-only
                 "payload_oversize_total": 0,
                 "destination_rejected_total": 0,
                 "queue_size": 0,

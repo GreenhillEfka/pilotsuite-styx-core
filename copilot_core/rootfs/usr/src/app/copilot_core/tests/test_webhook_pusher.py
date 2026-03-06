@@ -183,6 +183,9 @@ class TestQueueIntegration:
             "failed_total": 0,
             "retry_total": 0,
             "deadline_exceeded_total": 0,
+            "rate_limited_total": 0,
+            "destination_concurrency_wait_total": 0,
+            "destination_concurrency_timeout_total": 0,
             "queue_size": 0,
             "worker_count": 1,
             "workers_alive": 1,
@@ -212,6 +215,10 @@ class TestQueueIntegration:
             "delivered_total": 2,
             "failed_total": 0,
             "retry_total": 1,
+            "deadline_exceeded_total": 0,
+            "rate_limited_total": 0,
+            "destination_concurrency_wait_total": 0,
+            "destination_concurrency_timeout_total": 0,
             "queue_size": 0,
             "worker_count": 2,
             "workers_alive": 2,
@@ -235,6 +242,9 @@ class TestQueueIntegration:
         assert stats["workers_alive"] == 0
         assert stats["started"] == 0
         assert stats["deadline_exceeded_total"] == 0
+        assert stats["rate_limited_total"] == 0
+        assert stats["destination_concurrency_wait_total"] == 0
+        assert stats["destination_concurrency_timeout_total"] == 0
         assert stats["payload_oversize_total"] == 0
         assert stats["destination_rejected_total"] == 0
 

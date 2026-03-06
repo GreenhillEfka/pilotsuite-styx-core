@@ -16,6 +16,16 @@ PS-P0-013 Scope:
 - Graceful Shutdown mit Drain-Deadline
 - oeffentliche Queue-Observability via get_stats()/stats
 - Dokumentation der Betriebsparameter
+
+PS-HEPH-023 Scope:
+- Per-destination Concurrency Limit (DoS/Backpressure Guardrail)
+- Per-destination Rate Limit (Token Bucket)
+- globale Metriken fuer Wait/Timeout/RateLimit
+
+Hinweis:
+Die Default-Konfiguration arbeitet "single destination" (ein WebhookPusher
+instanziert genau eine Queue pro URL). Die per-destination Optionen sind
+abwaertskompatibel und erlauben spaeteres Multi-Destination Routing.
 """
 from __future__ import annotations
 
@@ -31,6 +41,43 @@ _LOGGER = logging.getLogger(__name__)
 
 Envelope = Dict[str, Any]
 SendFunc = Callable[[Envelope], None]
+DestinationKeyFunc = Callable[[Envelope], str]
+
+
+class _TokenBucket:
+    """Minimaler Token-Bucket (stdlib only) fuer per-destination Rate Limiting."""
+
+    def __init__(self, rate_per_second: float, burst: int, now: float) -> None:
+        self.rate_per_second = float(rate_per_second)
+        self.capacity = float(burst)
+        self.tokens = float(burst)
+        self.updated_at = float(now)
+
+    def _refill(self, now: float) -> None:
+        if now <= self.updated_at:
+            return
+        elapsed = now - self.updated_at
+        self.tokens = min(self.capacity, self.tokens + elapsed * self.rate_per_second)
+        self.updated_at = now
+
+    def required_wait_seconds(self, amount: float, now: float) -> float:
+        """Berechnet, wie lange bis amount Tokens verfuegbar sind.
+
+        Returns:
+            0.0 wenn sofort konsumierbar, sonst wait seconds > 0.
+        """
+        self._refill(now)
+        if self.tokens >= amount:
+            return 0.0
+        missing = amount - self.tokens
+        if self.rate_per_second <= 0:
+            return float("inf")
+        return missing / self.rate_per_second
+
+    def consume(self, amount: float) -> None:
+        if self.tokens < amount:
+            raise RuntimeError("token bucket underflow")
+        self.tokens -= amount
 
 
 class WebhookDeliveryQueue:
@@ -47,6 +94,12 @@ class WebhookDeliveryQueue:
     - retry_max_delay_seconds: Obergrenze fuer Backoff.
     - retry_jitter_seconds: zusaetzlicher Zufallsanteil fuer Entkopplung.
     - delivery_deadline_seconds: Harte Obergrenze fuer die Gesamtdauer inkl. Backoff.
+
+    PS-HEPH-023:
+    - destination_key_func: Envelope -> Destination Key (z.B. URL oder Host).
+    - destination_max_concurrency: Parallelitaet pro Destination (Semaphore).
+    - destination_rate_limit_per_second: Rate pro Destination (Token Bucket).
+    - destination_rate_limit_burst: Burst-Kapazitaet pro Destination.
     """
 
     SUPPORTED_BACKPRESSURE_POLICIES = {
@@ -67,6 +120,10 @@ class WebhookDeliveryQueue:
         retry_max_delay_seconds: float = 5.0,
         retry_jitter_seconds: float = 0.1,
         delivery_deadline_seconds: Optional[float] = 60.0,
+        destination_key_func: Optional[DestinationKeyFunc] = None,
+        destination_max_concurrency: Optional[int] = None,
+        destination_rate_limit_per_second: Optional[float] = None,
+        destination_rate_limit_burst: int = 1,
     ) -> None:
         if worker_count <= 0:
             raise ValueError("worker_count must be > 0")
@@ -89,6 +146,15 @@ class WebhookDeliveryQueue:
         if delivery_deadline_seconds is not None and delivery_deadline_seconds < 0:
             raise ValueError("delivery_deadline_seconds must be >= 0 or None")
 
+        if destination_max_concurrency is not None and destination_max_concurrency <= 0:
+            raise ValueError("destination_max_concurrency must be > 0 or None")
+
+        if destination_rate_limit_per_second is not None:
+            if destination_rate_limit_per_second <= 0:
+                raise ValueError("destination_rate_limit_per_second must be > 0 or None")
+            if destination_rate_limit_burst <= 0:
+                raise ValueError("destination_rate_limit_burst must be > 0")
+
         self._send_func = send_func
         self._worker_count = worker_count
         self._queue: queue.Queue[Envelope] = queue.Queue(maxsize=max_queue_size)
@@ -100,6 +166,15 @@ class WebhookDeliveryQueue:
         self._retry_max_delay_seconds = retry_max_delay_seconds
         self._retry_jitter_seconds = retry_jitter_seconds
         self._delivery_deadline_seconds = delivery_deadline_seconds
+
+        self._destination_key_func = destination_key_func
+        self._destination_max_concurrency = destination_max_concurrency
+        self._destination_rate_limit_per_second = destination_rate_limit_per_second
+        self._destination_rate_limit_burst = destination_rate_limit_burst
+
+        self._destination_lock = threading.Lock()
+        self._destination_semaphores: dict[str, threading.Semaphore] = {}
+        self._destination_buckets: dict[str, _TokenBucket] = {}
 
         self._workers: list[threading.Thread] = []
         self._lock = threading.Lock()
@@ -114,6 +189,10 @@ class WebhookDeliveryQueue:
             "failed_total": 0,
             "retry_total": 0,
             "deadline_exceeded_total": 0,
+            # PS-HEPH-023
+            "rate_limited_total": 0,
+            "destination_concurrency_wait_total": 0,
+            "destination_concurrency_timeout_total": 0,
         }
 
     def start(self) -> None:
@@ -288,6 +367,103 @@ class WebhookDeliveryQueue:
             finally:
                 self._queue.task_done()
 
+    def _get_destination_key(self, envelope: Envelope) -> str:
+        if self._destination_key_func is None:
+            return "default"
+        try:
+            key = self._destination_key_func(envelope)
+        except Exception:  # noqa: BLE001
+            return "default"
+        if not key:
+            return "default"
+        return str(key)
+
+    def _get_destination_semaphore(self, destination_key: str) -> threading.Semaphore:
+        if self._destination_max_concurrency is None:
+            raise RuntimeError("destination semaphore requested but destination_max_concurrency is None")
+
+        with self._destination_lock:
+            sem = self._destination_semaphores.get(destination_key)
+            if sem is None:
+                sem = threading.Semaphore(self._destination_max_concurrency)
+                self._destination_semaphores[destination_key] = sem
+            return sem
+
+    def _acquire_destination_slot(
+        self,
+        destination_key: str,
+        deadline_at: Optional[float],
+    ) -> Optional[threading.Semaphore]:
+        if self._destination_max_concurrency is None:
+            return None
+
+        sem = self._get_destination_semaphore(destination_key)
+
+        # Fast path: no wait.
+        if sem.acquire(blocking=False):
+            return sem
+
+        self._increment_stat("destination_concurrency_wait_total")
+
+        if deadline_at is None:
+            sem.acquire()
+            return sem
+
+        remaining = max(0.0, deadline_at - time.monotonic())
+        if remaining <= 0.0:
+            self._increment_stat("destination_concurrency_timeout_total")
+            return None
+
+        acquired = sem.acquire(timeout=remaining)
+        if not acquired:
+            self._increment_stat("destination_concurrency_timeout_total")
+            return None
+
+        return sem
+
+    def _get_destination_bucket(self, destination_key: str, now: float) -> _TokenBucket:
+        if self._destination_rate_limit_per_second is None:
+            raise RuntimeError("token bucket requested but destination_rate_limit_per_second is None")
+
+        with self._destination_lock:
+            bucket = self._destination_buckets.get(destination_key)
+            if bucket is None:
+                bucket = _TokenBucket(
+                    rate_per_second=self._destination_rate_limit_per_second,
+                    burst=self._destination_rate_limit_burst,
+                    now=now,
+                )
+                self._destination_buckets[destination_key] = bucket
+            return bucket
+
+    def _wait_for_rate_limit(
+        self,
+        destination_key: str,
+        deadline_at: Optional[float],
+    ) -> bool:
+        if self._destination_rate_limit_per_second is None:
+            return True
+
+        # Token bucket: wait until 1 token is available.
+        while True:
+            now = time.monotonic()
+            bucket = self._get_destination_bucket(destination_key, now)
+
+            with self._destination_lock:
+                wait_seconds = bucket.required_wait_seconds(1.0, now)
+                if wait_seconds <= 0.0:
+                    bucket.consume(1.0)
+                    return True
+
+            if deadline_at is not None:
+                remaining = deadline_at - now
+                if remaining <= 0.0 or wait_seconds > remaining:
+                    return False
+
+            self._increment_stat("rate_limited_total")
+            # Cap sleep to stay responsive to stop/drain deadlines.
+            time.sleep(min(wait_seconds, 0.5))
+
     def _deliver_with_retry(self, envelope: Envelope) -> None:
         """Fuehrt Zustellung mit Fehlerklassifikation, Retry und Deadline durch."""
         retries_done = 0
@@ -297,8 +473,33 @@ class WebhookDeliveryQueue:
         if self._delivery_deadline_seconds is not None:
             deadline_at = started_at + max(0.0, self._delivery_deadline_seconds)
 
+        destination_key = self._get_destination_key(envelope)
+
         while True:
+            # Per-destination concurrency/rate-limit werden pro Attempt angewendet,
+            # damit Retries/Backoff nicht dauerhaft Concurrency-Slots blockieren.
+            sem: Optional[threading.Semaphore] = None
             try:
+                sem = self._acquire_destination_slot(destination_key, deadline_at)
+                if self._destination_max_concurrency is not None and sem is None:
+                    self._increment_stat("failed_total")
+                    self._increment_stat("deadline_exceeded_total")
+                    _LOGGER.warning(
+                        "Webhook delivery deadline exceeded while waiting for destination slot (%s)",
+                        destination_key,
+                    )
+                    return
+
+                allowed = self._wait_for_rate_limit(destination_key, deadline_at)
+                if not allowed:
+                    self._increment_stat("failed_total")
+                    self._increment_stat("deadline_exceeded_total")
+                    _LOGGER.warning(
+                        "Webhook delivery deadline exceeded while rate-limited (%s)",
+                        destination_key,
+                    )
+                    return
+
                 self._send_func(envelope)
                 self._increment_stat("delivered_total")
                 return
@@ -357,6 +558,9 @@ class WebhookDeliveryQueue:
                     exc,
                 )
                 return
+            finally:
+                if sem is not None:
+                    sem.release()
 
     def _compute_retry_delay_seconds(self, retry_number: int) -> float:
         """Exponential Backoff + Jitter fuer den naechsten Retry."""
