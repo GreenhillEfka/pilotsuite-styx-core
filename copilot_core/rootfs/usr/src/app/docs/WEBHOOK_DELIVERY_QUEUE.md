@@ -50,6 +50,27 @@ Safety-Rail fuer spaetere Multi-Destination Erweiterungen.
 - `destination_rate_limit_burst` (Default: `1`)
   - Burst-Kapazitaet fuer den Token-Bucket.
 
+## WebhookPusher: Per-Destination Caps (Config/Env Wiring)
+
+Die Caps werden jetzt direkt ueber `WebhookPusher` konfigurierbar und an die
+`WebhookDeliveryQueue` weitergereicht. Prioritaet: **Config-Werte** (z. B.
+`configuration.yaml`/Dict) haben Vorrang, **Env** dient als Fallback.
+
+Config Keys (alle optional; Werte > 0 erforderlich, ansonsten Validation-Error der Queue):
+- `webhook_destination_max_concurrency` (int|None)
+- `webhook_destination_rate_limit_per_second` (float|None)
+- `webhook_destination_rate_limit_burst` (int, default: `1`)
+
+Env-Fallbacks:
+- `PILOTSUITE_WEBHOOK_DESTINATION_MAX_CONCURRENCY`
+- `PILOTSUITE_WEBHOOK_DESTINATION_RATE_LIMIT_PER_SECOND`
+- `PILOTSUITE_WEBHOOK_DESTINATION_RATE_LIMIT_BURST`
+
+Verhalten:
+- `max_concurrency=None`/nicht gesetzt → kein per-destination Semaphore.
+- `rate_limit_per_second=None`/nicht gesetzt → kein Token-Bucket; Burst wird ignoriert.
+- `rate_limit_burst` muss > 0 sein, wenn Rate-Limit gesetzt ist (default 1).
+
 ## WebhookPusher: Timeout & Payload Limits
 
 Zusaetzlich erzwingt `WebhookPusher`:

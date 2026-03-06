@@ -12,6 +12,7 @@ Features:
 """
 
 import logging
+import os
 import time
 from typing import Dict, Any, Optional
 from flask import Flask
@@ -264,11 +265,51 @@ async def init_services(hass=None, config: dict = None):
             maximum=60 * 60 * 24,
         )
 
+        # Optional per-destination caps (config first, then env fallback)
+        dest_max_conc_value = config.get("webhook_destination_max_concurrency") if config else None
+        if dest_max_conc_value is None:
+            dest_max_conc_value = os.environ.get("PILOTSUITE_WEBHOOK_DESTINATION_MAX_CONCURRENCY")
+        destination_max_concurrency: Optional[int] = None
+        if dest_max_conc_value is not None:
+            destination_max_concurrency = _safe_int(
+                dest_max_conc_value,
+                default=1,
+                minimum=1,
+                maximum=1000,
+            )
+
+        dest_rate_per_sec_value = config.get("webhook_destination_rate_limit_per_second") if config else None
+        if dest_rate_per_sec_value is None:
+            dest_rate_per_sec_value = os.environ.get("PILOTSUITE_WEBHOOK_DESTINATION_RATE_LIMIT_PER_SECOND")
+        destination_rate_limit_per_second: Optional[float] = None
+        if dest_rate_per_sec_value is not None:
+            destination_rate_limit_per_second = _safe_float(
+                dest_rate_per_sec_value,
+                default=1.0,
+                minimum=0.01,
+                maximum=1e6,
+            )
+
+        dest_rate_burst_value = config.get("webhook_destination_rate_limit_burst") if config else None
+        if dest_rate_burst_value is None:
+            dest_rate_burst_value = os.environ.get("PILOTSUITE_WEBHOOK_DESTINATION_RATE_LIMIT_BURST")
+        destination_rate_limit_burst = 1
+        if dest_rate_burst_value is not None:
+            destination_rate_limit_burst = _safe_int(
+                dest_rate_burst_value,
+                default=1,
+                minimum=1,
+                maximum=100000,
+            )
+
         services["webhook_pusher"] = WebhookPusher(
             webhook_url,
             webhook_token,
             webhook_signing_secret=webhook_signing_secret,
             webhook_signing_timestamp_ttl_seconds=webhook_signing_timestamp_ttl_seconds,
+            destination_max_concurrency=destination_max_concurrency,
+            destination_rate_limit_per_second=destination_rate_limit_per_second,
+            destination_rate_limit_burst=destination_rate_limit_burst,
         )
     except Exception:
         _LOGGER.exception("Failed to init WebhookPusher")

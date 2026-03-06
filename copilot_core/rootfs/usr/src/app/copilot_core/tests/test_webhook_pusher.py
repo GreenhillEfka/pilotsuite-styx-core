@@ -176,6 +176,95 @@ class TestQueueIntegration:
             {"type": "mood", "data": {"mood": "relax", "confidence": 0.5}}
         )
 
+    def test_destination_caps_forwarded_to_queue(self, monkeypatch):
+        captured = {}
+
+        class _DummyQueue:
+            def __init__(self, **kwargs):
+                captured.update(kwargs)
+
+            def enqueue(self, _envelope):
+                return True
+
+            def get_stats(self):  # pragma: no cover - not used in this test
+                return {
+                    "enqueued_total": 0,
+                    "dropped_total": 0,
+                    "delivered_total": 0,
+                    "failed_total": 0,
+                    "retry_total": 0,
+                    "deadline_exceeded_total": 0,
+                    "rate_limited_total": 0,
+                    "destination_concurrency_wait_total": 0,
+                    "destination_concurrency_timeout_total": 0,
+                    "queue_size": 0,
+                    "worker_count": 1,
+                    "workers_alive": 1,
+                    "started": 1,
+                }
+
+            def stop(self, drain_timeout=None):  # pragma: no cover - not used
+                return None
+
+        monkeypatch.setattr("copilot_core.webhook_pusher.WebhookDeliveryQueue", _DummyQueue)
+
+        p = WebhookPusher(
+            "http://example.test/hook",
+            "token",
+            destination_max_concurrency=3,
+            destination_rate_limit_per_second=5.0,
+            destination_rate_limit_burst=10,
+            destination_policy=lambda _url: True,
+        )
+
+        assert p.enabled is True
+        assert captured["destination_max_concurrency"] == 3
+        assert captured["destination_rate_limit_per_second"] == 5.0
+        assert captured["destination_rate_limit_burst"] == 10
+
+    def test_destination_caps_default_values_when_unspecified(self, monkeypatch):
+        captured = {}
+
+        class _DummyQueue:
+            def __init__(self, **kwargs):
+                captured.update(kwargs)
+
+            def enqueue(self, _envelope):
+                return True
+
+            def get_stats(self):  # pragma: no cover - not used in this test
+                return {
+                    "enqueued_total": 0,
+                    "dropped_total": 0,
+                    "delivered_total": 0,
+                    "failed_total": 0,
+                    "retry_total": 0,
+                    "deadline_exceeded_total": 0,
+                    "rate_limited_total": 0,
+                    "destination_concurrency_wait_total": 0,
+                    "destination_concurrency_timeout_total": 0,
+                    "queue_size": 0,
+                    "worker_count": 1,
+                    "workers_alive": 1,
+                    "started": 1,
+                }
+
+            def stop(self, drain_timeout=None):  # pragma: no cover - not used
+                return None
+
+        monkeypatch.setattr("copilot_core.webhook_pusher.WebhookDeliveryQueue", _DummyQueue)
+
+        p = WebhookPusher(
+            "http://example.test/hook",
+            "token",
+            destination_policy=lambda _url: True,
+        )
+
+        assert p.enabled is True
+        assert captured["destination_max_concurrency"] is None
+        assert captured["destination_rate_limit_per_second"] is None
+        assert captured["destination_rate_limit_burst"] == 1
+
     def test_payload_oversize_is_dropped_before_enqueue(self):
         p = WebhookPusher("http://example.test/hook", "token", max_payload_bytes=64)
         queue_mock = MagicMock()

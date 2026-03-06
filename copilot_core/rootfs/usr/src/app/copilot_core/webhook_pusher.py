@@ -52,6 +52,9 @@ class WebhookPusher:
         max_payload_bytes: Optional[int] = 65536,
         request_timeout_seconds: float = 10.0,
         delivery_deadline_seconds: Optional[float] = 60.0,
+        destination_max_concurrency: Optional[int] = None,
+        destination_rate_limit_per_second: Optional[float] = None,
+        destination_rate_limit_burst: int = 1,
         destination_policy: Optional[Callable[[str], bool]] = None,
         webhook_signing_secret: str = "",
         webhook_signing_timestamp_ttl_seconds: int = 300,
@@ -115,6 +118,9 @@ class WebhookPusher:
                 backpressure_policy=backpressure_policy,
                 block_timeout_seconds=block_timeout_seconds,
                 delivery_deadline_seconds=delivery_deadline_seconds,
+                destination_max_concurrency=destination_max_concurrency,
+                destination_rate_limit_per_second=destination_rate_limit_per_second,
+                destination_rate_limit_burst=destination_rate_limit_burst,
             )
 
     @property
