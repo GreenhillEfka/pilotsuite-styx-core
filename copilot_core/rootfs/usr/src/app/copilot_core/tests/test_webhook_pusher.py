@@ -57,7 +57,7 @@ class TestEnvelopeFormat:
         pusher._send_envelope = MagicMock()
         pusher.push_mood_changed("relax", 0.85)
         pusher._send_envelope.assert_called_once_with(
-            "mood_changed",
+            "mood",
             {"mood": "relax", "confidence": 0.85},
         )
 
@@ -66,7 +66,7 @@ class TestEnvelopeFormat:
         pusher._send_envelope = MagicMock()
         result = {"dominant_mood": "focus", "confidence": 0.72}
         pusher.push_neuron_update(result)
-        pusher._send_envelope.assert_called_once_with("neuron_update", result)
+        pusher._send_envelope.assert_called_once_with("neuron", result)
 
     def test_suggestion_envelope(self, pusher):
         """push_suggestion sendet korrektes Envelope-Format."""
@@ -96,7 +96,7 @@ class TestQueueIntegration:
         pusher.push_mood_changed("relax", 0.5)
 
         queue_mock.enqueue.assert_called_once_with(
-            {"type": "mood_changed", "data": {"mood": "relax", "confidence": 0.5}}
+            {"type": "mood", "data": {"mood": "relax", "confidence": 0.5}}
         )
 
     def test_stop_forwards_to_queue(self, pusher):
@@ -163,7 +163,7 @@ class TestHttpRequest:
     @patch("copilot_core.webhook_pusher.urllib.request.Request")
     def test_do_post_request_format(self, mock_request_cls, mock_urlopen, pusher):
         """_do_post erstellt korrekte HTTP Request mit Auth-Headern."""
-        envelope = {"type": "mood_changed", "data": {"mood": "relax"}}
+        envelope = {"type": "mood", "data": {"mood": "relax"}}
         mock_req = MagicMock()
         mock_request_cls.return_value = mock_req
         mock_urlopen.return_value.__enter__ = MagicMock(
@@ -177,7 +177,7 @@ class TestHttpRequest:
         call_kwargs = mock_request_cls.call_args
         assert call_kwargs[1]["method"] == "POST"
         body = json.loads(call_kwargs[1]["data"].decode("utf-8"))
-        assert body["type"] == "mood_changed"
+        assert body["type"] == "mood"
         mock_req.add_header.assert_any_call("X-Auth-Token", "secret-token")
         mock_req.add_header.assert_any_call("Authorization", "Bearer secret-token")
         assert mock_req.add_header.call_count == 2

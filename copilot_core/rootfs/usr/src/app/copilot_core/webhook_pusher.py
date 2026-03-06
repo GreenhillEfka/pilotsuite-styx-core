@@ -8,7 +8,7 @@ Envelope-Format (muss mit dem webhook.py-Handler uebereinstimmen)::
 
     {"type": "<event_type>", "data": {<payload>}}
 
-Beispiele fuer event_type: "mood_changed", "neuron_update", "suggestion".
+Kanonische event_type-Werte: "status", "mood", "neuron", "suggestion".
 """
 from __future__ import annotations
 
@@ -21,6 +21,12 @@ from typing import Any, Dict, Optional
 from copilot_core.webhook_delivery import WebhookDeliveryQueue
 
 _LOGGER = logging.getLogger(__name__)
+
+
+EVENT_TYPE_STATUS = "status"
+EVENT_TYPE_MOOD = "mood"
+EVENT_TYPE_NEURON = "neuron"
+EVENT_TYPE_SUGGESTION = "suggestion"
 
 
 class WebhookPusher:
@@ -60,19 +66,19 @@ class WebhookPusher:
     # ------------------------------------------------------------------
 
     def push_mood_changed(self, mood: str, confidence: float) -> None:
-        """Sendet ein mood_changed-Ereignis mit Stimmung und Konfidenz."""
-        self._send_envelope("mood_changed", {
+        """Sendet ein mood-Ereignis mit Stimmung und Konfidenz."""
+        self._send_envelope(EVENT_TYPE_MOOD, {
             "mood": mood,
             "confidence": round(confidence, 4),
         })
 
     def push_neuron_update(self, result_dict: Dict[str, Any]) -> None:
-        """Sendet ein neuron_update-Ereignis mit der Pipeline-Ergebniszusammenfassung."""
-        self._send_envelope("neuron_update", result_dict)
+        """Sendet ein neuron-Ereignis mit der Pipeline-Ergebniszusammenfassung."""
+        self._send_envelope(EVENT_TYPE_NEURON, result_dict)
 
     def push_suggestion(self, suggestion: Dict[str, Any]) -> None:
         """Sendet ein suggestion-Ereignis (Vorschlag) an die HACS-Integration."""
-        self._send_envelope("suggestion", suggestion)
+        self._send_envelope(EVENT_TYPE_SUGGESTION, suggestion)
 
     def stop(self, drain_timeout: Optional[float] = 1.0) -> None:
         """Stoppt die DeliveryQueue kontrolliert (idempotent)."""

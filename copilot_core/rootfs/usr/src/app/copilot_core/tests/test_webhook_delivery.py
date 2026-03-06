@@ -67,7 +67,7 @@ class TestWebhookDeliveryQueueBehavior:
         )
         queue.start()
 
-        envelope = {"type": "mood_changed", "data": {"mood": "focus"}}
+        envelope = {"type": "mood", "data": {"mood": "focus"}}
         assert queue.enqueue(envelope) is True
 
         assert delivered_event.wait(timeout=1.0), "delivery worker did not process envelope"
@@ -249,7 +249,7 @@ class TestWebhookDeliveryQueueRetries:
         )
         queue.start()
 
-        assert queue.enqueue({"type": "mood_changed", "data": {}}) is True
+        assert queue.enqueue({"type": "mood", "data": {}}) is True
         queue.stop(drain_timeout=1.0)
 
         stats = queue._get_stats_snapshot()
@@ -307,7 +307,7 @@ class TestWebhookDeliveryQueueRetries:
         )
         queue.start()
 
-        assert queue.enqueue({"type": "neuron_update", "data": {}}) is True
+        assert queue.enqueue({"type": "neuron", "data": {}}) is True
         queue.stop(drain_timeout=1.0)
 
         stats = queue._get_stats_snapshot()
