@@ -1272,8 +1272,8 @@ components:
     apiKeyAuth:
       type: apiKey
       in: header
-      name: X-API-Key
-      description: API Key authentication for most endpoints
+      name: X-Auth-Token
+      description: API key authentication for most endpoints (`X-API-Key` supported as legacy alias during transition)
     bearerAuth:
       type: http
       scheme: bearer
