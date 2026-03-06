@@ -50,7 +50,22 @@ Enforced Guardrails:
 - keine URL-Credentials (`user:pass@host`)
 - kein URL-Fragment (`#...`)
 
-Optional kann eine `destination_policy` (Callable) uebergeben werden:
+Default wird eine `destination_policy` genutzt (aus Env gebaut), die typische
+SSRF-Ziele blockt: private/loopback/link-local IP-Ranges sowie bekannte
+Cloud-Metadata-Endpoints.
+
+Env-Toggles (Default: konservativ):
+- `PILOTSUITE_WEBHOOK_DESTINATION_ALLOW_PRIVATE=true`
+  - erlaubt loopback + private Ranges (RFC1918/ULA/CGNAT). Link-local/Metadata
+    bleiben weiterhin geblockt.
+- `PILOTSUITE_WEBHOOK_DESTINATION_RESOLVE_DNS=true`
+  - optionaler DNS-Resolve-Check fuer Hostnames; fail-closed bei Resolve-Fehler.
+- `PILOTSUITE_WEBHOOK_DESTINATION_ALLOWED_DOMAINS=...` (CSV; unterstützt `*.example.com`)
+  - wenn gesetzt, muss der Host matchen.
+- `PILOTSUITE_WEBHOOK_DESTINATION_BLOCKED_DOMAINS=...` (CSV; unterstützt `*.example.com`)
+  - wenn gesetzt, wird bei Match geblockt.
+
+Optional kann weiterhin eine eigene `destination_policy` (Callable) uebergeben werden:
 - `destination_policy(url) -> bool`
 - `False` fuehrt zu `ValueError` und verhindert die Initialisierung
 
@@ -75,6 +90,8 @@ Folgende Metriken stehen ueber `get_stats()` bzw. `stats` zur Verfuegung:
 - `failed_total`
 - `retry_total`
 - `deadline_exceeded_total`
+- `payload_oversize_total` (WebhookPusher)
+- `destination_rejected_total` (WebhookPusher)
 - `queue_size`
 - `worker_count`
 - `workers_alive`

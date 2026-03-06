@@ -21,6 +21,9 @@ import urllib.request
 from typing import Any, Callable, Dict, Optional
 
 from copilot_core.webhook_delivery import WebhookDeliveryQueue
+from copilot_core.webhook_destination_policy import (
+    default_webhook_destination_policy_from_env,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -53,6 +56,9 @@ class WebhookPusher:
         self._enabled = bool(webhook_url)
         self._delivery_queue: Optional[WebhookDeliveryQueue] = None
         self._destination_policy = destination_policy
+        if self._enabled and self._destination_policy is None:
+            # Default SSRF guardrails (configurable via env); can be overridden by callers.
+            self._destination_policy = default_webhook_destination_policy_from_env()
         self._parsed_url: Optional[urllib.parse.ParseResult] = None
 
         if self._enabled:
@@ -76,8 +82,9 @@ class WebhookPusher:
 
         self._max_payload_bytes = max_payload_bytes
         self._request_timeout_seconds = request_timeout_seconds
-        self._payload_stats_lock = threading.Lock()
+        self._stats_lock = threading.Lock()
         self._payload_oversize_total = 0
+        self._destination_rejected_total = 0
 
         if self._enabled:
             self._delivery_queue = WebhookDeliveryQueue(
@@ -130,6 +137,7 @@ class WebhookPusher:
                 "retry_total": 0,
                 "deadline_exceeded_total": 0,
                 "payload_oversize_total": 0,
+                "destination_rejected_total": 0,
                 "queue_size": 0,
                 "worker_count": 0,
                 "workers_alive": 0,
@@ -137,8 +145,9 @@ class WebhookPusher:
             }
 
         stats = self._delivery_queue.get_stats()
-        with self._payload_stats_lock:
+        with self._stats_lock:
             stats["payload_oversize_total"] = self._payload_oversize_total
+            stats["destination_rejected_total"] = self._destination_rejected_total
         return stats
 
     @property
@@ -193,7 +202,7 @@ class WebhookPusher:
         if self._max_payload_bytes is not None:
             serialized = json.dumps(envelope, default=str).encode("utf-8")
             if len(serialized) > self._max_payload_bytes:
-                with self._payload_stats_lock:
+                with self._stats_lock:
                     self._payload_oversize_total += 1
                 _LOGGER.warning(
                     "Webhook envelope oversized for %s (%d bytes > %d); dropped",
@@ -209,6 +218,19 @@ class WebhookPusher:
 
     def _do_post(self, envelope: Dict[str, Any]) -> None:
         """Fuehrt den eigentlichen HTTP-POST aus (laeuft im Delivery-Worker)."""
+        if self._destination_policy is not None:
+            try:
+                allowed = bool(self._destination_policy(self._url))
+            except Exception as exc:  # noqa: BLE001
+                with self._stats_lock:
+                    self._destination_rejected_total += 1
+                raise ValueError("webhook_url rejected by destination_policy") from exc
+
+            if not allowed:
+                with self._stats_lock:
+                    self._destination_rejected_total += 1
+                raise ValueError("webhook_url rejected by destination_policy")
+
         body = json.dumps(envelope, default=str).encode("utf-8")
 
         req = urllib.request.Request(

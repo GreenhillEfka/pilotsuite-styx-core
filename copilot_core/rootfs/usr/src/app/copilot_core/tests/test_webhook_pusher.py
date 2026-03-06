@@ -5,6 +5,7 @@ Testet Envelope-Format, disabled/enabled Zustand, Queue-Integration und HTTP-For
 from __future__ import annotations
 
 import json
+import socket
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -18,7 +19,13 @@ from copilot_core.webhook_pusher import WebhookPusher
 
 @pytest.fixture
 def pusher() -> WebhookPusher:
-    return WebhookPusher("http://localhost:8123/api/webhook/test", "secret-token")
+    # Most unit tests use localhost URLs; the default destination policy blocks
+    # private/loopback targets unless explicitly allowed.
+    return WebhookPusher(
+        "http://localhost:8123/api/webhook/test",
+        "secret-token",
+        destination_policy=lambda _url: True,
+    )
 
 
 @pytest.fixture
@@ -75,6 +82,41 @@ class TestUrlValidation:
 
         with pytest.raises(ValueError):
             WebhookPusher("http://example.test/hook", "token", destination_policy=deny_all)
+
+    def test_default_destination_policy_blocks_loopback_by_default(self):
+        with pytest.raises(ValueError):
+            WebhookPusher("http://127.0.0.1:8123/api/webhook/test", "token")
+
+    def test_default_destination_policy_allows_loopback_when_allow_private_env_set(
+        self, monkeypatch
+    ):
+        monkeypatch.setenv("PILOTSUITE_WEBHOOK_DESTINATION_ALLOW_PRIVATE", "true")
+        p = WebhookPusher("http://127.0.0.1:8123/api/webhook/test", "token")
+        assert p.enabled is True
+
+    def test_default_destination_policy_dns_resolve_blocks_private_when_enabled(
+        self, monkeypatch
+    ):
+        monkeypatch.setenv("PILOTSUITE_WEBHOOK_DESTINATION_RESOLVE_DNS", "true")
+
+        with patch("copilot_core.webhook_destination_policy.socket.getaddrinfo") as mock_getaddr:
+            mock_getaddr.return_value = [
+                (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("192.168.1.10", 0)),
+            ]
+            with pytest.raises(ValueError):
+                WebhookPusher("http://example.test/hook", "token")
+
+    def test_default_destination_policy_dns_resolve_allows_public_when_enabled(
+        self, monkeypatch
+    ):
+        monkeypatch.setenv("PILOTSUITE_WEBHOOK_DESTINATION_RESOLVE_DNS", "true")
+
+        with patch("copilot_core.webhook_destination_policy.socket.getaddrinfo") as mock_getaddr:
+            mock_getaddr.return_value = [
+                (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 0)),
+            ]
+            p = WebhookPusher("http://example.test/hook", "token")
+            assert p.enabled is True
 
 
 # ---------------------------------------------------------------------------
@@ -194,6 +236,7 @@ class TestQueueIntegration:
         assert stats["started"] == 0
         assert stats["deadline_exceeded_total"] == 0
         assert stats["payload_oversize_total"] == 0
+        assert stats["destination_rejected_total"] == 0
 
 
 # ---------------------------------------------------------------------------
