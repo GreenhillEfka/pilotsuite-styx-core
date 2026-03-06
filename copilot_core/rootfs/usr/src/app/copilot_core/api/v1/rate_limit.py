@@ -41,6 +41,10 @@ _MIN_BURST_SIZE = 1
 _MAX_BURST_SIZE = 10_000
 _MAX_CLIENT_ID_LEN = 256
 
+# Validation boundaries for cleanup age in seconds.
+_MIN_CLEANUP_AGE_SECONDS = 1
+_MAX_CLEANUP_AGE_SECONDS = 604_800
+
 
 def _normalize_client_id(client_id: Any) -> str:
     """Normalize and validate a client identifier."""
@@ -341,7 +345,12 @@ def cleanup_stale_rate_limits():
         if not isinstance(data, dict):
             raise ValueError("Request body must be a JSON object")
 
-        max_age = int(data.get("max_age_seconds", 3600))
+        max_age = _validate_int_bound(
+            "max_age_seconds",
+            data.get("max_age_seconds", 3600),
+            _MIN_CLEANUP_AGE_SECONDS,
+            _MAX_CLEANUP_AGE_SECONDS,
+        )
 
         store = get_rate_limit_store()
         removed = store.cleanup_stale(max_age_seconds=max_age)

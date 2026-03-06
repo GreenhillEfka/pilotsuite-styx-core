@@ -118,6 +118,59 @@ def test_update_rate_limit_config_bounds_validation_returns_400():
             assert response.get_json()["error"] == "invalid_config"
 
 
+def test_cleanup_rate_limit_max_age_validation_returns_400():
+    """Validate max_age_seconds for cleanup: type and bounds checks."""
+    client = _build_client()
+    store = _RateLimitStoreSpy()
+
+    payloads = [
+        {"max_age_seconds": "invalid"},
+        {"max_age_seconds": 0},
+        {"max_age_seconds": -1},
+        {"max_age_seconds": 604_801},
+    ]
+
+    with patch(
+        "copilot_core.api.security.get_auth_token", return_value="secret-token"
+    ), patch("copilot_core.api.v1.rate_limit.get_rate_limit_store", return_value=store):
+        for payload in payloads:
+            response = client.post(
+                "/rate-limit/cleanup",
+                json=payload,
+                headers={"X-Auth-Token": "secret-token"},
+            )
+            assert response.status_code == 400
+            assert response.get_json()["error"] == "invalid_config"
+
+
+def test_cleanup_rate_limit_max_age_accepts_valid_boundaries():
+    """Validate cleanup accepts configured boundary values."""
+    client = _build_client()
+    store = _RateLimitStoreSpy(all_status={"client-a": {}, "client-b": {}, "client-c": {}})
+
+    with patch(
+        "copilot_core.api.security.get_auth_token", return_value="secret-token"
+    ), patch("copilot_core.api.v1.rate_limit.get_rate_limit_store", return_value=store):
+        response = client.post(
+            "/rate-limit/cleanup",
+            json={"max_age_seconds": 1},
+            headers={"X-Auth-Token": "secret-token"},
+        )
+        assert response.status_code == 200
+        assert response.get_json()["max_age_seconds"] == 1
+        assert response.get_json()["buckets_removed"] == len(store.all_status)
+
+        response = client.post(
+            "/rate-limit/cleanup",
+            json={"max_age_seconds": 604_800},
+            headers={"X-Auth-Token": "secret-token"},
+        )
+        assert response.status_code == 200
+        assert response.get_json()["max_age_seconds"] == 604800
+
+    assert store.cleanup_calls == [1, 604800]
+
+
 def test_mutating_endpoints_require_admin_token_and_allow_valid_token():
     """Mutating routes must require admin auth and accept valid tokens."""
     client = _build_client()
