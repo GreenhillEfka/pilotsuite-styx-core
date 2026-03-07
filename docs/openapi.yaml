@@ -1319,6 +1319,45 @@ paths:
                         mode: sunset
                         sunset_at: "2026-03-07T00:00:00Z"
                         sunset_at_raw: "2026-03-07T00:00:00Z"
+
+                missing_signature_headers:
+                  summary: Signing enabled but headers missing
+                  value:
+                    ok: false
+                    error:
+                      code: missing_signature_headers
+                      message: Webhook signature verification is enabled but required signature headers are missing or invalid.
+                      details:
+                        missing:
+                        - X-Signature
+                        - X-Signature-Timestamp
+                        - X-Signature-Nonce
+                stale_timestamp:
+                  summary: Signature timestamp outside TTL
+                  value:
+                    ok: false
+                    error:
+                      code: stale_timestamp
+                      message: Webhook signature timestamp is outside the allowed TTL window.
+                      details:
+                        ttl_seconds: 300
+                        timestamp: 1710000000
+                replay_detected:
+                  summary: Nonce replay detected
+                  value:
+                    ok: false
+                    error:
+                      code: replay_detected
+                      message: Webhook nonce replay detected within the allowed TTL window.
+                      details:
+                        ttl_seconds: 300
+                invalid_signature:
+                  summary: Signature verification failed
+                  value:
+                    ok: false
+                    error:
+                      code: invalid_signature
+                      message: Webhook signature verification failed.
       security:
       - apiKeyAuth: []
 components:
@@ -1527,6 +1566,10 @@ components:
           - legacy_type_unsupported
           - invalid_token
           - legacy_header_sunset
+          - missing_signature_headers
+          - stale_timestamp
+          - replay_detected
+          - invalid_signature
         message:
           type: string
         details:

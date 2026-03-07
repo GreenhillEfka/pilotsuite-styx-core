@@ -1,7 +1,18 @@
 # PilotSuite Styx Core API - Vollständige Referenz
 
-**Version:** 12.6.0  
-**Stand:** 2026-03-01  
+> ⚠️ **Legacy Documentation**
+>
+> This document describes historical API surfaces and is kept for reference only.
+> For the current v13.5.3 API contract, see:
+> - **OpenAPI Spec:** `/api/v1/docs/openapi.yaml`
+> - **Swagger UI:** `/docs`
+> - **Quick Reference:** `API_REFERENCE.md` (active endpoints only)
+>
+> Endpoints documented here may be deprecated, moved, or removed.
+> Use the Migration Quick Reference below to find active paths.
+
+**Version:** 12.6.0 (historical reference)  
+**Stand:** 2026-03-07  
 **Basis-URL:** `http://localhost:8909`
 
 ---
