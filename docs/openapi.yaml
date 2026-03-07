@@ -70,6 +70,512 @@ security:
 - apiKeyAuth: []
 - bearerAuth: []
 paths:
+  /api/v1/kg/edges:
+    get:
+      summary: KG: kg list edges
+      description: Auto-generated stub for `kg_list_edges` (GET /api/v1/kg/edges).
+      operationId: kg_list_edges
+      tags:
+      - Knowledge Graph
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - apiKeyAuth: []
+    post:
+      summary: KG: kg create edge
+      description: Auto-generated stub for `kg_create_edge` (POST /api/v1/kg/edges).
+      operationId: kg_create_edge
+      tags:
+      - Knowledge Graph
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - source
+              - target
+              - type
+              properties:
+                source:
+                  type: string
+                target:
+                  type: string
+                type:
+                  type: string
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - apiKeyAuth: []
+  /api/v1/kg/entities:
+    post:
+      summary: KG: kg upsert entity
+      description: Auto-generated stub for `kg_upsert_entity` (POST /api/v1/kg/entities).
+      operationId: kg_upsert_entity
+      tags:
+      - Knowledge Graph
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - entity_id
+              - domain
+              properties:
+                entity_id:
+                  type: string
+                domain:
+                  type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - apiKeyAuth: []
+  /api/v1/kg/entity/{entity_id}/related:
+    get:
+      summary: KG: kg entity related
+      description: Auto-generated stub for `kg_entity_related` (GET /api/v1/kg/entity/{entity_id}/related).
+      operationId: kg_entity_related
+      tags:
+      - Knowledge Graph
+      parameters:
+      - name: entity_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Path parameter `entity_id`
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - apiKeyAuth: []
+  /api/v1/kg/import/entities:
+    post:
+      summary: KG: kg import entities
+      description: Auto-generated stub for `kg_import_entities` (POST /api/v1/kg/import/entities).
+      operationId: kg_import_entities
+      tags:
+      - Knowledge Graph
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - apiKeyAuth: []
+  /api/v1/kg/import/patterns:
+    post:
+      summary: KG: kg import patterns
+      description: Auto-generated stub for `kg_import_patterns` (POST /api/v1/kg/import/patterns).
+      operationId: kg_import_patterns
+      tags:
+      - Knowledge Graph
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - apiKeyAuth: []
+  /api/v1/kg/mood/{mood}/patterns:
+    get:
+      summary: KG: kg mood patterns
+      description: Auto-generated stub for `kg_mood_patterns` (GET /api/v1/kg/mood/{mood}/patterns).
+      operationId: kg_mood_patterns
+      tags:
+      - Knowledge Graph
+      parameters:
+      - name: mood
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Path parameter `mood`
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - apiKeyAuth: []
+  /api/v1/kg/moods:
+    post:
+      summary: KG: kg upsert mood
+      description: Auto-generated stub for `kg_upsert_mood` (POST /api/v1/kg/moods).
+      operationId: kg_upsert_mood
+      tags:
+      - Knowledge Graph
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - mood
+              properties:
+                mood:
+                  type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - apiKeyAuth: []
+  /api/v1/kg/nodes:
+    get:
+      summary: KG: kg list nodes
+      description: Auto-generated stub for `kg_list_nodes` (GET /api/v1/kg/nodes).
+      operationId: kg_list_nodes
+      tags:
+      - Knowledge Graph
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - apiKeyAuth: []
+    post:
+      summary: KG: kg create node
+      description: Auto-generated stub for `kg_create_node` (POST /api/v1/kg/nodes).
+      operationId: kg_create_node
+      tags:
+      - Knowledge Graph
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - id
+              - type
+              properties:
+                id:
+                  type: string
+                type:
+                  type: string
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - apiKeyAuth: []
+  /api/v1/kg/nodes/{node_id}:
+    get:
+      summary: KG: kg get node
+      description: Auto-generated stub for `kg_get_node` (GET /api/v1/kg/nodes/{node_id}).
+      operationId: kg_get_node
+      tags:
+      - Knowledge Graph
+      parameters:
+      - name: node_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Path parameter `node_id`
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '404':
+          description: Resource not found
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - apiKeyAuth: []
+  /api/v1/kg/pattern/{pattern_id}:
+    get:
+      summary: KG: kg get pattern
+      description: Auto-generated stub for `kg_get_pattern` (GET /api/v1/kg/pattern/{pattern_id}).
+      operationId: kg_get_pattern
+      tags:
+      - Knowledge Graph
+      parameters:
+      - name: pattern_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Path parameter `pattern_id`
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '404':
+          description: Resource not found
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - apiKeyAuth: []
+  /api/v1/kg/query:
+    post:
+      summary: KG: kg query
+      description: Auto-generated stub for `kg_query` (POST /api/v1/kg/query).
+      operationId: kg_query
+      tags:
+      - Knowledge Graph
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - apiKeyAuth: []
+  /api/v1/kg/stats:
+    get:
+      summary: KG: kg stats
+      description: Auto-generated stub for `kg_stats` (GET /api/v1/kg/stats).
+      operationId: kg_stats
+      tags:
+      - Knowledge Graph
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - apiKeyAuth: []
+  /api/v1/kg/zone/{zone_id}/entities:
+    get:
+      summary: KG: kg zone entities
+      description: Auto-generated stub for `kg_zone_entities` (GET /api/v1/kg/zone/{zone_id}/entities).
+      operationId: kg_zone_entities
+      tags:
+      - Knowledge Graph
+      parameters:
+      - name: zone_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Path parameter `zone_id`
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - apiKeyAuth: []
+  /api/v1/kg/zones:
+    post:
+      summary: KG: kg upsert zone
+      description: Auto-generated stub for `kg_upsert_zone` (POST /api/v1/kg/zones).
+      operationId: kg_upsert_zone
+      tags:
+      - Knowledge Graph
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - zone_id
+              properties:
+                zone_id:
+                  type: string
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - apiKeyAuth: []
   /api/v1/system_health:
     get:
       summary: Get complete system health status
