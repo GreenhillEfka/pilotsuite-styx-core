@@ -1,6 +1,6 @@
 # PilotSuite Styx Core API Reference
 
-**Version:** 13.5.3  
+**Version:** 13.5.4  
 **Base URL:** `http://localhost:8909`  
 **Docs:** `/docs` (Swagger UI)
 
@@ -128,14 +128,41 @@ Authorization: Bearer your-token
 
 ### Notifications
 
+#### Core Operations
+
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/api/v1/notifications` | List notifications |
 | POST | `/api/v1/notifications` | Create notification |
-| GET | `/api/v1/notifications/<id>` | Get notification |
-| PUT | `/api/v1/notifications/<id>/read` | Mark as read |
-| DELETE | `/api/v1/notifications/<id>` | Delete notification |
-| GET | `/api/v1/notifications/unread/count` | Unread count |
+| GET | `/api/v1/notifications/{notification_id}` | Get notification |
+| POST | `/api/v1/notifications/{notification_id}/read` | Mark as read |
+| DELETE | `/api/v1/notifications/{notification_id}` | Delete notification |
+| POST | `/api/v1/notifications/clear` | Clear all notifications |
+| POST | `/api/v1/notifications/send` | Send notification |
+
+#### Home Assistant Integration
+
+> **New in v13.5.4:** HA device registration and notification services.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/v1/notifications/ha/register` | Register HA device |
+| GET | `/api/v1/notifications/ha/devices` | List HA devices |
+| POST | `/api/v1/notifications/ha/devices/{device_id}/enable` | Enable HA device |
+| POST | `/api/v1/notifications/ha/devices/{device_id}/disable` | Disable HA device |
+| DELETE | `/api/v1/notifications/ha/devices/{device_id}` | Unregister HA device |
+| GET | `/api/v1/notifications/ha/services` | List HA notify services |
+| GET | `/api/v1/notifications/ha/test` | Test HA connection |
+| POST | `/api/v1/notifications/send/ha` | Send via HA notification |
+
+#### Subscriptions
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/v1/notifications/subscribe` | Subscribe device |
+| POST | `/api/v1/notifications/unsubscribe` | Unsubscribe device |
+| GET | `/api/v1/notifications/subscriptions` | List subscriptions |
+| PUT | `/api/v1/notifications/subscriptions/{device_id}` | Update subscription |
 
 ### Multi-Home & Sharing
 
