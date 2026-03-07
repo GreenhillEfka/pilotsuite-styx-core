@@ -1,8 +1,22 @@
 # PilotSuite Styx Core API Reference
 
-**Version:** 12.6.0  
+**Version:** 13.5.3  
 **Base URL:** `http://localhost:8909`  
 **Docs:** `/docs` (Swagger UI)
+
+---
+
+> **⚡ Migration Quick Reference (v13.5.3)**
+>
+> | Legacy | Active | Note |
+> |--------|--------|------|
+> | `/api/v1/tags` | `/api/v1/tag-system/tags` | Tag-System namespace |
+> | `/api/v1/tags/{id}` | `/api/v1/tag-system/tags/{tag_id}` | Tag-System namespace |
+> | `/api/v1/candidates/{id}` | `/api/v1/candidates/{candidate_id}` | Parameter name unified |
+> | `X-API-Key` header | `X-Auth-Token` header | Auth header preferred |
+> | `mood_changed` event | `mood` event | Canonical event type |
+>
+> Use active v13 surface for all new integrations.
 
 ---
 
@@ -13,7 +27,7 @@
 curl http://localhost:8909/health
 
 # API with auth
-curl -H "X-API-Key: your-key" http://localhost:8909/api/v1/system_health
+curl -H "X-Auth-Token: your-key" http://localhost:8909/api/v1/system_health
 ```
 
 ---
@@ -24,8 +38,9 @@ All `/api/v1/*` endpoints require authentication:
 
 **API Key (most endpoints):**
 ```
-X-API-Key: your-api-key
+X-Auth-Token: your-api-key
 ```
+> Note: `X-API-Key` is deprecated. Use `X-Auth-Token` or `Authorization: Bearer ...`.
 
 **Bearer Token (Notifications, Telegram, Hub):**
 ```
@@ -170,10 +185,12 @@ Authorization: Bearer your-token
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/v1/tags` | List all tags |
-| POST | `/api/v1/tags` | Create tag |
-| DELETE | `/api/v1/tags/<id>` | Delete tag |
-| GET | `/api/v1/tags/registry` | Tag registry |
+| GET | `/api/v1/tag-system/tags` | List all tags |
+| POST | `/api/v1/tag-system/tags` | Create tag |
+| DELETE | `/api/v1/tag-system/tags/{tag_id}` | Delete tag |
+| GET | `/api/v1/tag-system/tags` | Tag registry |
+| GET | `/api/v1/tag-system/assignments` | List tag assignments |
+| POST | `/api/v1/tag-system/assignments` | Create tag assignment |
 
 ### Calendar
 
