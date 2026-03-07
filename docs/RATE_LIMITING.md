@@ -132,11 +132,11 @@ def get_client_identifier(request: Request) -> str:
     if hasattr(request.state, 'user_id') and request.state.user_id:
         return f"user:{request.state.user_id}"
     
-    # 2. API Key
-    api_key = request.headers.get("X-API-Key")
-    if api_key:
+    # 2. Auth Token (X-Auth-Token bevorzugt; X-API-Key deprecated seit v13.5.3)
+    auth_token = request.headers.get("X-Auth-Token") or request.headers.get("X-API-Key")
+    if auth_token:
         # Hash für Privacy (speichern nicht den Klartext-Key)
-        key_hash = hashlib.sha256(api_key.encode()).hexdigest()[:16]
+        key_hash = hashlib.sha256(auth_token.encode()).hexdigest()[:16]
         return f"apikey:{key_hash}"
     
     # 3. IP-Adresse (Fallback)
@@ -391,17 +391,17 @@ def test_rate_limit_exceeded():
 
 def test_rate_limit_by_client():
     """Testet, dass Limits pro Client gelten"""
-    # Client A: 100 Requests
+    # Client A: 100 Requests (X-Auth-Token bevorzugt seit v13.5.3)
     for i in range(100):
-        response = client.get("/zones", headers={"X-API-Key": "key-a"})
+        response = client.get("/zones", headers={"X-Auth-Token": "token-a"})
         assert response.status_code == 200
-    
+
     # Client A: 101. Request → 429
-    response = client.get("/zones", headers={"X-API-Key": "key-a"})
+    response = client.get("/zones", headers={"X-Auth-Token": "token-a"})
     assert response.status_code == 429
-    
+
     # Client B: 1. Request → 200 (separates Limit)
-    response = client.get("/zones", headers={"X-API-Key": "key-b"})
+    response = client.get("/zones", headers={"X-Auth-Token": "token-b"})
     assert response.status_code == 200
 
 def test_auth_endpoint_stricter_limit():

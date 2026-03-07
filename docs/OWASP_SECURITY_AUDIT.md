@@ -31,10 +31,10 @@ This audit evaluates the PilotSuite Styx Core codebase against the **OWASP Top 1
 **Status:** Partial implementation, requires enhancement
 
 #### Current Implementation
-- ✅ Token-based authentication (`X-API-Key`, `X-Auth-Token`, Bearer)
+- ✅ Token-based authentication (`X-Auth-Token` preferred, `X-API-Key` deprecated since v13.5.3, Bearer)
 - ✅ `@require_admin` decorator for sensitive endpoints
 - ✅ Token validation in `copilot_core/api/v1/security.py`
-- ✅ Per-client rate limiting by API key or IP
+- ✅ Per-client rate limiting by auth token or IP
 
 #### Identified Vulnerabilities
 1. **No Role-Based Access Control (RBAC):** All authenticated users have equal privileges
