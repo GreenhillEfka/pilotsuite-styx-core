@@ -613,7 +613,7 @@ API_MODULES: List[APIModule] = [
                 }
             ),
             APIEndpoint(
-                path="/api/v1/candidates/{id}",
+                path="/api/v1/candidates/{candidate_id}",
                 method="GET",
                 summary="Get candidate details",
                 description="Retrieve a specific candidate by ID.",
@@ -621,7 +621,7 @@ API_MODULES: List[APIModule] = [
                 tags=["Candidates"],
                 parameters=[
                     {
-                        "name": "id",
+                        "name": "candidate_id",
                         "in": "path",
                         "required": True,
                         "schema": {"type": "string"}
@@ -637,7 +637,7 @@ API_MODULES: List[APIModule] = [
                 }
             ),
             APIEndpoint(
-                path="/api/v1/candidates/{id}",
+                path="/api/v1/candidates/{candidate_id}",
                 method="PUT",
                 summary="Update candidate state",
                 description="Update candidate state (accept/dismiss/defer).",
@@ -645,7 +645,7 @@ API_MODULES: List[APIModule] = [
                 tags=["Candidates"],
                 parameters=[
                     {
-                        "name": "id",
+                        "name": "candidate_id",
                         "in": "path",
                         "required": True,
                         "schema": {"type": "string"}
@@ -1223,14 +1223,14 @@ API_MODULES: List[APIModule] = [
     APIModule(
         name="Tags",
         description="Tag system for entity organization",
-        base_path="/api/v1",
+        base_path="/api/v1/tag-system",
         auth_type="bearer",
         endpoints=[
             APIEndpoint(
-                path="/api/v1/tags",
+                path="/api/v1/tag-system/tags",
                 method="GET",
-                summary="List all tags",
-                description="Returns all tags.",
+                summary="List tag registry entries",
+                description="Returns all tags from the canonical tag registry.",
                 operation_id="listTags",
                 tags=["Tags"],
                 security=[{"bearerAuth": []}],
@@ -1241,42 +1241,100 @@ API_MODULES: List[APIModule] = [
                 }
             ),
             APIEndpoint(
-                path="/api/v1/tags",
-                method="POST",
-                summary="Create tag",
-                description="Creates a new tag.",
-                operation_id="createTag",
-                tags=["Tags"],
-                security=[{"bearerAuth": []}],
-                responses={
-                    "201": {
-                        "description": "Tag created"
-                    }
-                }
-            ),
-            APIEndpoint(
-                path="/api/v1/tags/{id}",
-                method="DELETE",
-                summary="Delete tag",
-                description="Deletes a tag.",
-                operation_id="deleteTag",
+                path="/api/v1/tag-system/tags/{tag_id}",
+                method="GET",
+                summary="Get tag registry entry",
+                description="Returns a single tag by id from the canonical tag registry.",
+                operation_id="getTag",
                 tags=["Tags"],
                 security=[{"bearerAuth": []}],
                 parameters=[
                     {
-                        "name": "id",
+                        "name": "tag_id",
                         "in": "path",
                         "required": True,
                         "schema": {"type": "string"}
                     }
                 ],
                 responses={
-                    "204": {
-                        "description": "Tag deleted"
+                    "200": {
+                        "description": "Tag details"
+                    },
+                    "404": {
+                        "description": "Tag not found"
                     }
                 }
-            )
-        ]
+            ),
+            APIEndpoint(
+                path="/api/v1/tag-system/assignments",
+                method="GET",
+                summary="List tag assignments",
+                description="Returns tag assignments with optional subject/tag filters.",
+                operation_id="listTagAssignments",
+                tags=["Tags"],
+                security=[{"bearerAuth": []}],
+                parameters=[
+                    {"name": "subject_id", "in": "query", "required": False, "schema": {"type": "string"}},
+                    {"name": "subject_kind", "in": "query", "required": False, "schema": {"type": "string"}},
+                    {"name": "tag_id", "in": "query", "required": False, "schema": {"type": "string"}},
+                    {"name": "materialized", "in": "query", "required": False, "schema": {"type": "boolean"}},
+                    {"name": "limit", "in": "query", "required": False, "schema": {"type": "integer", "default": 200}},
+                ],
+                responses={
+                    "200": {
+                        "description": "Tag assignments"
+                    }
+                }
+            ),
+            APIEndpoint(
+                path="/api/v1/tag-system/assignments",
+                method="POST",
+                summary="Create or update tag assignment",
+                description="Upserts a tag assignment for a subject.",
+                operation_id="upsertTagAssignment",
+                tags=["Tags"],
+                security=[{"bearerAuth": []}],
+                request_body={
+                    "required": True,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": ["subject_id", "subject_kind", "tag_id"],
+                                "properties": {
+                                    "subject_id": {"type": "string"},
+                                    "subject_kind": {"type": "string"},
+                                    "tag_id": {"type": "string"},
+                                    "source": {"type": "string", "default": "core"},
+                                    "confidence": {
+                                        "type": "number",
+                                        "format": "float",
+                                        "minimum": 0,
+                                        "maximum": 1,
+                                    },
+                                    "meta": {"type": "object"},
+                                    "materialized": {"type": "boolean"},
+                                },
+                            }
+                        }
+                    }
+                },
+                responses={
+                    "200": {
+                        "description": "Assignment updated"
+                    },
+                    "201": {
+                        "description": "Assignment created"
+                    },
+                    "400": {
+                        "description": "Invalid assignment payload"
+                    },
+                    "404": {
+                        "description": "Tag not found"
+                    },
+                }
+            ),
+        ],
     ),
     
     APIModule(
