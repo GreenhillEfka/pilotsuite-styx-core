@@ -64,7 +64,7 @@ Authorization: Bearer your-token
 | GET | `/api/v1/health/deep` | Deep health check (all services) |
 | GET | `/api/v1/health/metrics` | Request timing metrics |
 
-### Brain Graph (Knowledge Graph)
+### Brain Graph (Visualization)
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -73,6 +73,28 @@ Authorization: Bearer your-token
 | POST | `/api/v1/graph/query` | Execute graph query |
 | GET | `/api/v1/graph/summary` | Graph statistics |
 | POST | `/api/v1/graph/ingest` | Ingest events into graph |
+
+### Knowledge Graph (KG)
+
+> **New in v13.5.4:** Knowledge Graph API for entity/relationship management.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/v1/kg/nodes` | List all KG nodes |
+| GET | `/api/v1/kg/nodes/{node_id}` | Get specific node |
+| GET | `/api/v1/kg/edges` | List all KG edges (relationships) |
+| POST | `/api/v1/kg/edges` | Create a new edge |
+| POST | `/api/v1/kg/entities` | Upsert an entity |
+| GET | `/api/v1/kg/entity/{entity_id}/related` | Get related entities |
+| POST | `/api/v1/kg/import/entities` | Bulk import entities |
+| POST | `/api/v1/kg/import/patterns` | Import patterns from Habitus |
+| GET | `/api/v1/kg/moods` | List mood-related patterns |
+| GET | `/api/v1/kg/mood/{mood}/patterns` | Get patterns for specific mood |
+| GET | `/api/v1/kg/pattern/{pattern_id}` | Get specific pattern |
+| POST | `/api/v1/kg/query` | Execute KG query |
+| GET | `/api/v1/kg/stats` | KG statistics |
+| GET | `/api/v1/kg/zones` | List zones in KG |
+| GET | `/api/v1/kg/zone/{zone_id}/entities` | Get entities for zone |
 
 ### Habitus (Pattern Mining)
 
