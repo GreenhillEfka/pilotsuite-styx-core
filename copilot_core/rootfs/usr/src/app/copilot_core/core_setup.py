@@ -272,6 +272,12 @@ async def init_services(hass=None, config: dict = None):
             maximum=60 * 60 * 24,
         )
 
+        if webhook_url and not (webhook_signing_secret or webhook_signing_secret_primary):
+            _LOGGER.warning(
+                "Webhook signing is not configured (webhook_signing_secret_primary is empty) — "
+                "outgoing webhooks will not be signed. Set a signing secret for integrity protection."
+            )
+
         # Optional per-destination caps (config first, then env fallback)
         dest_max_conc_value = config.get("webhook_destination_max_concurrency") if config else None
         if dest_max_conc_value is None:

@@ -16,10 +16,13 @@ Die Policy ist als Callable kompatibel mit `WebhookPusher(destination_policy=...
 from __future__ import annotations
 
 import ipaddress
+import logging
 import os
 import socket
 import urllib.parse
 from typing import Callable, Iterable, List, Optional, Sequence, Set
+
+_LOGGER = logging.getLogger(__name__)
 
 
 def _split_csv(value: str) -> List[str]:
@@ -119,6 +122,12 @@ def default_webhook_destination_policy_from_env() -> Callable[[str], bool]:
 
     allowed_domains = _split_csv(os.environ.get("PILOTSUITE_WEBHOOK_DESTINATION_ALLOWED_DOMAINS", ""))
     blocked_domains = _split_csv(os.environ.get("PILOTSUITE_WEBHOOK_DESTINATION_BLOCKED_DOMAINS", ""))
+
+    if not allowed_domains:
+        _LOGGER.warning(
+            "PILOTSUITE_WEBHOOK_DESTINATION_ALLOWED_DOMAINS is not set — "
+            "webhooks can be sent to any domain. Set a CSV allowlist to restrict destinations."
+        )
 
     blocked_ranges = list(_ALWAYS_BLOCKED_RANGES)
     if not allow_private:
