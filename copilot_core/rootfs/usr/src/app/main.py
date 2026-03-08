@@ -450,9 +450,312 @@ def get_dev_logs():
     })
 
 
+@app.get("/api/v1/dev/errors")
+@require_token
+def get_dev_errors_stub():
+    """Legacy allowlist endpoint stubbed until implementation is wired."""
+    return (
+        jsonify(
+            {
+                "status": "stubbed",
+                "code": 501,
+                "message": "Not Implemented (Legacy Endpoint)",
+                "endpoint": "/api/v1/dev/errors",
+                "ticket": "PS-HEPH-150",
+            }
+        ),
+        501,
+        {"X-Stub": "allowlist"},
+    )
+
+
+@app.get("/api/v1/energy")
+@require_token
+def get_energy_stub():
+    """Legacy allowlist endpoint stubbed until implementation is wired."""
+    return (
+        jsonify(
+            {
+                "status": "stubbed",
+                "code": 501,
+                "message": "Not Implemented (Legacy Endpoint)",
+                "endpoint": "/api/v1/energy",
+                "ticket": "PS-HEPH-150",
+            }
+        ),
+        501,
+        {"X-Stub": "allowlist"},
+    )
+
+
+@app.get("/api/v1/energy/anomalies")
+@require_token
+def get_energy_anomalies_stub():
+    """Legacy allowlist endpoint stubbed until implementation is wired."""
+    return (
+        jsonify(
+            {
+                "status": "stubbed",
+                "code": 501,
+                "message": "Not Implemented (Legacy Endpoint)",
+                "endpoint": "/api/v1/energy/anomalies",
+                "ticket": "PS-HEPH-150",
+            }
+        ),
+        501,
+        {"X-Stub": "allowlist"},
+    )
+
+
+@app.get("/api/v1/energy/sankey")
+@require_token
+def get_energy_sankey_stub():
+    """Legacy allowlist endpoint stubbed until implementation is wired."""
+    return (
+        jsonify(
+            {
+                "status": "stubbed",
+                "code": 501,
+                "message": "Not Implemented (Legacy Endpoint)",
+                "endpoint": "/api/v1/energy/sankey",
+                "ticket": "PS-HEPH-150",
+            }
+        ),
+        501,
+        {"X-Stub": "allowlist"},
+    )
+
+
+@app.post("/api/v1/graph/query")
+@require_token
+def post_graph_query_stub():
+    """Legacy allowlist endpoint stubbed until implementation is wired."""
+    return (
+        jsonify(
+            {
+                "status": "stubbed",
+                "code": 501,
+                "message": "Not Implemented (Legacy Endpoint)",
+                "endpoint": "/api/v1/graph/query",
+                "ticket": "PS-HEPH-150",
+            }
+        ),
+        501,
+        {"X-Stub": "allowlist"},
+    )
+
+
+@app.get("/api/v1/graph/render")
+@require_token
+def get_graph_render_stub():
+    """Legacy allowlist endpoint stubbed until implementation is wired."""
+    return (
+        jsonify(
+            {
+                "status": "stubbed",
+                "code": 501,
+                "message": "Not Implemented (Legacy Endpoint)",
+                "endpoint": "/api/v1/graph/render",
+                "ticket": "PS-HEPH-150",
+            }
+        ),
+        501,
+        {"X-Stub": "allowlist"},
+    )
+
+
+@app.get("/api/v1/habitus/patterns")
+@require_token
+def get_habitus_patterns_stub():
+    """Legacy allowlist endpoint stubbed until implementation is wired."""
+    return (
+        jsonify(
+            {
+                "status": "stubbed",
+                "code": 501,
+                "message": "Not Implemented (Legacy Endpoint)",
+                "endpoint": "/api/v1/habitus/patterns",
+                "ticket": "PS-HEPH-150",
+            }
+        ),
+        501,
+        {"X-Stub": "allowlist"},
+    )
+
+
+@app.get("/api/v1/habitus/stats")
+@require_token
+def get_habitus_stats_stub():
+    """Legacy allowlist endpoint stubbed until implementation is wired."""
+    return (
+        jsonify(
+            {
+                "status": "stubbed",
+                "code": 501,
+                "message": "Not Implemented (Legacy Endpoint)",
+                "endpoint": "/api/v1/habitus/stats",
+                "ticket": "PS-HEPH-150",
+            }
+        ),
+        501,
+        {"X-Stub": "allowlist"},
+    )
+
+
+@app.get("/api/v1/hub/status")
+@require_token
+def get_hub_status_stub():
+    """Legacy allowlist endpoint stubbed until implementation is wired."""
+    return (
+        jsonify(
+            {
+                "status": "stubbed",
+                "code": 501,
+                "message": "Not Implemented (Legacy Endpoint)",
+                "endpoint": "/api/v1/hub/status",
+                "ticket": "PS-HEPH-150",
+            }
+        ),
+        501,
+        {"X-Stub": "allowlist"},
+    )
+
+
+@app.get("/api/v1/mood")
+@require_token
+def get_mood_stub():
+    """Legacy allowlist endpoint stubbed until implementation is wired."""
+    return (
+        jsonify({"status": "stubbed", "code": 501, "message": "Not Implemented (Legacy Endpoint)", "endpoint": "/api/v1/mood", "ticket": "PS-HEPH-150"}),
+        501,
+        {"X-Stub": "allowlist"},
+    )
+
+
+@app.get("/api/v1/mood/summary")
+@require_token
+def get_mood_summary_stub():
+    """Legacy allowlist endpoint stubbed until implementation is wired."""
+    return (
+        jsonify({"status": "stubbed", "code": 501, "message": "Not Implemented (Legacy Endpoint)", "endpoint": "/api/v1/mood/summary", "ticket": "PS-HEPH-150"}),
+        501,
+        {"X-Stub": "allowlist"},
+    )
+
+
+@app.post("/api/v1/mood/update-habitus")
+@require_token
+def post_mood_update_habitus_stub():
+    """Legacy allowlist endpoint stubbed until implementation is wired."""
+    return (
+        jsonify({"status": "stubbed", "code": 501, "message": "Not Implemented (Legacy Endpoint)", "endpoint": "/api/v1/mood/update-habitus", "ticket": "PS-HEPH-150"}),
+        501,
+        {"X-Stub": "allowlist"},
+    )
+
+
+@app.post("/api/v1/mood/update-media")
+@require_token
+def post_mood_update_media_stub():
+    """Legacy allowlist endpoint stubbed until implementation is wired."""
+    return (
+        jsonify({"status": "stubbed", "code": 501, "message": "Not Implemented (Legacy Endpoint)", "endpoint": "/api/v1/mood/update-media", "ticket": "PS-HEPH-150"}),
+        501,
+        {"X-Stub": "allowlist"},
+    )
+
+
+@app.get("/api/v1/mood/<zone_id>")
+@require_token
+def get_mood_zone_stub(zone_id):
+    """Legacy allowlist endpoint stubbed until implementation is wired."""
+    return (
+        jsonify({"status": "stubbed", "code": 501, "message": "Not Implemented (Legacy Endpoint)", "endpoint": f"/api/v1/mood/{zone_id}", "ticket": "PS-HEPH-150"}),
+        501,
+        {"X-Stub": "allowlist"},
+    )
+
+
+@app.post("/api/v1/mood/<zone_id>/suppress-energy-saving")
+@require_token
+def post_mood_zone_suppress_stub(zone_id):
+    """Legacy allowlist endpoint stubbed until implementation is wired."""
+    return (
+        jsonify({"status": "stubbed", "code": 501, "message": "Not Implemented (Legacy Endpoint)", "endpoint": f"/api/v1/mood/{zone_id}/suppress-energy-saving", "ticket": "PS-HEPH-150"}),
+        501,
+        {"X-Stub": "allowlist"},
+    )
+
+
+@app.get("/api/v1/system_health")
+@require_token
+def get_system_health_stub():
+    """Legacy allowlist endpoint stubbed until implementation is wired."""
+    return (
+        jsonify({"status": "stubbed", "code": 501, "message": "Not Implemented (Legacy Endpoint)", "endpoint": "/api/v1/system_health", "ticket": "PS-HEPH-150"}),
+        501,
+        {"X-Stub": "allowlist"},
+    )
+
+
+@app.get("/api/v1/system_health/zigbee")
+@require_token
+def get_system_health_zigbee_stub():
+    """Legacy allowlist endpoint stubbed until implementation is wired."""
+    return (
+        jsonify({"status": "stubbed", "code": 501, "message": "Not Implemented (Legacy Endpoint)", "endpoint": "/api/v1/system_health/zigbee", "ticket": "PS-HEPH-150"}),
+        501,
+        {"X-Stub": "allowlist"},
+    )
+
+
+@app.get("/api/v1/system_health/zwave")
+@require_token
+def get_system_health_zwave_stub():
+    """Legacy allowlist endpoint stubbed until implementation is wired."""
+    return (
+        jsonify({"status": "stubbed", "code": 501, "message": "Not Implemented (Legacy Endpoint)", "endpoint": "/api/v1/system_health/zwave", "ticket": "PS-HEPH-150"}),
+        501,
+        {"X-Stub": "allowlist"},
+    )
+
+
+@app.get("/api/v1/unifi")
+@require_token
+def get_unifi_stub():
+    """Legacy allowlist endpoint stubbed until implementation is wired."""
+    return (
+        jsonify({"status": "stubbed", "code": 501, "message": "Not Implemented (Legacy Endpoint)", "endpoint": "/api/v1/unifi", "ticket": "PS-HEPH-150"}),
+        501,
+        {"X-Stub": "allowlist"},
+    )
+
+
+@app.post("/telegram/send")
+@require_token
+def post_telegram_send_stub():
+    """Legacy allowlist endpoint stubbed until implementation is wired."""
+    return (
+        jsonify({"status": "stubbed", "code": 501, "message": "Not Implemented (Legacy Endpoint)", "endpoint": "/telegram/send", "ticket": "PS-HEPH-150"}),
+        501,
+        {"X-Stub": "allowlist"},
+    )
+
+
+@app.get("/telegram/status")
+@require_token
+def get_telegram_status_stub():
+    """Legacy allowlist endpoint stubbed until implementation is wired."""
+    return (
+        jsonify({"status": "stubbed", "code": 501, "message": "Not Implemented (Legacy Endpoint)", "endpoint": "/telegram/status", "ticket": "PS-HEPH-150"}),
+        501,
+        {"X-Stub": "allowlist"},
+    )
+
+
 def create_app(config: dict | None = None) -> Flask:
     """Factory function to create a Flask app instance.
-    
+
     Used primarily for testing to allow custom configuration.
     For production, use the global `app` instance directly.
     
