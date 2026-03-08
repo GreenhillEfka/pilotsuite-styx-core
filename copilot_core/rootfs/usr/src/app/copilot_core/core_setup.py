@@ -276,11 +276,11 @@ async def init_services(hass=None, config: dict = None):
         dest_max_conc_value = config.get("webhook_destination_max_concurrency") if config else None
         if dest_max_conc_value is None:
             dest_max_conc_value = os.environ.get("PILOTSUITE_WEBHOOK_DESTINATION_MAX_CONCURRENCY")
-        destination_max_concurrency: Optional[int] = None
+        destination_max_concurrency: Optional[int] = 5
         if dest_max_conc_value is not None:
             destination_max_concurrency = _safe_int(
                 dest_max_conc_value,
-                default=1,
+                default=5,
                 minimum=1,
                 maximum=1000,
             )
@@ -288,11 +288,11 @@ async def init_services(hass=None, config: dict = None):
         dest_rate_per_sec_value = config.get("webhook_destination_rate_limit_per_second") if config else None
         if dest_rate_per_sec_value is None:
             dest_rate_per_sec_value = os.environ.get("PILOTSUITE_WEBHOOK_DESTINATION_RATE_LIMIT_PER_SECOND")
-        destination_rate_limit_per_second: Optional[float] = None
+        destination_rate_limit_per_second: Optional[float] = 10.0
         if dest_rate_per_sec_value is not None:
             destination_rate_limit_per_second = _safe_float(
                 dest_rate_per_sec_value,
-                default=1.0,
+                default=10.0,
                 minimum=0.01,
                 maximum=1e6,
             )
@@ -300,11 +300,11 @@ async def init_services(hass=None, config: dict = None):
         dest_rate_burst_value = config.get("webhook_destination_rate_limit_burst") if config else None
         if dest_rate_burst_value is None:
             dest_rate_burst_value = os.environ.get("PILOTSUITE_WEBHOOK_DESTINATION_RATE_LIMIT_BURST")
-        destination_rate_limit_burst = 1
+        destination_rate_limit_burst = 5
         if dest_rate_burst_value is not None:
             destination_rate_limit_burst = _safe_int(
                 dest_rate_burst_value,
-                default=1,
+                default=5,
                 minimum=1,
                 maximum=100000,
             )

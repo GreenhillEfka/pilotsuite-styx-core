@@ -57,9 +57,9 @@ Die Caps werden jetzt direkt ueber `WebhookPusher` konfigurierbar und an die
 `configuration.yaml`/Dict) haben Vorrang, **Env** dient als Fallback.
 
 Config Keys (alle optional; Werte > 0 erforderlich, ansonsten Validation-Error der Queue):
-- `webhook_destination_max_concurrency` (int|None)
-- `webhook_destination_rate_limit_per_second` (float|None)
-- `webhook_destination_rate_limit_burst` (int, default: `1`)
+- `webhook_destination_max_concurrency` (int, default: `5`)
+- `webhook_destination_rate_limit_per_second` (float, default: `10.0`)
+- `webhook_destination_rate_limit_burst` (int, default: `5`)
 
 Env-Fallbacks:
 - `PILOTSUITE_WEBHOOK_DESTINATION_MAX_CONCURRENCY`
@@ -67,9 +67,10 @@ Env-Fallbacks:
 - `PILOTSUITE_WEBHOOK_DESTINATION_RATE_LIMIT_BURST`
 
 Verhalten:
-- `max_concurrency=None`/nicht gesetzt → kein per-destination Semaphore.
-- `rate_limit_per_second=None`/nicht gesetzt → kein Token-Bucket; Burst wird ignoriert.
-- `rate_limit_burst` muss > 0 sein, wenn Rate-Limit gesetzt ist (default 1).
+- `max_concurrency` default `5` → maximal 5 gleichzeitige Requests pro Destination.
+- `rate_limit_per_second` default `10.0` → Token-Bucket mit 10 req/s.
+- `rate_limit_burst` default `5` → erlaubt kurze Spitzen bis 5 Requests.
+- Explizit auf `None`/`0` setzen um Limits zu deaktivieren (nicht empfohlen).
 
 ## WebhookPusher: Timeout & Payload Limits
 
@@ -97,12 +98,13 @@ Default wird eine `destination_policy` genutzt (aus Env gebaut), die typische
 SSRF-Ziele blockt: private/loopback/link-local IP-Ranges sowie bekannte
 Cloud-Metadata-Endpoints.
 
-Env-Toggles (Default: konservativ):
+Env-Toggles (Default: secure):
 - `PILOTSUITE_WEBHOOK_DESTINATION_ALLOW_PRIVATE=true`
   - erlaubt loopback + private Ranges (RFC1918/ULA/CGNAT). Link-local/Metadata
     bleiben weiterhin geblockt.
-- `PILOTSUITE_WEBHOOK_DESTINATION_RESOLVE_DNS=true`
-  - optionaler DNS-Resolve-Check fuer Hostnames; fail-closed bei Resolve-Fehler.
+- `PILOTSUITE_WEBHOOK_DESTINATION_RESOLVE_DNS` (default: `true`)
+  - DNS-Resolve-Check fuer Hostnames; fail-closed bei Resolve-Fehler.
+  - Auf `false` setzen in offline/CI-Kontexten ohne DNS.
 - `PILOTSUITE_WEBHOOK_DESTINATION_ALLOWED_DOMAINS=...` (CSV; unterstützt `*.example.com`)
   - wenn gesetzt, muss der Host matchen.
 - `PILOTSUITE_WEBHOOK_DESTINATION_BLOCKED_DOMAINS=...` (CSV; unterstützt `*.example.com`)

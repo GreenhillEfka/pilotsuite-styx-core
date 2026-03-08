@@ -95,12 +95,12 @@ def default_webhook_destination_policy_from_env() -> Callable[[str], bool]:
 
     Env vars:
     - PILOTSUITE_WEBHOOK_DESTINATION_ALLOW_PRIVATE (default: false)
-    - PILOTSUITE_WEBHOOK_DESTINATION_RESOLVE_DNS (default: false)
+    - PILOTSUITE_WEBHOOK_DESTINATION_RESOLVE_DNS (default: true)
     - PILOTSUITE_WEBHOOK_DESTINATION_ALLOWED_DOMAINS (csv, optional)
     - PILOTSUITE_WEBHOOK_DESTINATION_BLOCKED_DOMAINS (csv, optional)
 
     Notes:
-    - DNS resolution is opt-in to avoid hard failures on startup in offline / CI contexts.
+    - DNS resolution is enabled by default for SSRF protection; set to false in offline/CI contexts.
     - Even with ALLOW_PRIVATE=true we still deny link-local + known metadata IPs.
     """
 
@@ -110,7 +110,7 @@ def default_webhook_destination_policy_from_env() -> Callable[[str], bool]:
         "yes",
         "on",
     )
-    resolve_dns = os.environ.get("PILOTSUITE_WEBHOOK_DESTINATION_RESOLVE_DNS", "false").lower() in (
+    resolve_dns = os.environ.get("PILOTSUITE_WEBHOOK_DESTINATION_RESOLVE_DNS", "true").lower() in (
         "1",
         "true",
         "yes",
