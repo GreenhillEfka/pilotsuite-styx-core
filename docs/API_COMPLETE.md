@@ -65,7 +65,7 @@
 
 Die PilotSuite Styx Core API ist eine RESTful API, die auf Flask basiert und umfassende Funktionen für Smart-Home-Automation, KI-gesteuerte Mustererkennung und Multi-Home-Synchronisation bereitstellt.
 
-> **📖 Quick Reference — Migration von v13.5.2 → v13.5.3**
+> **📖 Quick Reference — historische Migration von v13.5.2 → v13.5.3**
 >
 > | Legacy | Aktiv | Hinweis |
 > |--------|-------|---------|

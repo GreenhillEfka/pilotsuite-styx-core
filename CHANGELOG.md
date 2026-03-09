@@ -4,6 +4,18 @@ Alle wesentlichen Änderungen am PilotSuite Styx Core werden in dieser Datei dok
 
 ## [Unreleased]
 
+## [13.5.7] - 2026-03-09
+
+### Compatibility
+- Core v13.5.7 ↔ HA v13.5.7
+- Migration required: no
+
+### Fixed
+- Legacy health compatibility endpoint added.
+- Async `init_services()` handling hardened in main app startup.
+- Webhook stub endpoint added for contract alignment.
+- Version files normalized for release.
+
 ## [13.5.2] - 2026-03-06
 
 ### Compatibility

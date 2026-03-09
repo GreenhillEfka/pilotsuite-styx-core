@@ -1,6 +1,6 @@
 # PilotSuite - Smart Home Intelligence
 
-[![GitHub Release](https://img.shields.io/github/release/GreenhillEfka/pilotsuite-styx-ha.svg)](https://github.com/GreenhillEfka/pilotsuite-styx-ha/releases)
+[![GitHub Release](https://img.shields.io/github/v/release/GreenhillEfka/pilotsuite-styx-core)](https://github.com/GreenhillEfka/pilotsuite-styx-core/releases)
 [![HACS](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
 
 ## 🚀 Features
@@ -56,7 +56,7 @@
 
 ```yaml
 pilotsuite:
-  core_url: http://localhost:8000
+  core_url: http://localhost:8909
   enable_ml: true
   enable_anomaly_detection: true
 ```
@@ -64,7 +64,7 @@ pilotsuite:
 ### UI:
 
 1. Einstellungen → Geräte & Dienste → PilotSuite → Konfigurieren
-2. Core Backend URL eingeben (Standard: `http://localhost:8000`)
+2. Core Backend URL eingeben (Standard: `http://localhost:8909`)
 3. ML-Features aktivieren/deaktivieren
 4. Speichern
 
