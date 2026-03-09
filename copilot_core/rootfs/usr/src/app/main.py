@@ -5,6 +5,8 @@ Main Application Entry Point.
 Delegates service initialization and blueprint registration to core_setup.py.
 """
 
+import asyncio
+import inspect
 import json
 import logging as _logging
 import os
@@ -173,6 +175,8 @@ _main_logger.info("Pre-flight check results: %s", json.dumps(_preflight_results)
 
 try:
     _services = init_services(config=_options)
+    if inspect.iscoroutine(_services):
+        _services = asyncio.run(_services)
 except Exception:
     _main_logger.exception("CRITICAL: init_services failed — starting with empty services")
     _services = {}
@@ -259,6 +263,12 @@ def serve_card(filename):
 def health():
     """Basic liveness probe — always returns 200 if the process is alive."""
     return jsonify({"ok": True, "time": _now_iso()})
+
+
+@app.get("/api/v1/legacy/health")
+def legacy_health():
+    """Legacy compatibility alias for historical health checks."""
+    return jsonify({"ok": True, "legacy": True, "time": _now_iso()})
 
 
 @app.get("/ready")
@@ -726,6 +736,25 @@ def get_unifi_stub():
     """Legacy allowlist endpoint stubbed until implementation is wired."""
     return (
         jsonify({"status": "stubbed", "code": 501, "message": "Not Implemented (Legacy Endpoint)", "endpoint": "/api/v1/unifi", "ticket": "PS-HEPH-150"}),
+        501,
+        {"X-Stub": "allowlist"},
+    )
+
+
+@app.post("/api/webhook/<webhook_id>")
+@require_token
+def post_webhook_event_stub(webhook_id):
+    """Webhook ingress placeholder until full event processing is wired."""
+    return (
+        jsonify(
+            {
+                "status": "stubbed",
+                "code": 501,
+                "message": "Not Implemented (Webhook Endpoint)",
+                "endpoint": f"/api/webhook/{webhook_id}",
+                "ticket": "PS-HEPH-155",
+            }
+        ),
         501,
         {"X-Stub": "allowlist"},
     )
