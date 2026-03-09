@@ -26,7 +26,7 @@
 
 1. HACS öffnen
 2. Rechts oben auf "⋮" → "Custom repositories"
-3. Repository: `https://github.com/GreenhillEfka/pilotsuite-styx-ha`
+3. Repository: `https://github.com/GreenhillEfka/pilotsuite-styx-core`
 4. Category: `Integration`
 5. Auf "Add" klicken
 6. PilotSuite in HACS finden und installieren
@@ -37,18 +37,15 @@
 
 1. Repository klonen:
    ```bash
-   git clone https://github.com/GreenhillEfka/pilotsuite-styx-ha.git
-   cd pilotsuite-styx-ha
+   git clone https://github.com/GreenhillEfka/pilotsuite-styx-core.git
+   cd pilotsuite-styx-core
    ```
 
-2. Nach `custom_components/pilotsuite/` kopieren:
-   ```bash
-   cp -r custom_components/pilotsuite /config/custom_components/
-   ```
+2. Das Core Add-on gemäß Repo-/Release-Dokumentation bauen bzw. in Home Assistant als Add-on-Repository einbinden.
 
 3. Home Assistant neu starten
 
-4. Integration einrichten: Einstellungen → Geräte & Dienste → "+" → PilotSuite
+4. PilotSuite Core starten und Health auf `http://localhost:8909/health` prüfen
 
 ## ⚙️ Konfiguration
 
@@ -70,17 +67,17 @@ pilotsuite:
 
 ## 🔗 Links
 
-- [GitHub Repository](https://github.com/GreenhillEfka/pilotsuite-styx-ha)
-- [Core Backend](https://github.com/GreenhillEfka/pilotsuite-styx-core)
-- [Dokumentation](https://github.com/GreenhillEfka/pilotsuite-styx-ha/wiki)
-- [Issues melden](https://github.com/GreenhillEfka/pilotsuite-styx-ha/issues)
+- [GitHub Repository](https://github.com/GreenhillEfka/pilotsuite-styx-core)
+- [HA Integration](https://github.com/GreenhillEfka/pilotsuite-styx-ha)
+- [Dokumentation](https://github.com/GreenhillEfka/pilotsuite-styx-core)
+- [Issues melden](https://github.com/GreenhillEfka/pilotsuite-styx-core/issues)
 
 ## 📝 Changelog
 
-Siehe [Releases](https://github.com/GreenhillEfka/pilotsuite-styx-ha/releases) für alle Änderungen.
+Siehe [Releases](https://github.com/GreenhillEfka/pilotsuite-styx-core/releases) für alle Änderungen.
 
 ---
 
-**Aktuelle Version:** v13.5.0
-**Letztes Update:** 2026-03-05
+**Aktuelle Version:** v13.5.7
+**Letztes Update:** 2026-03-09
 **Home Assistant:** 2024.1.0+
