@@ -683,7 +683,7 @@ def register_blueprints(app: Flask, services: dict) -> None:
     from copilot_core.api.v1.calendar import calendar_bp
     from copilot_core.api.v1.energy_forecast import energy_forecast_bp
     from copilot_core.api.v1.habitus_zones import bp as habitus_zones_bp
-    from copilot_core.api.v1.zone_editor import zone_editor_bp
+    from copilot_core.api.v1.zone_editor import zone_editor_bp, zone_legacy_alias_bp
     from copilot_core.api.v1.media_zones import media_zones_bp, init_media_zones_api
     from copilot_core.api.v1.tag_system import bp as tag_bp
     from copilot_core.api.v1.multihome import bp as multihome_bp
@@ -719,6 +719,7 @@ def register_blueprints(app: Flask, services: dict) -> None:
     app.register_blueprint(energy_forecast_bp) # prefix: /api/v1/energy
     app.register_blueprint(habitus_zones_bp)   # prefix: /api/v1/habitus/zones
     app.register_blueprint(zone_editor_bp)     # prefix: /api/v1/zone-editor
+    app.register_blueprint(zone_legacy_alias_bp)  # prefix: /api/v1/zone (HA test compatibility aliases)
     init_media_zones_api(services.get("media_zone_manager"), services.get("proactive_engine"))
     app.register_blueprint(media_zones_bp)     # prefix: /api/v1/media
     app.register_blueprint(tag_bp)             # prefix: /api/v1/tag-system

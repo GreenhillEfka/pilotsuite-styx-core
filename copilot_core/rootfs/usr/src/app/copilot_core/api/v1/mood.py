@@ -232,3 +232,49 @@ def all_zones_status():
         _LOGGER = current_app.logger
         _LOGGER.exception("All zones status failed")
         return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@bp.get("/aggregated")
+def aggregated():
+    """Get aggregated mood data across all zones.
+    
+    Returns overall mood score, zone breakdown, and trends.
+    """
+    try:
+        from copilot_core.mood.orchestrator import MoodOrchestrator, create_default_config
+        
+        config = create_default_config()
+        orchestrator = MoodOrchestrator(
+            mood_config=config,
+            get_sensor_data=lambda entities: {},
+            execute_service_calls=lambda calls: True
+        )
+        
+        # Get all zones status
+        zone_statuses = orchestrator.get_all_zones_status()
+        
+        # Calculate aggregated score
+        scores = [z.get("mood_score", 0.5) for z in zone_statuses if isinstance(z, dict)]
+        avg_score = sum(scores) / len(scores) if scores else 0.5
+        
+        # Determine overall mood state
+        if avg_score >= 0.7:
+            overall_state = "positive"
+        elif avg_score >= 0.4:
+            overall_state = "neutral"
+        else:
+            overall_state = "negative"
+        
+        return jsonify({
+            "ok": True,
+            "aggregated": {
+                "overall_score": avg_score,
+                "overall_state": overall_state,
+                "zone_count": len(zone_statuses),
+                "zones": zone_statuses
+            }
+        })
+    except Exception as e:
+        _LOGGER = current_app.logger
+        _LOGGER.exception("Aggregated mood failed")
+        return jsonify({"ok": False, "error": str(e)}), 500

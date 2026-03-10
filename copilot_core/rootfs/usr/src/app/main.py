@@ -634,72 +634,6 @@ def get_hub_status_stub():
     )
 
 
-@app.get("/api/v1/mood")
-@require_token
-def get_mood_stub():
-    """Legacy allowlist endpoint stubbed until implementation is wired."""
-    return (
-        jsonify({"status": "stubbed", "code": 501, "message": "Not Implemented (Legacy Endpoint)", "endpoint": "/api/v1/mood", "ticket": "PS-HEPH-150"}),
-        501,
-        {"X-Stub": "allowlist"},
-    )
-
-
-@app.get("/api/v1/mood/summary")
-@require_token
-def get_mood_summary_stub():
-    """Legacy allowlist endpoint stubbed until implementation is wired."""
-    return (
-        jsonify({"status": "stubbed", "code": 501, "message": "Not Implemented (Legacy Endpoint)", "endpoint": "/api/v1/mood/summary", "ticket": "PS-HEPH-150"}),
-        501,
-        {"X-Stub": "allowlist"},
-    )
-
-
-@app.post("/api/v1/mood/update-habitus")
-@require_token
-def post_mood_update_habitus_stub():
-    """Legacy allowlist endpoint stubbed until implementation is wired."""
-    return (
-        jsonify({"status": "stubbed", "code": 501, "message": "Not Implemented (Legacy Endpoint)", "endpoint": "/api/v1/mood/update-habitus", "ticket": "PS-HEPH-150"}),
-        501,
-        {"X-Stub": "allowlist"},
-    )
-
-
-@app.post("/api/v1/mood/update-media")
-@require_token
-def post_mood_update_media_stub():
-    """Legacy allowlist endpoint stubbed until implementation is wired."""
-    return (
-        jsonify({"status": "stubbed", "code": 501, "message": "Not Implemented (Legacy Endpoint)", "endpoint": "/api/v1/mood/update-media", "ticket": "PS-HEPH-150"}),
-        501,
-        {"X-Stub": "allowlist"},
-    )
-
-
-@app.get("/api/v1/mood/<zone_id>")
-@require_token
-def get_mood_zone_stub(zone_id):
-    """Legacy allowlist endpoint stubbed until implementation is wired."""
-    return (
-        jsonify({"status": "stubbed", "code": 501, "message": "Not Implemented (Legacy Endpoint)", "endpoint": f"/api/v1/mood/{zone_id}", "ticket": "PS-HEPH-150"}),
-        501,
-        {"X-Stub": "allowlist"},
-    )
-
-
-@app.post("/api/v1/mood/<zone_id>/suppress-energy-saving")
-@require_token
-def post_mood_zone_suppress_stub(zone_id):
-    """Legacy allowlist endpoint stubbed until implementation is wired."""
-    return (
-        jsonify({"status": "stubbed", "code": 501, "message": "Not Implemented (Legacy Endpoint)", "endpoint": f"/api/v1/mood/{zone_id}/suppress-energy-saving", "ticket": "PS-HEPH-150"}),
-        501,
-        {"X-Stub": "allowlist"},
-    )
-
-
 @app.get("/api/v1/system_health")
 @require_token
 def get_system_health_stub():
@@ -830,11 +764,12 @@ def create_app(config: dict | None = None) -> Flask:
     # For testing: register only essential blueprints without full service init
     if config and config.get('TESTING'):
         try:
-            from copilot_core.api.v1.zone_editor import zone_editor_bp, zone_editor_legacy_bp
+            from copilot_core.api.v1.zone_editor import zone_editor_bp, zone_editor_legacy_bp, zone_legacy_alias_bp
             from copilot_core.api.v1.zone_dashboard import zone_dashboard_bp
             # Blueprints already have their url_prefix defined, don't add another
             test_app.register_blueprint(zone_editor_bp)
             test_app.register_blueprint(zone_editor_legacy_bp)
+            test_app.register_blueprint(zone_legacy_alias_bp)
             test_app.register_blueprint(zone_dashboard_bp)
         except ImportError as e:
             _main_logger.warning("Could not register test blueprints: %s", e)

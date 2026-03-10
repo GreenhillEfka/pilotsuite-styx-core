@@ -96,16 +96,6 @@ tags:
   description: Sensor cache operations
 - name: Vector
   description: Vector store operations
-- name: Onyx
-  description: Onyx bridge for deterministic HA actions via Supervisor API
-- name: Weather
-  description: Weather data, forecasts, and PV-based energy recommendations from external APIs
-- name: Calendar
-  description: Home Assistant calendar entity access and event retrieval
-- name: Automations
-  description: Automation suggestions, creation, and management
-- name: Zone Automation
-  description: Zone-based automation with presence, brightness, and entity management
 security:
 - apiKeyAuth: []
 - bearerAuth: []
@@ -4310,7 +4300,7 @@ paths:
       - bearerAuth: []
   /api/v1/kg/edges:
     get:
-      summary: 'KG: kg list edges'
+      summary: KG: kg list edges
       description: Auto-generated stub for `kg_list_edges` (GET /api/v1/kg/edges).
       operationId: kg_list_edges
       tags:
@@ -4337,11 +4327,28 @@ paths:
       security:
       - apiKeyAuth: []
     post:
-      summary: 'KG: kg create edge'
+      summary: KG: kg create edge
       description: Auto-generated stub for `kg_create_edge` (POST /api/v1/kg/edges).
       operationId: kg_create_edge
       tags:
       - Knowledge Graph
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - source
+              - target
+              - type
+              properties:
+                source:
+                  type: string
+                target:
+                  type: string
+                type:
+                  type: string
       responses:
         '201':
           description: Created
@@ -4361,6 +4368,15 @@ paths:
             application/json:
               schema:
                 type: object
+      security:
+      - apiKeyAuth: []
+  /api/v1/kg/entities:
+    post:
+      summary: KG: kg upsert entity
+      description: Auto-generated stub for `kg_upsert_entity` (POST /api/v1/kg/entities).
+      operationId: kg_upsert_entity
+      tags:
+      - Knowledge Graph
       requestBody:
         required: true
         content:
@@ -4368,25 +4384,13 @@ paths:
             schema:
               type: object
               required:
-              - source
-              - target
-              - type
+              - entity_id
+              - domain
               properties:
-                source:
+                entity_id:
                   type: string
-                target:
+                domain:
                   type: string
-                type:
-                  type: string
-      security:
-      - apiKeyAuth: []
-  /api/v1/kg/entities:
-    post:
-      summary: 'KG: kg upsert entity'
-      description: Auto-generated stub for `kg_upsert_entity` (POST /api/v1/kg/entities).
-      operationId: kg_upsert_entity
-      tags:
-      - Knowledge Graph
       responses:
         '200':
           description: Successful response
@@ -4406,29 +4410,22 @@ paths:
             application/json:
               schema:
                 type: object
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-              - entity_id
-              - domain
-              properties:
-                entity_id:
-                  type: string
-                domain:
-                  type: string
       security:
       - apiKeyAuth: []
   /api/v1/kg/entity/{entity_id}/related:
     get:
-      summary: 'KG: kg entity related'
+      summary: KG: kg entity related
       description: Auto-generated stub for `kg_entity_related` (GET /api/v1/kg/entity/{entity_id}/related).
       operationId: kg_entity_related
       tags:
       - Knowledge Graph
+      parameters:
+      - name: entity_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Path parameter `entity_id`
       responses:
         '200':
           description: Successful response
@@ -4442,18 +4439,11 @@ paths:
             application/json:
               schema:
                 type: object
-      parameters:
-      - name: entity_id
-        in: path
-        required: true
-        schema:
-          type: string
-        description: Path parameter `entity_id`
       security:
       - apiKeyAuth: []
   /api/v1/kg/import/entities:
     post:
-      summary: 'KG: kg import entities'
+      summary: KG: kg import entities
       description: Auto-generated stub for `kg_import_entities` (POST /api/v1/kg/import/entities).
       operationId: kg_import_entities
       tags:
@@ -4475,7 +4465,7 @@ paths:
       - apiKeyAuth: []
   /api/v1/kg/import/patterns:
     post:
-      summary: 'KG: kg import patterns'
+      summary: KG: kg import patterns
       description: Auto-generated stub for `kg_import_patterns` (POST /api/v1/kg/import/patterns).
       operationId: kg_import_patterns
       tags:
@@ -4497,11 +4487,18 @@ paths:
       - apiKeyAuth: []
   /api/v1/kg/mood/{mood}/patterns:
     get:
-      summary: 'KG: kg mood patterns'
+      summary: KG: kg mood patterns
       description: Auto-generated stub for `kg_mood_patterns` (GET /api/v1/kg/mood/{mood}/patterns).
       operationId: kg_mood_patterns
       tags:
       - Knowledge Graph
+      parameters:
+      - name: mood
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Path parameter `mood`
       responses:
         '200':
           description: Successful response
@@ -4515,22 +4512,26 @@ paths:
             application/json:
               schema:
                 type: object
-      parameters:
-      - name: mood
-        in: path
-        required: true
-        schema:
-          type: string
-        description: Path parameter `mood`
       security:
       - apiKeyAuth: []
   /api/v1/kg/moods:
     post:
-      summary: 'KG: kg upsert mood'
+      summary: KG: kg upsert mood
       description: Auto-generated stub for `kg_upsert_mood` (POST /api/v1/kg/moods).
       operationId: kg_upsert_mood
       tags:
       - Knowledge Graph
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - mood
+              properties:
+                mood:
+                  type: string
       responses:
         '200':
           description: Successful response
@@ -4550,22 +4551,11 @@ paths:
             application/json:
               schema:
                 type: object
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-              - mood
-              properties:
-                mood:
-                  type: string
       security:
       - apiKeyAuth: []
   /api/v1/kg/nodes:
     get:
-      summary: 'KG: kg list nodes'
+      summary: KG: kg list nodes
       description: Auto-generated stub for `kg_list_nodes` (GET /api/v1/kg/nodes).
       operationId: kg_list_nodes
       tags:
@@ -4592,11 +4582,25 @@ paths:
       security:
       - apiKeyAuth: []
     post:
-      summary: 'KG: kg create node'
+      summary: KG: kg create node
       description: Auto-generated stub for `kg_create_node` (POST /api/v1/kg/nodes).
       operationId: kg_create_node
       tags:
       - Knowledge Graph
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - id
+              - type
+              properties:
+                id:
+                  type: string
+                type:
+                  type: string
       responses:
         '201':
           description: Created
@@ -4616,48 +4620,15 @@ paths:
             application/json:
               schema:
                 type: object
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-              - id
-              - type
-              properties:
-                id:
-                  type: string
-                type:
-                  type: string
       security:
       - apiKeyAuth: []
   /api/v1/kg/nodes/{node_id}:
     get:
-      summary: 'KG: kg get node'
+      summary: KG: kg get node
       description: Auto-generated stub for `kg_get_node` (GET /api/v1/kg/nodes/{node_id}).
       operationId: kg_get_node
       tags:
       - Knowledge Graph
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                type: object
-        '404':
-          description: Resource not found
-          content:
-            application/json:
-              schema:
-                type: object
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                type: object
       parameters:
       - name: node_id
         in: path
@@ -4665,15 +4636,6 @@ paths:
         schema:
           type: string
         description: Path parameter `node_id`
-      security:
-      - apiKeyAuth: []
-  /api/v1/kg/pattern/{pattern_id}:
-    get:
-      summary: 'KG: kg get pattern'
-      description: Auto-generated stub for `kg_get_pattern` (GET /api/v1/kg/pattern/{pattern_id}).
-      operationId: kg_get_pattern
-      tags:
-      - Knowledge Graph
       responses:
         '200':
           description: Successful response
@@ -4693,6 +4655,15 @@ paths:
             application/json:
               schema:
                 type: object
+      security:
+      - apiKeyAuth: []
+  /api/v1/kg/pattern/{pattern_id}:
+    get:
+      summary: KG: kg get pattern
+      description: Auto-generated stub for `kg_get_pattern` (GET /api/v1/kg/pattern/{pattern_id}).
+      operationId: kg_get_pattern
+      tags:
+      - Knowledge Graph
       parameters:
       - name: pattern_id
         in: path
@@ -4700,11 +4671,30 @@ paths:
         schema:
           type: string
         description: Path parameter `pattern_id`
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '404':
+          description: Resource not found
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
       security:
       - apiKeyAuth: []
   /api/v1/kg/query:
     post:
-      summary: 'KG: kg query'
+      summary: KG: kg query
       description: Auto-generated stub for `kg_query` (POST /api/v1/kg/query).
       operationId: kg_query
       tags:
@@ -4726,7 +4716,7 @@ paths:
       - apiKeyAuth: []
   /api/v1/kg/stats:
     get:
-      summary: 'KG: kg stats'
+      summary: KG: kg stats
       description: Auto-generated stub for `kg_stats` (GET /api/v1/kg/stats).
       operationId: kg_stats
       tags:
@@ -4748,11 +4738,18 @@ paths:
       - apiKeyAuth: []
   /api/v1/kg/zone/{zone_id}/entities:
     get:
-      summary: 'KG: kg zone entities'
+      summary: KG: kg zone entities
       description: Auto-generated stub for `kg_zone_entities` (GET /api/v1/kg/zone/{zone_id}/entities).
       operationId: kg_zone_entities
       tags:
       - Knowledge Graph
+      parameters:
+      - name: zone_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Path parameter `zone_id`
       responses:
         '200':
           description: Successful response
@@ -4766,22 +4763,26 @@ paths:
             application/json:
               schema:
                 type: object
-      parameters:
-      - name: zone_id
-        in: path
-        required: true
-        schema:
-          type: string
-        description: Path parameter `zone_id`
       security:
       - apiKeyAuth: []
   /api/v1/kg/zones:
     post:
-      summary: 'KG: kg upsert zone'
+      summary: KG: kg upsert zone
       description: Auto-generated stub for `kg_upsert_zone` (POST /api/v1/kg/zones).
       operationId: kg_upsert_zone
       tags:
       - Knowledge Graph
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - zone_id
+              properties:
+                zone_id:
+                  type: string
       responses:
         '200':
           description: Successful response
@@ -4801,17 +4802,6 @@ paths:
             application/json:
               schema:
                 type: object
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-              - zone_id
-              properties:
-                zone_id:
-                  type: string
       security:
       - apiKeyAuth: []
   /api/v1/system_health:
@@ -5738,217 +5728,6 @@ paths:
                 type: object
       security:
       - apiKeyAuth: []
-  /api/v1/zone/dashboard:
-    get:
-      summary: 'Zone: Get complete dashboard data with all zones, status, mood, and
-        quick actions.'
-      description: Get dashboard data for all zones with status, mood, and quick actions.
-      operationId: zone_get_dashboard
-      tags:
-      - Zone
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                type: object
-        '400':
-          description: Invalid request payload
-          content:
-            application/json:
-              schema:
-                type: object
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                type: object
-      security:
-      - apiKeyAuth: []
-  /api/v1/zone/dashboard/summary:
-    get:
-      summary: 'Zone: Get dashboard summary (lightweight overview without details).'
-      description: Get dashboard summary with counts and active zones.
-      operationId: zone_get_dashboard_summary
-      tags:
-      - Zone
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                type: object
-        '400':
-          description: Invalid request payload
-          content:
-            application/json:
-              schema:
-                type: object
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                type: object
-      security:
-      - apiKeyAuth: []
-  /api/v1/zone/dashboard/mood:
-    get:
-      summary: 'Zone: Get mood data for all zones.'
-      description: Get mood scores (comfort, joy, frugality) for all zones.
-      operationId: zone_get_mood
-      tags:
-      - Zone
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                type: object
-        '400':
-          description: Invalid request payload
-          content:
-            application/json:
-              schema:
-                type: object
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                type: object
-      security:
-      - apiKeyAuth: []
-  /api/v1/zone/dashboard/mood/{zone_id}:
-    put:
-      summary: 'Zone: Set mood data for a zone.'
-      description: Set mood data for a specific zone (testing/demo).
-      operationId: zone_set_mood
-      tags:
-      - Zone
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                type: object
-        '400':
-          description: Invalid request payload
-          content:
-            application/json:
-              schema:
-                type: object
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                type: object
-      parameters:
-      - name: zone_id
-        in: path
-        required: true
-        schema:
-          type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                comfort:
-                  type: number
-                joy:
-                  type: number
-                frugality:
-                  type: number
-      security:
-      - apiKeyAuth: []
-  /api/v1/zone/dashboard/quick-action:
-    post:
-      summary: 'Zone: Execute a quick action for a zone.'
-      description: Execute a quick action (lights on/off, climate, media) for a zone.
-      operationId: zone_execute_quick_action
-      tags:
-      - Zone
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                type: object
-        '400':
-          description: Invalid request payload
-          content:
-            application/json:
-              schema:
-                type: object
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                type: object
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                zone_id:
-                  type: string
-                action_id:
-                  type: string
-                service:
-                  type: string
-                target:
-                  type: object
-                data:
-                  type: object
-      security:
-      - apiKeyAuth: []
-  /api/v1/zone/dashboard/{zone_id}:
-    get:
-      summary: 'Zone: Get detailed data for a single zone.'
-      description: Get detailed data for a zone including scenes and domain aggregates.
-      operationId: zone_get_zone_detail
-      tags:
-      - Zone
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                type: object
-        '400':
-          description: Invalid request payload
-          content:
-            application/json:
-              schema:
-                type: object
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                type: object
-      parameters:
-      - name: zone_id
-        in: path
-        required: true
-        schema:
-          type: string
-      security:
-      - apiKeyAuth: []
   /api/v1/suggestions:
     get:
       summary: 'Suggestions: Get active suggestions.'
@@ -6316,97 +6095,6 @@ paths:
           description: Aggregation completed
       security:
       - apiKeyAuth: []
-  /api/v1/federated/knowledge:
-    post:
-      summary: Extract knowledge from node
-      description: Extracts knowledge from a node for federated transfer.
-      operationId: extractKnowledge
-      tags:
-      - Federated Learning
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - node_id
-                - knowledge_type
-                - payload
-              properties:
-                node_id:
-                  type: string
-                knowledge_type:
-                  type: string
-                payload:
-                  type: object
-                confidence:
-                  type: number
-                  default: 1.0
-      responses:
-        '200':
-          description: Knowledge extracted successfully
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  ok:
-                    type: boolean
-                  knowledge_id:
-                    type: string
-                  knowledge_hash:
-                    type: string
-        '400':
-          description: Invalid request
-        '500':
-          description: Server error
-      security:
-      - apiKeyAuth: []
-  /api/v1/federated/knowledge/{knowledge_id}/transfer:
-    post:
-      summary: Transfer knowledge to another node
-      description: Transfers knowledge to another node in the federation.
-      operationId: transferKnowledge
-      tags:
-      - Federated Learning
-      parameters:
-      - name: knowledge_id
-        in: path
-        required: true
-        schema:
-          type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - target_node_id
-              properties:
-                target_node_id:
-                  type: string
-      responses:
-        '200':
-          description: Knowledge transfer initiated
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  ok:
-                    type: boolean
-                  knowledge_id:
-                    type: string
-                  target_node_id:
-                    type: string
-        '400':
-          description: Invalid request
-        '500':
-          description: Server error
-      security:
-      - apiKeyAuth: []
   /api/v1/federated/rounds:
     get:
       summary: Get round history
@@ -6429,116 +6117,6 @@ paths:
       responses:
         '200':
           description: Statistics
-      security:
-      - apiKeyAuth: []
-  /api/v1/federated/models:
-    get:
-      summary: Get aggregated models
-      description: Returns all aggregated models from federated learning.
-      operationId: getAggregatedModels
-      tags:
-      - Federated Learning
-      responses:
-        '200':
-          description: Aggregated models
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  count:
-                    type: integer
-                  models:
-                    type: object
-        '500':
-          description: Server error
-      security:
-      - apiKeyAuth: []
-  /api/v1/federated/knowledge-base:
-    get:
-      summary: Get knowledge base
-      description: Returns the knowledge transfer base for federated learning.
-      operationId: getKnowledgeBase
-      tags:
-      - Federated Learning
-      responses:
-        '200':
-          description: Knowledge base
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  count:
-                    type: integer
-                  items:
-                    type: object
-        '500':
-          description: Server error
-      security:
-      - apiKeyAuth: []
-  /api/v1/federated/save:
-    post:
-      summary: Save federated state
-      description: Saves the federated learning system state to a file.
-      operationId: saveFederatedState
-      tags:
-      - Federated Learning
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                path:
-                  type: string
-                  default: /config/.copilot/federated_state.json
-      responses:
-        '200':
-          description: State saved
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  ok:
-                    type: boolean
-                  path:
-                    type: string
-        '500':
-          description: Server error
-      security:
-      - apiKeyAuth: []
-  /api/v1/federated/load:
-    post:
-      summary: Load federated state
-      description: Loads the federated learning system state from a file.
-      operationId: loadFederatedState
-      tags:
-      - Federated Learning
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                path:
-                  type: string
-                  default: /config/.copilot/federated_state.json
-      responses:
-        '200':
-          description: State loaded
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  ok:
-                    type: boolean
-                  path:
-                    type: string
-        '500':
-          description: Server error
       security:
       - apiKeyAuth: []
   /api/v1/energy:
@@ -7147,774 +6725,6 @@ paths:
               required:
               - chat_id
               - text
-      security:
-      - bearerAuth: []
-  /api/v1/automations/suggestions:
-    get:
-      summary: 'Automation: Get automation suggestions.'
-      description: Auto-generated Automation stub for `get_suggestions` (GET /api/v1/automations/suggestions).
-      operationId: auto_get_suggestions
-      tags:
-      - Automations
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                type: object
-        '400':
-          description: Invalid request payload
-          content:
-            application/json:
-              schema:
-                type: object
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                type: object
-      security:
-      - bearerAuth: []
-  /api/v1/automations/suggestions/{suggestion_id}/accept:
-    post:
-      summary: 'Automation: Accept a suggestion.'
-      description: Auto-generated Automation stub for `accept_suggestion` (POST /api/v1/automations/suggestions/{suggestion_id}/accept).
-      operationId: auto_accept_suggestion
-      tags:
-      - Automations
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                type: object
-        '400':
-          description: Invalid request payload
-          content:
-            application/json:
-              schema:
-                type: object
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                type: object
-      parameters:
-      - name: suggestion_id
-        in: path
-        required: true
-        schema:
-          type: string
-      security:
-      - bearerAuth: []
-  /api/v1/automations/suggestions/{suggestion_id}/dismiss:
-    post:
-      summary: 'Automation: Dismiss a suggestion.'
-      description: Auto-generated Automation stub for `dismiss_suggestion` (POST /api/v1/automations/suggestions/{suggestion_id}/dismiss).
-      operationId: auto_dismiss_suggestion
-      tags:
-      - Automations
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                type: object
-        '400':
-          description: Invalid request payload
-          content:
-            application/json:
-              schema:
-                type: object
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                type: object
-      parameters:
-      - name: suggestion_id
-        in: path
-        required: true
-        schema:
-          type: string
-      security:
-      - bearerAuth: []
-  /api/v1/automations/suggestions/{suggestion_id}/yaml:
-    get:
-      summary: 'Automation: Get automation YAML for a suggestion.'
-      description: Auto-generated Automation stub for `get_suggestion_yaml` (GET /api/v1/automations/suggestions/{suggestion_id}/yaml).
-      operationId: auto_get_suggestion_yaml
-      tags:
-      - Automations
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                type: object
-        '400':
-          description: Invalid request payload
-          content:
-            application/json:
-              schema:
-                type: object
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                type: object
-      parameters:
-      - name: suggestion_id
-        in: path
-        required: true
-        schema:
-          type: string
-      security:
-      - bearerAuth: []
-  /api/v1/automations/generate:
-    post:
-      summary: 'Automation: Generate suggestions from current data.'
-      description: Auto-generated Automation stub for `generate_suggestions` (POST /api/v1/automations/generate).
-      operationId: auto_generate_suggestions
-      tags:
-      - Automations
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                type: object
-        '400':
-          description: Invalid request payload
-          content:
-            application/json:
-              schema:
-                type: object
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                type: object
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-      security:
-      - bearerAuth: []
-  /api/v1/automations/create:
-    post:
-      summary: 'Automation: Create automation from suggestion.'
-      description: Auto-generated Automation stub for `create_automation` (POST /api/v1/automations/create).
-      operationId: auto_create_automation
-      tags:
-      - Automations
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                type: object
-        '400':
-          description: Invalid request payload
-          content:
-            application/json:
-              schema:
-                type: object
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                type: object
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-      security:
-      - bearerAuth: []
-  /api/v1/automations:
-    get:
-      summary: 'Automation: List all Styx-created automations.'
-      description: Auto-generated Automation stub for `list_automations` (GET /api/v1/automations).
-      operationId: auto_list_automations
-      tags:
-      - Automations
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                type: object
-        '400':
-          description: Invalid request payload
-          content:
-            application/json:
-              schema:
-                type: object
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                type: object
-      security:
-      - bearerAuth: []
-  /api/v1/zone-automation/dashboard:
-    get:
-      summary: 'Zone Automation: Full automation dashboard with all zone states.'
-      description: Auto-generated Zone Automation stub for `get_dashboard` (GET /api/v1/zone-automation/dashboard).
-      operationId: zone_auto_get_dashboard
-      tags:
-      - Zone Automation
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                type: object
-        '400':
-          description: Invalid request payload
-          content:
-            application/json:
-              schema:
-                type: object
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                type: object
-      security:
-      - bearerAuth: []
-  /api/v1/zone-automation/zones/{zone_id}:
-    get:
-      summary: 'Zone Automation: Get zone automation state and config.'
-      description: Auto-generated Zone Automation stub for `get_zone_state` (GET /api/v1/zone-automation/zones/{zone_id}).
-      operationId: zone_auto_get_zone_state
-      tags:
-      - Zone Automation
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                type: object
-        '400':
-          description: Invalid request payload
-          content:
-            application/json:
-              schema:
-                type: object
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                type: object
-      parameters:
-      - name: zone_id
-        in: path
-        required: true
-        schema:
-          type: string
-      security:
-      - bearerAuth: []
-  /api/v1/zone-automation/zones/{zone_id}/config:
-    post:
-      summary: 'Zone Automation: Update zone automation config (partial updates).'
-      description: Auto-generated Zone Automation stub for `update_zone_config` (POST /api/v1/zone-automation/zones/{zone_id}/config).
-      operationId: zone_auto_update_zone_config
-      tags:
-      - Zone Automation
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                type: object
-        '400':
-          description: Invalid request payload
-          content:
-            application/json:
-              schema:
-                type: object
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                type: object
-      parameters:
-      - name: zone_id
-        in: path
-        required: true
-        schema:
-          type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-      security:
-      - bearerAuth: []
-  /api/v1/zone-automation/zones/{zone_id}/override:
-    post:
-      summary: 'Zone Automation: Toggle light/music override switch.'
-      description: Auto-generated Zone Automation stub for `toggle_override` (POST /api/v1/zone-automation/zones/{zone_id}/override).
-      operationId: zone_auto_toggle_override
-      tags:
-      - Zone Automation
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                type: object
-        '400':
-          description: Invalid request payload
-          content:
-            application/json:
-              schema:
-                type: object
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                type: object
-      parameters:
-      - name: zone_id
-        in: path
-        required: true
-        schema:
-          type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-      security:
-      - bearerAuth: []
-  /api/v1/zone-automation/zones/{zone_id}/presence:
-    post:
-      summary: 'Zone Automation: Report presence event.'
-      description: Auto-generated Zone Automation stub for `report_presence` (POST /api/v1/zone-automation/zones/{zone_id}/presence).
-      operationId: zone_auto_report_presence
-      tags:
-      - Zone Automation
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                type: object
-        '400':
-          description: Invalid request payload
-          content:
-            application/json:
-              schema:
-                type: object
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                type: object
-      parameters:
-      - name: zone_id
-        in: path
-        required: true
-        schema:
-          type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-      security:
-      - bearerAuth: []
-  /api/v1/zone-automation/zones/{zone_id}/brightness:
-    post:
-      summary: 'Zone Automation: Report brightness update for adaptive dimming.'
-      description: Auto-generated Zone Automation stub for `report_brightness` (POST /api/v1/zone-automation/zones/{zone_id}/brightness).
-      operationId: zone_auto_report_brightness
-      tags:
-      - Zone Automation
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                type: object
-        '400':
-          description: Invalid request payload
-          content:
-            application/json:
-              schema:
-                type: object
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                type: object
-      parameters:
-      - name: zone_id
-        in: path
-        required: true
-        schema:
-          type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-      security:
-      - bearerAuth: []
-  /api/v1/zone-automation/zones/{zone_id}/entities:
-    get:
-      summary: 'Zone Automation: List all entities in a zone, optionally grouped by role.'
-      description: Auto-generated Zone Automation stub for `list_zone_entities` (GET /api/v1/zone-automation/zones/{zone_id}/entities).
-      operationId: zone_auto_list_zone_entities
-      tags:
-      - Zone Automation
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                type: object
-        '400':
-          description: Invalid request payload
-          content:
-            application/json:
-              schema:
-                type: object
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                type: object
-      parameters:
-      - name: zone_id
-        in: path
-        required: true
-        schema:
-          type: string
-      security:
-      - bearerAuth: []
-    post:
-      summary: 'Zone Automation: Add entity to zone.'
-      description: Auto-generated Zone Automation stub for `add_entity` (POST /api/v1/zone-automation/zones/{zone_id}/entities).
-      operationId: zone_auto_add_entity
-      tags:
-      - Zone Automation
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                type: object
-        '400':
-          description: Invalid request payload
-          content:
-            application/json:
-              schema:
-                type: object
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                type: object
-      parameters:
-      - name: zone_id
-        in: path
-        required: true
-        schema:
-          type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-      security:
-      - bearerAuth: []
-  /api/v1/zone-automation/zones/{zone_id}/entities/{entity_id}:
-    delete:
-      summary: 'Zone Automation: Remove entity from zone.'
-      description: Auto-generated Zone Automation stub for `remove_entity` (DELETE /api/v1/zone-automation/zones/{zone_id}/entities/{entity_id}).
-      operationId: zone_auto_remove_entity
-      tags:
-      - Zone Automation
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                type: object
-        '400':
-          description: Invalid request payload
-          content:
-            application/json:
-              schema:
-                type: object
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                type: object
-      parameters:
-      - name: zone_id
-        in: path
-        required: true
-        schema:
-          type: string
-      - name: entity_id
-        in: path
-        required: true
-        schema:
-          type: string
-      security:
-      - bearerAuth: []
-  /api/v1/zone-automation/zones/{zone_id}/entities/{entity_id}/tags:
-    post:
-      summary: 'Zone Automation: Update tags for an entity.'
-      description: Auto-generated Zone Automation stub for `update_entity_tags` (POST /api/v1/zone-automation/zones/{zone_id}/entities/{entity_id}/tags).
-      operationId: zone_auto_update_entity_tags
-      tags:
-      - Zone Automation
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                type: object
-        '400':
-          description: Invalid request payload
-          content:
-            application/json:
-              schema:
-                type: object
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                type: object
-      parameters:
-      - name: zone_id
-        in: path
-        required: true
-        schema:
-          type: string
-      - name: entity_id
-        in: path
-        required: true
-        schema:
-          type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-      security:
-      - bearerAuth: []
-  /api/v1/zone-automation/zones/{zone_id}/entities/{entity_id}/role:
-    post:
-      summary: 'Zone Automation: Update role for an entity.'
-      description: Auto-generated Zone Automation stub for `update_entity_role` (POST /api/v1/zone-automation/zones/{zone_id}/entities/{entity_id}/role).
-      operationId: zone_auto_update_entity_role
-      tags:
-      - Zone Automation
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                type: object
-        '400':
-          description: Invalid request payload
-          content:
-            application/json:
-              schema:
-                type: object
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                type: object
-      parameters:
-      - name: zone_id
-        in: path
-        required: true
-        schema:
-          type: string
-      - name: entity_id
-        in: path
-        required: true
-        schema:
-          type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-      security:
-      - bearerAuth: []
-  /api/v1/zone-automation/tags:
-    get:
-      summary: 'Zone Automation: List all available tag definitions.'
-      description: Auto-generated Zone Automation stub for `list_tags` (GET /api/v1/zone-automation/tags).
-      operationId: zone_auto_list_tags
-      tags:
-      - Zone Automation
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                type: object
-        '400':
-          description: Invalid request payload
-          content:
-            application/json:
-              schema:
-                type: object
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                type: object
-      security:
-      - bearerAuth: []
-  /api/v1/zone-automation/roles:
-    get:
-      summary: 'Zone Automation: List all available entity roles.'
-      description: Auto-generated Zone Automation stub for `list_roles` (GET /api/v1/zone-automation/roles).
-      operationId: zone_auto_list_roles
-      tags:
-      - Zone Automation
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                type: object
-        '400':
-          description: Invalid request payload
-          content:
-            application/json:
-              schema:
-                type: object
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                type: object
-      security:
-      - bearerAuth: []
-  /api/v1/zone-automation/entities/search:
-    get:
-      summary: 'Zone Automation: Search entities across all zones.'
-      description: Auto-generated Zone Automation stub for `search_entities` (GET /api/v1/zone-automation/entities/search).
-      operationId: zone_auto_search_entities
-      tags:
-      - Zone Automation
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                type: object
-        '400':
-          description: Invalid request payload
-          content:
-            application/json:
-              schema:
-                type: object
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                type: object
-      security:
-      - bearerAuth: []
-  /api/v1/zone-automation/import:
-    post:
-      summary: 'Zone Automation: Import entities from example config or custom data.'
-      description: Auto-generated Zone Automation stub for `import_entities` (POST /api/v1/zone-automation/import).
-      operationId: zone_auto_import_entities
-      tags:
-      - Zone Automation
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                type: object
-        '400':
-          description: Invalid request payload
-          content:
-            application/json:
-              schema:
-                type: object
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                type: object
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
       security:
       - bearerAuth: []
   /api/v1/zones:
@@ -15860,8 +14670,7 @@ paths:
       - apiKeyAuth: []
   /api/v1/rag/search:
     post:
-      summary: 'Rag: Hybrid search combining BM25 lexical and semantic results via
-        RRF.'
+      summary: 'Rag: Hybrid search combining BM25 lexical and semantic results via RRF.'
       description: Auto-generated stub for `rag_search` (POST /api/v1/rag/search).
       operationId: misc_rag_search
       tags:
@@ -15961,6 +14770,40 @@ paths:
               type: object
       security:
       - apiKeyAuth: []
+  /api/v1/rag/search/enhanced:
+    post:
+      summary: 'Rag: Enhanced hybrid search with SearXNG web integration.'
+      description: Auto-generated stub for `rag_search_enhanced` (POST /api/v1/rag/search/enhanced).
+      operationId: misc_rag_search_enhanced
+      tags:
+      - Rag
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - apiKeyAuth: []
   /api/v1/rag/rerank:
     post:
       summary: 'Rag: Rerank pre-existing hit lists using Reciprocal Rank Fusion.'
@@ -15993,34 +14836,6 @@ paths:
           application/json:
             schema:
               type: object
-      security:
-      - apiKeyAuth: []
-  /api/v1/rag/stats:
-    get:
-      summary: 'Rag: Return BM25 index statistics, request metrics, and cache stats.'
-      description: Auto-generated stub for `rag_stats` (GET /api/v1/rag/stats).
-      operationId: misc_rag_stats
-      tags:
-      - Rag
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                type: object
-        '400':
-          description: Invalid request payload
-          content:
-            application/json:
-              schema:
-                type: object
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                type: object
       security:
       - apiKeyAuth: []
   /api/v1/rag/index:
@@ -16091,11 +14906,11 @@ paths:
               type: object
       security:
       - apiKeyAuth: []
-  /api/v1/rag/search/enhanced:
-    post:
-      summary: 'Rag: Enhanced hybrid search with SearXNG web integration.'
-      description: Auto-generated stub for `rag_search_enhanced` (POST /api/v1/rag/search/enhanced).
-      operationId: misc_rag_search_enhanced
+  /api/v1/rag/stats:
+    get:
+      summary: 'Rag: Return BM25 index statistics, request metrics, and cache stats.'
+      description: Auto-generated stub for `rag_stats` (GET /api/v1/rag/stats).
+      operationId: misc_rag_stats
       tags:
       - Rag
       responses:
@@ -16117,12 +14932,6 @@ paths:
             application/json:
               schema:
                 type: object
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
       security:
       - apiKeyAuth: []
   /api/v1/search:
@@ -17185,469 +15994,6 @@ paths:
                 type: object
       security:
       - apiKeyAuth: []
-
-  /api/v1/onyx/status:
-    get:
-      summary: 'Onyx: Get bridge status.'
-      description: Health/status information for Onyx bridge wiring, including HA connectivity
-        and allowed domains.
-      operationId: onyx_status
-      tags:
-      - Onyx
-      responses:
-        '200':
-          description: Bridge status information
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                - ok
-                - bridge
-                properties:
-                  ok:
-                    type: boolean
-                  bridge:
-                    type: string
-                    example: onyx
-                  supervisor_api:
-                    type: string
-                    example: http://supervisor/core/api
-                  has_supervisor_token:
-                    type: boolean
-                  ha_reachable:
-                    type: boolean
-                  ha_error:
-                    type: string
-                  allowed_domains:
-                    type: array
-                    items:
-                      type: string
-                    example:
-                    - light
-                    - switch
-                    - scene
-                    - fan
-                    - cover
-                    - climate
-                    - media_player
-                    - input_boolean
-                    - script
-                    - automation
-                    - notify
-        '401':
-          description: Unauthorized
-          content:
-            application/json:
-              schema:
-                type: object
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                type: object
-      security:
-      - apiKeyAuth: []
-
-  /api/v1/onyx/ha/service-call:
-    post:
-      summary: 'Onyx: Execute controlled HA service call.'
-      description: Execute a controlled Home Assistant service call with optional
-        state readback. Validates domain against allowed domains and returns entity
-        states after execution.
-      operationId: onyx_ha_service_call
-      tags:
-      - Onyx
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-              - domain
-              - service
-              properties:
-                domain:
-                  type: string
-                  description: HA service domain (e.g., light, switch, scene)
-                  example: light
-                service:
-                  type: string
-                  description: HA service name (e.g., turn_on, turn_off)
-                  example: turn_on
-                entity_id:
-                  oneOf:
-                  - type: string
-                  - type: array
-                    items:
-                      type: string
-                  description: Entity or entities to target
-                  example: light.living_room
-                service_data:
-                  type: object
-                  additionalProperties: true
-                  description: HA service payload data
-                  example:
-                    brightness_pct: 80
-                    color_temp: 350
-                target:
-                  type: object
-                  additionalProperties: true
-                  description: HA service target
-                readback:
-                  type: boolean
-                  default: true
-                  description: Whether to read back entity states after service call
-                readback_entity_ids:
-                  type: array
-                  items:
-                    type: string
-                  description: Entity IDs to read back (defaults to entity_id)
-                  example:
-                  - light.living_room
-                  - light.kitchen
-      responses:
-        '200':
-          description: Service call executed successfully
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                - ok
-                properties:
-                  ok:
-                    type: boolean
-                  domain:
-                    type: string
-                  service:
-                    type: string
-                  entity_ids:
-                    type: array
-                    items:
-                      type: string
-                  ha_status_code:
-                    type: integer
-                  ha_result:
-                    oneOf:
-                    - type: object
-                    - type: string
-                  readback_states:
-                    type: array
-                    items:
-                      type: object
-                      properties:
-                        entity_id:
-                          type: string
-                        state:
-                          type: string
-                        attributes:
-                          type: object
-                        last_changed:
-                          type: string
-        '400':
-          description: Invalid request (missing domain/service)
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  ok:
-                    type: boolean
-                  error:
-                    type: string
-        '401':
-          description: Unauthorized
-          content:
-            application/json:
-              schema:
-                type: object
-        '403':
-          description: Domain not allowed
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  ok:
-                    type: boolean
-                  error:
-                    type: string
-                  allowed_domains:
-                    type: array
-                    items:
-                      type: string
-        '502':
-          description: HA service call failed or rejected
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  ok:
-                    type: boolean
-                  error:
-                    type: string
-                  ha_status_code:
-                    type: integer
-                  ha_response:
-                    type: string
-        '503':
-          description: SUPERVISOR_TOKEN missing (no HA connection)
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  ok:
-                    type: boolean
-                  error:
-                    type: string
-      security:
-      - apiKeyAuth: []
-
-  /api/v1/weather:
-    get:
-      summary: 'Weather: Get current weather snapshot.'
-      description: Auto-generated stub for `get_weather` (GET /api/v1/weather). Returns
-        current weather data including temperature, humidity, cloud cover, UV index,
-        sunrise/sunset times, and PV production estimates.
-      operationId: weather_get_weather
-      tags:
-      - Weather
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  status:
-                    type: string
-                  data:
-                    type: object
-                    properties:
-                      timestamp:
-                        type: string
-                        format: date-time
-                      condition:
-                        type: string
-                      temperature_c:
-                        type: number
-                      humidity_percent:
-                        type: number
-                      cloud_cover_percent:
-                        type: number
-                      uv_index:
-                        type: number
-                      sunrise:
-                        type: string
-                        format: date-time
-                      sunset:
-                        type: string
-                        format: date-time
-                      forecast_pv_production_kwh:
-                        type: number
-                      recommendation:
-                        type: string
-        '400':
-          description: Invalid request payload
-          content:
-            application/json:
-              schema:
-                type: object
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                type: object
-        '503':
-          description: Weather service not initialized
-          content:
-            application/json:
-              schema:
-                type: object
-      security:
-      - apiKeyAuth: []
-
-  /api/v1/weather/forecast:
-    get:
-      summary: 'Weather: Get multi-day weather forecast.'
-      description: Auto-generated stub for `get_forecast` (GET /api/v1/weather/forecast).
-        Returns weather forecast for upcoming days with PV production factors.
-      operationId: weather_get_forecast
-      tags:
-      - Weather
-      parameters:
-      - name: days
-        in: query
-        description: Number of forecast days (1-7, default 3)
-        required: false
-        schema:
-          type: integer
-          minimum: 1
-          maximum: 7
-          default: 3
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  status:
-                    type: string
-                  data:
-                    type: object
-                    properties:
-                      forecast:
-                        type: array
-                        items:
-                          type: object
-                          properties:
-                            timestamp:
-                              type: string
-                              format: date-time
-                            condition:
-                              type: string
-                            temperature_high_c:
-                              type: number
-                            temperature_low_c:
-                              type: number
-                            cloud_cover_percent:
-                              type: number
-                            precipitation_probability:
-                              type: number
-                            pv_production_factor:
-                              type: number
-        '400':
-          description: Invalid request payload
-          content:
-            application/json:
-              schema:
-                type: object
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                type: object
-        '503':
-          description: Weather service not initialized
-          content:
-            application/json:
-              schema:
-                type: object
-      security:
-      - apiKeyAuth: []
-
-  /api/v1/weather/pv-recommendations:
-    get:
-      summary: 'Weather: Get PV-based energy recommendations.'
-      description: Auto-generated stub for `get_pv_recommendations` (GET /api/v1/weather/pv-recommendations).
-        Returns energy recommendations based on PV surplus forecast.
-      operationId: weather_get_pv_recommendations
-      tags:
-      - Weather
-      - Energy
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  status:
-                    type: string
-                  data:
-                    type: object
-                    properties:
-                      recommendations:
-                        type: array
-                        items:
-                          type: object
-                          properties:
-                            id:
-                              type: string
-                            timestamp:
-                              type: string
-                              format: date-time
-                            recommendation_type:
-                              type: string
-                            reason:
-                              type: string
-                            pv_surplus_kwh:
-                              type: number
-                            confidence:
-                              type: number
-                            suggested_action:
-                              type: string
-                            estimated_savings_eur:
-                              type: number
-        '400':
-          description: Invalid request payload
-          content:
-            application/json:
-              schema:
-                type: object
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                type: object
-        '503':
-          description: Weather service not initialized
-          content:
-            application/json:
-              schema:
-                type: object
-      security:
-      - apiKeyAuth: []
-
-  /api/v1/weather/health:
-    get:
-      summary: 'Weather: Health check endpoint.'
-      description: Auto-generated stub for `health` (GET /api/v1/weather/health).
-        Returns weather service health status.
-      operationId: weather_health
-      tags:
-      - Weather
-      - Health
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  status:
-                    type: string
-                  service:
-                    type: string
-                  cache_age_seconds:
-                    type: number
-        '503':
-          description: Weather service not initialized
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  status:
-                    type: string
-                  service:
-                    type: string
-      security:
-      - apiKeyAuth: []
-
 components:
   schemas:
     Candidate:
