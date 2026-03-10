@@ -1,9 +1,10 @@
 {
-  "name": "PilotSuite",
+  "name": "PilotSuite Core",
+  "content_in_root": false,
+  "zip_release": false,
+  "filename": "pilotsuite_core.py",
   "render_readme": true,
   "homeassistant": "2024.1.0",
-  "zip_release": true,
-  "filename": "pilotsuite.zip",
-  "hide_default_branch": false,
-  "content_in_root": false
+  "countries": ["DE", "AT", "CH"],
+  "persistent_directory": "pilotsuite_core"
 }
