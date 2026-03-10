@@ -110,6 +110,3249 @@ security:
 - apiKeyAuth: []
 - bearerAuth: []
 paths:
+  /api/v1/openapi.json:
+    get:
+      summary: 'Openapi.Json: openapi.json'
+      description: Stub for /api/v1/openapi.json.
+      operationId: stub_api_v1_openapi.json
+      tags:
+      - Openapi.Json
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/openapi.yaml:
+    get:
+      summary: 'Openapi.Yaml: openapi.yaml'
+      description: Stub for /api/v1/openapi.yaml.
+      operationId: stub_api_v1_openapi.yaml
+      tags:
+      - Openapi.Yaml
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/ready:
+    get:
+      summary: 'Ready: readiness_probe'
+      description: Auto-generated stub for `readiness_probe` (GET /api/v1/ready).
+      operationId: misc_readiness_probe
+      tags:
+      - Ready
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/live:
+    get:
+      summary: 'Live: liveness_probe'
+      description: Auto-generated stub for `liveness_probe` (GET /api/v1/live).
+      operationId: misc_liveness_probe
+      tags:
+      - Live
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/legacy/health:
+    get:
+      summary: Legacy health endpoint (deprecated)
+      description: Deprecated legacy health endpoint, wired as a stub for backward compatibility.
+      operationId: getLegacyHealth
+      tags:
+      - Legacy
+      responses:
+        '501':
+          description: Stub response (not implemented)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "501 Not Implemented"
+                  message:
+                    type: string
+                    example: "This endpoint is deprecated and wired as a stub."
+                  X-Stub:
+                    type: string
+                    example: "allowlist"
+      security:
+      - apiKeyAuth: []
+
+
+  /api/v1/metrics:
+    get:
+      summary: 'Metrics: prometheus_metrics'
+      description: Auto-generated stub for `prometheus_metrics` (GET /api/v1/metrics).
+      operationId: misc_prometheus_metrics
+      tags:
+      - Metrics
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/metrics/summary:
+    get:
+      summary: 'Metrics: metrics_summary'
+      description: Auto-generated stub for `metrics_summary` (GET /api/v1/metrics/summary).
+      operationId: misc_metrics_summary
+      tags:
+      - Metrics
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/log_fixer_tx/status:
+    get:
+      summary: 'LogFixerTx: get_status'
+      description: Auto-generated stub for `get_status` (GET /api/v1/log_fixer_tx/status).
+      operationId: final_get_status
+      tags:
+      - LogFixerTx
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/log_fixer_tx/transactions:
+    get:
+      summary: 'LogFixerTx: list_transactions'
+      description: Auto-generated stub for `list_transactions` (GET /api/v1/log_fixer_tx/transactions).
+      operationId: final_list_transactions
+      tags:
+      - LogFixerTx
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - apiKeyAuth: []
+    post:
+      summary: 'LogFixerTx: create_transaction'
+      description: Auto-generated stub for `create_transaction` (POST /api/v1/log_fixer_tx/transactions).
+      operationId: final_create_transaction
+      tags:
+      - LogFixerTx
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/log_fixer_tx/transactions/{tx_id}:
+    get:
+      summary: 'LogFixerTx: get_transaction'
+      description: Auto-generated stub for `get_transaction` (GET /api/v1/log_fixer_tx/transactions/{tx_id}).
+      operationId: final_get_transaction
+      tags:
+      - LogFixerTx
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+      parameters:
+      - name: tx_id
+        in: path
+        required: true
+        schema:
+          type: string
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/log_fixer_tx/transactions/{tx_id}/rollback:
+    post:
+      summary: 'LogFixerTx: rollback_transaction'
+      description: Auto-generated stub for `rollback_transaction` (POST /api/v1/log_fixer_tx/transactions/{tx_id}/rollback).
+      operationId: final_rollback_transaction
+      tags:
+      - LogFixerTx
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+      parameters:
+      - name: tx_id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/log_fixer_tx/recover:
+    post:
+      summary: 'LogFixerTx: recover'
+      description: Auto-generated stub for `recover` (POST /api/v1/log_fixer_tx/recover).
+      operationId: final_recover
+      tags:
+      - LogFixerTx
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/modules/health/dashboard:
+    get:
+      summary: 'Modules: Return the full module health dashboard.'
+      description: Auto-generated stub for `get_health_dashboard` (GET /api/v1/modules/health/dashboard).
+      operationId: misc_get_health_dashboard
+      tags:
+      - Modules
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/modules/health/learning:
+    get:
+      summary: 'Modules: Return detailed Hebbian learning status.'
+      description: Auto-generated stub for `get_learning_status` (GET /api/v1/modules/health/learning).
+      operationId: misc_get_learning_status
+      tags:
+      - Modules
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/modules/health/patterns:
+    get:
+      summary: 'Modules: Return discovered cross-module patterns.'
+      description: Auto-generated stub for `get_patterns` (GET /api/v1/modules/health/patterns).
+      operationId: misc_get_patterns
+      tags:
+      - Modules
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/modules:
+    get:
+      summary: 'Modules: modules'
+      description: Stub for /api/v1/modules.
+      operationId: stub_api_v1_modules
+      tags:
+      - Modules
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/modules/{module_id}:
+    get:
+      summary: 'Modules: module_id'
+      description: Stub for /api/v1/modules/{module_id}.
+      operationId: stub_api_v1_modules_{module_id}
+      tags:
+      - Modules
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+      parameters:
+      - name: module_id
+        in: path
+        required: true
+        schema:
+          type: string
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/modules/{module_id}/configure:
+    get:
+      summary: 'Modules: configure'
+      description: Stub for /api/v1/modules/{module_id}/configure.
+      operationId: stub_api_v1_modules_{module_id}_configure
+      tags:
+      - Modules
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+      parameters:
+      - name: module_id
+        in: path
+        required: true
+        schema:
+          type: string
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/mcp/connect:
+    post:
+      summary: 'Mcp: Connect to an MCP server.'
+      description: Auto-generated stub for `connect` (POST /api/v1/mcp/connect).
+      operationId: misc_connect
+      tags:
+      - Mcp
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/mcp/status:
+    get:
+      summary: 'Mcp: Get status of all MCP servers.'
+      description: Auto-generated stub for `status` (GET /api/v1/mcp/status).
+      operationId: misc_status
+      tags:
+      - Mcp
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/mcp/resources:
+    get:
+      summary: 'Mcp: Get available resources from connected MCP servers.'
+      description: Auto-generated stub for `resources` (GET /api/v1/mcp/resources).
+      operationId: misc_resources
+      tags:
+      - Mcp
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/mcp/query:
+    post:
+      summary: 'Mcp: Execute a resource query on MCP servers.'
+      description: Auto-generated stub for `query` (POST /api/v1/mcp/query).
+      operationId: misc_query
+      tags:
+      - Mcp
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/mcp/tools:
+    get:
+      summary: 'Mcp: List available MCP tools.'
+      description: Auto-generated stub for `tools` (GET /api/v1/mcp/tools).
+      operationId: misc_tools
+      tags:
+      - Mcp
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/mcp/tools/call:
+    post:
+      summary: 'Mcp: Call an MCP tool by name.'
+      description: Auto-generated stub for `tools_call` (POST /api/v1/mcp/tools/call).
+      operationId: misc_tools_call
+      tags:
+      - Mcp
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/hints:
+    get:
+      summary: 'Hints: List all hints.'
+      description: Auto-generated stub for `list_hints` (GET /api/v1/hints).
+      operationId: final_list_hints
+      tags:
+      - Hints
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - apiKeyAuth: []
+    post:
+      summary: 'Hints: Add a new user hint.'
+      description: Auto-generated stub for `add_hint` (POST /api/v1/hints).
+      operationId: final_add_hint
+      tags:
+      - Hints
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/hints/{hint_id}:
+    get:
+      summary: 'Hints: Get a specific hint.'
+      description: Auto-generated stub for `get_hint` (GET /api/v1/hints/{hint_id}).
+      operationId: final_get_hint
+      tags:
+      - Hints
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+      parameters:
+      - name: hint_id
+        in: path
+        required: true
+        schema:
+          type: string
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/hints/{hint_id}/accept:
+    post:
+      summary: 'Hints: Accept a hint suggestion and create the automation.'
+      description: Auto-generated stub for `accept_hint` (POST /api/v1/hints/{hint_id}/accept).
+      operationId: final_accept_hint
+      tags:
+      - Hints
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+      parameters:
+      - name: hint_id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/hints/{hint_id}/reject:
+    post:
+      summary: 'Hints: Reject a hint suggestion.'
+      description: Auto-generated stub for `reject_hint` (POST /api/v1/hints/{hint_id}/reject).
+      operationId: final_reject_hint
+      tags:
+      - Hints
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+      parameters:
+      - name: hint_id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/hints/suggestions:
+    get:
+      summary: 'Hints: List all suggestions.'
+      description: Auto-generated stub for `list_suggestions` (GET /api/v1/hints/suggestions).
+      operationId: final_list_suggestions
+      tags:
+      - Hints
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/hints/types:
+    get:
+      summary: 'Hints: List available hint types.'
+      description: Auto-generated stub for `list_hint_types` (GET /api/v1/hints/types).
+      operationId: final_list_hint_types
+      tags:
+      - Hints
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/rate-limit/config:
+    get:
+      summary: 'RateLimit: get_rate_limit_config'
+      description: Auto-generated stub for `get_rate_limit_config` (GET /api/v1/rate-limit/config).
+      operationId: misc_get_rate_limit_config
+      tags:
+      - RateLimit
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - apiKeyAuth: []
+    put:
+      summary: 'RateLimit: update_rate_limit_config'
+      description: Auto-generated stub for `update_rate_limit_config` (PUT /api/v1/rate-limit/config).
+      operationId: misc_update_rate_limit_config
+      tags:
+      - RateLimit
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/rate-limit/status:
+    get:
+      summary: 'RateLimit: get_rate_limit_status'
+      description: Auto-generated stub for `get_rate_limit_status` (GET /api/v1/rate-limit/status).
+      operationId: misc_get_rate_limit_status
+      tags:
+      - RateLimit
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/rate-limit/status/{client_id}:
+    get:
+      summary: 'RateLimit: get_client_rate_limit_status'
+      description: Auto-generated stub for `get_client_rate_limit_status` (GET /api/v1/rate-limit/status/{client_id}).
+      operationId: misc_get_client_rate_limit_status
+      tags:
+      - RateLimit
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      parameters:
+      - name: client_id
+        in: path
+        required: true
+        schema:
+          type: string
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/rate-limit/config/{client_id}:
+    delete:
+      summary: 'RateLimit: reset_client_rate_limit'
+      description: Auto-generated stub for `reset_client_rate_limit` (DELETE /api/v1/rate-limit/config/{client_id}).
+      operationId: misc_reset_client_rate_limit
+      tags:
+      - RateLimit
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      parameters:
+      - name: client_id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/rate-limit/reset-all:
+    post:
+      summary: 'RateLimit: reset_all_rate_limits'
+      description: Auto-generated stub for `reset_all_rate_limits` (POST /api/v1/rate-limit/reset-all).
+      operationId: misc_reset_all_rate_limits
+      tags:
+      - RateLimit
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/rate-limit/cleanup:
+    post:
+      summary: 'RateLimit: cleanup_stale_rate_limits'
+      description: Auto-generated stub for `cleanup_stale_rate_limits` (POST /api/v1/rate-limit/cleanup).
+      operationId: misc_cleanup_stale_rate_limits
+      tags:
+      - RateLimit
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/rate-limit/defaults:
+    get:
+      summary: 'RateLimit: get_default_rate_limit'
+      description: Auto-generated stub for `get_default_rate_limit` (GET /api/v1/rate-limit/defaults).
+      operationId: misc_get_default_rate_limit
+      tags:
+      - RateLimit
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/homekit/status:
+    get:
+      summary: 'Homekit: Get HomeKit bridge status — which zones are enabled.'
+      description: Auto-generated stub for `homekit_status` (GET /api/v1/homekit/status).
+      operationId: misc_homekit_status
+      tags:
+      - Homekit
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/homekit/toggle:
+    post:
+      summary: 'Homekit: Toggle HomeKit for a habitus zone.'
+      description: Auto-generated stub for `toggle_homekit` (POST /api/v1/homekit/toggle).
+      operationId: misc_toggle_homekit
+      tags:
+      - Homekit
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/homekit/update:
+    post:
+      summary: 'Homekit: Receive HomeKit zone data from HACS integration (sync).'
+      description: Auto-generated stub for `update_homekit_cache` (POST /api/v1/homekit/update).
+      operationId: misc_update_homekit_cache
+      tags:
+      - Homekit
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/homekit/setup-info/{zone_id}:
+    get:
+      summary: 'Homekit: Get HomeKit setup info (code, URI, device info) for a zone.'
+      description: Auto-generated stub for `homekit_setup_info` (GET /api/v1/homekit/setup-info/{zone_id}).
+      operationId: misc_homekit_setup_info
+      tags:
+      - Homekit
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      parameters:
+      - name: zone_id
+        in: path
+        required: true
+        schema:
+          type: string
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/homekit/qr/{zone_id}.svg:
+    get:
+      summary: 'Homekit: Serve HomeKit pairing QR code as SVG for a zone.'
+      description: Auto-generated stub for `homekit_qr_svg` (GET /api/v1/homekit/qr/{zone_id}.svg).
+      operationId: misc_homekit_qr_svg
+      tags:
+      - Homekit
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      parameters:
+      - name: zone_id
+        in: path
+        required: true
+        schema:
+          type: string
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/homekit/qr/{zone_id}.png:
+    get:
+      summary: 'Homekit: Serve HomeKit pairing QR code as PNG for a zone.'
+      description: Auto-generated stub for `homekit_qr_png` (GET /api/v1/homekit/qr/{zone_id}.png).
+      operationId: misc_homekit_qr_png
+      tags:
+      - Homekit
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      parameters:
+      - name: zone_id
+        in: path
+        required: true
+        schema:
+          type: string
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/homekit/all-zones-info:
+    get:
+      summary: 'Homekit: Get setup info + QR URLs for ALL HomeKit-enabled zones.'
+      description: Auto-generated stub for `homekit_all_zones_info` (GET /api/v1/homekit/all-zones-info).
+      operationId: misc_homekit_all_zones_info
+      tags:
+      - Homekit
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/ha/connect:
+    post:
+      summary: 'Ha: Establish connection to HomeAssistant.'
+      description: Auto-generated stub for `` (POST /api/v1/ha/connect).
+      operationId: misc_api_v1_ha_connect
+      tags:
+      - Ha
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/ha/status:
+    get:
+      summary: 'Ha: Get current HA connection status.'
+      description: Auto-generated stub for `` (GET /api/v1/ha/status).
+      operationId: misc_api_v1_ha_status
+      tags:
+      - Ha
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/ha/areas:
+    get:
+      summary: 'Ha: Get all areas/zones from HomeAssistant.'
+      description: Auto-generated stub for `` (GET /api/v1/ha/areas).
+      operationId: misc_api_v1_ha_areas
+      tags:
+      - Ha
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/ha/entities:
+    get:
+      summary: 'Ha: Get all entities from HomeAssistant.'
+      description: Auto-generated stub for `` (GET /api/v1/ha/entities).
+      operationId: misc_api_v1_ha_entities
+      tags:
+      - Ha
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/ha/entity/{entity_id}:
+    get:
+      summary: 'Ha: Get single entity from HomeAssistant.'
+      description: Auto-generated stub for `` (GET /api/v1/ha/entity/{entity_id}).
+      operationId: misc_api_v1_ha_entity_{entity_id}
+      tags:
+      - Ha
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      parameters:
+      - name: entity_id
+        in: path
+        required: true
+        schema:
+          type: string
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/ha/discover:
+    post:
+      summary: 'Ha: Discover HomeAssistant instances.'
+      description: Auto-generated stub for `` (POST /api/v1/ha/discover).
+      operationId: misc_api_v1_ha_discover
+      tags:
+      - Ha
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/ha/disconnect:
+    post:
+      summary: 'Ha: Disconnect from HomeAssistant.'
+      description: Auto-generated stub for `` (POST /api/v1/ha/disconnect).
+      operationId: misc_api_v1_ha_disconnect
+      tags:
+      - Ha
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/zone-editor/zones:
+    get:
+      summary: 'ZoneEditor: List all zones.'
+      description: Auto-generated stub for `list_zones` (GET /api/v1/zone-editor/zones).
+      operationId: misc_list_zones
+      tags:
+      - ZoneEditor
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/zone-editor/zones/{zone_id}:
+    get:
+      summary: 'ZoneEditor: Get details for a specific zone.'
+      description: Auto-generated stub for `get_zone` (GET /api/v1/zone-editor/zones/{zone_id}).
+      operationId: misc_get_zone
+      tags:
+      - ZoneEditor
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      parameters:
+      - name: zone_id
+        in: path
+        required: true
+        schema:
+          type: string
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/zone-editor/zones/{zone_id}/state:
+    get:
+      summary: 'ZoneEditor: Get current state of a zone.'
+      description: Auto-generated stub for `get_zone_state` (GET /api/v1/zone-editor/zones/{zone_id}/state).
+      operationId: misc_get_zone_state
+      tags:
+      - ZoneEditor
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      parameters:
+      - name: zone_id
+        in: path
+        required: true
+        schema:
+          type: string
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/zone-editor/rooms:
+    get:
+      summary: 'ZoneEditor: List all rooms.'
+      description: Auto-generated stub for `list_rooms` (GET /api/v1/zone-editor/rooms).
+      operationId: misc_list_rooms
+      tags:
+      - ZoneEditor
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/zone-editor/rooms/{room_id}:
+    get:
+      summary: 'ZoneEditor: Get details for a specific room.'
+      description: Auto-generated stub for `get_room` (GET /api/v1/zone-editor/rooms/{room_id}).
+      operationId: misc_get_room
+      tags:
+      - ZoneEditor
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      parameters:
+      - name: room_id
+        in: path
+        required: true
+        schema:
+          type: string
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/zone-editor/overview:
+    get:
+      summary: 'ZoneEditor: Get zone overview.'
+      description: Auto-generated stub for `get_overview` (GET /api/v1/zone-editor/overview).
+      operationId: misc_get_overview
+      tags:
+      - ZoneEditor
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/zone-editor/templates:
+    get:
+      summary: 'ZoneEditor: List available zone templates.'
+      description: Auto-generated stub for `list_templates` (GET /api/v1/zone-editor/templates).
+      operationId: misc_list_templates
+      tags:
+      - ZoneEditor
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/zone-editor/modes:
+    get:
+      summary: 'ZoneEditor: List available zone modes.'
+      description: Auto-generated stub for `list_modes` (GET /api/v1/zone-editor/modes).
+      operationId: misc_list_modes
+      tags:
+      - ZoneEditor
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/sharing/entities/shared:
+    get:
+      summary: 'Sharing: Get all shared entities (filtered).'
+      description: Auto-generated stub for `get_shared_entities` (GET /api/v1/sharing/entities/shared).
+      operationId: final_get_shared_entities
+      tags:
+      - Sharing
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/sharing/entities/{entity_id}:
+    get:
+      summary: 'Sharing: Get a specific shared entity.'
+      description: Auto-generated stub for `get_entity` (GET /api/v1/sharing/entities/{entity_id}).
+      operationId: final_get_entity
+      tags:
+      - Sharing
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+      parameters:
+      - name: entity_id
+        in: path
+        required: true
+        schema:
+          type: string
+      security:
+      - apiKeyAuth: []
+    put:
+      summary: 'Sharing: Update an entity''s sharing configuration.'
+      description: Auto-generated stub for `update_entity` (PUT /api/v1/sharing/entities/{entity_id}).
+      operationId: final_update_entity
+      tags:
+      - Sharing
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+      parameters:
+      - name: entity_id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - apiKeyAuth: []
+    delete:
+      summary: 'Sharing: Unregister an entity from sharing.'
+      description: Auto-generated stub for `unregister_entity` (DELETE /api/v1/sharing/entities/{entity_id}).
+      operationId: final_unregister_entity
+      tags:
+      - Sharing
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+      parameters:
+      - name: entity_id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/sharing/entities/{entity_id}/share-with:
+    post:
+      summary: 'Sharing: Share an entity with another home.'
+      description: Auto-generated stub for `share_with_home` (POST /api/v1/sharing/entities/{entity_id}/share-with).
+      operationId: final_share_with_home
+      tags:
+      - Sharing
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+      parameters:
+      - name: entity_id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/sharing/entities/{entity_id}/stop-sharing/{home_id}:
+    post:
+      summary: 'Sharing: Stop sharing an entity with a specific home.'
+      description: Auto-generated stub for `stop_sharing_with_home` (POST /api/v1/sharing/entities/{entity_id}/stop-sharing/{home_id}).
+      operationId: final_stop_sharing_with_home
+      tags:
+      - Sharing
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+      parameters:
+      - name: entity_id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: home_id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/sharing/entities/{entity_id}/shared-with:
+    get:
+      summary: 'Sharing: Get list of homes this entity is shared with.'
+      description: Auto-generated stub for `get_shared_with` (GET /api/v1/sharing/entities/{entity_id}/shared-with).
+      operationId: final_get_shared_with
+      tags:
+      - Sharing
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+      parameters:
+      - name: entity_id
+        in: path
+        required: true
+        schema:
+          type: string
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/sharing/sync/entities:
+    get:
+      summary: 'Sharing: Get all synchronized entities from sync service.'
+      description: Auto-generated stub for `get_synced_entities` (GET /api/v1/sharing/sync/entities).
+      operationId: final_get_synced_entities
+      tags:
+      - Sharing
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/sharing/sync/entities/{entity_id}:
+    get:
+      summary: 'Sharing: Get a specific synchronized entity.'
+      description: Auto-generated stub for `get_synced_entity` (GET /api/v1/sharing/sync/entities/{entity_id}).
+      operationId: final_get_synced_entity
+      tags:
+      - Sharing
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+      parameters:
+      - name: entity_id
+        in: path
+        required: true
+        schema:
+          type: string
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/sharing/sync/peers:
+    get:
+      summary: 'Sharing: Get list of synchronized peers.'
+      description: Auto-generated stub for `get_sync_peers` (GET /api/v1/sharing/sync/peers).
+      operationId: final_get_sync_peers
+      tags:
+      - Sharing
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/sharing/discovery/local:
+    get:
+      summary: 'Sharing: Get local peer information.'
+      description: Auto-generated stub for `get_local_peer_info` (GET /api/v1/sharing/discovery/local).
+      operationId: final_get_local_peer_info
+      tags:
+      - Sharing
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/multihome/homes:
+    get:
+      summary: 'Multihome: List all configured home instances.'
+      description: Auto-generated Multihome stub for `list_homes` (GET /api/v1/multihome/homes).
+      operationId: multihome_list_homes
+      tags:
+      - Multihome
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - apiKeyAuth: []
+    post:
+      summary: 'Multihome: Register a new home instance.'
+      description: Auto-generated Multihome stub for `register_home` (POST /api/v1/multihome/homes).
+      operationId: multihome_register_home
+      tags:
+      - Multihome
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/multihome/homes/{home_id}:
+    get:
+      summary: 'Multihome: Get details for a specific home instance.'
+      description: Auto-generated Multihome stub for `get_home` (GET /api/v1/multihome/homes/{home_id}).
+      operationId: multihome_get_home
+      tags:
+      - Multihome
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      parameters:
+      - name: home_id
+        in: path
+        required: true
+        schema:
+          type: string
+      security:
+      - apiKeyAuth: []
+    delete:
+      summary: 'Multihome: Unregister a home instance.'
+      description: Auto-generated Multihome stub for `unregister_home` (DELETE /api/v1/multihome/homes/{home_id}).
+      operationId: multihome_unregister_home
+      tags:
+      - Multihome
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      parameters:
+      - name: home_id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/multihome/config/diff/{source_home_id}/{target_home_id}:
+    get:
+      summary: 'Multihome: Get configuration difference report between two homes.'
+      description: Auto-generated Multihome stub for `get_config_diff` (GET /api/v1/multihome/config/diff/{source_home_id}/{target_home_id}).
+      operationId: multihome_get_config_diff
+      tags:
+      - Multihome
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      parameters:
+      - name: source_home_id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: target_home_id
+        in: path
+        required: true
+        schema:
+          type: string
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/multihome/config/sync:
+    post:
+      summary: 'Multihome: Create a configuration synchronization operation.'
+      description: Auto-generated Multihome stub for `create_config_sync` (POST /api/v1/multihome/config/sync).
+      operationId: multihome_create_config_sync
+      tags:
+      - Multihome
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/multihome/config/sync/{operation_id}/apply:
+    post:
+      summary: 'Multihome: Apply a configuration synchronization operation.'
+      description: Auto-generated Multihome stub for `apply_config_sync` (POST /api/v1/multihome/config/sync/{operation_id}/apply).
+      operationId: multihome_apply_config_sync
+      tags:
+      - Multihome
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      parameters:
+      - name: operation_id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/multihome/state/diff/{home_id_1}/{home_id_2}:
+    get:
+      summary: 'Multihome: Get state difference report between two homes.'
+      description: Auto-generated Multihome stub for `get_state_diff` (GET /api/v1/multihome/state/diff/{home_id_1}/{home_id_2}).
+      operationId: multihome_get_state_diff
+      tags:
+      - Multihome
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      parameters:
+      - name: home_id_1
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: home_id_2
+        in: path
+        required: true
+        schema:
+          type: string
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/multihome/state/sync:
+    post:
+      summary: 'Multihome: Create a state synchronization operation.'
+      description: Auto-generated Multihome stub for `create_state_sync` (POST /api/v1/multihome/state/sync).
+      operationId: multihome_create_state_sync
+      tags:
+      - Multihome
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/multihome/state/sync/{operation_id}/apply:
+    post:
+      summary: 'Multihome: Apply a state synchronization operation.'
+      description: Auto-generated Multihome stub for `apply_state_sync` (POST /api/v1/multihome/state/sync/{operation_id}/apply).
+      operationId: multihome_apply_state_sync
+      tags:
+      - Multihome
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      parameters:
+      - name: operation_id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/multihome/location/sync:
+    post:
+      summary: 'Multihome: Synchronize location-aware automations (e.g., "Ferienhaus
+        vorheizen").'
+      description: Auto-generated Multihome stub for `sync_location_aware_automations`
+        (POST /api/v1/multihome/location/sync).
+      operationId: multihome_sync_location_aware_automations
+      tags:
+      - Multihome
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/multihome/climate/preheat:
+    post:
+      summary: 'Multihome: Preheat vacation home climate (example location-aware automation).'
+      description: Auto-generated Multihome stub for `preheat_vacation_home` (POST
+
+  /api/v1/multihome/conflicts:
+    get:
+      summary: 'Multihome: List all active synchronization conflicts.'
+      description: Auto-generated Multihome stub for `list_conflicts` (GET /api/v1/multihome/conflicts).
+      operationId: multihome_list_conflicts
+      tags:
+      - Multihome
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/multihome/conflicts/{conflict_id}/resolve:
+    post:
+      summary: 'Multihome: Resolve a synchronization conflict.'
+      description: Auto-generated Multihome stub for `resolve_conflict` (POST /api/v1/multihome/conflicts/{conflict_id}/resolve).
+      operationId: multihome_resolve_conflict
+      tags:
+      - Multihome
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      parameters:
+      - name: conflict_id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/multihome/status:
+    get:
+      summary: 'Multihome: Get overall synchronization status.'
+      description: Auto-generated Multihome stub for `get_sync_status` (GET /api/v1/multihome/status).
+      operationId: multihome_get_sync_status
+      tags:
+      - Multihome
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/multihome/operations:
+    get:
+      summary: 'Multihome: List pending synchronization operations.'
+      description: Auto-generated Multihome stub for `list_operations` (GET /api/v1/multihome/operations).
+      operationId: multihome_list_operations
+      tags:
+      - Multihome
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/multihome/operations/{operation_id}/execute:
+    post:
+      summary: 'Multihome: Execute a pending synchronization operation.'
+      description: Auto-generated Multihome stub for `execute_operation` (POST /api/v1/multihome/operations/{operation_id}/execute).
+      operationId: multihome_execute_operation
+      tags:
+      - Multihome
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      parameters:
+      - name: operation_id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/multihome/operations/cleanup:
+    delete:
+      summary: 'Multihome: Clean up old synchronization operations.'
+      description: Auto-generated Multihome stub for `cleanup_operations` (DELETE
+
+  /api/v1/multihome/settings:
+    get:
+      summary: 'Multihome: Get multi-home synchronization settings.'
+      description: Auto-generated Multihome stub for `get_settings` (GET /api/v1/multihome/settings).
+      operationId: multihome_get_settings
+      tags:
+      - Multihome
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - apiKeyAuth: []
+    put:
+      summary: 'Multihome: Update multi-home synchronization settings.'
+      description: Auto-generated Multihome stub for `update_settings` (PUT /api/v1/multihome/settings).
+      operationId: multihome_update_settings
+      tags:
+      - Multihome
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/notifications/send:
+    post:
+      summary: 'Notifications-Extra: Send a notification.'
+      description: Auto-generated Notifications-Extra stub for `send_notification`
+        (POST /api/v1/notifications/send).
+      operationId: notif_send_notification
+      tags:
+      - Notifications-Extra
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/notifications/{notification_id}/read:
+    post:
+      summary: 'Notifications-Extra: Mark notification as read.'
+      description: Auto-generated Notifications-Extra stub for `mark_notification_read`
+        (POST /api/v1/notifications/{notification_id}/read).
+      operationId: notif_mark_notification_read
+      tags:
+      - Notifications-Extra
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      parameters:
+      - name: notification_id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/notifications/{notification_id}:
+    delete:
+      summary: 'Notifications-Extra: Dismiss a notification.'
+      description: Auto-generated Notifications-Extra stub for `dismiss_notification`
+        (DELETE /api/v1/notifications/{notification_id}).
+      operationId: notif_dismiss_notification
+      tags:
+      - Notifications-Extra
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      parameters:
+      - name: notification_id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/notifications/clear:
+    post:
+      summary: 'Notifications-Extra: Clear notifications.'
+      description: Auto-generated Notifications-Extra stub for `clear_notifications`
+        (POST /api/v1/notifications/clear).
+      operationId: notif_clear_notifications
+      tags:
+      - Notifications-Extra
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/notifications/subscribe:
+    post:
+      summary: 'Notifications-Extra: Subscribe a device for push notifications.'
+      description: Auto-generated Notifications-Extra stub for `subscribe_device`
+        (POST /api/v1/notifications/subscribe).
+      operationId: notif_subscribe_device
+      tags:
+      - Notifications-Extra
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/notifications/unsubscribe:
+    post:
+      summary: 'Notifications-Extra: Unsubscribe a device.'
+      description: Auto-generated Notifications-Extra stub for `unsubscribe_device`
+        (POST /api/v1/notifications/unsubscribe).
+      operationId: notif_unsubscribe_device
+      tags:
+      - Notifications-Extra
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/notifications/subscriptions:
+    get:
+      summary: 'Notifications-Extra: Get all device subscriptions.'
+      description: Auto-generated Notifications-Extra stub for `get_subscriptions`
+        (GET /api/v1/notifications/subscriptions).
+      operationId: notif_get_subscriptions
+      tags:
+      - Notifications-Extra
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/notifications/subscriptions/{device_id}:
+    put:
+      summary: 'Notifications-Extra: Update subscription preferences.'
+      description: Auto-generated Notifications-Extra stub for `update_subscription`
+        (PUT /api/v1/notifications/subscriptions/{device_id}).
+      operationId: notif_update_subscription
+      tags:
+      - Notifications-Extra
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      parameters:
+      - name: device_id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/notifications/ha/register:
+    post:
+      summary: 'Notifications-Extra: Register a HomeAssistant notify device.'
+      description: Auto-generated Notifications-Extra stub for `register_ha_device`
+        (POST /api/v1/notifications/ha/register).
+      operationId: notif_register_ha_device
+      tags:
+      - Notifications-Extra
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/notifications/ha/devices:
+    get:
+      summary: 'Notifications-Extra: Get registered HomeAssistant devices.'
+      description: Auto-generated Notifications-Extra stub for `get_ha_devices` (GET
+
+  /api/v1/notifications/ha/devices/{device_id}:
+    delete:
+      summary: 'Notifications-Extra: Unregister a HomeAssistant device.'
+      description: Auto-generated Notifications-Extra stub for `unregister_ha_device`
+        (DELETE /api/v1/notifications/ha/devices/{device_id}).
+      operationId: notif_unregister_ha_device
+      tags:
+      - Notifications-Extra
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      parameters:
+      - name: device_id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/notifications/ha/devices/{device_id}/enable:
+    post:
+      summary: 'Notifications-Extra: Enable a HomeAssistant device.'
+      description: Auto-generated Notifications-Extra stub for `enable_ha_device`
+        (POST /api/v1/notifications/ha/devices/{device_id}/enable).
+      operationId: notif_enable_ha_device
+      tags:
+      - Notifications-Extra
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      parameters:
+      - name: device_id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/notifications/ha/devices/{device_id}/disable:
+    post:
+      summary: 'Notifications-Extra: Disable a HomeAssistant device.'
+      description: Auto-generated Notifications-Extra stub for `disable_ha_device`
+        (POST /api/v1/notifications/ha/devices/{device_id}/disable).
+      operationId: notif_disable_ha_device
+      tags:
+      - Notifications-Extra
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      parameters:
+      - name: device_id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/notifications/send/ha:
+    post:
+      summary: 'Notifications-Extra: Send notification via HomeAssistant notify service.'
+      description: Auto-generated Notifications-Extra stub for `send_ha_notification`
+        (POST /api/v1/notifications/send/ha).
+      operationId: notif_send_ha_notification
+      tags:
+      - Notifications-Extra
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/notifications/ha/test:
+    get:
+      summary: 'Notifications-Extra: Test HomeAssistant connection and notify service
+        availability.'
+      description: Auto-generated Notifications-Extra stub for `test_ha_connection`
+        (GET /api/v1/notifications/ha/test).
+      operationId: notif_test_ha_connection
+      tags:
+      - Notifications-Extra
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/notifications/ha/services:
+    get:
+      summary: 'Notifications-Extra: Get available HomeAssistant notify services.'
+      description: Auto-generated Notifications-Extra stub for `get_ha_notify_services`
+        (GET /api/v1/notifications/ha/services).
+      operationId: notif_get_ha_notify_services
+      tags:
+      - Notifications-Extra
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - apiKeyAuth: []
+
   /api/v1/neurons:
     get:
       summary: 'Neurons: List all neurons.'
@@ -6577,316 +9820,6 @@ paths:
           description: Sankey diagram data
       security:
       - apiKeyAuth: []
-  /api/v1/energy/shifting:
-    get:
-      summary: Get energy load shifting recommendations
-      description: Returns load shifting suggestions for optimal energy consumption timing.
-      operationId: getEnergyShifting
-      tags:
-      - Energy
-      responses:
-        '200':
-          description: Load shifting recommendations
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  ok:
-                    type: boolean
-                  recommendations:
-                    type: array
-                    items:
-                      type: object
-                  summary:
-                    type: object
-      security:
-      - apiKeyAuth: []
-  /api/v1/energy/explain/{suggestion_id}:
-    get:
-      summary: Explain an energy suggestion
-      description: Returns detailed explanation for a specific energy optimization suggestion.
-      operationId: explainEnergySuggestion
-      tags:
-      - Energy
-      parameters:
-      - name: suggestion_id
-        in: path
-        required: true
-        schema:
-          type: string
-        description: The suggestion ID to explain
-      responses:
-        '200':
-          description: Detailed explanation of the suggestion
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  ok:
-                    type: boolean
-                  suggestion_id:
-                    type: string
-                  explanation:
-                    type: string
-                  reasoning:
-                    type: array
-                    items:
-                      type: string
-                  impact:
-                    type: object
-        '404':
-          description: Suggestion not found
-      security:
-      - apiKeyAuth: []
-  /api/v1/energy/baselines:
-    get:
-      summary: Get energy baselines
-      description: Returns baseline energy consumption values for devices and zones.
-      operationId: getEnergyBaselines
-      tags:
-      - Energy
-      responses:
-        '200':
-          description: Energy baselines
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  ok:
-                    type: boolean
-                  baselines:
-                    type: object
-                    additionalProperties:
-                      type: number
-                  last_updated:
-                    type: string
-      security:
-      - apiKeyAuth: []
-  /api/v1/energy/suppress:
-    get:
-      summary: Check if energy suggestions should be suppressed
-      description: Returns whether energy-saving suggestions should be suppressed based on system state.
-      operationId: getEnergySuppress
-      tags:
-      - Energy
-      responses:
-        '200':
-          description: Suppression status
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  ok:
-                    type: boolean
-                  suppress:
-                    type: boolean
-                  reason:
-                    type: string
-                  until:
-                    type: string
-      security:
-      - apiKeyAuth: []
-  /api/v1/energy/health:
-    get:
-      summary: Get energy system health
-      description: Returns health status of the energy monitoring system.
-      operationId: getEnergyHealth
-      tags:
-      - Energy
-      responses:
-        '200':
-          description: Energy system health
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  ok:
-                    type: boolean
-                  status:
-                    type: string
-                  components:
-                    type: object
-                  last_update:
-                    type: string
-      security:
-      - apiKeyAuth: []
-  /api/v1/energy/zones:
-    get:
-      summary: Get all energy zones
-      description: Returns all energy zones with their configurations and current state.
-      operationId: getEnergyZones
-      tags:
-      - Energy
-      responses:
-        '200':
-          description: List of energy zones
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  ok:
-                    type: boolean
-                  zones:
-                    type: array
-                    items:
-                      type: object
-                      properties:
-                        zone_id:
-                          type: string
-                        name:
-                          type: string
-                        devices:
-                          type: array
-                          items:
-                            type: string
-                        baseline_kw:
-                          type: number
-                        current_kw:
-                          type: number
-      security:
-      - apiKeyAuth: []
-  /api/v1/energy/zone/{zone_id}:
-    get:
-      summary: Get energy zone details
-      description: Returns detailed information for a specific energy zone.
-      operationId: getEnergyZone
-      tags:
-      - Energy
-      parameters:
-      - name: zone_id
-        in: path
-        required: true
-        schema:
-          type: string
-        description: The zone ID
-      responses:
-        '200':
-          description: Zone details
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  ok:
-                    type: boolean
-                  zone_id:
-                    type: string
-                  name:
-                    type: string
-                  devices:
-                    type: array
-                    items:
-                      type: object
-                  baseline_kw:
-                    type: number
-                  current_kw:
-                    type: number
-                  history:
-                    type: array
-                    items:
-                      type: object
-        '404':
-          description: Zone not found
-      security:
-      - apiKeyAuth: []
-    post:
-      summary: Update energy zone configuration
-      description: Updates configuration for a specific energy zone.
-      operationId: updateEnergyZone
-      tags:
-      - Energy
-      parameters:
-      - name: zone_id
-        in: path
-        required: true
-        schema:
-          type: string
-        description: The zone ID
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                name:
-                  type: string
-                baseline_kw:
-                  type: number
-                devices:
-                  type: array
-                  items:
-                    type: string
-      responses:
-        '200':
-          description: Zone updated
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  ok:
-                    type: boolean
-                  zone:
-                    type: object
-        '404':
-          description: Zone not found
-      security:
-      - apiKeyAuth: []
-  /api/v1/energy/sankey.svg:
-    get:
-      summary: Get energy Sankey diagram as SVG
-      description: Returns the energy flow diagram as an SVG image.
-      operationId: getEnergySankeySvg
-      tags:
-      - Energy
-      responses:
-        '200':
-          description: SVG image of energy flow diagram
-          content:
-            image/svg+xml:
-              schema:
-                type: string
-      security:
-      - apiKeyAuth: []
-  /api/v1/energy/dashboard-config:
-    get:
-      summary: Get energy dashboard configuration
-      description: Returns configuration settings for the energy dashboard display.
-      operationId: getEnergyDashboardConfig
-      tags:
-      - Energy
-      responses:
-        '200':
-          description: Dashboard configuration
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  ok:
-                    type: boolean
-                  config:
-                    type: object
-                    properties:
-                      refresh_interval:
-                        type: integer
-                      units:
-                        type: string
-                      display_options:
-                        type: object
-                      widgets:
-                        type: array
-                        items:
-                          type: object
-      security:
-      - apiKeyAuth: []
   /api/v1/unifi:
     get:
       summary: Get UniFi network snapshot
@@ -7147,232 +10080,6 @@ paths:
               required:
               - chat_id
               - text
-      security:
-      - bearerAuth: []
-  /api/v1/automations/suggestions:
-    get:
-      summary: 'Automation: Get automation suggestions.'
-      description: Auto-generated Automation stub for `get_suggestions` (GET /api/v1/automations/suggestions).
-      operationId: auto_get_suggestions
-      tags:
-      - Automations
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                type: object
-        '400':
-          description: Invalid request payload
-          content:
-            application/json:
-              schema:
-                type: object
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                type: object
-      security:
-      - bearerAuth: []
-  /api/v1/automations/suggestions/{suggestion_id}/accept:
-    post:
-      summary: 'Automation: Accept a suggestion.'
-      description: Auto-generated Automation stub for `accept_suggestion` (POST /api/v1/automations/suggestions/{suggestion_id}/accept).
-      operationId: auto_accept_suggestion
-      tags:
-      - Automations
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                type: object
-        '400':
-          description: Invalid request payload
-          content:
-            application/json:
-              schema:
-                type: object
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                type: object
-      parameters:
-      - name: suggestion_id
-        in: path
-        required: true
-        schema:
-          type: string
-      security:
-      - bearerAuth: []
-  /api/v1/automations/suggestions/{suggestion_id}/dismiss:
-    post:
-      summary: 'Automation: Dismiss a suggestion.'
-      description: Auto-generated Automation stub for `dismiss_suggestion` (POST /api/v1/automations/suggestions/{suggestion_id}/dismiss).
-      operationId: auto_dismiss_suggestion
-      tags:
-      - Automations
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                type: object
-        '400':
-          description: Invalid request payload
-          content:
-            application/json:
-              schema:
-                type: object
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                type: object
-      parameters:
-      - name: suggestion_id
-        in: path
-        required: true
-        schema:
-          type: string
-      security:
-      - bearerAuth: []
-  /api/v1/automations/suggestions/{suggestion_id}/yaml:
-    get:
-      summary: 'Automation: Get automation YAML for a suggestion.'
-      description: Auto-generated Automation stub for `get_suggestion_yaml` (GET /api/v1/automations/suggestions/{suggestion_id}/yaml).
-      operationId: auto_get_suggestion_yaml
-      tags:
-      - Automations
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                type: object
-        '400':
-          description: Invalid request payload
-          content:
-            application/json:
-              schema:
-                type: object
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                type: object
-      parameters:
-      - name: suggestion_id
-        in: path
-        required: true
-        schema:
-          type: string
-      security:
-      - bearerAuth: []
-  /api/v1/automations/generate:
-    post:
-      summary: 'Automation: Generate suggestions from current data.'
-      description: Auto-generated Automation stub for `generate_suggestions` (POST /api/v1/automations/generate).
-      operationId: auto_generate_suggestions
-      tags:
-      - Automations
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                type: object
-        '400':
-          description: Invalid request payload
-          content:
-            application/json:
-              schema:
-                type: object
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                type: object
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-      security:
-      - bearerAuth: []
-  /api/v1/automations/create:
-    post:
-      summary: 'Automation: Create automation from suggestion.'
-      description: Auto-generated Automation stub for `create_automation` (POST /api/v1/automations/create).
-      operationId: auto_create_automation
-      tags:
-      - Automations
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                type: object
-        '400':
-          description: Invalid request payload
-          content:
-            application/json:
-              schema:
-                type: object
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                type: object
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-      security:
-      - bearerAuth: []
-  /api/v1/automations:
-    get:
-      summary: 'Automation: List all Styx-created automations.'
-      description: Auto-generated Automation stub for `list_automations` (GET /api/v1/automations).
-      operationId: auto_list_automations
-      tags:
-      - Automations
-      responses:
-        '200':
-          description: Successful response
-          content:
-            application/json:
-              schema:
-                type: object
-        '400':
-          description: Invalid request payload
-          content:
-            application/json:
-              schema:
-                type: object
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                type: object
       security:
       - bearerAuth: []
   /api/v1/zone-automation/dashboard:
@@ -7917,623 +10624,6 @@ paths:
               type: object
       security:
       - bearerAuth: []
-  /api/v1/zones:
-    get:
-      summary: List zones (Core API)
-      description: Returns all configured zones. Direct Core API path mirrored from
-        Hub.
-      operationId: coreListZones
-      tags:
-      - Zones
-      responses:
-        '200':
-          description: List of zones
-          content:
-            application/json:
-              schema:
-                type: object
-        '400':
-          description: Invalid request payload
-          content:
-            application/json:
-              schema:
-                type: object
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                type: object
-      security:
-      - apiKeyAuth: []
-    post:
-      summary: Create a zone (Core API)
-      description: Create a new zone. Direct Core API path mirrored from Hub.
-      operationId: coreCreateZone
-      tags:
-      - Zones
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-      responses:
-        '200':
-          description: Zone created
-          content:
-            application/json:
-              schema:
-                type: object
-        '400':
-          description: Invalid request payload
-          content:
-            application/json:
-              schema:
-                type: object
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                type: object
-      security:
-      - apiKeyAuth: []
-  /api/v1/zones/{zone_id}:
-    get:
-      summary: Get zone details (Core API)
-      description: Get details for a specific zone. Direct Core API path mirrored
-        from Hub.
-      operationId: coreGetZone
-      tags:
-      - Zones
-      parameters:
-      - name: zone_id
-        in: path
-        required: true
-        schema:
-          type: string
-      responses:
-        '200':
-          description: Zone details
-          content:
-            application/json:
-              schema:
-                type: object
-        '400':
-          description: Invalid request payload
-          content:
-            application/json:
-              schema:
-                type: object
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                type: object
-      security:
-      - apiKeyAuth: []
-    delete:
-      summary: Delete a zone (Core API)
-      description: Delete a zone. Direct Core API path mirrored from Hub.
-      operationId: coreDeleteZone
-      tags:
-      - Zones
-      parameters:
-      - name: zone_id
-        in: path
-        required: true
-        schema:
-          type: string
-      responses:
-        '200':
-          description: Zone deleted
-          content:
-            application/json:
-              schema:
-                type: object
-        '400':
-          description: Invalid request payload
-          content:
-            application/json:
-              schema:
-                type: object
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                type: object
-      security:
-      - apiKeyAuth: []
-  /api/v1/zones/{zone_id}/mode:
-    post:
-      summary: Set zone mode (Core API)
-      description: Set the mode for a zone. Direct Core API path mirrored from Hub.
-      operationId: coreSetZoneMode
-      tags:
-      - Zones
-      parameters:
-      - name: zone_id
-        in: path
-        required: true
-        schema:
-          type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-      responses:
-        '200':
-          description: Mode set
-          content:
-            application/json:
-              schema:
-                type: object
-        '400':
-          description: Invalid request payload
-          content:
-            application/json:
-              schema:
-                type: object
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                type: object
-      security:
-      - apiKeyAuth: []
-  /api/v1/zones/{zone_id}/room:
-    post:
-      summary: Add room to zone (Core API)
-      description: Add a room to a zone. Direct Core API path mirrored from Hub.
-      operationId: coreAddRoomToZone
-      tags:
-      - Zones
-      parameters:
-      - name: zone_id
-        in: path
-        required: true
-        schema:
-          type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-      responses:
-        '200':
-          description: Room added
-          content:
-            application/json:
-              schema:
-                type: object
-        '400':
-          description: Invalid request payload
-          content:
-            application/json:
-              schema:
-                type: object
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                type: object
-      security:
-      - apiKeyAuth: []
-  /api/v1/zones/{zone_id}/room/{room_id}:
-    delete:
-      summary: Remove room from zone (Core API)
-      description: Remove a room from a zone. Direct Core API path mirrored from Hub.
-      operationId: coreRemoveRoomFromZone
-      tags:
-      - Zones
-      parameters:
-      - name: zone_id
-        in: path
-        required: true
-        schema:
-          type: string
-      - name: room_id
-        in: path
-        required: true
-        schema:
-          type: string
-      responses:
-        '200':
-          description: Room removed
-          content:
-            application/json:
-              schema:
-                type: object
-        '400':
-          description: Invalid request payload
-          content:
-            application/json:
-              schema:
-                type: object
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                type: object
-      security:
-      - apiKeyAuth: []
-  /api/v1/zones/rooms:
-    get:
-      summary: List all rooms (Core API)
-      description: Get all registered rooms. Direct Core API path mirrored from Hub.
-      operationId: coreListRooms
-      tags:
-      - Zones
-      responses:
-        '200':
-          description: List of rooms
-          content:
-            application/json:
-              schema:
-                type: object
-        '400':
-          description: Invalid request payload
-          content:
-            application/json:
-              schema:
-                type: object
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                type: object
-      security:
-      - apiKeyAuth: []
-    post:
-      summary: Register a room (Core API)
-      description: Register a new room. Direct Core API path mirrored from Hub.
-      operationId: coreRegisterRoom
-      tags:
-      - Zones
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-      responses:
-        '200':
-          description: Room registered
-          content:
-            application/json:
-              schema:
-                type: object
-        '400':
-          description: Invalid request payload
-          content:
-            application/json:
-              schema:
-                type: object
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                type: object
-      security:
-      - apiKeyAuth: []
-  /api/v1/zones/templates:
-    get:
-      summary: Get zone templates (Core API)
-      description: Get available zone templates. Direct Core API path mirrored from
-        Hub.
-      operationId: coreGetZoneTemplates
-      tags:
-      - Zones
-      responses:
-        '200':
-          description: List of templates
-          content:
-            application/json:
-              schema:
-                type: object
-        '400':
-          description: Invalid request payload
-          content:
-            application/json:
-              schema:
-                type: object
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                type: object
-      security:
-      - apiKeyAuth: []
-  /api/v1/zones/template/{template_id}:
-    post:
-      summary: Create zone from template (Core API)
-      description: Create a zone from a template. Direct Core API path mirrored from
-        Hub.
-      operationId: coreCreateZoneFromTemplate
-      tags:
-      - Zones
-      parameters:
-      - name: template_id
-        in: path
-        required: true
-        schema:
-          type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-      responses:
-        '200':
-          description: Zone created
-          content:
-            application/json:
-              schema:
-                type: object
-        '400':
-          description: Invalid request payload
-          content:
-            application/json:
-              schema:
-                type: object
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                type: object
-      security:
-      - apiKeyAuth: []
-  /api/v1/zones/modes:
-    get:
-      summary: Get zone modes (Core API)
-      description: Get available zone modes. Direct Core API path mirrored from Hub.
-      operationId: coreGetZoneModes
-      tags:
-      - Zones
-      responses:
-        '200':
-          description: List of modes
-          content:
-            application/json:
-              schema:
-                type: object
-        '400':
-          description: Invalid request payload
-          content:
-            application/json:
-              schema:
-                type: object
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                type: object
-      security:
-      - apiKeyAuth: []
-  /api/v1/homes:
-    get:
-      summary: List homes (Core API)
-      description: Get multi-home summary. Direct Core API path mirrored from Hub.
-      operationId: coreListHomes
-      tags:
-      - Homes
-      responses:
-        '200':
-          description: List of homes
-          content:
-            application/json:
-              schema:
-                type: object
-        '400':
-          description: Invalid request payload
-          content:
-            application/json:
-              schema:
-                type: object
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                type: object
-      security:
-      - apiKeyAuth: []
-    post:
-      summary: Add a home (Core API)
-      description: Add a new home. Direct Core API path mirrored from Hub.
-      operationId: coreAddHome
-      tags:
-      - Homes
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-      responses:
-        '200':
-          description: Home added
-          content:
-            application/json:
-              schema:
-                type: object
-        '400':
-          description: Invalid request payload
-          content:
-            application/json:
-              schema:
-                type: object
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                type: object
-      security:
-      - apiKeyAuth: []
-  /api/v1/homes/{home_id}:
-    get:
-      summary: Get home details (Core API)
-      description: Get details for a specific home. Direct Core API path mirrored
-        from Hub.
-      operationId: coreGetHome
-      tags:
-      - Homes
-      parameters:
-      - name: home_id
-        in: path
-        required: true
-        schema:
-          type: string
-      responses:
-        '200':
-          description: Home details
-          content:
-            application/json:
-              schema:
-                type: object
-        '400':
-          description: Invalid request payload
-          content:
-            application/json:
-              schema:
-                type: object
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                type: object
-      security:
-      - apiKeyAuth: []
-    delete:
-      summary: Remove a home (Core API)
-      description: Remove a home. Direct Core API path mirrored from Hub.
-      operationId: coreRemoveHome
-      tags:
-      - Homes
-      parameters:
-      - name: home_id
-        in: path
-        required: true
-        schema:
-          type: string
-      responses:
-        '200':
-          description: Home removed
-          content:
-            application/json:
-              schema:
-                type: object
-        '400':
-          description: Invalid request payload
-          content:
-            application/json:
-              schema:
-                type: object
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                type: object
-      security:
-      - apiKeyAuth: []
-  /api/v1/homes/{home_id}/activate:
-    post:
-      summary: Switch active home (Core API)
-      description: Activate a home. Direct Core API path mirrored from Hub.
-      operationId: coreActivateHome
-      tags:
-      - Homes
-      parameters:
-      - name: home_id
-        in: path
-        required: true
-        schema:
-          type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-      responses:
-        '200':
-          description: Home activated
-          content:
-            application/json:
-              schema:
-                type: object
-        '400':
-          description: Invalid request payload
-          content:
-            application/json:
-              schema:
-                type: object
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                type: object
-      security:
-      - apiKeyAuth: []
-  /api/v1/homes/{home_id}/status:
-    post:
-      summary: Update home status (Core API)
-      description: Update home status. Direct Core API path mirrored from Hub.
-      operationId: coreUpdateHomeStatus
-      tags:
-      - Homes
-      parameters:
-      - name: home_id
-        in: path
-        required: true
-        schema:
-          type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-      responses:
-        '200':
-          description: Status updated
-          content:
-            application/json:
-              schema:
-                type: object
-        '400':
-          description: Invalid request payload
-          content:
-            application/json:
-              schema:
-                type: object
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                type: object
-      security:
-      - apiKeyAuth: []
   /api/v1/hub/status:
     get:
       summary: Get Hub status
@@ -16588,6 +18678,118 @@ paths:
                   description: Additional metadata
       responses:
         '201':
+  /api/v1/zone/create:
+    post:
+      tags: [zone]
+      summary: Create new zone
+      operationId: createZone
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ZoneCreateRequest'
+      responses:
+        "201":
+          description: Zone created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Zone'
+        "400":
+          description: Invalid request
+  /api/v1/zone/delete/{zone_id}:
+    delete:
+      tags: [zone]
+      summary: Delete zone
+      operationId: deleteZone
+      parameters:
+      - name: zone_id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        "204":
+          description: Zone deleted
+        "404":
+          description: Zone not found
+  /api/v1/zone/update:
+    put:
+      tags: [zone]
+      summary: Update zone
+      operationId: updateZone
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ZoneUpdateRequest'
+      responses:
+        "200":
+          description: Zone updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Zone'
+        "404":
+          description: Zone not found
+  /api/v1/zone/{zone_id}:
+    get:
+      tags: [zone]
+      summary: Get zone details
+      operationId: getZone
+      parameters:
+      - name: zone_id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: Zone details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Zone'
+        "404":
+          description: Zone not found
+  /api/v1/mood/aggregated:
+    get:
+      tags: [mood]
+      summary: Get aggregated mood data
+      operationId: getAggregatedMood
+      parameters:
+      - name: home_id
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: hours
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 24
+      responses:
+        "200":
+          description: Aggregated mood data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  home_id:
+                    type: string
+                  period_hours:
+                    type: integer
+                  mood_score:
+                    type: number
+                    format: float
+                  samples:
+                    type: integer
+        "400":
+          description: Invalid parameters
           description: Embedding created
           content:
             application/json:
@@ -17183,228 +19385,6 @@ paths:
             application/json:
               schema:
                 type: object
-      security:
-      - apiKeyAuth: []
-
-  /api/v1/onyx/status:
-    get:
-      summary: 'Onyx: Get bridge status.'
-      description: Health/status information for Onyx bridge wiring, including HA connectivity
-        and allowed domains.
-      operationId: onyx_status
-      tags:
-      - Onyx
-      responses:
-        '200':
-          description: Bridge status information
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                - ok
-                - bridge
-                properties:
-                  ok:
-                    type: boolean
-                  bridge:
-                    type: string
-                    example: onyx
-                  supervisor_api:
-                    type: string
-                    example: http://supervisor/core/api
-                  has_supervisor_token:
-                    type: boolean
-                  ha_reachable:
-                    type: boolean
-                  ha_error:
-                    type: string
-                  allowed_domains:
-                    type: array
-                    items:
-                      type: string
-                    example:
-                    - light
-                    - switch
-                    - scene
-                    - fan
-                    - cover
-                    - climate
-                    - media_player
-                    - input_boolean
-                    - script
-                    - automation
-                    - notify
-        '401':
-          description: Unauthorized
-          content:
-            application/json:
-              schema:
-                type: object
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                type: object
-      security:
-      - apiKeyAuth: []
-
-  /api/v1/onyx/ha/service-call:
-    post:
-      summary: 'Onyx: Execute controlled HA service call.'
-      description: Execute a controlled Home Assistant service call with optional
-        state readback. Validates domain against allowed domains and returns entity
-        states after execution.
-      operationId: onyx_ha_service_call
-      tags:
-      - Onyx
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-              - domain
-              - service
-              properties:
-                domain:
-                  type: string
-                  description: HA service domain (e.g., light, switch, scene)
-                  example: light
-                service:
-                  type: string
-                  description: HA service name (e.g., turn_on, turn_off)
-                  example: turn_on
-                entity_id:
-                  oneOf:
-                  - type: string
-                  - type: array
-                    items:
-                      type: string
-                  description: Entity or entities to target
-                  example: light.living_room
-                service_data:
-                  type: object
-                  additionalProperties: true
-                  description: HA service payload data
-                  example:
-                    brightness_pct: 80
-                    color_temp: 350
-                target:
-                  type: object
-                  additionalProperties: true
-                  description: HA service target
-                readback:
-                  type: boolean
-                  default: true
-                  description: Whether to read back entity states after service call
-                readback_entity_ids:
-                  type: array
-                  items:
-                    type: string
-                  description: Entity IDs to read back (defaults to entity_id)
-                  example:
-                  - light.living_room
-                  - light.kitchen
-      responses:
-        '200':
-          description: Service call executed successfully
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                - ok
-                properties:
-                  ok:
-                    type: boolean
-                  domain:
-                    type: string
-                  service:
-                    type: string
-                  entity_ids:
-                    type: array
-                    items:
-                      type: string
-                  ha_status_code:
-                    type: integer
-                  ha_result:
-                    oneOf:
-                    - type: object
-                    - type: string
-                  readback_states:
-                    type: array
-                    items:
-                      type: object
-                      properties:
-                        entity_id:
-                          type: string
-                        state:
-                          type: string
-                        attributes:
-                          type: object
-                        last_changed:
-                          type: string
-        '400':
-          description: Invalid request (missing domain/service)
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  ok:
-                    type: boolean
-                  error:
-                    type: string
-        '401':
-          description: Unauthorized
-          content:
-            application/json:
-              schema:
-                type: object
-        '403':
-          description: Domain not allowed
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  ok:
-                    type: boolean
-                  error:
-                    type: string
-                  allowed_domains:
-                    type: array
-                    items:
-                      type: string
-        '502':
-          description: HA service call failed or rejected
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  ok:
-                    type: boolean
-                  error:
-                    type: string
-                  ha_status_code:
-                    type: integer
-                  ha_response:
-                    type: string
-        '503':
-          description: SUPERVISOR_TOKEN missing (no HA connection)
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  ok:
-                    type: boolean
-                  error:
-                    type: string
       security:
       - apiKeyAuth: []
 
