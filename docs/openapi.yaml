@@ -205,24 +205,29 @@ paths:
   /api/v1/legacy/health:
     get:
       summary: Legacy health endpoint (deprecated)
-      description: Deprecated legacy health endpoint, wired as a stub for backward compatibility.
+      description: Deprecated legacy health endpoint for backward compatibility. Returns 200 OK with health status.
       operationId: getLegacyHealth
       tags:
       - Legacy
+      deprecated: true
       responses:
-        '501':
-          description: Stub response (not implemented)
+        '200':
+          description: Legacy health check response
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  status:
+                  ok:
+                    type: boolean
+                    example: true
+                  legacy:
+                    type: boolean
+                    example: true
+                  time:
                     type: string
-                    example: "501 Not Implemented"
-                  message:
-                    type: string
-                    example: "This endpoint is deprecated and wired as a stub."
+                    format: date-time
+                    example: "2026-03-10T09:16:00Z"
                   X-Stub:
                     type: string
                     example: "allowlist"
