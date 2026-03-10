@@ -70,6 +70,3270 @@ security:
 - apiKeyAuth: []
 - bearerAuth: []
 paths:
+  /api/v1/neurons:
+    get:
+      summary: 'Neurons: List all neurons.'
+      description: Auto-generated Neurons stub for `list_neurons` (GET /api/v1/neurons).
+      operationId: neurons_list_neurons
+      tags:
+      - Neurons
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/neurons/{neuron_id}:
+    get:
+      summary: 'Neurons: Get a specific neuron''s state.'
+      description: Auto-generated Neurons stub for `get_neuron` (GET /api/v1/neurons/{neuron_id}).
+      operationId: neurons_get_neuron
+      tags:
+      - Neurons
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      parameters:
+      - name: neuron_id
+        in: path
+        required: true
+        schema:
+          type: string
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/neurons/evaluate:
+    post:
+      summary: 'Neurons: Run full neural pipeline evaluation.'
+      description: Auto-generated Neurons stub for `evaluate_neurons` (POST /api/v1/neurons/evaluate).
+      operationId: neurons_evaluate_neurons
+      tags:
+      - Neurons
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/neurons/update:
+    post:
+      summary: 'Neurons: Update HA states without full evaluation.'
+      description: Auto-generated Neurons stub for `update_neuron_states` (POST /api/v1/neurons/update).
+      operationId: neurons_update_neuron_states
+      tags:
+      - Neurons
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/neurons/configure:
+    post:
+      summary: 'Neurons: Configure neurons from HA.'
+      description: Auto-generated Neurons stub for `configure_neurons` (POST /api/v1/neurons/configure).
+      operationId: neurons_configure_neurons
+      tags:
+      - Neurons
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/neurons/mood:
+    get:
+      summary: 'Neurons: Get current mood state.'
+      description: Auto-generated Neurons stub for `get_mood` (GET /api/v1/neurons/mood).
+      operationId: neurons_get_mood
+      tags:
+      - Neurons
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/neurons/mood/evaluate:
+    post:
+      summary: 'Neurons: Force mood evaluation.'
+      description: Auto-generated Neurons stub for `evaluate_mood` (POST /api/v1/neurons/mood/evaluate).
+      operationId: neurons_evaluate_mood
+      tags:
+      - Neurons
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/neurons/mood/history:
+    get:
+      summary: 'Neurons: Get mood history.'
+      description: Auto-generated Neurons stub for `get_mood_history` (GET /api/v1/neurons/mood/history).
+      operationId: neurons_get_mood_history
+      tags:
+      - Neurons
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/neurons/suggestions:
+    get:
+      summary: 'Neurons: Get current suggestions.'
+      description: Auto-generated Neurons stub for `get_suggestions` (GET /api/v1/neurons/suggestions).
+      operationId: neurons_get_suggestions
+      tags:
+      - Neurons
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/neurons/graph:
+    get:
+      summary: 'Neurons: Get complete neuron graph (nodes + edges).'
+      description: Auto-generated Neurons stub for `get_neuron_graph_endpoint` (GET
+
+  /api/v1/neurons/{neuron_id}/stats:
+    get:
+      summary: 'Neurons: Get neuron statistics (fire-rate, confidence, metrics).'
+      description: Auto-generated Neurons stub for `get_neuron_stats` (GET /api/v1/neurons/{neuron_id}/stats).
+      operationId: neurons_get_neuron_stats
+      tags:
+      - Neurons
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      parameters:
+      - name: neuron_id
+        in: path
+        required: true
+        schema:
+          type: string
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/neurons/graph/stats:
+    get:
+      summary: 'Neurons: Get overall graph statistics.'
+      description: Auto-generated Neurons stub for `get_graph_stats` (GET /api/v1/neurons/graph/stats).
+      operationId: neurons_get_graph_stats
+      tags:
+      - Neurons
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/neurons/connections:
+    get:
+      summary: 'Neurons: Get connections between neurons.'
+      description: Auto-generated Neurons stub for `get_connections` (GET /api/v1/neurons/connections).
+      operationId: neurons_get_connections
+      tags:
+      - Neurons
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/neurons/paths:
+    get:
+      summary: 'Neurons: Find paths between two neurons.'
+      description: Auto-generated Neurons stub for `get_paths` (GET /api/v1/neurons/paths).
+      operationId: neurons_get_paths
+      tags:
+      - Neurons
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/neurons/{neuron_id}/config:
+    patch:
+      summary: 'Neurons: Update a neuron''s configuration parameters.'
+      description: Auto-generated Neurons stub for `update_neuron_config` (PATCH /api/v1/neurons/{neuron_id}/config).
+      operationId: neurons_update_neuron_config
+      tags:
+      - Neurons
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      parameters:
+      - name: neuron_id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/neurons/{neuron_id}/enable:
+    post:
+      summary: 'Neurons: Enable a neuron.'
+      description: Auto-generated Neurons stub for `enable_neuron` (POST /api/v1/neurons/{neuron_id}/enable).
+      operationId: neurons_enable_neuron
+      tags:
+      - Neurons
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      parameters:
+      - name: neuron_id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/neurons/{neuron_id}/disable:
+    post:
+      summary: 'Neurons: Disable a neuron.'
+      description: Auto-generated Neurons stub for `disable_neuron` (POST /api/v1/neurons/{neuron_id}/disable).
+      operationId: neurons_disable_neuron
+      tags:
+      - Neurons
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      parameters:
+      - name: neuron_id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/neurons/batch-configure:
+    post:
+      summary: 'Neurons: Configure multiple neurons in one request.'
+      description: Auto-generated Neurons stub for `batch_configure_neurons` (POST
+
+  /api/v1/neurons/state:
+    get:
+      summary: 'Neurons: Get all 14 neuron states.'
+      description: Auto-generated Neurons stub for `get_all_neurons_state` (GET /api/v1/neurons/state).
+      operationId: neurons_get_all_neurons_state
+      tags:
+      - Neurons
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/neurons/{neuron_id}/fire:
+    get:
+      summary: 'Neurons: Get live fire status for a single neuron.'
+      description: Auto-generated Neurons stub for `get_neuron_fire_status` (GET /api/v1/neurons/{neuron_id}/fire).
+      operationId: neurons_get_neuron_fire_status
+      tags:
+      - Neurons
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      parameters:
+      - name: neuron_id
+        in: path
+        required: true
+        schema:
+          type: string
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/neurons/brain/pipeline:
+    get:
+      summary: 'Neurons: Get the communication pipeline status.'
+      description: Auto-generated Neurons stub for `get_brain_pipeline` (GET /api/v1/neurons/brain/pipeline).
+      operationId: neurons_get_brain_pipeline
+      tags:
+      - Neurons
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/neurons/layers/visualization:
+    get:
+      summary: 'Neurons: Return full neuron layer data with values and connections.'
+      description: Auto-generated Neurons stub for `get_layer_visualization` (GET
+
+  /api/v1/neurons/layers/snapshot.svg:
+    get:
+      summary: 'Neurons: Return SVG visualization of the neuron layers.'
+      description: Auto-generated Neurons stub for `get_layer_svg` (GET /api/v1/neurons/layers/snapshot.svg).
+      operationId: neurons_get_layer_svg
+      tags:
+      - Neurons
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/neurons/layers/heatmap:
+    get:
+      summary: 'Neurons: Return connection weight matrix as a heatmap data structure.'
+      description: Auto-generated Neurons stub for `get_connection_heatmap` (GET /api/v1/neurons/layers/heatmap).
+      operationId: neurons_get_connection_heatmap
+      tags:
+      - Neurons
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/neurons/layers/synapses:
+    get:
+      summary: 'Neurons: List all synapses with current and default weights.'
+      description: Auto-generated Neurons stub for `list_synapses` (GET /api/v1/neurons/layers/synapses).
+      operationId: neurons_list_synapses
+      tags:
+      - Neurons
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/neurons/layers/synapses/update:
+    post:
+      summary: 'Neurons: Update a synapse weight.'
+      description: Auto-generated Neurons stub for `update_synapse_weight` (POST /api/v1/neurons/layers/synapses/update).
+      operationId: neurons_update_synapse_weight
+      tags:
+      - Neurons
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/neurons/layers/synapses/reset:
+    post:
+      summary: 'Neurons: Reset a synapse weight to default.'
+      description: Auto-generated Neurons stub for `reset_synapse_weight` (POST /api/v1/neurons/layers/synapses/reset).
+      operationId: neurons_reset_synapse_weight
+      tags:
+      - Neurons
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/sonos/health:
+    get:
+      summary: 'Sonos: sonos_health'
+      description: Auto-generated Sonos stub for `sonos_health` (GET /api/v1/sonos/health).
+      operationId: sonos_sonos_health
+      tags:
+      - Sonos
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/sonos/zones:
+    get:
+      summary: 'Sonos: sonos_zones'
+      description: Auto-generated Sonos stub for `sonos_zones` (GET /api/v1/sonos/zones).
+      operationId: sonos_sonos_zones
+      tags:
+      - Sonos
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/sonos/rooms:
+    get:
+      summary: 'Sonos: sonos_rooms'
+      description: Auto-generated Sonos stub for `sonos_rooms` (GET /api/v1/sonos/rooms).
+      operationId: sonos_sonos_rooms
+      tags:
+      - Sonos
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/sonos/rooms/{room}/state:
+    get:
+      summary: 'Sonos: sonos_room_state'
+      description: Auto-generated Sonos stub for `sonos_room_state` (GET /api/v1/sonos/rooms/{room}/state).
+      operationId: sonos_sonos_room_state
+      tags:
+      - Sonos
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      parameters:
+      - name: room
+        in: path
+        required: true
+        schema:
+          type: string
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/sonos/rooms/{room}/play:
+    post:
+      summary: 'Sonos: sonos_play'
+      description: Auto-generated Sonos stub for `sonos_play` (POST /api/v1/sonos/rooms/{room}/play).
+      operationId: sonos_sonos_play
+      tags:
+      - Sonos
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      parameters:
+      - name: room
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/sonos/rooms/{room}/pause:
+    post:
+      summary: 'Sonos: sonos_pause'
+      description: Auto-generated Sonos stub for `sonos_pause` (POST /api/v1/sonos/rooms/{room}/pause).
+      operationId: sonos_sonos_pause
+      tags:
+      - Sonos
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      parameters:
+      - name: room
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/sonos/rooms/{room}/stop:
+    post:
+      summary: 'Sonos: sonos_stop'
+      description: Auto-generated Sonos stub for `sonos_stop` (POST /api/v1/sonos/rooms/{room}/stop).
+      operationId: sonos_sonos_stop
+      tags:
+      - Sonos
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      parameters:
+      - name: room
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/sonos/rooms/{room}/toggle:
+    post:
+      summary: 'Sonos: sonos_toggle'
+      description: Auto-generated Sonos stub for `sonos_toggle` (POST /api/v1/sonos/rooms/{room}/toggle).
+      operationId: sonos_sonos_toggle
+      tags:
+      - Sonos
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      parameters:
+      - name: room
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/sonos/rooms/{room}/next:
+    post:
+      summary: 'Sonos: sonos_next'
+      description: Auto-generated Sonos stub for `sonos_next` (POST /api/v1/sonos/rooms/{room}/next).
+      operationId: sonos_sonos_next
+      tags:
+      - Sonos
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      parameters:
+      - name: room
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/sonos/rooms/{room}/previous:
+    post:
+      summary: 'Sonos: sonos_previous'
+      description: Auto-generated Sonos stub for `sonos_previous` (POST /api/v1/sonos/rooms/{room}/previous).
+      operationId: sonos_sonos_previous
+      tags:
+      - Sonos
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      parameters:
+      - name: room
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/sonos/rooms/{room}/volume:
+    post:
+      summary: 'Sonos: sonos_volume'
+      description: Auto-generated Sonos stub for `sonos_volume` (POST /api/v1/sonos/rooms/{room}/volume).
+      operationId: sonos_sonos_volume
+      tags:
+      - Sonos
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      parameters:
+      - name: room
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/sonos/rooms/{room}/volume/adjust:
+    post:
+      summary: 'Sonos: sonos_volume_adjust'
+      description: Auto-generated Sonos stub for `sonos_volume_adjust` (POST /api/v1/sonos/rooms/{room}/volume/adjust).
+      operationId: sonos_sonos_volume_adjust
+      tags:
+      - Sonos
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      parameters:
+      - name: room
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/sonos/rooms/{room}/mute:
+    post:
+      summary: 'Sonos: sonos_mute'
+      description: Auto-generated Sonos stub for `sonos_mute` (POST /api/v1/sonos/rooms/{room}/mute).
+      operationId: sonos_sonos_mute
+      tags:
+      - Sonos
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      parameters:
+      - name: room
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/sonos/rooms/{room}/favorites:
+    get:
+      summary: 'Sonos: sonos_favorites'
+      description: Auto-generated Sonos stub for `sonos_favorites` (GET /api/v1/sonos/rooms/{room}/favorites).
+      operationId: sonos_sonos_favorites
+      tags:
+      - Sonos
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      parameters:
+      - name: room
+        in: path
+        required: true
+        schema:
+          type: string
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/sonos/rooms/{room}/favorite:
+    post:
+      summary: 'Sonos: sonos_play_favorite'
+      description: Auto-generated Sonos stub for `sonos_play_favorite` (POST /api/v1/sonos/rooms/{room}/favorite).
+      operationId: sonos_sonos_play_favorite
+      tags:
+      - Sonos
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      parameters:
+      - name: room
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/sonos/rooms/{room}/playlists:
+    get:
+      summary: 'Sonos: sonos_playlists'
+      description: Auto-generated Sonos stub for `sonos_playlists` (GET /api/v1/sonos/rooms/{room}/playlists).
+      operationId: sonos_sonos_playlists
+      tags:
+      - Sonos
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      parameters:
+      - name: room
+        in: path
+        required: true
+        schema:
+          type: string
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/sonos/rooms/{room}/playlist:
+    post:
+      summary: 'Sonos: sonos_play_playlist'
+      description: Auto-generated Sonos stub for `sonos_play_playlist` (POST /api/v1/sonos/rooms/{room}/playlist).
+      operationId: sonos_sonos_play_playlist
+      tags:
+      - Sonos
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      parameters:
+      - name: room
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/sonos/rooms/{room}/queue:
+    get:
+      summary: 'Sonos: sonos_queue'
+      description: Auto-generated Sonos stub for `sonos_queue` (GET /api/v1/sonos/rooms/{room}/queue).
+      operationId: sonos_sonos_queue
+      tags:
+      - Sonos
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      parameters:
+      - name: room
+        in: path
+        required: true
+        schema:
+          type: string
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/sonos/rooms/{room}/queue/clear:
+    post:
+      summary: 'Sonos: sonos_clear_queue'
+      description: Auto-generated Sonos stub for `sonos_clear_queue` (POST /api/v1/sonos/rooms/{room}/queue/clear).
+      operationId: sonos_sonos_clear_queue
+      tags:
+      - Sonos
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      parameters:
+      - name: room
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/sonos/rooms/{room}/join:
+    post:
+      summary: 'Sonos: sonos_join'
+      description: Auto-generated Sonos stub for `sonos_join` (POST /api/v1/sonos/rooms/{room}/join).
+      operationId: sonos_sonos_join
+      tags:
+      - Sonos
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      parameters:
+      - name: room
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/sonos/rooms/{room}/leave:
+    post:
+      summary: 'Sonos: sonos_leave'
+      description: Auto-generated Sonos stub for `sonos_leave` (POST /api/v1/sonos/rooms/{room}/leave).
+      operationId: sonos_sonos_leave
+      tags:
+      - Sonos
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      parameters:
+      - name: room
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/sonos/rooms/{room}/say:
+    post:
+      summary: 'Sonos: sonos_say'
+      description: Auto-generated Sonos stub for `sonos_say` (POST /api/v1/sonos/rooms/{room}/say).
+      operationId: sonos_sonos_say
+      tags:
+      - Sonos
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      parameters:
+      - name: room
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/sonos/rooms/{room}/sleep:
+    post:
+      summary: 'Sonos: sonos_sleep'
+      description: Auto-generated Sonos stub for `sonos_sleep` (POST /api/v1/sonos/rooms/{room}/sleep).
+      operationId: sonos_sonos_sleep
+      tags:
+      - Sonos
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      parameters:
+      - name: room
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/sonos/rooms/{room}/shuffle:
+    post:
+      summary: 'Sonos: sonos_shuffle'
+      description: Auto-generated Sonos stub for `sonos_shuffle` (POST /api/v1/sonos/rooms/{room}/shuffle).
+      operationId: sonos_sonos_shuffle
+      tags:
+      - Sonos
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      parameters:
+      - name: room
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/sonos/sayall:
+    post:
+      summary: 'Sonos: sonos_say_all'
+      description: Auto-generated Sonos stub for `sonos_say_all` (POST /api/v1/sonos/sayall).
+      operationId: sonos_sonos_say_all
+      tags:
+      - Sonos
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/sonos/pauseall:
+    post:
+      summary: 'Sonos: sonos_pause_all'
+      description: Auto-generated Sonos stub for `sonos_pause_all` (POST /api/v1/sonos/pauseall).
+      operationId: sonos_sonos_pause_all
+      tags:
+      - Sonos
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/sonos/resumeall:
+    post:
+      summary: 'Sonos: sonos_resume_all'
+      description: Auto-generated Sonos stub for `sonos_resume_all` (POST /api/v1/sonos/resumeall).
+      operationId: sonos_sonos_resume_all
+      tags:
+      - Sonos
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/sonos/volume-profiles:
+    get:
+      summary: 'Sonos: sonos_volume_profiles'
+      description: Auto-generated Sonos stub for `sonos_volume_profiles` (GET /api/v1/sonos/volume-profiles).
+      operationId: sonos_sonos_volume_profiles
+      tags:
+      - Sonos
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/sonos/volume-profiles/{name}:
+    put:
+      summary: 'Sonos: sonos_update_volume_profile'
+      description: Auto-generated Sonos stub for `sonos_update_volume_profile` (PUT
+
+  /api/v1/sonos/presets:
+    get:
+      summary: 'Sonos: sonos_list_presets'
+      description: Auto-generated Sonos stub for `sonos_list_presets` (GET /api/v1/sonos/presets).
+      operationId: sonos_sonos_list_presets
+      tags:
+      - Sonos
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - apiKeyAuth: []
+    post:
+      summary: 'Sonos: sonos_create_preset'
+      description: Auto-generated Sonos stub for `sonos_create_preset` (POST /api/v1/sonos/presets).
+      operationId: sonos_sonos_create_preset
+      tags:
+      - Sonos
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/sonos/presets/{preset_id}:
+    get:
+      summary: 'Sonos: sonos_get_preset'
+      description: Auto-generated Sonos stub for `sonos_get_preset` (GET /api/v1/sonos/presets/{preset_id}).
+      operationId: sonos_sonos_get_preset
+      tags:
+      - Sonos
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      parameters:
+      - name: preset_id
+        in: path
+        required: true
+        schema:
+          type: string
+      security:
+      - apiKeyAuth: []
+    delete:
+      summary: 'Sonos: sonos_delete_preset'
+      description: Auto-generated Sonos stub for `sonos_delete_preset` (DELETE /api/v1/sonos/presets/{preset_id}).
+      operationId: sonos_sonos_delete_preset
+      tags:
+      - Sonos
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      parameters:
+      - name: preset_id
+        in: path
+        required: true
+        schema:
+          type: string
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/sonos/presets/{preset_id}/apply:
+    post:
+      summary: 'Sonos: sonos_apply_preset'
+      description: Auto-generated Sonos stub for `sonos_apply_preset` (POST /api/v1/sonos/presets/{preset_id}/apply).
+      operationId: sonos_sonos_apply_preset
+      tags:
+      - Sonos
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      parameters:
+      - name: preset_id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/sonos/intelligence/zones:
+    get:
+      summary: 'Sonos: sonos_intel_zones'
+      description: Auto-generated Sonos stub for `sonos_intel_zones` (GET /api/v1/sonos/intelligence/zones).
+      operationId: sonos_sonos_intel_zones
+      tags:
+      - Sonos
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - apiKeyAuth: []
+    post:
+      summary: 'Sonos: sonos_register_zone'
+      description: Auto-generated Sonos stub for `sonos_register_zone` (POST /api/v1/sonos/intelligence/zones).
+      operationId: sonos_sonos_register_zone
+      tags:
+      - Sonos
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/sonos/intelligence/zones/{zone_id}/fallback:
+    get:
+      summary: 'Sonos: sonos_get_fallback'
+      description: Auto-generated Sonos stub for `sonos_get_fallback` (GET /api/v1/sonos/intelligence/zones/{zone_id}/fallback).
+      operationId: sonos_sonos_get_fallback
+      tags:
+      - Sonos
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      parameters:
+      - name: zone_id
+        in: path
+        required: true
+        schema:
+          type: string
+      security:
+      - apiKeyAuth: []
+    post:
+      summary: 'Sonos: sonos_set_fallback'
+      description: Auto-generated Sonos stub for `sonos_set_fallback` (POST /api/v1/sonos/intelligence/zones/{zone_id}/fallback).
+      operationId: sonos_sonos_set_fallback
+      tags:
+      - Sonos
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      parameters:
+      - name: zone_id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/sonos/intelligence/presence:
+    post:
+      summary: 'Sonos: sonos_presence'
+      description: Auto-generated Sonos stub for `sonos_presence` (POST /api/v1/sonos/intelligence/presence).
+      operationId: sonos_sonos_presence
+      tags:
+      - Sonos
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - apiKeyAuth: []
+
+  /api/v1/hub/brain:
+    get:
+      summary: 'Hub: get brain dashboard'
+      description: Auto-generated Hub stub for `get_brain_dashboard` (GET /api/v1/hub/brain).
+      operationId: get_brain_dashboard
+      tags:
+      - Hub
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+
+  /api/v1/hub/brain/activity:
+    get:
+      summary: 'Hub: get brain activity'
+      description: Auto-generated Hub stub for `get_brain_activity` (GET /api/v1/hub/brain/activity).
+      operationId: get_brain_activity
+      tags:
+      - Hub
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+
+  /api/v1/hub/brain/activity/chat:
+    get:
+      summary: 'Hub: get brain chat'
+      description: Auto-generated Hub stub for `get_brain_chat` (GET /api/v1/hub/brain/activity/chat).
+      operationId: get_brain_chat
+      tags:
+      - Hub
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+    post:
+      summary: 'Hub: add brain chat'
+      description: Auto-generated Hub stub for `add_brain_chat` (POST /api/v1/hub/brain/activity/chat).
+      operationId: add_brain_chat
+      tags:
+      - Hub
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - bearerAuth: []
+
+  /api/v1/hub/brain/activity/chat/clear:
+    post:
+      summary: 'Hub: clear brain chat'
+      description: Auto-generated Hub stub for `clear_brain_chat` (POST /api/v1/hub/brain/activity/chat/clear).
+      operationId: clear_brain_chat
+      tags:
+      - Hub
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - bearerAuth: []
+
+  /api/v1/hub/brain/activity/config:
+    post:
+      summary: 'Hub: configure brain activity'
+      description: Auto-generated Hub stub for `configure_brain_activity` (POST /api/v1/hub/brain/activity/config).
+      operationId: configure_brain_activity
+      tags:
+      - Hub
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - bearerAuth: []
+
+  /api/v1/hub/brain/activity/pulse:
+    post:
+      summary: 'Hub: start brain pulse'
+      description: Auto-generated Hub stub for `start_brain_pulse` (POST /api/v1/hub/brain/activity/pulse).
+      operationId: start_brain_pulse
+      tags:
+      - Hub
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - bearerAuth: []
+
+  /api/v1/hub/brain/activity/pulse/end:
+    post:
+      summary: 'Hub: end brain pulse'
+      description: Auto-generated Hub stub for `end_brain_pulse` (POST /api/v1/hub/brain/activity/pulse/end).
+      operationId: end_brain_pulse
+      tags:
+      - Hub
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - bearerAuth: []
+
+  /api/v1/hub/brain/activity/sleep:
+    post:
+      summary: 'Hub: sleep brain'
+      description: Auto-generated Hub stub for `sleep_brain` (POST /api/v1/hub/brain/activity/sleep).
+      operationId: sleep_brain
+      tags:
+      - Hub
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - bearerAuth: []
+
+  /api/v1/hub/brain/activity/state:
+    get:
+      summary: 'Hub: get brain state'
+      description: Auto-generated Hub stub for `get_brain_state` (GET /api/v1/hub/brain/activity/state).
+      operationId: get_brain_state
+      tags:
+      - Hub
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+
+  /api/v1/hub/brain/activity/wake:
+    post:
+      summary: 'Hub: wake brain'
+      description: Auto-generated Hub stub for `wake_brain` (POST /api/v1/hub/brain/activity/wake).
+      operationId: wake_brain
+      tags:
+      - Hub
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - bearerAuth: []
+
+  /api/v1/hub/brain/graph:
+    get:
+      summary: 'Hub: get brain graph'
+      description: Auto-generated Hub stub for `get_brain_graph` (GET /api/v1/hub/brain/graph).
+      operationId: get_brain_graph
+      tags:
+      - Hub
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+
+  /api/v1/hub/brain/regions:
+    get:
+      summary: 'Hub: get brain regions'
+      description: Auto-generated Hub stub for `get_brain_regions` (GET /api/v1/hub/brain/regions).
+      operationId: get_brain_regions
+      tags:
+      - Hub
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+
+  /api/v1/hub/brain/regions/{region_id}:
+    get:
+      summary: 'Hub: get brain region'
+      description: Auto-generated Hub stub for `get_brain_region` (GET /api/v1/hub/brain/regions/{region_id}).
+      operationId: get_brain_region
+      tags:
+      - Hub
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+
+  /api/v1/hub/brain/synapses:
+    get:
+      summary: 'Hub: get brain synapses'
+      description: Auto-generated Hub stub for `get_brain_synapses` (GET /api/v1/hub/brain/synapses).
+      operationId: get_brain_synapses
+      tags:
+      - Hub
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+    post:
+      summary: 'Hub: add brain synapse'
+      description: Auto-generated Hub stub for `add_brain_synapse` (POST /api/v1/hub/brain/synapses).
+      operationId: add_brain_synapse
+      tags:
+      - Hub
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - bearerAuth: []
+
+  /api/v1/hub/brain/synapses/{synapse_id}:
+    delete:
+      summary: 'Hub: remove brain synapse'
+      description: Auto-generated Hub stub for `remove_brain_synapse` (DELETE /api/v1/hub/brain/synapses/{synapse_id}).
+      operationId: remove_brain_synapse
+      tags:
+      - Hub
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+
+  /api/v1/hub/brain/synapses/{synapse_id}/fire:
+    post:
+      summary: 'Hub: fire brain synapse'
+      description: Auto-generated Hub stub for `fire_brain_synapse` (POST /api/v1/hub/brain/synapses/{synapse_id}/fire).
+      operationId: fire_brain_synapse
+      tags:
+      - Hub
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - bearerAuth: []
+
+  /api/v1/hub/brain/synapses/{synapse_id}/state:
+    post:
+      summary: 'Hub: set brain synapse state'
+      description: Auto-generated Hub stub for `set_brain_synapse_state` (POST /api/v1/hub/brain/synapses/{synapse_id}/state).
+      operationId: set_brain_synapse_state
+      tags:
+      - Hub
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - bearerAuth: []
+
+  /api/v1/hub/brain/sync:
+    post:
+      summary: 'Hub: sync brain with hub'
+      description: Auto-generated Hub stub for `sync_brain_with_hub` (POST /api/v1/hub/brain/sync).
+      operationId: sync_brain_with_hub
+      tags:
+      - Hub
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - bearerAuth: []
+
+  /api/v1/hub/notifications:
+    get:
+      summary: 'Hub: get notification dashboard'
+      description: Auto-generated Hub stub for `get_notification_dashboard` (GET /api/v1/hub/notifications).
+      operationId: get_notification_dashboard
+      tags:
+      - Hub
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+
+  /api/v1/hub/notifications/batch:
+    post:
+      summary: 'Hub: configure notification batch'
+      description: Auto-generated Hub stub for `configure_notification_batch` (POST
+        /api/v1/hub/notifications/batch).
+      operationId: configure_notification_batch
+      tags:
+      - Hub
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - bearerAuth: []
+  /api/v1/hub/notifications/batch/flush:
+    post:
+      summary: 'Hub: flush notification batch'
+      description: Auto-generated Hub stub for `flush_notification_batch` (POST /api/v1/hub/notifications/batch/flush).
+      operationId: flush_notification_batch
+      tags:
+      - Hub
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - bearerAuth: []
+
+  /api/v1/hub/notifications/dnd:
+    post:
+      summary: 'Hub: set notification dnd'
+      description: Auto-generated Hub stub for `set_notification_dnd` (POST /api/v1/hub/notifications/dnd).
+      operationId: set_notification_dnd
+      tags:
+      - Hub
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - bearerAuth: []
+
+  /api/v1/hub/notifications/dnd/status:
+    get:
+      summary: 'Hub: get notification dnd status'
+      description: Auto-generated Hub stub for `get_notification_dnd_status` (GET
+        /api/v1/hub/notifications/dnd/status).
+      operationId: get_notification_dnd_status
+      tags:
+      - Hub
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+  /api/v1/hub/notifications/history:
+    get:
+      summary: 'Hub: get notification history'
+      description: Auto-generated Hub stub for `get_notification_history` (GET /api/v1/hub/notifications/history).
+      operationId: get_notification_history
+      tags:
+      - Hub
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+
+  /api/v1/hub/notifications/read-all:
+    post:
+      summary: 'Hub: mark all notifications read'
+      description: Auto-generated Hub stub for `mark_all_notifications_read` (POST
+        /api/v1/hub/notifications/read-all).
+      operationId: mark_all_notifications_read
+      tags:
+      - Hub
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - bearerAuth: []
+  /api/v1/hub/notifications/rules:
+    get:
+      summary: 'Hub: get notification rules'
+      description: Auto-generated Hub stub for `get_notification_rules` (GET /api/v1/hub/notifications/rules).
+      operationId: get_notification_rules
+      tags:
+      - Hub
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+    post:
+      summary: 'Hub: add notification rule'
+      description: Auto-generated Hub stub for `add_notification_rule` (POST /api/v1/hub/notifications/rules).
+      operationId: add_notification_rule
+      tags:
+      - Hub
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - bearerAuth: []
+
+  /api/v1/hub/notifications/rules/{rule_id}:
+    delete:
+      summary: 'Hub: remove notification rule'
+      description: Auto-generated Hub stub for `remove_notification_rule` (DELETE
+        /api/v1/hub/notifications/rules/{rule_id}).
+      operationId: remove_notification_rule
+      tags:
+      - Hub
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+  /api/v1/hub/notifications/send:
+    post:
+      summary: 'Hub: send notification'
+      description: Auto-generated Hub stub for `send_notification` (POST /api/v1/hub/notifications/send).
+      operationId: send_notification
+      tags:
+      - Hub
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - bearerAuth: []
+
+  /api/v1/hub/notifications/stats:
+    get:
+      summary: 'Hub: get notification stats'
+      description: Auto-generated Hub stub for `get_notification_stats` (GET /api/v1/hub/notifications/stats).
+      operationId: get_notification_stats
+      tags:
+      - Hub
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+
+  /api/v1/hub/notifications/{notification_id}/read:
+    post:
+      summary: 'Hub: mark notification read'
+      description: Auto-generated Hub stub for `mark_notification_read` (POST /api/v1/hub/notifications/{notification_id}/read).
+      operationId: mark_notification_read
+      tags:
+      - Hub
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - bearerAuth: []
   /api/v1/kg/edges:
     get:
       summary: KG: kg list edges
@@ -1745,6 +5009,351 @@ paths:
           description: List of zones
       security:
       - bearerAuth: []
+  /api/v1/hub/zones/{zone_id}:
+    get:
+      summary: 'Hub: Get zone details.'
+      description: Auto-generated Hub stub for `get_zone_detail` (GET /api/v1/hub/zones/{zone_id}).
+      operationId: hub_get_zone_detail
+      tags:
+      - Hub
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      parameters:
+      - name: zone_id
+        in: path
+        required: true
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+    delete:
+      summary: 'Hub: Delete a zone.'
+      description: Auto-generated Hub stub for `delete_zone_endpoint` (DELETE /api/v1/hub/zones/{zone_id}).
+      operationId: hub_delete_zone_endpoint
+      tags:
+      - Hub
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      parameters:
+      - name: zone_id
+        in: path
+        required: true
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+  /api/v1/hub/zones/{zone_id}/mode:
+    post:
+      summary: 'Hub: Set zone mode.'
+      description: Auto-generated Hub stub for `set_zone_mode_endpoint` (POST /api/v1/hub/zones/{zone_id}/mode).
+      operationId: hub_set_zone_mode_endpoint
+      tags:
+      - Hub
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      parameters:
+      - name: zone_id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - bearerAuth: []
+  /api/v1/hub/zones/{zone_id}/room:
+    post:
+      summary: 'Hub: Add a room to a zone.'
+      description: Auto-generated Hub stub for `add_room_to_zone_endpoint` (POST /api/v1/hub/zones/{zone_id}/room).
+      operationId: hub_add_room_to_zone_endpoint
+      tags:
+      - Hub
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      parameters:
+      - name: zone_id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - bearerAuth: []
+  /api/v1/hub/zones/{zone_id}/room/{room_id}:
+    delete:
+      summary: 'Hub: Remove a room from a zone.'
+      description: Auto-generated Hub stub for `remove_room_from_zone_endpoint` (DELETE
+        /api/v1/hub/zones/{zone_id}/room/{room_id}).
+      operationId: hub_remove_room_from_zone_endpoint
+      tags:
+      - Hub
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      parameters:
+      - name: zone_id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: room_id
+        in: path
+        required: true
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+  /api/v1/hub/zones/rooms:
+    get:
+      summary: 'Hub: Get all registered rooms.'
+      description: Auto-generated Hub stub for `get_rooms` (GET /api/v1/hub/zones/rooms).
+      operationId: hub_get_rooms
+      tags:
+      - Hub
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+    post:
+      summary: 'Hub: Register a room.'
+      description: Auto-generated Hub stub for `register_room_endpoint` (POST /api/v1/hub/zones/rooms).
+      operationId: hub_register_room_endpoint
+      tags:
+      - Hub
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - bearerAuth: []
+  /api/v1/hub/zones/templates:
+    get:
+      summary: 'Hub: Get available zone templates.'
+      description: Auto-generated Hub stub for `get_zone_templates` (GET /api/v1/hub/zones/templates).
+      operationId: hub_get_zone_templates
+      tags:
+      - Hub
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+  /api/v1/hub/zones/template/{template_id}:
+    post:
+      summary: 'Hub: Create a zone from a template.'
+      description: Auto-generated Hub stub for `create_zone_from_template_endpoint`
+        (POST /api/v1/hub/zones/template/{template_id}).
+      operationId: hub_create_zone_from_template_endpoint
+      tags:
+      - Hub
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      parameters:
+      - name: template_id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - bearerAuth: []
+  /api/v1/hub/zones/modes:
+    get:
+      summary: 'Hub: Get available zone modes.'
+      description: Auto-generated Hub stub for `get_zone_modes` (GET /api/v1/hub/zones/modes).
+      operationId: hub_get_zone_modes
+      tags:
+      - Hub
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
   /api/v1/hub/modes:
     get:
       summary: List modes
@@ -1755,6 +5364,906 @@ paths:
       responses:
         '200':
           description: List of modes
+      security:
+      - bearerAuth: []
+  /api/v1/hub/modes/available:
+    get:
+      summary: 'Hub: Get all available mode definitions.'
+      description: Auto-generated Hub stub for `get_available_modes` (GET /api/v1/hub/modes/available).
+      operationId: hub_get_available_modes
+      tags:
+      - Hub
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+  /api/v1/hub/modes/zone/{zone_id}:
+    get:
+      summary: 'Hub: Get current mode status for a zone.'
+      description: Auto-generated Hub stub for `get_zone_mode_status` (GET /api/v1/hub/modes/zone/{zone_id}).
+      operationId: hub_get_zone_mode_status
+      tags:
+      - Hub
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      parameters:
+      - name: zone_id
+        in: path
+        required: true
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+  /api/v1/hub/modes/activate:
+    post:
+      summary: 'Hub: Activate a mode on a zone.'
+      description: Auto-generated Hub stub for `activate_zone_mode` (POST /api/v1/hub/modes/activate).
+      operationId: hub_activate_zone_mode
+      tags:
+      - Hub
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - bearerAuth: []
+  /api/v1/hub/modes/deactivate:
+    post:
+      summary: 'Hub: Deactivate the current mode on a zone.'
+      description: Auto-generated Hub stub for `deactivate_zone_mode` (POST /api/v1/hub/modes/deactivate).
+      operationId: hub_deactivate_zone_mode
+      tags:
+      - Hub
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - bearerAuth: []
+  /api/v1/hub/modes/expire:
+    post:
+      summary: 'Hub: Check and expire timed-out modes.'
+      description: Auto-generated Hub stub for `check_mode_expirations` (POST /api/v1/hub/modes/expire).
+      operationId: hub_check_mode_expirations
+      tags:
+      - Hub
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - bearerAuth: []
+  /api/v1/hub/modes/custom:
+    post:
+      summary: 'Hub: Register a custom mode.'
+      description: Auto-generated Hub stub for `register_custom_mode` (POST /api/v1/hub/modes/custom).
+      operationId: hub_register_custom_mode
+      tags:
+      - Hub
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - bearerAuth: []
+  /api/v1/hub/media:
+    get:
+      summary: 'Hub: get media dashboard'
+      description: Auto-generated Hub media stub for `get_media_dashboard` (GET /api/v1/hub/media).
+      operationId: get_media_dashboard
+      tags:
+      - Hub
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+  /api/v1/hub/media/follow:
+    post:
+      summary: 'Hub: set media follow'
+      description: Auto-generated Hub media stub for `set_media_follow` (POST /api/v1/hub/media/follow).
+      operationId: set_media_follow
+      tags:
+      - Hub
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - bearerAuth: []
+  /api/v1/hub/media/playback:
+    post:
+      summary: 'Hub: update media playback'
+      description: Auto-generated Hub media stub for `update_media_playback` (POST
+        /api/v1/hub/media/playback).
+      operationId: update_media_playback
+      tags:
+      - Hub
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - bearerAuth: []
+  /api/v1/hub/media/sessions:
+    get:
+      summary: 'Hub: get media sessions'
+      description: Auto-generated Hub media stub for `get_media_sessions` (GET /api/v1/hub/media/sessions).
+      operationId: get_media_sessions
+      tags:
+      - Hub
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+  /api/v1/hub/media/sources:
+    get:
+      summary: 'Hub: get media sources'
+      description: Auto-generated Hub media stub for `get_media_sources` (GET /api/v1/hub/media/sources).
+      operationId: get_media_sources
+      tags:
+      - Hub
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+    post:
+      summary: 'Hub: register media source'
+      description: Auto-generated Hub media stub for `register_media_source` (POST
+        /api/v1/hub/media/sources).
+      operationId: register_media_source
+      tags:
+      - Hub
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - bearerAuth: []
+  /api/v1/hub/media/sources/{entity_id}:
+    delete:
+      summary: 'Hub: unregister media source'
+      description: Auto-generated Hub media stub for `unregister_media_source` (DELETE
+        /api/v1/hub/media/sources/{entity_id}).
+      operationId: unregister_media_source
+      tags:
+      - Hub
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+  /api/v1/hub/media/transfer:
+    post:
+      summary: 'Hub: transfer media'
+      description: Auto-generated Hub media stub for `transfer_media` (POST /api/v1/hub/media/transfer).
+      operationId: transfer_media
+      tags:
+      - Hub
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - bearerAuth: []
+  /api/v1/hub/media/zone/{zone_id}:
+    get:
+      summary: 'Hub: get zone media'
+      description: Auto-generated Hub media stub for `get_zone_media` (GET /api/v1/hub/media/zone/{zone_id}).
+      operationId: get_zone_media
+      tags:
+      - Hub
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+  /api/v1/hub/media/zone_enter:
+    post:
+      summary: 'Hub: on zone enter media'
+      description: Auto-generated Hub media stub for `on_zone_enter_media` (POST /api/v1/hub/media/zone_enter).
+      operationId: on_zone_enter_media
+      tags:
+      - Hub
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - bearerAuth: []
+  /api/v1/hub/scenes:
+    get:
+      summary: 'Hub: Get scene intelligence dashboard.'
+      description: Auto-generated Hub stub for `get_scene_dashboard` (GET /api/v1/hub/scenes).
+      operationId: hub_get_scene_dashboard
+      tags:
+      - Hub
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+  /api/v1/hub/scenes/list:
+    get:
+      summary: 'Hub: Get all scenes with optional category filter.'
+      description: Auto-generated Hub stub for `get_scenes_list` (GET /api/v1/hub/scenes/list).
+      operationId: hub_get_scenes_list
+      tags:
+      - Hub
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+  /api/v1/hub/scenes/active:
+    get:
+      summary: 'Hub: Get the currently active scene.'
+      description: Auto-generated Hub stub for `get_active_scene` (GET /api/v1/hub/scenes/active).
+      operationId: hub_get_active_scene
+      tags:
+      - Hub
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+  /api/v1/hub/scenes/activate:
+    post:
+      summary: 'Hub: Activate a scene.'
+      description: Auto-generated Hub stub for `activate_scene` (POST /api/v1/hub/scenes/activate).
+      operationId: hub_activate_scene
+      tags:
+      - Hub
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - bearerAuth: []
+  /api/v1/hub/scenes/deactivate:
+    post:
+      summary: 'Hub: Deactivate the current scene.'
+      description: Auto-generated Hub stub for `deactivate_scene` (POST /api/v1/hub/scenes/deactivate).
+      operationId: hub_deactivate_scene
+      tags:
+      - Hub
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - bearerAuth: []
+  /api/v1/hub/scenes/suggest:
+    post:
+      summary: 'Hub: Get scene suggestions based on context.'
+      description: Auto-generated Hub stub for `suggest_scenes` (POST /api/v1/hub/scenes/suggest).
+      operationId: hub_suggest_scenes
+      tags:
+      - Hub
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - bearerAuth: []
+  /api/v1/hub/scenes/learn:
+    post:
+      summary: 'Hub: Trigger pattern learning from activation history.'
+      description: Auto-generated Hub stub for `learn_scene_patterns` (POST /api/v1/hub/scenes/learn).
+      operationId: hub_learn_scene_patterns
+      tags:
+      - Hub
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - bearerAuth: []
+  /api/v1/hub/scenes/cloud:
+    post:
+      summary: 'Hub: Configure PilotSuite Cloud connection.'
+      description: Auto-generated Hub stub for `configure_scene_cloud` (POST /api/v1/hub/scenes/cloud).
+      operationId: hub_configure_scene_cloud
+      tags:
+      - Hub
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - bearerAuth: []
+  /api/v1/hub/scenes/cloud/status:
+    get:
+      summary: 'Hub: Get PilotSuite Cloud status.'
+      description: Auto-generated Hub stub for `get_scene_cloud_status` (GET /api/v1/hub/scenes/cloud/status).
+      operationId: hub_get_scene_cloud_status
+      tags:
+      - Hub
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      security:
+      - bearerAuth: []
+  /api/v1/hub/scenes/cloud/share:
+    post:
+      summary: 'Hub: Share a scene to PilotSuite Cloud.'
+      description: Auto-generated Hub stub for `share_scene_to_cloud` (POST /api/v1/hub/scenes/cloud/share).
+      operationId: hub_share_scene_to_cloud
+      tags:
+      - Hub
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - bearerAuth: []
+  /api/v1/hub/scenes/{scene_id}/rate:
+    post:
+      summary: 'Hub: Rate a scene.'
+      description: Auto-generated Hub stub for `rate_scene` (POST /api/v1/hub/scenes/{scene_id}/rate).
+      operationId: hub_rate_scene
+      tags:
+      - Hub
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      parameters:
+      - name: scene_id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      security:
+      - bearerAuth: []
+  /api/v1/hub/scenes/custom:
+    post:
+      summary: 'Hub: Register a custom scene.'
+      description: Auto-generated Hub stub for `register_custom_scene` (POST /api/v1/hub/scenes/custom).
+      operationId: hub_register_custom_scene
+      tags:
+      - Hub
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
       security:
       - bearerAuth: []
   /api/v1/hub/dashboard:
@@ -3573,6 +8082,468 @@ paths:
           application/json:
             schema:
               type: object
+      security:
+      - bearerAuth: []
+  /api/v1/hub/presence:
+    get:
+      summary: 'Hub Presence: get presence dashboard'
+      description: Auto-generated Hub Presence stub for `get_presence_dashboard` (GET
+        /api/v1/hub/presence).
+      operationId: hub_presence_get_presence_dashboard
+      tags:
+      - Hub
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Successful response
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Invalid request payload
+        '500':
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Internal server error
+      security:
+      - bearerAuth: []
+  /api/v1/hub/presence/heatmap:
+    get:
+      summary: 'Hub Presence: get presence heatmap'
+      description: Auto-generated Hub Presence stub for `get_presence_heatmap` (GET
+        /api/v1/hub/presence/heatmap).
+      operationId: hub_presence_get_presence_heatmap
+      tags:
+      - Hub
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Successful response
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Invalid request payload
+        '500':
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Internal server error
+      security:
+      - bearerAuth: []
+  /api/v1/hub/presence/household:
+    get:
+      summary: 'Hub Presence: get household presence'
+      description: Auto-generated Hub Presence stub for `get_household_presence` (GET
+        /api/v1/hub/presence/household).
+      operationId: hub_presence_get_household_presence
+      tags:
+      - Hub
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Successful response
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Invalid request payload
+        '500':
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Internal server error
+      security:
+      - bearerAuth: []
+  /api/v1/hub/presence/idle:
+    post:
+      summary: 'Hub Presence: check presence idle'
+      description: Auto-generated Hub Presence stub for `check_presence_idle` (POST
+        /api/v1/hub/presence/idle).
+      operationId: hub_presence_check_presence_idle
+      tags:
+      - Hub
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Successful response
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Invalid request payload
+        '500':
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Internal server error
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+        required: true
+      security:
+      - bearerAuth: []
+  /api/v1/hub/presence/persons:
+    post:
+      summary: 'Hub Presence: register presence person'
+      description: Auto-generated Hub Presence stub for `register_presence_person`
+        (POST /api/v1/hub/presence/persons).
+      operationId: hub_presence_register_presence_person
+      tags:
+      - Hub
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Successful response
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Invalid request payload
+        '500':
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Internal server error
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+        required: true
+      security:
+      - bearerAuth: []
+  /api/v1/hub/presence/persons/{person_id}:
+    delete:
+      summary: 'Hub Presence: unregister presence person'
+      description: Auto-generated Hub Presence stub for `unregister_presence_person`
+        (DELETE /api/v1/hub/presence/persons/{person_id}).
+      operationId: hub_presence_unregister_presence_person
+      tags:
+      - Hub
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Successful response
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Invalid request payload
+        '500':
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Internal server error
+      security:
+      - bearerAuth: []
+    get:
+      summary: 'Hub Presence: get presence person'
+      description: Auto-generated Hub Presence stub for `get_presence_person` (GET
+        /api/v1/hub/presence/persons/{person_id}).
+      operationId: hub_presence_get_presence_person
+      tags:
+      - Hub
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Successful response
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Invalid request payload
+        '500':
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Internal server error
+      security:
+      - bearerAuth: []
+  /api/v1/hub/presence/room/{room_id}/occupancy:
+    get:
+      summary: 'Hub Presence: get room occupancy'
+      description: Auto-generated Hub Presence stub for `get_room_occupancy` (GET
+        /api/v1/hub/presence/room/{room_id}/occupancy).
+      operationId: hub_presence_get_room_occupancy
+      tags:
+      - Hub
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Successful response
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Invalid request payload
+        '500':
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Internal server error
+      security:
+      - bearerAuth: []
+  /api/v1/hub/presence/rooms:
+    get:
+      summary: 'Hub Presence: get presence rooms'
+      description: Auto-generated Hub Presence stub for `get_presence_rooms` (GET
+        /api/v1/hub/presence/rooms).
+      operationId: hub_presence_get_presence_rooms
+      tags:
+      - Hub
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Successful response
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Invalid request payload
+        '500':
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Internal server error
+      security:
+      - bearerAuth: []
+    post:
+      summary: 'Hub Presence: register presence room'
+      description: Auto-generated Hub Presence stub for `register_presence_room` (POST
+        /api/v1/hub/presence/rooms).
+      operationId: hub_presence_register_presence_room
+      tags:
+      - Hub
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Successful response
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Invalid request payload
+        '500':
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Internal server error
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+        required: true
+      security:
+      - bearerAuth: []
+  /api/v1/hub/presence/transitions:
+    get:
+      summary: 'Hub Presence: get presence transitions'
+      description: Auto-generated Hub Presence stub for `get_presence_transitions`
+        (GET /api/v1/hub/presence/transitions).
+      operationId: hub_presence_get_presence_transitions
+      tags:
+      - Hub
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Successful response
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Invalid request payload
+        '500':
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Internal server error
+      security:
+      - bearerAuth: []
+  /api/v1/hub/presence/triggers:
+    get:
+      summary: 'Hub Presence: get presence triggers'
+      description: Auto-generated Hub Presence stub for `get_presence_triggers` (GET
+        /api/v1/hub/presence/triggers).
+      operationId: hub_presence_get_presence_triggers
+      tags:
+      - Hub
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Successful response
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Invalid request payload
+        '500':
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Internal server error
+      security:
+      - bearerAuth: []
+    post:
+      summary: 'Hub Presence: register presence trigger'
+      description: Auto-generated Hub Presence stub for `register_presence_trigger`
+        (POST /api/v1/hub/presence/triggers).
+      operationId: hub_presence_register_presence_trigger
+      tags:
+      - Hub
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Successful response
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Invalid request payload
+        '500':
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Internal server error
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+        required: true
+      security:
+      - bearerAuth: []
+  /api/v1/hub/presence/triggers/{trigger_id}:
+    delete:
+      summary: 'Hub Presence: unregister presence trigger'
+      description: Auto-generated Hub Presence stub for `unregister_presence_trigger`
+        (DELETE /api/v1/hub/presence/triggers/{trigger_id}).
+      operationId: hub_presence_unregister_presence_trigger
+      tags:
+      - Hub
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Successful response
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Invalid request payload
+        '500':
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Internal server error
+      security:
+      - bearerAuth: []
+  /api/v1/hub/presence/update:
+    post:
+      summary: 'Hub Presence: update person presence'
+      description: Auto-generated Hub Presence stub for `update_person_presence` (POST
+        /api/v1/hub/presence/update).
+      operationId: hub_presence_update_person_presence
+      tags:
+      - Hub
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Successful response
+        '400':
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Invalid request payload
+        '500':
+          content:
+            application/json:
+              schema:
+                type: object
+          description: Internal server error
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+        required: true
       security:
       - bearerAuth: []
   /api/webhook/{webhook_id}:
