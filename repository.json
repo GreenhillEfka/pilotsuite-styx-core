@@ -1,7 +1,17 @@
 {
-  "name": "PilotSuite Add-ons",
+  "name": "PilotSuite Core",
   "url": "https://github.com/GreenhillEfka/pilotsuite-styx-core",
   "maintainer": "GreenhillEfka",
-  "channel": "stable",
-  "description": "PilotSuite — Styx: AI Home Copilot for Home Assistant. Mood detection, habitus zones, neural system, knowledge graph, and local LLM conversation."
+  "addons": [
+    {
+      "slug": "pilotsuite_core",
+      "name": "PilotSuite Core",
+      "description": "PilotSuite Styx Core - Home Assistant Copilot",
+      "url": "https://github.com/GreenhillEfka/pilotsuite-styx-core",
+      "version": "v13.5.8",
+      "arch": ["amd64", "armv7", "arm64"],
+      "homeassistant": "2024.1.0",
+      "image": "greenhillefka/pilotsuite-core"
+    }
+  ]
 }
