@@ -58,13 +58,24 @@ class ChatRequest:
 
 # ── Configuration ───────────────────────────────────────────────────────
 
-# Singleton ChatHandler (uses internal RAG pipeline directly)
+# Singleton ChatHandler fallback (uses internal RAG pipeline directly)
 _chat_handler: Optional[ChatHandler] = None
 
 
 def _get_chat_handler() -> ChatHandler:
-    """Liefert singleton ChatHandler."""
+    """Liefert ChatHandler aus COPILOT_SERVICES oder erstellt Fallback-Singleton."""
     global _chat_handler
+    
+    # Try to get from Flask app config first (initialized in core_setup.py)
+    try:
+        from flask import current_app
+        services = current_app.config.get("COPILOT_SERVICES", {})
+        if services and services.get("chat_handler"):
+            return services["chat_handler"]
+    except Exception:
+        pass
+    
+    # Fallback: create singleton
     if _chat_handler is None:
         _chat_handler = ChatHandler()
     return _chat_handler

@@ -186,6 +186,9 @@ try:
 except Exception:
     _main_logger.exception("CRITICAL: register_blueprints failed")
 
+# Store services in app config for blueprint access
+app.config["COPILOT_SERVICES"] = _services
+
 # Store startup info
 _STARTUP_TIME = time.time()
 app.config["STARTUP_TIME"] = _STARTUP_TIME

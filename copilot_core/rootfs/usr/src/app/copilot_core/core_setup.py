@@ -89,6 +89,7 @@ async def init_services(hass=None, config: dict = None):
         "graph_renderer": None,
         "candidate_store": None,
         "habitus_service": None,
+        "chat_handler": None,
         "mood_service": None,
         "event_processor": None,
         "tag_registry": None,
@@ -198,6 +199,15 @@ async def init_services(hass=None, config: dict = None):
             init_habitus_api(habitus_service)
     except Exception:
         _LOGGER.exception("Failed to init HabitusService")
+
+    # Initialize ChatHandler for Styx Chat API
+    try:
+        from copilot_core.styx.chat_handler import ChatHandler
+        chat_handler = ChatHandler()
+        services["chat_handler"] = chat_handler
+        _LOGGER.info("ChatHandler initialized (Styx Chat)")
+    except Exception:
+        _LOGGER.exception("Failed to init ChatHandler")
 
     # Initialize mood service and API
     try:
