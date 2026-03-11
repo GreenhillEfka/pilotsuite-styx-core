@@ -752,11 +752,16 @@ def register_blueprints(app: Flask, services: dict) -> None:
     init_musikwolke_api(services.get("musikwolke_bridge"))
     app.register_blueprint(musikwolke_bp)
 
-    # Register Zone Dashboard API (real-time zone overview with mood & quick actions)
+    # Register Zone Dashboard API (zonenzentriertes Dashboard mit Modulintegration)
     from copilot_core.api.v1.zone_dashboard import zone_dashboard_bp, init_zone_dashboard_api
     init_zone_dashboard_api(
         zone_automation=services.get("zone_automation"),
         mood_service=services.get("mood_service"),
+        hub_licht=services.get("hub_licht"),
+        hub_helligkeit=services.get("hub_helligkeit"),
+        hub_heiz=services.get("hub_heiz"),
+        hub_bewegung=services.get("hub_bewegung"),
+        hub_praesenz=services.get("hub_praesenz"),
     )
     app.register_blueprint(zone_dashboard_bp)
 

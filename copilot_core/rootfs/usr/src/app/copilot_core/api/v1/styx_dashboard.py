@@ -124,26 +124,11 @@ def full_dashboard():
     if candidates_store:
         recent_candidates = _safe_call(lambda: candidates_store.list(limit=5), [])
 
-    # ── Habitus Zones ──
+    # ── Habitus Zones (delegiert an zone_dashboard) ──
     zones_data = []
     try:
-        from copilot_core.homeassistant.habitus_zones import get_all_zones
-        from copilot_core.example_config import ZONE_DISPLAY, EXAMPLE_ZONE_ENTITIES
-        for zone in get_all_zones():
-            zid = zone.zone_type.value
-            display = ZONE_DISPLAY.get(zid, {})
-            entity_map = EXAMPLE_ZONE_ENTITIES.get(zid, {})
-            entity_count = sum(len(v) for v in entity_map.values())
-            zones_data.append({
-                "id": zid,
-                "name_de": zone.name_de,
-                "name_en": zone.name_en,
-                "icon": display.get("icon", ""),
-                "color": display.get("color", "#888"),
-                "priority": zone.priority,
-                "entity_count": entity_count,
-                "roles": {k: len(v) for k, v in entity_map.items()},
-            })
+        from copilot_core.api.v1.zone_dashboard import build_zones_for_styx
+        zones_data = build_zones_for_styx()
     except Exception:
         pass
 

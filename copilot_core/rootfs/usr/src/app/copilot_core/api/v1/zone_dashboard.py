@@ -1,20 +1,19 @@
-"""Zone Dashboard API - Real-time Zone Overview with Mood & Quick Actions.
+"""Zone Dashboard API — Zonenzentriertes Dashboard mit Modulintegration.
+
+Zentraler Dashboard-Endpunkt fuer Habituszonen. Aggregiert Daten aus
+allen 5 Modul-Engines (Licht, Helligkeit, Heiz, Bewegung, Praesenz)
+pro Zone zu einem einheitlichen Dashboard.
 
 Endpunkte:
-  GET  /api/v1/zone/dashboard         - Dashboard-Daten (alle Zonen mit Status, Mood, Entities)
-  GET  /api/v1/zone/dashboard/summary - Zusammenfassung (Counts, aktive Zonen)
-  POST /api/v1/zone/dashboard/quick-action - Quick-Action ausführen (Zone ein/aus, Mood)
-  GET  /api/v1/zone/dashboard/mood    - Mood-Daten aller Zonen
-  PUT  /api/v1/zone/dashboard/mood/<zone_id> - Mood für Zone setzen
-
-Integration:
-  - Verwendet habitus_zones.py als Datenquelle
-  - Aggregiert Entity-Status aus Home Assistant
-  - Berechnet Mood-Scores (comfort, joy, frugality)
-  - Bietet Quick-Actions für schnelle Steuerung
+  GET  /api/v1/zone/dashboard              - Alle Zonen mit Moduldaten
+  GET  /api/v1/zone/dashboard/summary      - Leichtgewichtige Zusammenfassung
+  GET  /api/v1/zone/dashboard/mood         - Mood-Daten aller Zonen
+  PUT  /api/v1/zone/dashboard/mood/<id>    - Mood fuer Zone setzen
+  POST /api/v1/zone/dashboard/quick-action - Quick-Action ausfuehren
+  GET  /api/v1/zone/dashboard/<id>         - Einzelzone Detail
 
 Author: Clawdya (via Codex)
-Version: 1.0.0
+Version: 2.0.0
 """
 from __future__ import annotations
 
@@ -37,21 +36,50 @@ _zone_mood_data: Dict[str, Dict[str, float]] = {}
 _zone_automation = None
 _mood_service = None
 
+# Module engine references (wired by init_zone_dashboard_api)
+_hub_licht = None
+_hub_helligkeit = None
+_hub_heiz = None
+_hub_bewegung = None
+_hub_praesenz = None
 
-def init_zone_dashboard_api(zone_automation=None, mood_service=None) -> None:
+
+def init_zone_dashboard_api(
+    zone_automation=None,
+    mood_service=None,
+    hub_licht=None,
+    hub_helligkeit=None,
+    hub_heiz=None,
+    hub_bewegung=None,
+    hub_praesenz=None,
+) -> None:
     """Initialize the Zone Dashboard API with live service references."""
     global _zone_automation, _mood_service
+    global _hub_licht, _hub_helligkeit, _hub_heiz, _hub_bewegung, _hub_praesenz
     _zone_automation = zone_automation
     _mood_service = mood_service
-    _LOGGER.info("Zone Dashboard API initialized (zone_automation=%s, mood=%s)",
-                 zone_automation is not None, mood_service is not None)
+    _hub_licht = hub_licht
+    _hub_helligkeit = hub_helligkeit
+    _hub_heiz = hub_heiz
+    _hub_bewegung = hub_bewegung
+    _hub_praesenz = hub_praesenz
+    _LOGGER.info(
+        "Zone Dashboard API initialized (zone_automation=%s, mood=%s, "
+        "modules=%d/5 wired)",
+        zone_automation is not None, mood_service is not None,
+        sum(1 for m in (hub_licht, hub_helligkeit, hub_heiz, hub_bewegung, hub_praesenz) if m),
+    )
 
+
+# ═══════════════════════════════════════════════════════════════════════
+# Zone Data Assembly — Single Source of Truth
+# ═══════════════════════════════════════════════════════════════════════
 
 def _get_habitus_zones() -> List[Dict[str, Any]]:
     """Get zones from habitus_zones module, enriched with example entities."""
-    zones = []
+    zones: List[Any] = []
     try:
-        from copilot_core.api.v1.habitus_zones import get_all_zones
+        from copilot_core.homeassistant.habitus_zones import get_all_zones
         zones = get_all_zones()
     except ImportError:
         _LOGGER.warning("habitus_zones module not available")
@@ -61,7 +89,6 @@ def _get_habitus_zones() -> List[Dict[str, Any]]:
         from copilot_core.example_config import EXAMPLE_ZONE_ENTITIES, ZONE_DISPLAY
         enriched = []
         for zone in zones:
-            # Handle both dict and dataclass objects
             if isinstance(zone, dict):
                 zid = zone.get("zone_id", "")
                 zdict = zone
@@ -72,6 +99,8 @@ def _get_habitus_zones() -> List[Dict[str, Any]]:
                 zdict = {
                     "zone_id": zid,
                     "name": getattr(zone, "name_de", getattr(zone, "name", zid)),
+                    "name_de": getattr(zone, "name_de", ""),
+                    "name_en": getattr(zone, "name_en", ""),
                     "zone_type": zid,
                     "priority": getattr(zone, "priority", 0),
                     "entity_ids": [],
@@ -96,7 +125,7 @@ def _get_habitus_zones() -> List[Dict[str, Any]]:
 
 
 def _get_zone_mood(zone_id: str) -> Dict[str, Any]:
-    """Get mood data for a zone from MoodService or overrides.
+    """Get mood data for a zone.
 
     Sources (priority):
     1. User-set overrides (_zone_mood_data)
@@ -106,7 +135,6 @@ def _get_zone_mood(zone_id: str) -> Dict[str, Any]:
     if zone_id in _zone_mood_data:
         return _zone_mood_data[zone_id]
 
-    # Try MoodService for real mood data
     if _mood_service:
         try:
             mood_state = _mood_service.get_current_mood()
@@ -121,7 +149,6 @@ def _get_zone_mood(zone_id: str) -> Dict[str, Any]:
         except Exception:
             pass
 
-    # Derive from zone automation state if available
     if _zone_automation:
         try:
             state = _zone_automation.get_zone_state(zone_id)
@@ -161,21 +188,21 @@ def _get_entity_count(zone: Dict[str, Any]) -> Dict[str, int]:
     """Count entities by domain for a zone."""
     entity_ids = zone.get("entity_ids", [])
     entities_by_role = zone.get("entities", {})
-    
+
     counts: Dict[str, int] = {}
-    
-    # Count from entity_ids
+
     for entity_id in entity_ids:
         domain = entity_id.split(".")[0] if "." in entity_id else "unknown"
         counts[domain] = counts.get(domain, 0) + 1
-    
-    # Count from entities by role
-    for role, role_entities in entities_by_role.items():
-        if isinstance(role_entities, list):
-            for entity_id in role_entities:
-                domain = entity_id.split(".")[0] if "." in entity_id else "unknown"
-                counts[domain] = counts.get(domain, 0) + 1
-    
+
+    # Only count from role mapping if entity_ids was empty
+    if not entity_ids:
+        for role, role_entities in entities_by_role.items():
+            if isinstance(role_entities, list):
+                for entity_id in role_entities:
+                    domain = entity_id.split(".")[0] if "." in entity_id else "unknown"
+                    counts[domain] = counts.get(domain, 0) + 1
+
     return counts
 
 
@@ -183,7 +210,6 @@ def _get_zone_status(zone: Dict[str, Any]) -> str:
     """Determine zone status from ZoneAutomationController live state."""
     zone_id = zone.get("zone_id", "")
 
-    # Query live automation state
     if _zone_automation:
         try:
             state = _zone_automation.get_zone_state(zone_id)
@@ -197,34 +223,115 @@ def _get_zone_status(zone: Dict[str, Any]) -> str:
         except Exception:
             pass
 
-    # Fallback: infer from entity roles
-    entities = zone.get("entities", {})
-    if entities.get("motion"):
-        return "idle"  # Has motion sensors but no live data yet
-
     return "idle"
 
 
 def _get_person_count(zone: Dict[str, Any]) -> int:
-    """Get number of people in zone (from device_tracker/person entities)."""
+    """Get number of people in zone from PraesenzModule or entity heuristic."""
+    zone_id = zone.get("zone_id", "")
+
+    # Prefer live presence data from PraesenzModuleEngine
+    if _hub_praesenz:
+        try:
+            presence = _hub_praesenz.get_zone_presence(zone_id)
+            return presence.person_count
+        except Exception:
+            pass
+
+    # Fallback: count person/device_tracker entities
     entity_ids = zone.get("entity_ids", [])
-    entities = zone.get("entities", {})
-    
-    person_count = 0
-    
-    # Check entity_ids
-    for entity_id in entity_ids:
-        if entity_id.startswith(("person.", "device_tracker.")):
-            person_count += 1
-    
-    # Check entities by role
-    for role_entities in entities.values():
-        if isinstance(role_entities, list):
-            for entity_id in role_entities:
-                if entity_id.startswith(("person.", "device_tracker.")):
-                    person_count += 1
-    
-    return person_count
+    return sum(1 for e in entity_ids if e.startswith(("person.", "device_tracker.")))
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Module Engine Integration — Per-Zone Aggregation
+# ═══════════════════════════════════════════════════════════════════════
+
+def _get_zone_module_data(zone_id: str) -> Dict[str, Any]:
+    """Aggregate module engine data for a single zone.
+
+    Queries all 5 module engines and returns a unified dict with
+    licht, helligkeit, heiz, bewegung, praesenz subsections.
+    """
+    modules: Dict[str, Any] = {}
+
+    # Licht (Light)
+    if _hub_licht:
+        try:
+            state = _hub_licht.get_zone_state(zone_id)
+            modules["licht"] = {
+                "lights_on": state.lights_on,
+                "lights_total": state.lights_total,
+                "avg_brightness_pct": state.avg_brightness_pct,
+                "any_override": state.any_override,
+                "target_brightness_pct": state.target_brightness_pct,
+                "target_color_temp_k": state.target_color_temp_k,
+                "auto_enabled": state.auto_enabled,
+            }
+        except Exception:
+            pass
+
+    # Helligkeit (Brightness)
+    if _hub_helligkeit:
+        try:
+            state = _hub_helligkeit.get_zone_brightness(zone_id)
+            modules["helligkeit"] = {
+                "avg_indoor_lux": state.avg_indoor_lux,
+                "avg_outdoor_lux": state.avg_outdoor_lux,
+                "needs_light": state.needs_light,
+                "deficit_pct": state.deficit_pct,
+                "recommended_dimming_pct": state.recommended_dimming_pct,
+            }
+        except Exception:
+            pass
+
+    # Heiz (Climate)
+    if _hub_heiz:
+        try:
+            state = _hub_heiz.get_zone_climate(zone_id)
+            modules["heiz"] = {
+                "current_temp": state.current_temp,
+                "target_temp": state.target_temp,
+                "humidity": state.humidity,
+                "is_heating": state.is_heating,
+                "eco_mode": state.eco_mode,
+                "comfort_index": state.comfort_index,
+                "needs_heating": state.needs_heating,
+            }
+        except Exception:
+            pass
+
+    # Bewegung (Motion)
+    if _hub_bewegung:
+        try:
+            state = _hub_bewegung.get_zone_motion(zone_id)
+            modules["bewegung"] = {
+                "sensors_active": state.sensors_active,
+                "sensors_total": state.sensors_total,
+                "last_motion": state.last_motion.isoformat() if state.last_motion else None,
+                "motion_in_last_5min": state.motion_in_last_5min,
+                "motion_in_last_30min": state.motion_in_last_30min,
+                "daily_triggers": state.daily_triggers,
+            }
+        except Exception:
+            pass
+
+    # Praesenz (Presence)
+    if _hub_praesenz:
+        try:
+            state = _hub_praesenz.get_zone_presence(zone_id)
+            modules["praesenz"] = {
+                "is_occupied": state.is_occupied,
+                "person_count": state.person_count,
+                "persons": state.persons,
+                "occupied_since": state.occupied_since.isoformat() if state.occupied_since else None,
+                "sources_active": state.sources_active,
+                "sources_total": state.sources_total,
+            }
+        except Exception:
+            pass
+
+    return modules
 
 
 def _generate_quick_actions(zone: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -232,13 +339,10 @@ def _generate_quick_actions(zone: Dict[str, Any]) -> List[Dict[str, Any]]:
     actions = []
     entities = zone.get("entities", {})
     entity_ids = zone.get("entity_ids", [])
-    
+
     zone_id = zone.get("zone_id", "")
-    zone_name = zone.get("name", zone_id)
-    
-    # Check for lights
+
     has_lights = any(e.startswith("light.") for e in entity_ids) or "lights" in entities
-    
     if has_lights:
         actions.append({
             "action_id": f"{zone_id}_lights_on",
@@ -254,10 +358,8 @@ def _generate_quick_actions(zone: Dict[str, Any]) -> List[Dict[str, Any]]:
             "service": "light.turn_off",
             "target": {"entity_id": "all_lights_in_zone"},
         })
-    
-    # Check for climate/heating
+
     has_climate = any(e.startswith("climate.") for e in entity_ids) or "heating" in entities
-    
     if has_climate:
         actions.append({
             "action_id": f"{zone_id}_climate_comfort",
@@ -267,10 +369,8 @@ def _generate_quick_actions(zone: Dict[str, Any]) -> List[Dict[str, Any]]:
             "data": {"hvac_mode": "heat"},
             "target": {"entity_id": "all_climate_in_zone"},
         })
-    
-    # Check for media
+
     has_media = any(e.startswith("media_player.") for e in entity_ids) or "media" in entities
-    
     if has_media:
         actions.append({
             "action_id": f"{zone_id}_media_mood",
@@ -280,8 +380,7 @@ def _generate_quick_actions(zone: Dict[str, Any]) -> List[Dict[str, Any]]:
             "data": {"media_content_type": "playlist"},
             "target": {"entity_id": "all_media_in_zone"},
         })
-    
-    # Zone enable/disable
+
     actions.append({
         "action_id": f"{zone_id}_toggle",
         "name": "Zone " + ("deaktivieren" if zone.get("enabled", True) else "aktivieren"),
@@ -289,35 +388,84 @@ def _generate_quick_actions(zone: Dict[str, Any]) -> List[Dict[str, Any]]:
         "service": "zone.toggle",
         "target": {"zone_id": zone_id},
     })
-    
+
     return actions
 
 
-# --- REST Endpoints ---
+# ═══════════════════════════════════════════════════════════════════════
+# Public Helper — Used by styx_dashboard.py
+# ═══════════════════════════════════════════════════════════════════════
+
+def build_zones_for_styx() -> List[Dict[str, Any]]:
+    """Build compact zone data for the Styx full dashboard.
+
+    Returns a list of zone dicts with identity, module summary,
+    and entity counts — no mood or quick actions (those are
+    separate SPA tabs).
+    """
+    zones = _get_habitus_zones()
+    result = []
+    for zone in zones:
+        zid = zone.get("zone_id", "")
+        entities = zone.get("entities", {})
+        entry: Dict[str, Any] = {
+            "id": zid,
+            "name_de": zone.get("name_de", zone.get("name", zid)),
+            "name_en": zone.get("name_en", ""),
+            "icon": zone.get("icon", ""),
+            "color": zone.get("color", "#888"),
+            "priority": zone.get("priority", 0),
+            "entity_count": len(zone.get("entity_ids", [])),
+            "roles": {k: len(v) for k, v in entities.items() if isinstance(v, list)},
+            "status": _get_zone_status(zone),
+        }
+        # Attach lightweight module summary
+        modules = _get_zone_module_data(zid)
+        if modules:
+            entry["modules"] = modules
+        result.append(entry)
+    return result
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# REST Endpoints
+# ═══════════════════════════════════════════════════════════════════════
 
 
 @zone_dashboard_bp.route("", methods=["GET"])
 @require_token
 def get_dashboard():
-    """Get complete dashboard data with all zones, status, mood, and quick actions.
-    
+    """Zonenzentriertes Dashboard mit Moduldaten.
+
+    Gibt alle Habituszonen mit Status, Mood, Entities und
+    aggregierten Moduldaten (Licht, Heiz, Helligkeit, Bewegung,
+    Praesenz) zurueck.
+
     Query params:
-      - include_entities: bool (default: true) - Include entity details
-      - include_mood: bool (default: true) - Include mood scores
-      - include_actions: bool (default: true) - Include quick actions
+      - include_entities: bool (default: true)
+      - include_mood: bool (default: true)
+      - include_actions: bool (default: true)
+      - include_modules: bool (default: true)
     """
     include_entities = request.args.get("include_entities", "true").lower() == "true"
     include_mood = request.args.get("include_mood", "true").lower() == "true"
     include_actions = request.args.get("include_actions", "true").lower() == "true"
-    
+    include_modules = request.args.get("include_modules", "true").lower() == "true"
+
     zones = _get_habitus_zones()
-    
+
     dashboard_zones = []
     for zone in zones:
-        zone_data = {
-            "zone_id": zone.get("zone_id"),
+        zid = zone.get("zone_id", "")
+        zone_data: Dict[str, Any] = {
+            "zone_id": zid,
             "name": zone.get("name"),
+            "name_de": zone.get("name_de", zone.get("name", zid)),
+            "name_en": zone.get("name_en", ""),
             "zone_type": zone.get("zone_type", "room"),
+            "icon": zone.get("icon", ""),
+            "color": zone.get("color", ""),
+            "priority": zone.get("priority", 0),
             "status": _get_zone_status(zone),
             "person_count": _get_person_count(zone),
             "entity_count": len(zone.get("entity_ids", [])),
@@ -325,19 +473,22 @@ def get_dashboard():
             "enabled": zone.get("enabled", True),
             "updated_at": zone.get("updated_at"),
         }
-        
+
+        if include_modules:
+            zone_data["modules"] = _get_zone_module_data(zid)
+
         if include_mood:
-            zone_data["mood"] = _get_zone_mood(zone.get("zone_id", ""))
-        
+            zone_data["mood"] = _get_zone_mood(zid)
+
         if include_actions:
             zone_data["quick_actions"] = _generate_quick_actions(zone)
-        
+
         if include_entities:
             zone_data["entity_ids"] = zone.get("entity_ids", [])
             zone_data["entities"] = zone.get("entities", {})
-        
+
         dashboard_zones.append(zone_data)
-    
+
     return jsonify({
         "ok": True,
         "zones": dashboard_zones,
@@ -349,23 +500,50 @@ def get_dashboard():
 @zone_dashboard_bp.route("/summary", methods=["GET"])
 @require_token
 def get_dashboard_summary():
-    """Get dashboard summary (lightweight overview without details)."""
+    """Leichtgewichtige Zusammenfassung (Counts, aktive Zonen, Modulstatus)."""
     zones = _get_habitus_zones()
-    
+
     total_entities = 0
     active_zones = 0
     total_persons = 0
     zone_types: Dict[str, int] = {}
-    
+    zones_heating = 0
+    zones_with_motion = 0
+    zones_occupied = 0
+
     for zone in zones:
+        zid = zone.get("zone_id", "")
         total_entities += len(zone.get("entity_ids", []))
-        if _get_zone_status(zone) == "active":
+        status = _get_zone_status(zone)
+        if status == "active":
             active_zones += 1
         total_persons += _get_person_count(zone)
-        
         zone_type = zone.get("zone_type", "room")
         zone_types[zone_type] = zone_types.get(zone_type, 0) + 1
-    
+
+        # Module summary counters
+        if _hub_heiz:
+            try:
+                climate = _hub_heiz.get_zone_climate(zid)
+                if climate.is_heating:
+                    zones_heating += 1
+            except Exception:
+                pass
+        if _hub_bewegung:
+            try:
+                motion = _hub_bewegung.get_zone_motion(zid)
+                if motion.motion_in_last_5min:
+                    zones_with_motion += 1
+            except Exception:
+                pass
+        if _hub_praesenz:
+            try:
+                presence = _hub_praesenz.get_zone_presence(zid)
+                if presence.is_occupied:
+                    zones_occupied += 1
+            except Exception:
+                pass
+
     return jsonify({
         "ok": True,
         "summary": {
@@ -375,6 +553,9 @@ def get_dashboard_summary():
             "total_entities": total_entities,
             "total_persons": total_persons,
             "zone_types": zone_types,
+            "zones_heating": zones_heating,
+            "zones_with_motion": zones_with_motion,
+            "zones_occupied": zones_occupied,
         },
         "generated_at": datetime.now(timezone.utc).isoformat(),
     })
@@ -385,12 +566,12 @@ def get_dashboard_summary():
 def get_mood():
     """Get mood data for all zones."""
     zones = _get_habitus_zones()
-    
+
     mood_data = {}
     for zone in zones:
         zone_id = zone.get("zone_id", "")
         mood_data[zone_id] = _get_zone_mood(zone_id)
-    
+
     return jsonify({
         "ok": True,
         "mood": mood_data,
@@ -402,7 +583,7 @@ def get_mood():
 @require_token
 def set_mood(zone_id: str):
     """Set mood data for a zone (for testing/demo).
-    
+
     Payload:
     {
         "comfort": 0.8,
@@ -412,12 +593,12 @@ def set_mood(zone_id: str):
     """
     zone_id = zone_id if zone_id.startswith("zone:") else f"zone:{zone_id}"
     body = request.get_json(silent=True) or {}
-    
+
     if not body:
         return jsonify({"ok": False, "error": "Mood data required"}), 400
-    
+
     mood_data = _set_zone_mood(zone_id, body)
-    
+
     return jsonify({
         "ok": True,
         "zone_id": zone_id,
@@ -429,30 +610,30 @@ def set_mood(zone_id: str):
 @require_token
 def execute_quick_action():
     """Execute a quick action for a zone.
-    
+
     Payload:
     {
         "zone_id": "zone:wohnzimmer",
         "action_id": "zone:wohnzimmer_lights_on",
         "service": "light.turn_on",
         "target": {"entity_id": "light.wohnzimmer"},
-        "data": {}  # optional
+        "data": {}
     }
     """
     body = request.get_json(silent=True) or {}
-    
+
     zone_id = body.get("zone_id")
     action_id = body.get("action_id")
     service = body.get("service")
-    
+
     if not zone_id or not action_id or not service:
         return jsonify({
             "ok": False,
             "error": "zone_id, action_id, and service are required"
         }), 400
-    
+
     _LOGGER.info("Quick action executed: %s for zone %s (service: %s)", action_id, zone_id, service)
-    
+
     return jsonify({
         "ok": True,
         "action_id": action_id,
@@ -465,23 +646,29 @@ def execute_quick_action():
 @zone_dashboard_bp.route("/<zone_id>", methods=["GET"])
 @require_token
 def get_zone_detail(zone_id: str):
-    """Get detailed data for a single zone."""
+    """Detailansicht einer einzelnen Zone mit allen Moduldaten."""
     zone_id = zone_id if zone_id.startswith("zone:") else f"zone:{zone_id}"
-    
+
     zones = _get_habitus_zones()
     zone = next((z for z in zones if z.get("zone_id") == zone_id), None)
-    
+
     if zone is None:
         return jsonify({"ok": False, "error": "Zone not found"}), 404
-    
-    zone_data = {
+
+    zone_data: Dict[str, Any] = {
         "zone_id": zone.get("zone_id"),
         "name": zone.get("name"),
+        "name_de": zone.get("name_de", zone.get("name", zone_id)),
+        "name_en": zone.get("name_en", ""),
         "zone_type": zone.get("zone_type", "room"),
+        "icon": zone.get("icon", ""),
+        "color": zone.get("color", ""),
+        "priority": zone.get("priority", 0),
         "status": _get_zone_status(zone),
         "person_count": _get_person_count(zone),
         "entity_count": len(zone.get("entity_ids", [])),
         "entity_counts_by_domain": _get_entity_count(zone),
+        "modules": _get_zone_module_data(zone_id),
         "mood": _get_zone_mood(zone_id),
         "quick_actions": _generate_quick_actions(zone),
         "entity_ids": zone.get("entity_ids", []),
@@ -490,7 +677,7 @@ def get_zone_detail(zone_id: str):
         "enabled": zone.get("enabled", True),
         "updated_at": zone.get("updated_at"),
     }
-    
+
     return jsonify({
         "ok": True,
         "zone": zone_data,
