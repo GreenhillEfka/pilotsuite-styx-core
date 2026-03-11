@@ -45,6 +45,9 @@ from .mupl import (
     UserRole, UserProfile, RoleInferenceConfig,
     MultiUserPreferenceLearning, create_mupl_module,
 )
+from .dynamic import (
+    DynamicMetaNeuron, DynamicNeuronFactory, ProposedNeuron,
+)
 
 __all__ = [
     # Manager
@@ -125,4 +128,8 @@ __all__ = [
     "RoleInferenceConfig",
     "MultiUserPreferenceLearning",
     "create_mupl_module",
+    # Dynamic neurons
+    "DynamicMetaNeuron",
+    "DynamicNeuronFactory",
+    "ProposedNeuron",
 ]
