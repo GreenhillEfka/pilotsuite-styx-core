@@ -1,5 +1,13 @@
 # Changelog
 
+## [v13.7.0] - 2026-03-11
+
+### Musikwolke HA-Integration & Dokumentation
+- **HA-Services**: 8 neue Services steuern alle Musikwolke-Endpunkte aus HA Automations
+- **Dokumentation**: Handbuch, Installationsanleitung
+- **Versions-Synchronisierung**: Alle Artefakte auf 13.7.0
+
+
 Alle wesentlichen Änderungen am PilotSuite Styx Core werden in dieser Datei dokumentiert.
 
 ## [v13.6.0] - 2026-03-11
