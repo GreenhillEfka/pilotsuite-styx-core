@@ -7,6 +7,7 @@ Provides REST API for cache management:
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Optional
 
@@ -27,6 +28,22 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 cache_control_bp = Blueprint("cache_control", __name__)
+
+
+def _run_async(coro, timeout: int = 10):
+    """Run async coroutine from sync Flask context."""
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+
+    if loop and loop.is_running():
+        import concurrent.futures
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            future = pool.submit(asyncio.run, asyncio.wait_for(coro, timeout=timeout))
+            return future.result(timeout=timeout + 2)
+
+    return asyncio.run(asyncio.wait_for(coro, timeout=timeout))
 
 
 @cache_control_bp.route("/status", methods=["GET"])
@@ -73,63 +90,54 @@ def cache_invalidate():
         JSON with invalidation results
     """
     try:
-        import asyncio
         from ..cache.api_cache import get_api_cache
-        
+
         cache = get_api_cache()
         data = request.get_json() or {}
-        
-        # Run async operation in sync context
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        
-        try:
-            if data.get("all"):
-                count = loop.run_until_complete(cache.invalidate_all())
-                return jsonify({
-                    "success": True,
-                    "data": {
-                        "invalidated": "all",
-                        "message": "All cache entries cleared"
-                    }
-                }), 200
-            
-            elif data.get("key"):
-                key = data["key"]
-                success = loop.run_until_complete(cache.invalidate(key))
-                return jsonify({
-                    "success": success,
-                    "data": {
-                        "key": key,
-                        "invalidated": success
-                    }
-                }), 200 if success else 404
-            
-            elif data.get("pattern"):
-                pattern = data["pattern"]
-                count = loop.run_until_complete(cache.invalidate_pattern(pattern))
-                return jsonify({
-                    "success": True,
-                    "data": {
-                        "pattern": pattern,
-                        "invalidated_count": count
-                    }
-                }), 200
-            
-            else:
-                # Default: invalidate all entity and state caches
-                entity_count = loop.run_until_complete(cache.invalidate_entities())
-                state_count = loop.run_until_complete(cache.invalidate_states())
-                return jsonify({
-                    "success": True,
-                    "data": {
-                        "invalidated_entities": entity_count,
-                        "invalidated_states": state_count,
-                        "total": entity_count + state_count
-                    }
-                }), 200
-        finally:
-            loop.close()
+
+        if data.get("all"):
+            _run_async(cache.invalidate_all())
+            return jsonify({
+                "success": True,
+                "data": {
+                    "invalidated": "all",
+                    "message": "All cache entries cleared"
+                }
+            }), 200
+
+        elif data.get("key"):
+            key = data["key"]
+            success = _run_async(cache.invalidate(key))
+            return jsonify({
+                "success": success,
+                "data": {
+                    "key": key,
+                    "invalidated": success
+                }
+            }), 200 if success else 404
+
+        elif data.get("pattern"):
+            pattern = data["pattern"]
+            count = _run_async(cache.invalidate_pattern(pattern))
+            return jsonify({
+                "success": True,
+                "data": {
+                    "pattern": pattern,
+                    "invalidated_count": count
+                }
+            }), 200
+
+        else:
+            entity_count = _run_async(cache.invalidate_entities())
+            state_count = _run_async(cache.invalidate_states())
+            return jsonify({
+                "success": True,
+                "data": {
+                    "invalidated_entities": entity_count,
+                    "invalidated_states": state_count,
+                    "total": entity_count + state_count
+                }
+            }), 200
     
     except Exception as e:
         logger.error(f"Error invalidating cache: {e}")
@@ -148,24 +156,16 @@ def cache_stats():
         JSON with hit/miss ratio and connection stats
     """
     try:
-        import asyncio
         from ..cache.api_cache import get_api_cache
-        
+
         cache = get_api_cache()
-        
-        # Run async operation in sync context
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        
-        try:
-            stats = loop.run_until_complete(cache.get_stats())
-            return jsonify({
-                "success": True,
-                "data": stats
-            }), 200
-        finally:
-            loop.close()
-    
+        stats = _run_async(cache.get_stats())
+
+        return jsonify({
+            "success": True,
+            "data": stats
+        }), 200
+
     except Exception as e:
         logger.error(f"Error getting cache stats: {e}")
         return jsonify({
@@ -182,20 +182,12 @@ def init_cache_control_api(app=None) -> None:
     """
     # Initialize Redis client
     redis_client = get_redis_client()
-    
+
     # Try to connect (non-blocking)
-    import asyncio
     try:
-        loop = asyncio.get_event_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-    
-    if not loop.is_running():
-        try:
-            loop.run_until_complete(redis_client.connect())
-        except Exception as e:
-            logger.warning(f"Initial Redis connection failed: {e}")
+        _run_async(redis_client.connect(), timeout=5)
+    except Exception as e:
+        logger.warning("Initial Redis connection failed: %s", e)
     
     if app:
         app.register_blueprint(cache_control_bp, url_prefix="/api/v1/cache")
