@@ -126,6 +126,12 @@ async def init_services(hass=None, config: dict = None):
         "hub_integration": None,
         "hub_brain_arch": None,
         "hub_brain_activity": None,
+        # PilotSuite Module (v1.0.0)
+        "hub_licht": None,
+        "hub_helligkeit": None,
+        "hub_heiz": None,
+        "hub_bewegung": None,
+        "hub_praesenz": None,
     }
 
     # Initialize system health service (requires hass)
@@ -573,6 +579,32 @@ async def init_services(hass=None, config: dict = None):
     except Exception:
         _LOGGER.exception("Failed to init Hub engines")
 
+    # Initialize PilotSuite Module engines (Licht, Helligkeit, Heiz, Bewegung, Praesenz)
+    try:
+        from copilot_core.hub.licht_module import LichtModuleEngine
+        from copilot_core.hub.helligkeit_module import HelligkeitModuleEngine
+        from copilot_core.hub.heiz_module import HeizModuleEngine
+        from copilot_core.hub.bewegung_module import BewegungModuleEngine
+        from copilot_core.hub.praesenz_module import PraesenzModuleEngine
+
+        services["hub_licht"] = LichtModuleEngine()
+        services["hub_helligkeit"] = HelligkeitModuleEngine()
+        services["hub_heiz"] = HeizModuleEngine()
+        services["hub_bewegung"] = BewegungModuleEngine()
+        services["hub_praesenz"] = PraesenzModuleEngine()
+
+        from copilot_core.api.v1.module_endpoints import init_module_endpoints
+        init_module_endpoints(
+            licht=services["hub_licht"],
+            helligkeit=services["hub_helligkeit"],
+            heiz=services["hub_heiz"],
+            bewegung=services["hub_bewegung"],
+            praesenz=services["hub_praesenz"],
+        )
+        _LOGGER.info("PilotSuite Module engines initialized (5 modules)")
+    except Exception:
+        _LOGGER.exception("Failed to init PilotSuite Module engines")
+
     # Calculate startup time
     services["startup_time_ms"] = (time.perf_counter() - start_time) * 1000
     
@@ -659,6 +691,13 @@ def register_blueprints(app: Flask, services: dict) -> None:
     
     # Register MCP REST API (standalone, absolute prefix /api/v1/mcp)
     app.register_blueprint(mcp_bp)
+
+    # Register PilotSuite Module endpoints (Licht, Helligkeit, Heiz, Bewegung, Praesenz)
+    try:
+        from copilot_core.api.v1.module_endpoints import modules_bp
+        app.register_blueprint(modules_bp)
+    except Exception:
+        _LOGGER.exception("Failed to register PilotSuite Module endpoints")
 
     # Register Integration Bus API
     from copilot_core.integration.api import integration_bp
