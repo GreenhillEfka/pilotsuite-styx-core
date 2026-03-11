@@ -90,6 +90,7 @@ Eigenstaendige Intelligence-Module mit eigenen Datenmodellen:
 | `anomaly_detection.py` | Anomalieerkennung |
 | `predictive_maintenance.py` | Vorhersagende Wartung |
 | `habitus_zones.py` | Habituszonen-Verwaltung |
+| `sonos_client.py` | Sonos-Steuerung via jishi/node-sonos-http-api (Port 5005) |
 
 ### Zone Automation Controller (hub/zone_automation.py)
 
@@ -173,7 +174,7 @@ with app.test_client() as c:
 
 - Neue Services: In `init_services()` initialisieren, in try/except wrappen, im services-Dict zurueckgeben
 - Neue Hub-Module: In `hub/` anlegen, Blueprint in `api/v1/` anlegen, in `register_blueprints()` registrieren
-- Port ist immer 8909 (`PORT` Env-Variable); Ollama intern 11435
+- Port ist immer 8909 (`PORT` Env-Variable); Ollama intern 11435; Sonos via jishi API Port 5005
 - Persistenz: `/data/` (HA Add-on Mount), Ollama Models unter `/share/`
 - `datetime.now(timezone.utc)` statt `datetime.utcnow()` (deprecated seit Python 3.12)
 - Dokumentation in Deutsch bevorzugt
@@ -215,6 +216,8 @@ Zwei konfigurierte Instanzen schuetzen vor kaskadierenden Fehlern:
 | `copilot_core/rootfs/usr/src/app/copilot_core/hub/zone_automation.py` | Zone Automation Controller (Licht/Musik/Entities) |
 | `copilot_core/rootfs/usr/src/app/copilot_core/hub/light_intelligence.py` | Light Intelligence (Lux, Sun, Scenes) |
 | `copilot_core/rootfs/usr/src/app/copilot_core/hub/presence_intelligence.py` | Presence Intelligence (Person-Tracking) |
+| `copilot_core/rootfs/usr/src/app/copilot_core/hub/sonos_client.py` | Sonos via jishi API (Port 5005) |
+| `copilot_core/rootfs/usr/src/app/copilot_core/api/v1/sonos.py` | Sonos REST Blueprint (20+ Endpoints) |
 | `copilot_core/rootfs/usr/src/app/copilot_core/neurons/manager.py` | NeuronManager Pipeline |
 | `copilot_core/rootfs/usr/src/app/copilot_core/mood/engine.py` | Unified Mood Engine v3.0 |
 | `copilot_core/rootfs/usr/src/app/copilot_core/brain_graph/store.py` | Brain Graph SQLite Store |

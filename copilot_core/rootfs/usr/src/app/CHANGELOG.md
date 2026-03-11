@@ -1,6 +1,29 @@
 # Changelog
 
-Alle wesentlichen Änderungen am PilotSuite Styx Core Backend.
+Alle wesentlichen Aenderungen am PilotSuite Styx Core Backend.
+
+## [v12.16.0] - 2026-03-11
+
+### Sonos Integration via jishi/node-sonos-http-api
+- **Neuer SonosCloudClient** (`hub/sonos_client.py`): Komplette Sonos-Steuerung ueber
+  die lokal installierte node-sonos-http-api (Port 5005) statt SOAP/UPnP.
+  - Zone-Discovery via GET /zones, Playback-Steuerung, Lautstaerke, Favorites/Playlists
+  - TTS/Say-Ansagen (Einzel-Raum und Broadcast)
+  - **Musikwolke**: create_musikwolke, dissolve_musikwolke, follow_user (Musik folgt Person)
+  - Queue-Management, Shuffle/Repeat/Crossfade, Sleep-Timer
+  - Health-Check fuer jishi API Erreichbarkeit
+- **Neues Sonos API Blueprint** (`api/v1/sonos.py`): 20+ REST-Endpoints unter `/api/v1/sonos/`
+  - `/zones`, `/speakers`, `/summary`, `/health`
+  - `/play`, `/pause`, `/next`, `/previous`, `/volume`, `/mute`
+  - `/favorites`, `/favorite/play`, `/playlists`
+  - `/say`, `/say-all`
+  - `/musikwolke/create`, `/musikwolke/dissolve`, `/musikwolke/follow`
+  - `/join`, `/leave`
+- **Service-Integration**: SonosCloudClient in `core_setup.py` als Service registriert
+  mit konfigurierbarem Host/Port (`sonos_api_host`, `sonos_api_port`)
+
+### Styx Chat Fix
+- Default-Modell von Platzhalter `qwen3.5:397b-cloud` auf reales `qwen3:0.6b` korrigiert
 
 ## [v12.15.0] - 2026-03-02
 

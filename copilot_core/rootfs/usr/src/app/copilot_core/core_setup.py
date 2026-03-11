@@ -99,6 +99,7 @@ async def init_services(hass=None, config: dict = None):
         "module_registry": None,
         "automation_creator": None,
         "media_zone_manager": None,
+        "sonos_client": None,
         "proactive_engine": None,
         "web_search_service": None,
         "waste_service": None,
@@ -438,6 +439,17 @@ async def init_services(hass=None, config: dict = None):
     except Exception:
         _LOGGER.exception("Failed to init MediaZoneManager")
 
+    # Initialize Sonos Client (jishi/node-sonos-http-api)
+    try:
+        sonos_host = config.get("sonos_api_host", "localhost")
+        sonos_port = int(config.get("sonos_api_port", 5005))
+        services["sonos_client"] = SonosCloudClient(
+            host=sonos_host, port=sonos_port,
+        )
+        _LOGGER.info("SonosCloudClient initialized @ %s:%d", sonos_host, sonos_port)
+    except Exception:
+        _LOGGER.exception("Failed to init SonosCloudClient")
+
     # Initialize Proactive Engine with lazy loading
     try:
         if lazy_load_enabled:
@@ -585,6 +597,7 @@ def register_blueprints(app: Flask, services: dict) -> None:
     from copilot_core.api.v1.mood import bp as mood_bp
     from copilot_core.api.v1.zone_editor import zone_editor_bp
     from copilot_core.api.v1.media_zones import media_zones_bp
+    from copilot_core.api.v1.sonos import sonos_bp
     from copilot_core.api.v1.tag_system import bp as tag_bp
     from copilot_core.api.v1.notifications import bp as notifications_bp
     from copilot_core.api.v1.blueprint import api_v1 as blueprint_bp
@@ -614,6 +627,7 @@ def register_blueprints(app: Flask, services: dict) -> None:
     app.register_blueprint(mood_bp, url_prefix="/api/v1")
     app.register_blueprint(zone_editor_bp, url_prefix="/api/v1")
     app.register_blueprint(media_zones_bp, url_prefix="/api/v1")
+    app.register_blueprint(sonos_bp)  # Already has /api/v1/sonos prefix
     app.register_blueprint(tag_bp, url_prefix="/api/v1")
     app.register_blueprint(notifications_bp, url_prefix="/api/v1")
     app.register_blueprint(blueprint_bp, url_prefix="/api/v1")
@@ -747,4 +761,5 @@ from copilot_core.neurons.manager import NeuronManager
 from copilot_core.module_registry import ModuleRegistry
 from copilot_core.automation_creator import AutomationCreator
 from copilot_core.media_zone_manager import MediaZoneManager
+from copilot_core.hub.sonos_client import SonosCloudClient
 from copilot_core.waste_service import WasteCollectionService, BirthdayService

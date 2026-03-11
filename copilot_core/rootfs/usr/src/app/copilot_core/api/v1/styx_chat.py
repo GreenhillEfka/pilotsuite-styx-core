@@ -44,15 +44,15 @@ class ChatRequest:
     query: str
     user_id: str
     use_web: bool = False
-    model: str = "qwen3.5:397b-cloud"
-    
+    model: str = "qwen3:0.6b"
+
     @classmethod
     def from_json(cls, data: Dict[str, Any]) -> "ChatRequest":
         return cls(
             query=str(data.get("query", "")).strip(),
             user_id=str(data.get("user_id", "anonymous")),
             use_web=bool(data.get("use_web", False)),
-            model=str(data.get("model", "qwen3.5:397b-cloud")),
+            model=str(data.get("model", "qwen3:0.6b")),
         )
 
 
