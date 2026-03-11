@@ -566,19 +566,19 @@ class BrainGraphStore:
     async def upsert_node_async(self, node: GraphNode) -> bool:
         """Async wrapper for upsert_node - runs in thread pool."""
         import asyncio
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         return await loop.run_in_executor(_executor, self.upsert_node, node)
     
     async def upsert_edge_async(self, edge: GraphEdge) -> bool:
         """Async wrapper for upsert_edge - runs in thread pool."""
         import asyncio
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         return await loop.run_in_executor(_executor, self.upsert_edge, edge)
     
     async def get_node_async(self, node_id: str) -> Optional[GraphNode]:
         """Async wrapper for get_node - runs in thread pool."""
         import asyncio
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         return await loop.run_in_executor(_executor, self.get_node, node_id)
     
     async def get_nodes_async(
@@ -589,7 +589,7 @@ class BrainGraphStore:
     ) -> List[GraphNode]:
         """Async wrapper for get_nodes - runs in thread pool."""
         import asyncio
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         return await loop.run_in_executor(
             _executor, self.get_nodes, kinds, domains, limit
         )
@@ -603,7 +603,7 @@ class BrainGraphStore:
     ) -> List[GraphEdge]:
         """Async wrapper for get_edges - runs in thread pool."""
         import asyncio
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         return await loop.run_in_executor(
             _executor, self.get_edges, from_node, to_node, edge_types, limit
         )
@@ -617,7 +617,7 @@ class BrainGraphStore:
     ) -> Tuple[List[GraphNode], List[GraphEdge]]:
         """Async wrapper for get_neighborhood - runs in thread pool."""
         import asyncio
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         return await loop.run_in_executor(
             _executor, self.get_neighborhood, center_node, hops, max_nodes, max_edges
         )
@@ -625,7 +625,7 @@ class BrainGraphStore:
     async def get_stats_async(self) -> Dict[str, int]:
         """Async wrapper for get_stats - runs in thread pool."""
         import asyncio
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         return await loop.run_in_executor(_executor, self.get_stats)
 
 

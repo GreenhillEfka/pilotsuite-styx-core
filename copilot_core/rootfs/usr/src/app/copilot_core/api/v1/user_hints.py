@@ -1,10 +1,28 @@
 """User Hints API Blueprint."""
 
+import asyncio
+
 from flask import Blueprint, request, jsonify
 from typing import Dict, Any
 
 from .service import UserHintsService
 from .models import HintStatus, HintType
+
+
+def _run_async(coro, timeout: int = 10):
+    """Run async coroutine from sync Flask context."""
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+
+    if loop and loop.is_running():
+        import concurrent.futures
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            future = pool.submit(asyncio.run, asyncio.wait_for(coro, timeout=timeout))
+            return future.result(timeout=timeout + 2)
+
+    return asyncio.run(asyncio.wait_for(coro, timeout=timeout))
 
 bp = Blueprint('user_hints', __name__, url_prefix='/hints')
 
@@ -82,15 +100,7 @@ def add_hint():
         except ValueError:
             return jsonify({"error": f"Invalid type: {hint_type_str}"}), 400
     
-    # Run async in sync context
-    import asyncio
-    try:
-        loop = asyncio.get_event_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-    
-    hint = loop.run_until_complete(service.add_hint(text, hint_type))
+    hint = _run_async(service.add_hint(text, hint_type))
     
     return jsonify({
         "ok": True,
@@ -118,14 +128,7 @@ def accept_hint(hint_id: str):
     """Accept a hint suggestion and create the automation."""
     service = get_hints_service()
     
-    import asyncio
-    try:
-        loop = asyncio.get_event_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-    
-    success = loop.run_until_complete(service.accept_suggestion(hint_id))
+    success = _run_async(service.accept_suggestion(hint_id))
     
     if not success:
         return jsonify({"error": "Failed to accept suggestion"}), 400
@@ -145,14 +148,7 @@ def reject_hint(hint_id: str):
     data = request.get_json(silent=True) or {}
     reason = data.get('reason')
     
-    import asyncio
-    try:
-        loop = asyncio.get_event_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-    
-    success = loop.run_until_complete(service.reject_suggestion(hint_id, reason))
+    success = _run_async(service.reject_suggestion(hint_id, reason))
     
     if not success:
         return jsonify({"error": "Failed to reject suggestion"}), 400

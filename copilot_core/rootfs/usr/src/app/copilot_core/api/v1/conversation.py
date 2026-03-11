@@ -1076,9 +1076,7 @@ def memory_stats():
         if vector_store:
             import asyncio
             try:
-                loop = asyncio.new_event_loop()
-                vs_stats = loop.run_until_complete(vector_store.stats())
-                loop.close()
+                vs_stats = asyncio.run(vector_store.stats())
                 result["vector_store"] = vs_stats
                 result["rag_active"] = True
             except Exception:

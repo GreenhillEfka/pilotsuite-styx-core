@@ -125,9 +125,10 @@ class HAConnectionPool:
                 if session and hasattr(session, "close"):
                     try:
                         import asyncio
-                        if asyncio.get_event_loop().is_running():
-                            asyncio.create_task(session.close())
-                        else:
+                        try:
+                            loop = asyncio.get_running_loop()
+                            loop.create_task(session.close())
+                        except RuntimeError:
                             asyncio.run(session.close())
                     except Exception:
                         pass

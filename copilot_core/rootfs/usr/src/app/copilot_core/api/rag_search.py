@@ -430,24 +430,19 @@ def register_rag_search_flask(app):
             vector_store = get_vector_store()
             embedding_engine = get_embedding_engine()
             
-            # Generate embedding (sync wrapper)
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                embedding_result = loop.run_until_complete(
-                    embedding_engine.embed_query(query)
+            # Generate embedding
+            embedding_result = asyncio.run(
+                embedding_engine.embed_query(query)
+            )
+            results = asyncio.run(
+                vector_store.search(
+                    query_vector=embedding_result.embedding,
+                    limit=limit,
+                    entry_type=filters.get("entry_type"),
+                    metadata_filter=filters.get("metadata"),
+                    threshold=threshold,
                 )
-                results = loop.run_until_complete(
-                    vector_store.search(
-                        query_vector=embedding_result.embedding,
-                        limit=limit,
-                        entry_type=filters.get("entry_type"),
-                        metadata_filter=filters.get("metadata"),
-                        threshold=threshold,
-                    )
-                )
-            finally:
-                loop.close()
+            )
             
             formatted_results = [
                 {
@@ -558,20 +553,15 @@ def register_rag_search_flask(app):
                 vector_store = get_vector_store()
                 embedding_engine = get_embedding_engine()
                 
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                try:
-                    embedding_result = loop.run_until_complete(
-                        embedding_engine.embed_query(query)
+                embedding_result = asyncio.run(
+                    embedding_engine.embed_query(query)
+                )
+                asyncio.run(
+                    vector_store.search(
+                        query_vector=embedding_result.embedding,
+                        limit=10,
                     )
-                    loop.run_until_complete(
-                        vector_store.search(
-                            query_vector=embedding_result.embedding,
-                            limit=10,
-                        )
-                    )
-                finally:
-                    loop.close()
+                )
             except Exception:
                 pass
             
