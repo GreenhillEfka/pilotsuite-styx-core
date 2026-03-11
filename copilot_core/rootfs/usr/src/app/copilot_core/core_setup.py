@@ -697,6 +697,11 @@ def register_blueprints(app: Flask, services: dict) -> None:
             media_follow=services.get("hub_media"),
         )
         services["musikwolke_bridge"] = musikwolke
+        # Connect bridge to ZoneAutomationController for auto-execution
+        zone_ctrl = services.get("zone_automation")
+        if zone_ctrl is not None:
+            zone_ctrl.set_music_bridge(musikwolke)
+            _LOGGER.info("MusikwolkeBridge connected to ZoneAutomationController")
         _LOGGER.info("MusikwolkeBridge wired (sonos=%s, media_follow=%s)",
                       services.get("sonos_client") is not None,
                       services.get("hub_media") is not None)

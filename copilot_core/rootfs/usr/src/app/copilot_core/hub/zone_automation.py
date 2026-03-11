@@ -257,6 +257,13 @@ class ZoneAutomationController:
         # Entity assignments per zone: zone_id -> list[ZoneEntityAssignment]
         self._entity_assignments: dict[str, list[ZoneEntityAssignment]] = {}
 
+        # Optional MusikwolkeBridge for executing music actions
+        self._music_bridge: Any | None = None
+
+    def set_music_bridge(self, bridge: Any) -> None:
+        """Attach a MusikwolkeBridge to auto-execute music actions."""
+        self._music_bridge = bridge
+
     # ── Configuration ────────────────────────────────────────────────────
 
     def get_zone_config(self, zone_id: str) -> ZoneAutomationConfig:
@@ -373,6 +380,13 @@ class ZoneAutomationController:
                     state.music_playing = True
                     state.music_triggered_at = now
 
+        # Auto-execute music actions via MusikwolkeBridge if wired
+        if self._music_bridge and (actions.get("music_start") or actions.get("music_follow")):
+            try:
+                self._music_bridge.execute_actions(actions)
+            except Exception:
+                logger.exception("MusikwolkeBridge.execute_actions failed for zone '%s'", zone_id)
+
         return actions
 
     def on_presence_cleared(self, zone_id: str) -> dict[str, Any]:
@@ -415,6 +429,13 @@ class ZoneAutomationController:
                 actions["music_pause"] = True
                 actions["music_fade_s"] = config.music.fade_duration_s
                 state.music_playing = False
+
+        # Auto-execute music pause via MusikwolkeBridge if wired
+        if self._music_bridge and actions.get("music_pause"):
+            try:
+                self._music_bridge.execute_actions(actions)
+            except Exception:
+                logger.exception("MusikwolkeBridge.execute_actions (pause) failed for zone '%s'", zone_id)
 
         return actions
 

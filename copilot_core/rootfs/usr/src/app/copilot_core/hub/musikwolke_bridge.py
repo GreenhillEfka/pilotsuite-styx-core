@@ -101,13 +101,22 @@ class MusikwolkeBridge:
         sonos_room = self._zone_speaker_map.get(zone_id)
 
         if actions.get("music_start"):
-            self._handle_music_start(zone_id, sonos_room, actions, result)
+            try:
+                self._handle_music_start(zone_id, sonos_room, actions, result)
+            except Exception:
+                logger.exception("music_start failed for zone '%s'", zone_id)
 
         if actions.get("music_pause"):
-            self._handle_music_pause(zone_id, sonos_room, actions, result)
+            try:
+                self._handle_music_pause(zone_id, sonos_room, actions, result)
+            except Exception:
+                logger.exception("music_pause failed for zone '%s'", zone_id)
 
         if actions.get("music_follow"):
-            self._handle_music_follow(zone_id, result)
+            try:
+                self._handle_music_follow(zone_id, result)
+            except Exception:
+                logger.exception("music_follow failed for zone '%s'", zone_id)
 
         return result
 
@@ -241,15 +250,16 @@ class MusikwolkeBridge:
         media_dashboard = None
         if self._media_follow:
             db = self._media_follow.get_dashboard()
-            media_dashboard = {
-                "total_sources": db.total_sources,
-                "active_sessions": db.active_sessions,
-                "zones_with_playback": db.zones_with_playback,
-                "follow_enabled_zones": db.follow_enabled_zones,
-            }
+            if db is not None:
+                media_dashboard = {
+                    "total_sources": db.total_sources,
+                    "active_sessions": db.active_sessions,
+                    "zones_with_playback": db.zones_with_playback,
+                    "follow_enabled_zones": db.follow_enabled_zones,
+                }
 
         return {
-            "sonos_connected": self._sonos is not None and self._sonos.health_check() if self._sonos else False,
+            "sonos_connected": (self._sonos.health_check() if self._sonos else False),
             "media_follow_active": self._media_follow is not None,
             "zone_speaker_map": dict(self._zone_speaker_map),
             "active_zones": list(self._active_zones),
