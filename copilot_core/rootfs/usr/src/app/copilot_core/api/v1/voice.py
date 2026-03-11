@@ -519,11 +519,12 @@ def get_zones():
         from copilot_core.voice.context_builder import VoiceContextBuilder
         
         zones = []
+        zone_aliases = getattr(VoiceContextBuilder, "ZONE_ALIASES", {})
         for zone_name, zone_type in VoiceContextBuilder.ZONE_TYPE_MAP.items():
             zones.append({
                 "name": zone_name,
                 "type": zone_type,
-                "aliases": VoiceContextBuilder.ZONE_TYPE_MAP.get(zone_name, []),
+                "aliases": zone_aliases.get(zone_name, [zone_name]),
             })
         
         return jsonify({

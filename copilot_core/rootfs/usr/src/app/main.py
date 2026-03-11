@@ -172,7 +172,8 @@ _preflight_results = _preflight_check()
 _main_logger.info("Pre-flight check results: %s", json.dumps(_preflight_results))
 
 try:
-    _services = init_services(config=_options)
+    import asyncio as _asyncio
+    _services = _asyncio.run(init_services(config=_options))
 except Exception:
     _main_logger.exception("CRITICAL: init_services failed — starting with empty services")
     _services = {}
