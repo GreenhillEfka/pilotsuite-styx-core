@@ -288,7 +288,7 @@ class LightIntelligenceEngine:
         # Normalized illumination ratio
         illumination_ratio = 0.0
         if avg_outdoor > 0:
-            illumination_ratio = min(1.0, avg_indoor / max(avg_outdoor, 1.0))
+            illumination_ratio = max(0.0, min(1.0, avg_indoor / max(avg_outdoor, 1.0)))
 
         illumination_pct = illumination_ratio * 100
 
