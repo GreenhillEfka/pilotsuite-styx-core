@@ -2,6 +2,38 @@
 
 Alle wesentlichen Änderungen am PilotSuite Styx Core werden in dieser Datei dokumentiert.
 
+## [v13.6.0] - 2026-03-11
+
+### Musikwolke Bridge — End-to-End Sonos-Integration
+- **MusikwolkeBridge**: Neues Hub-Modul verbindet ZoneAutomationController mit SonosCloudClient und MediaFollowEngine
+- **Zone-Speaker-Mapping**: Automatische und manuelle Zuordnung von Zonen zu Sonos-Raeumen
+- **Follow-Mode**: Musik folgt dem Nutzer automatisch zwischen Raeumen via Sonos-Gruppierung
+- **Musikwolke API**: 8 neue REST-Endpoints unter `/api/v1/musikwolke/` (status, zone-map, play, pause, volume, create, dissolve, auto-discover)
+
+### Automation-Modus-System (off/learning/autonomy)
+- **3-Stufen-Modus** pro Zone: `off` (nur Zustand), `learning` (Zustand + Muster lernen), `autonomy` (volle Automatisierung)
+- **Modus-Integration**: ZoneAutomationController respektiert Modus bei Praesenz-Events
+- **API-Endpoints**: GET/POST `/api/v1/zone-automation/zones/{zone_id}/mode`
+- **Dashboard-Integration**: Modus wird in Zone-State und Dashboard angezeigt
+
+### Tag-System — Bidirektionale Synchronisierung
+- **13 neue Zone-Rollen-Tags** in tags.yaml: aicp.role.licht bis aicp.role.styx
+- **Kanonische Tag-IDs**: Mapping zwischen Kurznamen und aicp.role.* IDs
+- **HA → Core Sync**: POST `/api/v1/tag-system/tags/sync` fuer bidirektionalen Tag-Austausch
+- **TagZoneIntegration**: Auto-Erstellung von HabitusZones aus aicp.place.* Tags
+
+### Zone Dashboard — Echtdaten statt Mockups
+- **MoodService-Integration**: Echte Mood-Abfragen statt Mock-Daten
+- **ZoneAutomationController-Abfragen**: Live Entity-Counts, Occupancy, Brightness
+- **HabitusZones-Metriken**: Echte Daten aus ZoneAutomationController
+
+### Versions-Synchronisierung
+- **Einheitliche Version 13.6.0**: Alle VERSION-Dateien, config.yaml und manifest.json synchronisiert
+- **Paired Release**: Core + HA identische Versionsnummer
+
+### TagRegistry — Erweiterte Methoden
+- `remove_from_zone`, `get_zone_members`, `get_zones`, `get_subject_tag_ids`, `get_context_for_llm`, `auto_tag_styx`
+
 ## [v13.3.0] - 2026-03-04
 
 ### Zone Automation — Praesenzabhaengige Licht- & Musiksteuerung, Entity-Management

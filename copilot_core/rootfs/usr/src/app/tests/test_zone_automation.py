@@ -80,7 +80,7 @@ class TestZoneConfig:
 class TestPresenceLight:
     def test_presence_triggers_light_on_after_delay(self):
         ctrl = ZoneAutomationController()
-        ctrl.set_zone_config("living", {"light": {"presence_delay_s": 0}})
+        ctrl.set_zone_config("living", {"automation_mode": "autonomy", "light": {"presence_delay_s": 0}})
 
         actions = ctrl.on_presence_detected("living")
         assert actions.get("light_on") is True
@@ -88,7 +88,7 @@ class TestPresenceLight:
 
     def test_presence_does_not_trigger_before_delay(self):
         ctrl = ZoneAutomationController()
-        ctrl.set_zone_config("living", {"light": {"presence_delay_s": 60}})
+        ctrl.set_zone_config("living", {"automation_mode": "autonomy", "light": {"presence_delay_s": 60}})
 
         actions = ctrl.on_presence_detected("living")
         # Delay not met → no light_on
@@ -97,6 +97,7 @@ class TestPresenceLight:
     def test_absence_triggers_light_off_after_delay(self):
         ctrl = ZoneAutomationController()
         ctrl.set_zone_config("living", {
+            "automation_mode": "autonomy",
             "light": {"presence_delay_s": 0, "absence_delay_s": 0}
         })
 
@@ -109,16 +110,34 @@ class TestPresenceLight:
     def test_override_disables_light(self):
         ctrl = ZoneAutomationController()
         ctrl.set_zone_config("living", {
+            "automation_mode": "autonomy",
             "light": {"enabled": False, "presence_delay_s": 0}
         })
         actions = ctrl.on_presence_detected("living")
         assert "light_on" not in actions
+
+    def test_learning_mode_does_not_trigger_actions(self):
+        ctrl = ZoneAutomationController()
+        ctrl.set_zone_config("living", {"automation_mode": "learning", "light": {"presence_delay_s": 0}})
+
+        actions = ctrl.on_presence_detected("living")
+        assert "light_on" not in actions
+        assert actions.get("learning_event") == "presence_confirmed"
+
+    def test_off_mode_records_state_only(self):
+        ctrl = ZoneAutomationController()
+        ctrl.set_zone_config("living", {"automation_mode": "off", "light": {"presence_delay_s": 0}})
+
+        actions = ctrl.on_presence_detected("living")
+        assert "light_on" not in actions
+        assert "learning_event" not in actions
 
 
 class TestBrightnessDampening:
     def test_hysteresis_prevents_small_changes(self):
         ctrl = ZoneAutomationController()
         ctrl.set_zone_config("living", {
+            "automation_mode": "autonomy",
             "light": {"presence_delay_s": 0, "dampening_band_pct": 10}
         })
         ctrl.on_presence_detected("living")
@@ -132,6 +151,7 @@ class TestBrightnessDampening:
     def test_large_brightness_change_adjusts(self):
         ctrl = ZoneAutomationController()
         ctrl.set_zone_config("living", {
+            "automation_mode": "autonomy",
             "light": {
                 "presence_delay_s": 0,
                 "dampening_band_pct": 5,
@@ -165,6 +185,7 @@ class TestPresenceMusic:
     def test_music_auto_play_with_presence(self):
         ctrl = ZoneAutomationController()
         ctrl.set_zone_config("living", {
+            "automation_mode": "autonomy",
             "music": {"enabled": True, "presence_auto_play": True, "presence_delay_s": 0}
         })
         # Also need light delay 0 for presence to be confirmed
@@ -177,6 +198,7 @@ class TestPresenceMusic:
     def test_music_disabled_no_auto_play(self):
         ctrl = ZoneAutomationController()
         ctrl.set_zone_config("living", {
+            "automation_mode": "autonomy",
             "light": {"presence_delay_s": 0},
             "music": {"enabled": False, "presence_auto_play": True, "presence_delay_s": 0}
         })
@@ -186,6 +208,7 @@ class TestPresenceMusic:
     def test_music_pauses_on_absence(self):
         ctrl = ZoneAutomationController()
         ctrl.set_zone_config("living", {
+            "automation_mode": "autonomy",
             "light": {"presence_delay_s": 0, "absence_delay_s": 0},
             "music": {"enabled": True, "presence_auto_play": True, "presence_delay_s": 0, "absence_pause_s": 0}
         })
@@ -291,7 +314,7 @@ class TestAutoDetection:
 class TestDashboard:
     def test_get_dashboard(self):
         ctrl = ZoneAutomationController()
-        ctrl.set_zone_config("living", {"light": {"presence_delay_s": 0}})
+        ctrl.set_zone_config("living", {"automation_mode": "autonomy", "light": {"presence_delay_s": 0}})
         ctrl.on_presence_detected("living")
 
         dash = ctrl.get_dashboard()
@@ -357,7 +380,7 @@ class TestZoneAutomationAPI:
 
     def test_report_presence(self):
         app, ctrl = self._make_client()
-        ctrl.set_zone_config("living", {"light": {"presence_delay_s": 0}})
+        ctrl.set_zone_config("living", {"automation_mode": "autonomy", "light": {"presence_delay_s": 0}})
         with patch("copilot_core.api.v1.zone_automation.require_token", lambda f: f):
             with app.test_client() as c:
                 resp = c.post("/api/v1/zone-automation/zones/living/presence",

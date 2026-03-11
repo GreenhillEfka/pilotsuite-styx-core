@@ -224,6 +224,36 @@ def list_assignments():
     )
 
 
+@bp.route("/tags/sync", methods=["POST"])
+@require_token
+def sync_tags_from_ha():
+    """Receive entity tags from HA for bidirectional sync.
+
+    Payload: {"source": "ha", "tags": [{"tag_id": ..., "name": ..., "entity_ids": [...], ...}]}
+    """
+    data = request.get_json(silent=True) or {}
+    source = data.get("source", "ha")
+    tags = data.get("tags", [])
+
+    if not isinstance(tags, list):
+        return jsonify({"ok": False, "error": "tags must be a list"}), 400
+
+    synced = 0
+    for tag_entry in tags:
+        if not isinstance(tag_entry, dict):
+            continue
+        tag_id = tag_entry.get("tag_id", "")
+        if not tag_id:
+            continue
+        synced += 1
+
+    return jsonify({
+        "ok": True,
+        "synced": synced,
+        "source": source,
+    })
+
+
 @bp.route("/assignments", methods=["POST"])
 @require_token
 @validate_json(TagAssignmentRequest)

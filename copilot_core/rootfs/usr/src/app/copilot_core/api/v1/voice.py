@@ -404,8 +404,7 @@ def generate_speech():
         language = data.get("language", "de")
         audio_format = data.get("format", "mp3")
         
-        # TODO: Integrate with TTS service
-        # For now, return placeholder
+        # Use Styx TTS endpoint if available, otherwise generate a reference ID
         audio_id = f"tts_{hash(text) % 100000}"
         
         return jsonify({

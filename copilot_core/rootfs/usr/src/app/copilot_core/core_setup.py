@@ -91,6 +91,7 @@ async def init_services(hass=None, config: dict = None):
         "mood_service": None,
         "event_processor": None,
         "tag_registry": None,
+        "tag_zone_integration": None,
         "webhook_pusher": None,
         "household_profile": None,
         "neuron_manager": None,
@@ -100,6 +101,7 @@ async def init_services(hass=None, config: dict = None):
         "automation_creator": None,
         "media_zone_manager": None,
         "sonos_client": None,
+        "musikwolke_bridge": None,
         "proactive_engine": None,
         "web_search_service": None,
         "waste_service": None,
@@ -252,6 +254,20 @@ async def init_services(hass=None, config: dict = None):
         services["tag_registry"] = TagRegistry()
     except Exception:
         _LOGGER.exception("Failed to init TagRegistry")
+
+    # Wire TagZoneIntegration: bridges tags → HabitusZones (auto-zone from place tags)
+    try:
+        tag_registry = services.get("tag_registry")
+        if tag_registry:
+            from copilot_core.tagging.zone_integration import create_tag_zone_integration
+            tag_zone_integration = create_tag_zone_integration(tag_registry)
+            services["tag_zone_integration"] = tag_zone_integration
+            _LOGGER.info("TagZoneIntegration wired to TagRegistry")
+        else:
+            services["tag_zone_integration"] = None
+    except Exception:
+        _LOGGER.exception("Failed to init TagZoneIntegration")
+        services["tag_zone_integration"] = None
 
     # Initialize Webhook Pusher
     try:
@@ -672,6 +688,33 @@ def register_blueprints(app: Flask, services: dict) -> None:
         _LOGGER.warning("Zone Automation init failed: %s", exc)
         init_zone_automation_api(None)
     app.register_blueprint(zone_automation_bp)
+
+    # Wire Musikwolke Bridge (connects ZoneAutomation → Sonos + MediaFollow)
+    try:
+        from copilot_core.hub.musikwolke_bridge import MusikwolkeBridge
+        musikwolke = MusikwolkeBridge(
+            sonos=services.get("sonos_client"),
+            media_follow=services.get("hub_media"),
+        )
+        services["musikwolke_bridge"] = musikwolke
+        _LOGGER.info("MusikwolkeBridge wired (sonos=%s, media_follow=%s)",
+                      services.get("sonos_client") is not None,
+                      services.get("hub_media") is not None)
+    except Exception:
+        _LOGGER.exception("Failed to init MusikwolkeBridge")
+
+    # Register Musikwolke API (zone-based Sonos control)
+    from copilot_core.api.v1.musikwolke import musikwolke_bp, init_musikwolke_api
+    init_musikwolke_api(services.get("musikwolke_bridge"))
+    app.register_blueprint(musikwolke_bp)
+
+    # Register Zone Dashboard API (real-time zone overview with mood & quick actions)
+    from copilot_core.api.v1.zone_dashboard import zone_dashboard_bp, init_zone_dashboard_api
+    init_zone_dashboard_api(
+        zone_automation=services.get("zone_automation"),
+        mood_service=services.get("mood_service"),
+    )
+    app.register_blueprint(zone_dashboard_bp)
 
     # Register Styx Dashboard API
     from copilot_core.api.v1.styx_dashboard import styx_dashboard_bp, init_styx_dashboard_api

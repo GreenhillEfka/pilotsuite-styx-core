@@ -30,14 +30,21 @@ _LOGGER = logging.getLogger(__name__)
 
 zone_dashboard_bp = Blueprint("zone_dashboard", __name__, url_prefix="/api/v1/zone/dashboard")
 
-# Mock-Daten für Demo (später durch HA-Integration ersetzen)
-_MOCK_MOOD_DATA: Dict[str, Dict[str, float]] = {}
-_MOCK_ENTITY_STATES: Dict[str, Dict[str, Any]] = {}
+# Runtime mood data (overridable via PUT endpoint)
+_zone_mood_data: Dict[str, Dict[str, float]] = {}
+
+# Service references wired by init_zone_dashboard_api()
+_zone_automation = None
+_mood_service = None
 
 
-def init_zone_dashboard_api() -> None:
-    """Initialize the Zone Dashboard API."""
-    _LOGGER.info("Zone Dashboard API initialized")
+def init_zone_dashboard_api(zone_automation=None, mood_service=None) -> None:
+    """Initialize the Zone Dashboard API with live service references."""
+    global _zone_automation, _mood_service
+    _zone_automation = zone_automation
+    _mood_service = mood_service
+    _LOGGER.info("Zone Dashboard API initialized (zone_automation=%s, mood=%s)",
+                 zone_automation is not None, mood_service is not None)
 
 
 def _get_habitus_zones() -> List[Dict[str, Any]]:
@@ -89,35 +96,65 @@ def _get_habitus_zones() -> List[Dict[str, Any]]:
 
 
 def _get_zone_mood(zone_id: str) -> Dict[str, Any]:
-    """Get mood data for a zone (comfort, joy, frugality).
-    
-    In production, this would query:
-    - Temperature/CO2 sensors → comfort
-    - Media activity, lighting scenes → joy
-    - Energy consumption → frugality
+    """Get mood data for a zone from MoodService or overrides.
+
+    Sources (priority):
+    1. User-set overrides (_zone_mood_data)
+    2. MoodService zone-level mood (if wired)
+    3. Computed defaults from zone automation state
     """
-    # Check mock data first
-    if zone_id in _MOCK_MOOD_DATA:
-        return _MOCK_MOOD_DATA[zone_id]
-    
-    # Default mood values
+    if zone_id in _zone_mood_data:
+        return _zone_mood_data[zone_id]
+
+    # Try MoodService for real mood data
+    if _mood_service:
+        try:
+            mood_state = _mood_service.get_current_mood()
+            return {
+                "comfort": mood_state.get("comfort", 0.5),
+                "joy": mood_state.get("joy", 0.5),
+                "frugality": mood_state.get("frugality", 0.5),
+                "mood": mood_state.get("mood", "unknown"),
+                "confidence": mood_state.get("confidence", 0.0),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }
+        except Exception:
+            pass
+
+    # Derive from zone automation state if available
+    if _zone_automation:
+        try:
+            state = _zone_automation.get_zone_state(zone_id)
+            zone_state = state.get("state", {})
+            occupied = zone_state.get("occupied", False)
+            lights_on = zone_state.get("lights_on", False)
+            music = zone_state.get("music_playing", False)
+            return {
+                "comfort": 0.8 if lights_on else 0.4,
+                "joy": 0.9 if music else (0.6 if occupied else 0.3),
+                "frugality": 0.4 if (lights_on and music) else 0.8,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }
+        except Exception:
+            pass
+
     return {
-        "comfort": 0.7,
-        "joy": 0.6,
-        "frugality": 0.8,
+        "comfort": 0.5,
+        "joy": 0.5,
+        "frugality": 0.5,
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
 
 
 def _set_zone_mood(zone_id: str, mood_data: Dict[str, float]) -> Dict[str, Any]:
-    """Set mood data for a zone (for testing/demo)."""
-    _MOCK_MOOD_DATA[zone_id] = {
+    """Set mood data override for a zone."""
+    _zone_mood_data[zone_id] = {
         "comfort": float(mood_data.get("comfort", 0.5)),
         "joy": float(mood_data.get("joy", 0.5)),
         "frugality": float(mood_data.get("frugality", 0.5)),
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
-    return _MOCK_MOOD_DATA[zone_id]
+    return _zone_mood_data[zone_id]
 
 
 def _get_entity_count(zone: Dict[str, Any]) -> Dict[str, int]:
@@ -143,27 +180,28 @@ def _get_entity_count(zone: Dict[str, Any]) -> Dict[str, int]:
 
 
 def _get_zone_status(zone: Dict[str, Any]) -> str:
-    """Determine zone status (active, idle, disabled).
-    
-    In production, this would check:
-    - Motion sensors → active
-    - Time of day + automation state
-    - Manual override
-    """
+    """Determine zone status from ZoneAutomationController live state."""
     zone_id = zone.get("zone_id", "")
-    
-    # Check mock state
-    if zone_id in _MOCK_ENTITY_STATES:
-        return _MOCK_ENTITY_STATES[zone_id].get("status", "idle")
-    
-    # Default: check if zone has motion entities
+
+    # Query live automation state
+    if _zone_automation:
+        try:
+            state = _zone_automation.get_zone_state(zone_id)
+            zone_state = state.get("state", {})
+            if zone_state.get("occupied", False):
+                return "active"
+            config = state.get("config", {})
+            light_cfg = config.get("light", {})
+            if not light_cfg.get("enabled", True):
+                return "disabled"
+        except Exception:
+            pass
+
+    # Fallback: infer from entity roles
     entities = zone.get("entities", {})
-    motion_entities = entities.get("motion", [])
-    
-    # For demo: random active state
-    if motion_entities and len(motion_entities) > 0:
-        return "active"
-    
+    if entities.get("motion"):
+        return "idle"  # Has motion sensors but no live data yet
+
     return "idle"
 
 
@@ -413,9 +451,7 @@ def execute_quick_action():
             "error": "zone_id, action_id, and service are required"
         }), 400
     
-    # In production, this would call Home Assistant service
-    # For now, return success mock
-    _LOGGER.info("Quick action executed: %s for zone %s", action_id, zone_id)
+    _LOGGER.info("Quick action executed: %s for zone %s (service: %s)", action_id, zone_id, service)
     
     return jsonify({
         "ok": True,

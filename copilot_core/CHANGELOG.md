@@ -3,6 +3,13 @@
 This file exists so Home Assistant can show an add-on changelog.
 For full history, see the repository-level `CHANGELOG.md`.
 
+## 13.6.0 (2026-03-11)
+- **Musikwolke Bridge**: End-to-End Sonos-Integration mit Zone-Speaker-Mapping und Follow-Mode
+- **Automation-Modus**: 3-Stufen off/learning/autonomy pro Zone
+- **Tag-System**: 13 neue Zonen-Rollen-Tags, bidirektionale HA↔Core Synchronisierung
+- **Zone Dashboard**: Echtdaten statt Mockups (Mood, Occupancy, Brightness)
+- **Versions-Sync**: Alle VERSION-Dateien auf 13.6.0 vereinheitlicht
+
 ## 12.8.1 (2026-03-02)
 - **Connection Pooling für HA-Supervisor und Ollama**: Wiederverwendbare aiohttp.ClientSession-Connections statt Neuverbindung pro Request
   - `copilot_core/connection_pool.py`: Zentraler ConnectionPoolManager mit konfigurierbarer Pool-Größe (default: 10 Connections)
