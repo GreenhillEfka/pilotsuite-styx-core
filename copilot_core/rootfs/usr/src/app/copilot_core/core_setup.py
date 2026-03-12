@@ -132,6 +132,8 @@ async def init_services(hass=None, config: dict = None):
         "hub_heiz": None,
         "hub_bewegung": None,
         "hub_praesenz": None,
+        # Weather service (for energy forecast engines)
+        "weather_service": None,
     }
 
     # Initialize system health service (requires hass)
@@ -161,6 +163,19 @@ async def init_services(hass=None, config: dict = None):
                 services["energy_service"] = EnergyService(hass)
     except Exception:
         _LOGGER.exception("Failed to init EnergyService")
+
+    # Initialize Weather Service (provides data to energy forecast engines)
+    try:
+        from copilot_core.api.v1.weather import WeatherService, init_weather_api
+        location = config.get("location", {}) if config else {}
+        lat = _safe_float(location.get("latitude", 52.5), 52.5, -90.0, 90.0)
+        lon = _safe_float(location.get("longitude", 13.4), 13.4, -180.0, 180.0)
+        weather_svc = WeatherService(lat=lat, lon=lon)
+        services["weather_service"] = weather_svc
+        init_weather_api(lat=lat, lon=lon)
+        _LOGGER.info("WeatherService initialized (lat=%.2f, lon=%.2f)", lat, lon)
+    except Exception:
+        _LOGGER.exception("Failed to init WeatherService")
 
     # Parse Brain Graph configuration with validation
     try:
@@ -788,7 +803,8 @@ def register_blueprints(app: Flask, services: dict) -> None:
     from copilot_core.api.v1.swagger_ui import bp as swagger_ui_bp
     from copilot_core.api.v1.rag import bp as rag_bp
     from copilot_core.api.v1.styx_chat import bp as styx_bp
-    
+    from copilot_core.api.v1.weather import bp as weather_bp
+
     # Make services available via app.config for blueprints using current_app.config
     app.config["COPILOT_SERVICES"] = services
 
@@ -836,7 +852,8 @@ def register_blueprints(app: Flask, services: dict) -> None:
     app.register_blueprint(swagger_ui_bp, url_prefix="/api/v1")
     app.register_blueprint(rag_bp)  # Already has /api/v1/rag prefix
     app.register_blueprint(styx_bp)  # Already has /api/styx prefix
-    
+    app.register_blueprint(weather_bp, url_prefix="/api/v1")  # /api/v1/weather
+
     # Register MCP REST API (standalone, absolute prefix /api/v1/mcp)
     app.register_blueprint(mcp_bp)
 

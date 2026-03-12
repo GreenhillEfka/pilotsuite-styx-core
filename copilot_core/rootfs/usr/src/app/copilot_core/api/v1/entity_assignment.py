@@ -71,11 +71,11 @@ def _room_hint_from_entity_id(entity_id: str) -> str | None:
     return meaningful[0].lower()
 
 
-def _fetch_states() -> list[dict]:
-    """Call HA Supervisor API to get all entity states."""
+def _fetch_states() -> list[dict] | None:
+    """Call HA Supervisor API to get all entity states. Returns None on error."""
     token = os.environ.get("SUPERVISOR_TOKEN", "")
     if not token:
-        return []
+        return None
     try:
         resp = requests.get(
             f"{SUPERVISOR_API}/states",
@@ -87,6 +87,7 @@ def _fetch_states() -> list[dict]:
             return data if isinstance(data, list) else []
     except Exception as exc:
         _LOGGER.warning("Failed to fetch HA states: %s", exc)
+        return None
     return None
 
 
