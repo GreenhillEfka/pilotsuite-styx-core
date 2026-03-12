@@ -339,16 +339,15 @@ def update_zone_legacy(zone_id: str):
     
     # Update zone settings
     if "name" in data:
-        # Note: Would need a set_zone_name method in engine
-        pass
+        engine.set_zone_name(zone_id, data["name"])
     if "icon" in data:
-        pass
+        engine.set_zone_icon(zone_id, data["icon"])
     if "mode" in data:
         engine.set_zone_mode(zone_id, data["mode"])
     if "enabled" in data:
         engine.set_zone_enabled(zone_id, data["enabled"])
     if "priority" in data:
-        pass
+        engine.set_zone_priority(zone_id, data["priority"])
     
     _LOGGER.info(f"Updated zone: {zone_id}")
     

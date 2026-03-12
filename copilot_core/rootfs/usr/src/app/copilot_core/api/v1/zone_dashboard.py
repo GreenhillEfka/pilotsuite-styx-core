@@ -523,6 +523,28 @@ def _collect_musikwolke(zone_id: str) -> Optional[Dict[str, Any]]:
 
 
 def _collect_playlists(zone_id: str) -> Optional[List[Dict[str, Any]]]:
+    """Collect playlists for a zone from Musikwolke/Sonos or example fallback."""
+    # Try real data from musikwolke service (has zone-speaker mapping)
+    hub_mw = _svc.get("hub_musikwolke")
+    if hub_mw:
+        try:
+            status = hub_mw.get_status()
+            speaker = status.get("zone_speaker_map", {}).get(zone_id)
+            if speaker:
+                # If zone has a mapped speaker, retrieve its playlists
+                playlists_raw = hub_mw.get_playlists() if hasattr(hub_mw, "get_playlists") else []
+                if playlists_raw:
+                    return [
+                        {"id": p.get("id", ""), "name": p.get("name", ""),
+                         "source": p.get("source", "sonos"),
+                         "icon": p.get("icon", "mdi:playlist-music"),
+                         "time_affinity": p.get("time_affinity", "")}
+                        for p in playlists_raw
+                    ] or None
+        except Exception:
+            pass
+
+    # Fallback to example data
     playlists = _get_example().get("playlists", [])
     result = [
         {"id": p["id"], "name": p["name"], "source": p["source"],
@@ -533,6 +555,32 @@ def _collect_playlists(zone_id: str) -> Optional[List[Dict[str, Any]]]:
 
 
 def _collect_todos(zone_id: str) -> Optional[Dict[str, Any]]:
+    """Collect todos/reminders for a zone from Shopping/Reminders DB or example fallback."""
+    try:
+        from copilot_core.api.v1.shopping import _get_conn
+        conn = _get_conn()
+        rows = conn.execute(
+            "SELECT id, title, description, due_at, created_at "
+            "FROM reminders WHERE completed = 0 ORDER BY created_at DESC LIMIT 20"
+        ).fetchall()
+        conn.close()
+        if rows:
+            zone_todos = [
+                {
+                    "id": r["id"],
+                    "title": r["title"],
+                    "description": r["description"] or "",
+                    "due_at": r["due_at"],
+                    "zone_id": zone_id,
+                    "status": "pending",
+                }
+                for r in rows
+            ]
+            return {"count": len(zone_todos), "items": zone_todos}
+    except Exception:
+        pass
+
+    # Fallback to example data
     todos = _get_example().get("todos", [])
     zone_todos = [t for t in todos
                   if t.get("zone_id") == zone_id and t.get("status") != "completed"]
