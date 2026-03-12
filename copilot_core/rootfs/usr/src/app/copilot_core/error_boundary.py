@@ -131,7 +131,7 @@ class HAConnectionPool:
                         except RuntimeError:
                             asyncio.run(session.close())
                     except Exception:
-                        pass
+                        _LOGGER.debug("Failed to close HA session %s", session_id, exc_info=True)
                 return True
         return False
     

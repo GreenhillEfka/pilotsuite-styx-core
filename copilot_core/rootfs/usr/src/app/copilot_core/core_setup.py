@@ -112,7 +112,7 @@ def _wire_bus_events(services: dict) -> None:
                         )
                         _svc.suggest_scenes(ctx, limit=3)
                     except Exception:
-                        pass
+                        _LOGGER.debug("SceneIntelligence suggest_scenes failed for zone %s", zone_id, exc_info=True)
 
             bus.subscribe("presence.changed", _scene_from_presence)
             _LOGGER.info("SceneIntelligence wired to presence.changed events")
@@ -136,7 +136,7 @@ def _wire_bus_events(services: dict) -> None:
                             source="anomaly_detection",
                         )
                     except Exception:
-                        pass
+                        _LOGGER.debug("NotificationIntelligence add_notification failed", exc_info=True)
 
             bus.subscribe("anomaly.detected", _notify_on_anomaly)
             _LOGGER.info("NotificationIntelligence wired to anomaly.detected events")
