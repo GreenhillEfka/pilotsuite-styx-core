@@ -4,10 +4,11 @@ Suggestions API — Accept, reject, or snooze automation suggestions.
 Blueprint prefix: /api/v1/suggestions
 
 Endpoints:
+    GET  /api/v1/suggestions           — List pending suggestions
+    GET  /api/v1/suggestions/repairs   — List repair/improvement suggestions
     POST /api/v1/suggestions/accept   — Accept a suggestion
     POST /api/v1/suggestions/reject   — Reject a suggestion
     POST /api/v1/suggestions/snooze   — Snooze a suggestion
-    GET  /api/v1/suggestions           — List pending suggestions
 """
 
 from __future__ import annotations
