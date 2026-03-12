@@ -166,3 +166,117 @@ def praesenz_persons():
         return jsonify({"error": "Praesenzmodul not initialized"}), 503
     persons = _praesenz_engine.get_all_persons_home()
     return jsonify({"ok": True, "persons": persons, "count": len(persons)})
+
+
+# ── Aggregated Dashboard ───────────────────────────────────────────────
+
+@modules_bp.route("/dashboard", methods=["GET"])
+@require_token
+def modules_dashboard():
+    """Aggregated dashboard for all 5 smart home modules.
+
+    Returns summaries for licht, helligkeit, heiz, bewegung, praesenz
+    in a single call — used by HA coordinator polling.
+    """
+    result: dict = {"ok": True, "modules": {}}
+
+    if _licht_engine:
+        try:
+            result["modules"]["licht"] = _licht_engine.get_summary()
+        except Exception:
+            logger.exception("Lichtmodul summary failed")
+            result["modules"]["licht"] = None
+    else:
+        result["modules"]["licht"] = None
+
+    if _helligkeit_engine:
+        try:
+            result["modules"]["helligkeit"] = _helligkeit_engine.get_summary()
+        except Exception:
+            logger.exception("Helligkeitsmodul summary failed")
+            result["modules"]["helligkeit"] = None
+    else:
+        result["modules"]["helligkeit"] = None
+
+    if _heiz_engine:
+        try:
+            result["modules"]["heiz"] = _heiz_engine.get_summary()
+        except Exception:
+            logger.exception("Heizmodul summary failed")
+            result["modules"]["heiz"] = None
+    else:
+        result["modules"]["heiz"] = None
+
+    if _bewegung_engine:
+        try:
+            result["modules"]["bewegung"] = _bewegung_engine.get_summary()
+        except Exception:
+            logger.exception("Bewegungsmodul summary failed")
+            result["modules"]["bewegung"] = None
+    else:
+        result["modules"]["bewegung"] = None
+
+    if _praesenz_engine:
+        try:
+            result["modules"]["praesenz"] = _praesenz_engine.get_summary()
+        except Exception:
+            logger.exception("Praesenzmodul summary failed")
+            result["modules"]["praesenz"] = None
+    else:
+        result["modules"]["praesenz"] = None
+
+    return jsonify(result)
+
+
+@modules_bp.route("/zones/<zone_id>", methods=["GET"])
+@require_token
+def modules_zone_detail(zone_id):
+    """Aggregated zone detail for all 5 modules — single call per zone.
+
+    Returns per-zone data from each module engine.
+    """
+    from dataclasses import asdict
+
+    result: dict = {"ok": True, "zone_id": zone_id, "modules": {}}
+
+    if _licht_engine:
+        try:
+            result["modules"]["licht"] = asdict(_licht_engine.get_zone_state(zone_id))
+        except Exception:
+            result["modules"]["licht"] = None
+    else:
+        result["modules"]["licht"] = None
+
+    if _helligkeit_engine:
+        try:
+            result["modules"]["helligkeit"] = asdict(_helligkeit_engine.get_zone_brightness(zone_id))
+        except Exception:
+            result["modules"]["helligkeit"] = None
+    else:
+        result["modules"]["helligkeit"] = None
+
+    if _heiz_engine:
+        try:
+            result["modules"]["heiz"] = asdict(_heiz_engine.get_zone_climate(zone_id))
+        except Exception:
+            result["modules"]["heiz"] = None
+    else:
+        result["modules"]["heiz"] = None
+
+    if _bewegung_engine:
+        try:
+            result["modules"]["bewegung"] = asdict(_bewegung_engine.get_zone_motion(zone_id))
+        except Exception:
+            result["modules"]["bewegung"] = None
+    else:
+        result["modules"]["bewegung"] = None
+
+    if _praesenz_engine:
+        try:
+            result["modules"]["praesenz"] = asdict(_praesenz_engine.get_zone_presence(zone_id))
+        except Exception:
+            result["modules"]["praesenz"] = None
+    else:
+        result["modules"]["praesenz"] = None
+
+    return jsonify(result)
