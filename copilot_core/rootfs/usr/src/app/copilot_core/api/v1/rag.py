@@ -1082,13 +1082,16 @@ def rag_cache_clear() -> Tuple[Any, int] | Any:
         
         cache = _get_rag_cache()
         
-        # Clear all or specific keys
-        if namespace or pattern:
-            # Get all keys and filter
-            # Note: This requires Redis SCAN or iteration over local cache
-            # For now, clear all as a simple implementation
-            asyncio.run(cache.clear())
-            cleared = "all (namespace/pattern filter not yet implemented)"
+        # Clear all or filter by namespace/pattern
+        if namespace:
+            # Clear only keys matching the namespace prefix
+            prefix = f"rag:{namespace}:"
+            count = asyncio.run(cache.clear_by_prefix(prefix))
+            cleared = f"namespace '{namespace}' ({count} entries)"
+        elif pattern:
+            # Clear keys matching a glob pattern
+            count = asyncio.run(cache.clear_by_pattern(f"*{pattern}*"))
+            cleared = f"pattern '{pattern}' ({count} entries)"
         else:
             asyncio.run(cache.clear())
             cleared = "all"

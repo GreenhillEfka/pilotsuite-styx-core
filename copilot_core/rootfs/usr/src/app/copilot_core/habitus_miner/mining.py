@@ -416,14 +416,26 @@ def mine_with_context_stratification(
         
         _LOGGER.debug("Mining context '%s' with %d events", context, len(ctx_events))
         ctx_rules = mine_ab_rules(ctx_events, config)
-        
-        # TODO: Attach context variants to global rules in v0.2
-        # For v0.1, we just mine separately
-        for rule in ctx_rules:
-            rule.A = f"{rule.A}@{context}"
-            rule.B = f"{rule.B}@{context}"
-        
-        global_rules.extend(ctx_rules)
+
+        # Attach context rules as variants of matching global rules.
+        # If a global rule A→B exists and a context-specific A→B was mined,
+        # store it as a context_variant on the global rule instead of
+        # creating a separate top-level rule.
+        # Unmatched context rules are added as standalone with @context suffix.
+        global_rule_map = {(r.A, r.B): r for r in global_rules}
+
+        for ctx_rule in ctx_rules:
+            global_match = global_rule_map.get((ctx_rule.A, ctx_rule.B))
+            if global_match is not None:
+                # Attach as context variant on the matching global rule
+                if global_match.context_variants is None:
+                    global_match.context_variants = {}
+                global_match.context_variants[context] = ctx_rule
+            else:
+                # No matching global rule — add as standalone with context tag
+                ctx_rule.A = f"{ctx_rule.A}@{context}"
+                ctx_rule.B = f"{ctx_rule.B}@{context}"
+                global_rules.append(ctx_rule)
     
     # Re-sort and limit
     global_rules.sort(key=lambda r: r.score(), reverse=True)

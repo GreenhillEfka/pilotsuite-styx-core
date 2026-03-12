@@ -512,7 +512,77 @@ class HybridCacheManager:
                 _LOGGER.error("Error clearing Redis cache: %s", e)
         
         _LOGGER.info("Hybrid cache cleared")
-    
+
+    async def clear_by_prefix(self, prefix: str) -> int:
+        """Clear cache entries whose keys start with the given prefix.
+
+        Args:
+            prefix: Key prefix to match (e.g. "rag:ha_docs:")
+
+        Returns:
+            Number of entries deleted
+        """
+        deleted_count = 0
+
+        # Delete from local cache
+        async with self._lock:
+            keys_to_delete = [k for k in self._local_cache if k.startswith(prefix)]
+            for key in keys_to_delete:
+                del self._local_cache[key]
+                deleted_count += 1
+
+        # Delete from Redis
+        if self._redis_connected:
+            try:
+                pattern = f"{self._redis_prefix}{prefix}*"
+                keys = await self._redis_client.keys(pattern)
+                if keys:
+                    await self._redis_client.delete(*keys)
+                    deleted_count = max(deleted_count, len(keys))
+            except Exception as e:
+                _LOGGER.error("Error clearing Redis cache by prefix '%s': %s", prefix, e)
+
+        if deleted_count:
+            _LOGGER.info("Hybrid cache cleared %d entries with prefix '%s'", deleted_count, prefix)
+
+        return deleted_count
+
+    async def clear_by_pattern(self, pattern: str) -> int:
+        """Clear cache entries whose keys contain the given pattern.
+
+        Args:
+            pattern: Substring pattern to match anywhere in key
+
+        Returns:
+            Number of entries deleted
+        """
+        import fnmatch
+
+        deleted_count = 0
+
+        # Delete from local cache
+        async with self._lock:
+            keys_to_delete = [k for k in self._local_cache if fnmatch.fnmatch(k, pattern)]
+            for key in keys_to_delete:
+                del self._local_cache[key]
+                deleted_count += 1
+
+        # Delete from Redis using SCAN + pattern
+        if self._redis_connected:
+            try:
+                redis_pattern = f"{self._redis_prefix}{pattern}"
+                keys = await self._redis_client.keys(redis_pattern)
+                if keys:
+                    await self._redis_client.delete(*keys)
+                    deleted_count = max(deleted_count, len(keys))
+            except Exception as e:
+                _LOGGER.error("Error clearing Redis cache by pattern '%s': %s", pattern, e)
+
+        if deleted_count:
+            _LOGGER.info("Hybrid cache cleared %d entries matching '%s'", deleted_count, pattern)
+
+        return deleted_count
+
     async def exists(self, key: str) -> bool:
         """Check if key exists and is not expired."""
         if not self._config.cache_enabled:
