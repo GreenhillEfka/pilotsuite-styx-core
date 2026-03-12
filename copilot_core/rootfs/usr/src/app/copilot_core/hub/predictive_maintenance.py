@@ -245,6 +245,15 @@ class PredictiveMaintenanceEngine:
     def device_count(self) -> int:
         return len(self._devices)
 
+    def health_check(self) -> dict[str, Any]:
+        """Return health status for backend health endpoint."""
+        return {
+            "status": "ok",
+            "devices_monitored": len(self._devices),
+            "devices_healthy": sum(1 for d in self._devices.values() if d.status == "healthy"),
+            "devices_critical": sum(1 for d in self._devices.values() if d.status == "critical"),
+        }
+
     # ── Internal scoring ──────────────────────────────────────────────
 
     def _calculate_health_score(self, device: DeviceHealth) -> float:

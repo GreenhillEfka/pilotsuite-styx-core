@@ -272,9 +272,8 @@ class ChatHandler:
             except Exception as exc:
                 logger.warning("Web search failed: %s", exc)
 
-        # Sort by score descending, take top 10
-        results.sort(key=lambda r: r.get("score", 0), reverse=True)
-        results = results[:10]
+        # Reciprocal Rank Fusion (RRF) for hybrid search results
+        results = self._rrf_merge(results)
         sources = sources[:10]
 
         return {
@@ -282,6 +281,43 @@ class ChatHandler:
             "sources": sources,
             "query_type": query_type,
         }
+
+    @staticmethod
+    def _rrf_merge(results: List[Dict[str, Any]], k: int = 60, top_n: int = 10) -> List[Dict[str, Any]]:
+        """Reciprocal Rank Fusion: merge BM25 + Semantic results by rank.
+
+        RRF score = sum(1 / (k + rank_i)) across each search type's ranked list.
+        This avoids score normalization issues between different search backends.
+        """
+        # Group results by search type
+        by_type: Dict[str, List[Dict[str, Any]]] = {}
+        for r in results:
+            st = r.get("search_type", "unknown")
+            by_type.setdefault(st, []).append(r)
+
+        # Sort each type's list by score descending
+        for st in by_type:
+            by_type[st].sort(key=lambda x: x.get("score", 0), reverse=True)
+
+        # Compute RRF scores keyed by doc_id
+        rrf_scores: Dict[str, float] = {}
+        doc_map: Dict[str, Dict[str, Any]] = {}
+        for st, docs in by_type.items():
+            for rank, doc in enumerate(docs, start=1):
+                doc_id = doc.get("doc_id", f"unknown_{rank}")
+                rrf_scores[doc_id] = rrf_scores.get(doc_id, 0.0) + 1.0 / (k + rank)
+                if doc_id not in doc_map:
+                    doc_map[doc_id] = doc
+
+        # Sort by RRF score descending
+        ranked = sorted(rrf_scores.items(), key=lambda x: -x[1])
+        merged = []
+        for doc_id, rrf_score in ranked[:top_n]:
+            doc = doc_map[doc_id].copy()
+            doc["rrf_score"] = round(rrf_score, 6)
+            merged.append(doc)
+
+        return merged
 
     # ── Conversation Memory ──────────────────────────────────────────
 

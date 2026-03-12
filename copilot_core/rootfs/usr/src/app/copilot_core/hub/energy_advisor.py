@@ -416,6 +416,16 @@ class EnergyAdvisorEngine:
         ))
         return True
 
+    def health_check(self) -> dict[str, Any]:
+        """Return health status for backend health endpoint."""
+        return {
+            "status": "ok",
+            "devices_tracked": len(self._devices),
+            "recommendations_total": len(self._recommendations),
+            "recommendations_applied": sum(1 for r in self._recommendations if r.applied),
+            "electricity_price_ct": self._price_ct_kwh,
+        }
+
     # ── Dashboard ────────────────────────────────────────────────────────
 
     def get_dashboard(self) -> EnergyAdvisorDashboard:

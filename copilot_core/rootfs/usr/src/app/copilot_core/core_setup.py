@@ -631,6 +631,109 @@ async def init_services(hass=None, config: dict = None):
     except Exception:
         _LOGGER.exception("Failed to wire WebhookPusher module_data push")
 
+    # Wire Anomaly Detection to IntegrationBus events
+    try:
+        bus = services.get("integration_bus")
+        hub_anomaly = services.get("hub_anomaly")
+        if bus and hub_anomaly and hasattr(hub_anomaly, "ingest"):
+            def _anomaly_from_event(event):
+                """Feed HA state-change events into anomaly detection engine."""
+                data = event.data if hasattr(event, "data") else {}
+                entity_id = data.get("entity_id", "")
+                value = data.get("value")
+                if entity_id and value is not None:
+                    try:
+                        hub_anomaly.ingest(entity_id, float(value))
+                    except (ValueError, TypeError):
+                        pass
+
+            bus.subscribe("state.changed", _anomaly_from_event)
+            _LOGGER.info("AnomalyDetection wired to state.changed events via IntegrationBus")
+    except Exception:
+        _LOGGER.exception("Failed to wire AnomalyDetection to IntegrationBus")
+
+    # Wire Predictive Maintenance to IntegrationBus events
+    try:
+        bus = services.get("integration_bus")
+        hub_maintenance = services.get("hub_maintenance")
+        if bus and hub_maintenance and hasattr(hub_maintenance, "ingest_metric"):
+            def _maintenance_from_event(event):
+                """Feed device metrics into predictive maintenance engine."""
+                data = event.data if hasattr(event, "data") else {}
+                device_id = data.get("device_id", "")
+                metric = data.get("metric", "")
+                value = data.get("value")
+                if device_id and metric and value is not None:
+                    try:
+                        hub_maintenance.ingest_metric(device_id, metric, float(value))
+                    except (ValueError, TypeError):
+                        pass
+
+            bus.subscribe("device.metric", _maintenance_from_event)
+            _LOGGER.info("PredictiveMaintenance wired to device.metric events via IntegrationBus")
+    except Exception:
+        _LOGGER.exception("Failed to wire PredictiveMaintenance to IntegrationBus")
+
+    # Wire Presence Intelligence → Scene suggestions
+    try:
+        bus = services.get("integration_bus")
+        hub_presence = services.get("hub_presence")
+        hub_scenes = services.get("hub_scenes")
+        if bus and hub_scenes and hasattr(hub_scenes, "suggest_scenes"):
+            def _scene_from_presence(event):
+                """Trigger scene suggestions when presence changes."""
+                data = event.data if hasattr(event, "data") else {}
+                zone_id = data.get("zone_id", "")
+                is_home = data.get("is_home", True)
+                occupancy = data.get("occupancy_count", 1)
+                if zone_id:
+                    try:
+                        from copilot_core.hub.scene_intelligence import SceneContext
+                        from datetime import datetime, timezone
+                        now = datetime.now(tz=timezone.utc)
+                        ctx = SceneContext(
+                            hour=now.hour,
+                            is_home=is_home,
+                            occupancy_count=occupancy,
+                            active_zone=zone_id,
+                            is_weekend=now.weekday() >= 5,
+                        )
+                        hub_scenes.suggest_scenes(ctx, limit=3)
+                    except Exception:
+                        pass
+
+            bus.subscribe("presence.changed", _scene_from_presence)
+            _LOGGER.info("SceneIntelligence wired to presence.changed events via IntegrationBus")
+    except Exception:
+        _LOGGER.exception("Failed to wire SceneIntelligence to IntegrationBus")
+
+    # Wire Anomaly Detection → Notification Intelligence
+    try:
+        bus = services.get("integration_bus")
+        hub_anomaly = services.get("hub_anomaly")
+        hub_notifications = services.get("hub_notifications")
+        if bus and hub_notifications and hasattr(hub_notifications, "add_notification"):
+            def _notify_on_anomaly(event):
+                """Create notification when anomaly is detected."""
+                data = event.data if hasattr(event, "data") else {}
+                severity = data.get("severity", "info")
+                if severity in ("warning", "critical"):
+                    try:
+                        hub_notifications.add_notification(
+                            title=f"Anomalie erkannt: {data.get('entity_id', 'unbekannt')}",
+                            message=data.get("description", ""),
+                            severity=severity,
+                            category="anomaly",
+                            source="anomaly_detection",
+                        )
+                    except Exception:
+                        pass
+
+            bus.subscribe("anomaly.detected", _notify_on_anomaly)
+            _LOGGER.info("NotificationIntelligence wired to anomaly.detected events")
+    except Exception:
+        _LOGGER.exception("Failed to wire NotificationIntelligence to IntegrationBus")
+
     # Calculate startup time
     services["startup_time_ms"] = (time.perf_counter() - start_time) * 1000
     
@@ -890,7 +993,12 @@ def register_blueprints(app: Flask, services: dict) -> None:
     # Explain API (explainability for suggestions/patterns)
     try:
         from copilot_core.api.v1.explain import explain_bp, init_explain_api
-        init_explain_api(None)  # ExplainabilityEngine not yet initialized
+        from copilot_core.explainability import ExplainabilityEngine
+        explain_engine = ExplainabilityEngine(
+            brain_graph_service=services.get("brain_graph_service"),
+        )
+        services["explainability_engine"] = explain_engine
+        init_explain_api(explain_engine)
         app.register_blueprint(explain_bp)
     except Exception:
         _LOGGER.exception("Failed to register explain_bp")
