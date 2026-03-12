@@ -1,7 +1,14 @@
-"""Helligkeitsmodul — Helligkeitsverfolgung pro Zone (v1.0.0).
+"""Helligkeitsmodul — Helligkeitsverfolgung pro Zone (v1.1.0).
 
 Verfolgt Lux-Sensoren (innen/aussen) pro Zone und berechnet
 Lichtbedarf, Defizit und empfohlene Dimmung.
+
+Architektur-Hinweis:
+    Dieses Modul ist der **Sensor-Layer** fuer Helligkeitsdaten.
+    ``light_intelligence.py`` ist der uebergeordnete **Intelligence-Layer**
+    mit Sonnentracking, Mood-Scenes und erweiterter Analyse.
+    Beide nutzen ``CloudResilientFilter`` aus ``brightness_filter.py``
+    fuer die cloud-resistente Aussenbeleuchtung.
 
 Features:
 - Indoor/Outdoor Helligkeitssensoren mit Lux-Tracking
@@ -14,10 +21,11 @@ Features:
 from __future__ import annotations
 
 import logging
-from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
+
+from copilot_core.hub.brightness_filter import CloudResilientFilter
 
 logger = logging.getLogger(__name__)
 
@@ -65,8 +73,7 @@ class HelligkeitModuleEngine:
         self._sensors: dict[str, HelligkeitSensor] = {}
         self._zone_config: dict[str, dict[str, Any]] = {}
         self._zone_names: dict[str, str] = {}
-        self._outdoor_history: deque[float] = deque(maxlen=10)
-        self._last_outdoor_avg: float | None = None
+        self._outdoor_filter = CloudResilientFilter(window_size=10, hysteresis_pct=12.0)
 
     def register_sensor(
         self, entity_id: str, zone_id: str, location: str = "indoor",
@@ -107,7 +114,7 @@ class HelligkeitModuleEngine:
         sensor.last_lux = lux
         sensor.last_update = datetime.now(tz=timezone.utc)
         if sensor.location == "outdoor":
-            self._outdoor_history.append(lux)
+            self._outdoor_filter.add_reading(lux)
         logger.debug("Helligkeitsmodul: %s = %.1f lx", entity_id, lux)
         return sensor
 
@@ -120,17 +127,8 @@ class HelligkeitModuleEngine:
         return count
 
     def get_outdoor_brightness(self) -> float:
-        """Berechnet cloud-resistente Aussenbeleuchtung mit gleitendem Durchschnitt und 12% Hysterese."""
-        if not self._outdoor_history:
-            return 0.0
-        current_avg = sum(self._outdoor_history) / len(self._outdoor_history)
-        if self._last_outdoor_avg is not None:
-            delta = abs(current_avg - self._last_outdoor_avg)
-            threshold = self._last_outdoor_avg * 0.12
-            if delta < threshold:
-                return self._last_outdoor_avg
-        self._last_outdoor_avg = current_avg
-        return current_avg
+        """Berechnet cloud-resistente Aussenbeleuchtung (12% Hysterese via CloudResilientFilter)."""
+        return self._outdoor_filter.get_filtered()
 
     def get_zone_brightness(self, zone_id: str) -> ZoneHelligkeit:
         """Berechnet den Helligkeitszustand einer Zone."""

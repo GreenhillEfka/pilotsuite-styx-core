@@ -3,8 +3,13 @@ PilotSuite Core — Styx
 
 Main Application Entry Point.
 Delegates service initialization and blueprint registration to core_setup.py.
+
+App Factory pattern: all initialization in ``create_app()``.
+Module-level ``app = create_app()`` preserves backward compatibility
+(``from main import app`` still works).
 """
 
+import asyncio as _asyncio
 import json
 import logging as _logging
 import os
@@ -25,6 +30,23 @@ APP_VERSION = get_runtime_version()
 
 _main_logger = _logging.getLogger(__name__)
 
+DEV_LOG_PATH = "/data/dev_logs.jsonl"
+DEV_LOG_MAX_CACHE = 200
+SLOW_REQUEST_THRESHOLD = 2.0  # seconds
+
+TEMPLATE_DIR = os.path.join(os.path.dirname(__file__), 'templates')
+STATIC_DIR = os.path.join(os.path.dirname(__file__), 'static')
+
+# Shared mutable state (module-level, thread-safe)
+_REQUEST_METRICS: dict = {"total": 0, "slow": 0, "errors": 0, "by_endpoint": {}}
+_METRICS_LOCK = _threading.Lock()
+_DEV_LOG_CACHE: list[dict] = []
+_DEV_LOG_LOCK = _threading.Lock()
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
 
 def _load_options_json(path: str = "/data/options.json") -> dict:
     """Lade Add-on Konfiguration aus options.json (Home Assistant Supervisor)."""
@@ -33,6 +55,34 @@ def _load_options_json(path: str = "/data/options.json") -> dict:
             return json.load(fh) or {}
     except Exception:
         return {}
+
+
+def _now_iso():
+    from datetime import datetime, timezone
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _append_dev_log(entry: dict) -> None:
+    os.makedirs(os.path.dirname(DEV_LOG_PATH), exist_ok=True)
+    with open(DEV_LOG_PATH, "a", encoding="utf-8") as fh:
+        fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    with _DEV_LOG_LOCK:
+        _DEV_LOG_CACHE.append(entry)
+        if len(_DEV_LOG_CACHE) > DEV_LOG_MAX_CACHE:
+            del _DEV_LOG_CACHE[: len(_DEV_LOG_CACHE) - DEV_LOG_MAX_CACHE]
+
+
+def _load_dev_log_cache() -> None:
+    try:
+        with open(DEV_LOG_PATH, "r", encoding="utf-8") as fh:
+            lines = fh.readlines()[-DEV_LOG_MAX_CACHE:]
+        for line in lines:
+            try:
+                _DEV_LOG_CACHE.append(json.loads(line))
+            except Exception:
+                continue
+    except Exception:
+        return
 
 
 # ---------------------------------------------------------------------------
@@ -90,440 +140,315 @@ def _preflight_check() -> dict:
     return checks
 
 
-DEV_LOG_PATH = "/data/dev_logs.jsonl"
-DEV_LOG_MAX_CACHE = 200
-
-app = Flask(__name__)
-
-# Initialize compression for API responses
-Compress(app)
-app.config['COMPRESS_MIMETYPES'] = ['application/json', 'text/html']
-app.config['COMPRESS_LEVEL'] = 6
-app.config['COMPRESS_MIN_SIZE'] = 500
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16 MB upload limit
-
 # ---------------------------------------------------------------------------
-# Request timing middleware + correlation IDs (v3.6.0)
+# App Factory
 # ---------------------------------------------------------------------------
 
-_REQUEST_METRICS: dict = {"total": 0, "slow": 0, "errors": 0, "by_endpoint": {}}
-_METRICS_LOCK = _threading.Lock()
-SLOW_REQUEST_THRESHOLD = 2.0  # seconds
+def _configure_compression(flask_app: Flask) -> None:
+    Compress(flask_app)
+    flask_app.config['COMPRESS_MIMETYPES'] = ['application/json', 'text/html']
+    flask_app.config['COMPRESS_LEVEL'] = 6
+    flask_app.config['COMPRESS_MIN_SIZE'] = 500
+    flask_app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16 MB
 
 
-@app.before_request
-def _before_request():
-    g.start_time = time.time()
-    g.request_id = request.headers.get("X-Request-ID", uuid.uuid4().hex[:12])
-    g.api_version = parse_accept_version(request.headers.get("Accept-Version"))
+def _register_middleware(flask_app: Flask) -> None:
+    """Request timing middleware + correlation IDs (v3.6.0)."""
 
-
-@app.after_request
-def _after_request(response):
-    duration = time.time() - getattr(g, "start_time", time.time())
-    req_id = getattr(g, "request_id", "-")
-    response.headers["X-Request-ID"] = req_id
-    response.headers["X-Response-Time"] = f"{duration:.3f}s"
-    response.headers["X-API-Version"] = getattr(g, "api_version", API_VERSION)
-
-    # Deprecation warnings (v5.0.0)
-    deprecation = get_deprecation_info(request.path)
-    if deprecation:
-        response.headers["Deprecation"] = "true"
-        response.headers["Sunset"] = deprecation.get("sunset", "")
-        if deprecation.get("successor"):
-            response.headers["Link"] = f'<{deprecation["successor"]}>; rel="successor-version"'
-
-    endpoint = request.endpoint or request.path
-    status = response.status_code
-
-    with _METRICS_LOCK:
-        _REQUEST_METRICS["total"] += 1
-        if duration >= SLOW_REQUEST_THRESHOLD:
-            _REQUEST_METRICS["slow"] += 1
-            _main_logger.warning(
-                "SLOW REQUEST [%s] %s %s -> %d (%.2fs)",
-                req_id, request.method, request.path, status, duration,
-            )
-        if status >= 500:
-            _REQUEST_METRICS["errors"] += 1
-
-        ep_key = f"{request.method} {endpoint}"
-        ep = _REQUEST_METRICS["by_endpoint"].setdefault(ep_key, {
-            "count": 0, "total_ms": 0, "max_ms": 0, "errors": 0
-        })
-        ep["count"] += 1
-        ep["total_ms"] += int(duration * 1000)
-        ep["max_ms"] = max(ep["max_ms"], int(duration * 1000))
-        if status >= 500:
-            ep["errors"] += 1
-
-    return response
-
-
-# ---------------------------------------------------------------------------
-# Service initialization
-# ---------------------------------------------------------------------------
-
-_options = _load_options_json()
-
-# Run pre-flight checks
-_preflight_results = _preflight_check()
-_main_logger.info("Pre-flight check results: %s", json.dumps(_preflight_results))
-
-try:
-    import asyncio as _asyncio
-    _services = _asyncio.run(init_services(config=_options))
-except Exception:
-    _main_logger.exception("CRITICAL: init_services failed — starting with empty services")
-    _services = {}
-
-try:
-    register_blueprints(app, _services)
-except Exception:
-    _main_logger.exception("CRITICAL: register_blueprints failed")
-
-# Store startup info
-_STARTUP_TIME = time.time()
-app.config["STARTUP_TIME"] = _STARTUP_TIME
-app.config["PREFLIGHT"] = _preflight_results
-
-# In-memory ring buffer of recent dev logs (thread-safe).
-_DEV_LOG_CACHE: list[dict] = []
-_DEV_LOG_LOCK = _threading.Lock()
-
-
-def _now_iso():
-    from datetime import datetime, timezone
-    return datetime.now(timezone.utc).isoformat()
-
-
-def _append_dev_log(entry: dict) -> None:
-    import json
-    os.makedirs(os.path.dirname(DEV_LOG_PATH), exist_ok=True)
-    with open(DEV_LOG_PATH, "a", encoding="utf-8") as fh:
-        fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
-
-    with _DEV_LOG_LOCK:
-        _DEV_LOG_CACHE.append(entry)
-        if len(_DEV_LOG_CACHE) > DEV_LOG_MAX_CACHE:
-            del _DEV_LOG_CACHE[: len(_DEV_LOG_CACHE) - DEV_LOG_MAX_CACHE]
-
-
-def _load_dev_log_cache() -> None:
-    import json
-    try:
-        with open(DEV_LOG_PATH, "r", encoding="utf-8") as fh:
-            lines = fh.readlines()[-DEV_LOG_MAX_CACHE:]
-        for line in lines:
-            try:
-                _DEV_LOG_CACHE.append(json.loads(line))
-            except Exception:
-                continue
-    except FileNotFoundError:
-        return
-    except Exception:
-        return
-
-
-_load_dev_log_cache()
-
-
-TEMPLATE_DIR = os.path.join(os.path.dirname(__file__), 'templates')
-STATIC_DIR = os.path.join(os.path.dirname(__file__), 'static')
-
-
-@app.get("/")
-def index():
-    """Serve PilotSuite Dashboard (ingress panel)."""
-    return render_template(
-        "dashboard.html",
-        dashboard_auth_token=get_auth_token() or "",
-    )
-
-
-@app.get("/api/v1/cards/<path:filename>")
-def serve_card(filename):
-    """Serve Lovelace custom card JavaScript files.
-
-    These are loaded as Lovelace resources by the HACS integration:
-      /api/v1/cards/pilotsuite-cards.js
-    """
-    cards_dir = os.path.join(STATIC_DIR, 'cards')
-    response = send_from_directory(cards_dir, filename)
-    response.headers['Cache-Control'] = 'public, max-age=3600'
-    response.headers['Content-Type'] = 'application/javascript'
-    return response
-
-
-@app.get("/health")
-def health():
-    """Basic liveness probe — always returns 200 if the process is alive."""
-    return jsonify({"ok": True, "time": _now_iso()})
-
-
-@app.get("/ready")
-def readiness():
-    """Readiness probe — returns 200 only if critical services are initialized."""
-    services = app.config.get("COPILOT_SERVICES", {})
-    brain_ok = services.get("brain_graph_service") is not None
-    memory_ok = services.get("conversation_memory") is not None
-    conv_enabled = str(os.environ.get("CONVERSATION_ENABLED", "true")).lower() in (
-        "1",
-        "true",
-        "yes",
-        "on",
-    )
-    ollama_url = os.environ.get("OLLAMA_URL", "http://localhost:11434")
-    ollama_ok = True
-    if conv_enabled:
-        try:
-            import requests as http_req
-            r = http_req.get(f"{ollama_url}/api/tags", timeout=2)
-            ollama_ok = bool(r.ok)
-        except Exception:
-            ollama_ok = False
-
-    ready = brain_ok and memory_ok and ollama_ok
-    status = 200 if ready else 503
-    return jsonify({
-        "ready": ready,
-        "brain_graph": brain_ok,
-        "conversation_memory": memory_ok,
-        "ollama_required": conv_enabled,
-        "ollama": ollama_ok,
-        "ollama_url": ollama_url,
-        "vector_store": services.get("vector_store") is not None,
-        "uptime_s": int(time.time() - _STARTUP_TIME),
-    }), status
-
-
-@app.get("/api/v1/health/deep")
-def deep_health():
-    """Deep health check — tests all services and external dependencies."""
-    import requests as http_req
-
-    checks = {}
-
-    # 1. Internal services
-    services = app.config.get("COPILOT_SERVICES", {})
-    for svc_name in [
-        "brain_graph_service", "conversation_memory", "vector_store",
-        "mood_service", "habitus_service", "neuron_manager",
-        "web_search_service", "module_registry",
-    ]:
-        checks[svc_name] = services.get(svc_name) is not None
-
-    # 2. HA Supervisor
-    ha_token = os.environ.get("SUPERVISOR_TOKEN", "")
-    if ha_token:
-        try:
-            r = http_req.get(
-                "http://supervisor/core/api/",
-                headers={"Authorization": f"Bearer {ha_token}"},
-                timeout=5,
-            )
-            checks["ha_supervisor"] = r.ok
-        except Exception:
-            checks["ha_supervisor"] = False
-    else:
-        checks["ha_supervisor"] = None
-
-    # 3. Ollama
-    ollama_url = os.environ.get("OLLAMA_URL", "http://localhost:11434")
-    try:
-        r = http_req.get(f"{ollama_url}/api/tags", timeout=5)
-        checks["ollama"] = r.ok
-    except Exception:
-        checks["ollama"] = False
-
-    # 4. SQLite databases
-    for db_label, db_path in [
-        ("conversation_memory_db", "/data/conversation_memory.db"),
-        ("vector_store_db", "/data/vector_store.db"),
-        ("shopping_db", "/data/shopping_reminders.db"),
-    ]:
-        checks[db_label] = os.path.exists(db_path)
-
-    # 5. Disk usage
-    try:
-        import shutil
-        usage = shutil.disk_usage("/data")
-        checks["disk_free_mb"] = int(usage.free / (1024 * 1024))
-        checks["disk_used_pct"] = int(usage.used / usage.total * 100)
-    except Exception:
-        checks["disk_free_mb"] = -1
-
-    # 6. Request metrics
-    checks["request_metrics"] = {
-        "total": _REQUEST_METRICS["total"],
-        "slow": _REQUEST_METRICS["slow"],
-        "errors": _REQUEST_METRICS["errors"],
-    }
-
-    # 7. Circuit breakers (v3.6.0)
-    try:
-        from copilot_core.circuit_breaker import get_all_breaker_status
-        checks["circuit_breakers"] = get_all_breaker_status()
-    except Exception:
-        checks["circuit_breakers"] = []
-
-    all_ok = all(
-        v is True for k, v in checks.items()
-        if isinstance(v, bool) and k not in ("ha_supervisor",)
-    )
-
-    return jsonify({
-        "healthy": all_ok,
-        "version": APP_VERSION,
-        "uptime_s": int(time.time() - _STARTUP_TIME),
-        "checks": checks,
-        "time": _now_iso(),
-    }), 200 if all_ok else 503
-
-
-@app.get("/api/v1/health/metrics")
-def request_metrics():
-    """Request timing metrics — endpoint latencies, slow requests, error rates."""
-    with _METRICS_LOCK:
-        top_slow = sorted(
-            _REQUEST_METRICS["by_endpoint"].items(),
-            key=lambda x: x[1]["max_ms"],
-            reverse=True,
-        )[:10]
-    return jsonify({
-        "total_requests": _REQUEST_METRICS["total"],
-        "slow_requests": _REQUEST_METRICS["slow"],
-        "errors": _REQUEST_METRICS["errors"],
-        "slow_threshold_s": SLOW_REQUEST_THRESHOLD,
-        "top_endpoints_by_latency": {k: v for k, v in top_slow},
-        "uptime_s": int(time.time() - _STARTUP_TIME),
-    })
-
-
-@app.get("/version")
-def version():
-    return jsonify({
-        "name": "Styx",
-        "suite": "PilotSuite",
-        "version": APP_VERSION,
-        "time": _now_iso(),
-    })
-
-
-@app.post("/api/v1/echo")
-@require_token
-def echo():
-    payload = request.get_json(silent=True) or {}
-    return jsonify({"time": _now_iso(), "received": payload})
-
-
-@app.post("/api/v1/dev/logs")
-@require_token
-def ingest_dev_logs():
-    payload = request.get_json(silent=True) or {}
-    entry = {
-        "received": _now_iso(),
-        "payload": payload,
-    }
-
-    try:
-        _append_dev_log(entry)
-    except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 500
-
-    return jsonify({"ok": True, "stored": True})
-
-
-@app.get("/api/v1/dev/logs")
-@require_token
-def get_dev_logs():
-    try:
-        limit = int(request.args.get("limit", "50"))
-    except Exception:
-        limit = 50
-    limit = max(1, min(limit, DEV_LOG_MAX_CACHE))
-
-    return jsonify({
-        "ok": True,
-        "count": min(limit, len(_DEV_LOG_CACHE)),
-        "items": _DEV_LOG_CACHE[-limit:],
-    })
-
-
-def create_app(config: dict | None = None) -> Flask:
-    """Factory function to create a Flask app instance.
-    
-    Used primarily for testing to allow custom configuration.
-    For production, use the global `app` instance directly.
-    
-    Args:
-        config: Optional configuration dict to override defaults.
-        
-    Returns:
-        Configured Flask application instance.
-    """
-    # For testing, we create a fresh app instance
-    test_app = Flask(__name__)
-    
-    # Apply compression
-    Compress(test_app)
-    test_app.config['COMPRESS_MIMETYPES'] = ['application/json', 'text/html']
-    test_app.config['COMPRESS_LEVEL'] = 6
-    test_app.config['COMPRESS_MIN_SIZE'] = 500
-    test_app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
-    
-    # Apply custom config if provided
-    if config:
-        test_app.config.update(config)
-    
-    # Apply request timing middleware
-    @test_app.before_request
+    @flask_app.before_request
     def _before_request():
         g.start_time = time.time()
         g.request_id = request.headers.get("X-Request-ID", uuid.uuid4().hex[:12])
         g.api_version = parse_accept_version(request.headers.get("Accept-Version"))
 
-    @test_app.after_request
+    @flask_app.after_request
     def _after_request(response):
         duration = time.time() - getattr(g, "start_time", time.time())
         req_id = getattr(g, "request_id", "-")
         response.headers["X-Request-ID"] = req_id
         response.headers["X-Response-Time"] = f"{duration:.3f}s"
         response.headers["X-API-Version"] = getattr(g, "api_version", API_VERSION)
+
+        # Deprecation warnings (v5.0.0)
+        deprecation = get_deprecation_info(request.path)
+        if deprecation:
+            response.headers["Deprecation"] = "true"
+            response.headers["Sunset"] = deprecation.get("sunset", "")
+            if deprecation.get("successor"):
+                response.headers["Link"] = f'<{deprecation["successor"]}>; rel="successor-version"'
+
+        endpoint = request.endpoint or request.path
+        status = response.status_code
+
+        with _METRICS_LOCK:
+            _REQUEST_METRICS["total"] += 1
+            if duration >= SLOW_REQUEST_THRESHOLD:
+                _REQUEST_METRICS["slow"] += 1
+                _main_logger.warning(
+                    "SLOW REQUEST [%s] %s %s -> %d (%.2fs)",
+                    req_id, request.method, request.path, status, duration,
+                )
+            if status >= 500:
+                _REQUEST_METRICS["errors"] += 1
+
+            ep_key = f"{request.method} {endpoint}"
+            ep = _REQUEST_METRICS["by_endpoint"].setdefault(ep_key, {
+                "count": 0, "total_ms": 0, "max_ms": 0, "errors": 0
+            })
+            ep["count"] += 1
+            ep["total_ms"] += int(duration * 1000)
+            ep["max_ms"] = max(ep["max_ms"], int(duration * 1000))
+            if status >= 500:
+                ep["errors"] += 1
+
         return response
-    
-    # For testing: register only essential blueprints without full service init
-    if config and config.get('TESTING'):
+
+
+def _register_routes(flask_app: Flask, startup_time: float) -> None:
+    """Register main-level routes (health, ready, version, dev-logs, etc.)."""
+
+    @flask_app.get("/")
+    def index():
+        """Serve PilotSuite Dashboard (ingress panel)."""
+        return render_template(
+            "dashboard.html",
+            dashboard_auth_token=get_auth_token() or "",
+        )
+
+    @flask_app.get("/api/v1/cards/<path:filename>")
+    def serve_card(filename):
+        cards_dir = os.path.join(STATIC_DIR, 'cards')
+        response = send_from_directory(cards_dir, filename)
+        response.headers['Cache-Control'] = 'public, max-age=3600'
+        response.headers['Content-Type'] = 'application/javascript'
+        return response
+
+    @flask_app.get("/health")
+    def health():
+        return jsonify({"ok": True, "time": _now_iso()})
+
+    @flask_app.get("/ready")
+    def readiness():
+        services = flask_app.config.get("COPILOT_SERVICES", {})
+        brain_ok = services.get("brain_graph_service") is not None
+        memory_ok = services.get("conversation_memory") is not None
+        conv_enabled = str(os.environ.get("CONVERSATION_ENABLED", "true")).lower() in (
+            "1", "true", "yes", "on",
+        )
+        ollama_url = os.environ.get("OLLAMA_URL", "http://localhost:11434")
+        ollama_ok = True
+        if conv_enabled:
+            try:
+                import requests as http_req
+                r = http_req.get(f"{ollama_url}/api/tags", timeout=2)
+                ollama_ok = bool(r.ok)
+            except Exception:
+                ollama_ok = False
+
+        ready = brain_ok and memory_ok and ollama_ok
+        return jsonify({
+            "ready": ready,
+            "brain_graph": brain_ok,
+            "conversation_memory": memory_ok,
+            "ollama_required": conv_enabled,
+            "ollama": ollama_ok,
+            "ollama_url": ollama_url,
+            "vector_store": services.get("vector_store") is not None,
+            "uptime_s": int(time.time() - startup_time),
+        }), 200 if ready else 503
+
+    @flask_app.get("/api/v1/health/deep")
+    def deep_health():
+        import requests as http_req
+
+        checks = {}
+
+        services = flask_app.config.get("COPILOT_SERVICES", {})
+        for svc_name in [
+            "brain_graph_service", "conversation_memory", "vector_store",
+            "mood_service", "habitus_service", "neuron_manager",
+            "web_search_service", "module_registry",
+        ]:
+            checks[svc_name] = services.get(svc_name) is not None
+
+        ha_token = os.environ.get("SUPERVISOR_TOKEN", "")
+        if ha_token:
+            try:
+                r = http_req.get(
+                    "http://supervisor/core/api/",
+                    headers={"Authorization": f"Bearer {ha_token}"},
+                    timeout=5,
+                )
+                checks["ha_supervisor"] = r.ok
+            except Exception:
+                checks["ha_supervisor"] = False
+        else:
+            checks["ha_supervisor"] = None
+
+        ollama_url = os.environ.get("OLLAMA_URL", "http://localhost:11434")
         try:
-            from copilot_core.api.v1.zone_editor import zone_editor_bp, zone_editor_legacy_bp
-            from copilot_core.api.v1.zone_dashboard import zone_dashboard_bp
-            # Blueprints already have their url_prefix defined, don't add another
-            test_app.register_blueprint(zone_editor_bp)
-            test_app.register_blueprint(zone_editor_legacy_bp)
-            test_app.register_blueprint(zone_dashboard_bp)
-        except ImportError as e:
-            _main_logger.warning("Could not register test blueprints: %s", e)
-        
-        # Add basic routes
-        @test_app.get("/")
-        def index():
-            return jsonify({"ok": True, "testing": True})
-        
-        @test_app.get("/health")
-        def health():
-            return jsonify({"ok": True, "time": _now_iso()})
-    else:
-        # Production: full initialization
-        try:
-            import asyncio as _asyncio
-            options = _load_options_json()
-            services = _asyncio.run(init_services(config=options))
-            register_blueprints(test_app, services)
+            r = http_req.get(f"{ollama_url}/api/tags", timeout=5)
+            checks["ollama"] = r.ok
         except Exception:
-            _main_logger.exception("Service initialization failed")
-    
-    return test_app
+            checks["ollama"] = False
+
+        for db_label, db_path in [
+            ("conversation_memory_db", "/data/conversation_memory.db"),
+            ("vector_store_db", "/data/vector_store.db"),
+            ("shopping_db", "/data/shopping_reminders.db"),
+        ]:
+            checks[db_label] = os.path.exists(db_path)
+
+        try:
+            import shutil
+            usage = shutil.disk_usage("/data")
+            checks["disk_free_mb"] = int(usage.free / (1024 * 1024))
+            checks["disk_used_pct"] = int(usage.used / usage.total * 100)
+        except Exception:
+            checks["disk_free_mb"] = -1
+
+        checks["request_metrics"] = {
+            "total": _REQUEST_METRICS["total"],
+            "slow": _REQUEST_METRICS["slow"],
+            "errors": _REQUEST_METRICS["errors"],
+        }
+
+        try:
+            from copilot_core.circuit_breaker import get_all_breaker_status
+            checks["circuit_breakers"] = get_all_breaker_status()
+        except Exception:
+            checks["circuit_breakers"] = []
+
+        all_ok = all(
+            v is True for k, v in checks.items()
+            if isinstance(v, bool) and k not in ("ha_supervisor",)
+        )
+
+        return jsonify({
+            "healthy": all_ok,
+            "version": APP_VERSION,
+            "uptime_s": int(time.time() - startup_time),
+            "checks": checks,
+            "time": _now_iso(),
+        }), 200 if all_ok else 503
+
+    @flask_app.get("/api/v1/health/metrics")
+    def request_metrics():
+        with _METRICS_LOCK:
+            top_slow = sorted(
+                _REQUEST_METRICS["by_endpoint"].items(),
+                key=lambda x: x[1]["max_ms"],
+                reverse=True,
+            )[:10]
+        return jsonify({
+            "total_requests": _REQUEST_METRICS["total"],
+            "slow_requests": _REQUEST_METRICS["slow"],
+            "errors": _REQUEST_METRICS["errors"],
+            "slow_threshold_s": SLOW_REQUEST_THRESHOLD,
+            "top_endpoints_by_latency": {k: v for k, v in top_slow},
+            "uptime_s": int(time.time() - startup_time),
+        })
+
+    @flask_app.get("/version")
+    def version():
+        return jsonify({
+            "name": "Styx",
+            "suite": "PilotSuite",
+            "version": APP_VERSION,
+            "time": _now_iso(),
+        })
+
+    @flask_app.post("/api/v1/echo")
+    @require_token
+    def echo():
+        payload = request.get_json(silent=True) or {}
+        return jsonify({"time": _now_iso(), "received": payload})
+
+    @flask_app.post("/api/v1/dev/logs")
+    @require_token
+    def ingest_dev_logs():
+        payload = request.get_json(silent=True) or {}
+        entry = {"received": _now_iso(), "payload": payload}
+        try:
+            _append_dev_log(entry)
+        except Exception as e:
+            return jsonify({"ok": False, "error": str(e)}), 500
+        return jsonify({"ok": True, "stored": True})
+
+    @flask_app.get("/api/v1/dev/logs")
+    @require_token
+    def get_dev_logs():
+        try:
+            limit = int(request.args.get("limit", "50"))
+        except Exception:
+            limit = 50
+        limit = max(1, min(limit, DEV_LOG_MAX_CACHE))
+        return jsonify({
+            "ok": True,
+            "count": min(limit, len(_DEV_LOG_CACHE)),
+            "items": _DEV_LOG_CACHE[-limit:],
+        })
+
+
+def create_app(options: dict | None = None) -> Flask:
+    """Create and fully initialize the PilotSuite Flask application.
+
+    Args:
+        options: Override for /data/options.json (useful for testing).
+                 If None, options are loaded from disk.
+
+    Returns:
+        Fully configured Flask application with all services and blueprints.
+    """
+    flask_app = Flask(__name__)
+
+    # Compression
+    _configure_compression(flask_app)
+
+    # Request timing + correlation IDs
+    _register_middleware(flask_app)
+
+    # Load config
+    opts = options if options is not None else _load_options_json()
+
+    # Pre-flight checks
+    preflight_results = _preflight_check()
+    _main_logger.info("Pre-flight check results: %s", json.dumps(preflight_results))
+
+    # Initialize services
+    try:
+        services = _asyncio.run(init_services(config=opts))
+    except Exception:
+        _main_logger.exception("CRITICAL: init_services failed — starting with empty services")
+        services = {}
+
+    # Register blueprints
+    try:
+        register_blueprints(flask_app, services)
+    except Exception:
+        _main_logger.exception("CRITICAL: register_blueprints failed")
+
+    # Store startup metadata
+    startup_time = time.time()
+    flask_app.config["STARTUP_TIME"] = startup_time
+    flask_app.config["PREFLIGHT"] = preflight_results
+
+    # Load dev-log cache from disk
+    _load_dev_log_cache()
+
+    # Register main-level routes
+    _register_routes(flask_app, startup_time)
+
+    return flask_app
+
+
+# ---------------------------------------------------------------------------
+# Module-level app instance — backward compatibility for:
+#   - ``from main import app``
+#   - ``python3 -u main.py`` (Waitress entry point)
+# ---------------------------------------------------------------------------
+
+app = create_app()
 
 
 if __name__ == "__main__":
@@ -531,6 +456,6 @@ if __name__ == "__main__":
     port = int(os.environ.get("PORT", "8909"))
     _main_logger.info(
         "Starting PilotSuite v%s on %s:%d (pre-flight: %s)",
-        APP_VERSION, host, port, json.dumps(_preflight_results),
+        APP_VERSION, host, port, json.dumps(app.config.get("PREFLIGHT", {})),
     )
     serve(app, host=host, port=port)
