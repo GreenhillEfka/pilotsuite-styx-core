@@ -430,3 +430,55 @@ def create_app() -> Flask:
         return None
 
     return app
+
+
+def create_full_app(config: dict | None = None) -> Flask:
+    """Create a Flask app with ALL blueprints registered (like production).
+
+    Unlike ``create_app()`` which only registers the nested ``api_v1`` plus a
+    handful of standalone blueprints, this factory mirrors ``main.py`` by
+    calling ``init_services()`` and ``register_blueprints()`` from
+    ``core_setup.py``.  This ensures integration tests cover the full
+    production endpoint surface.
+
+    Args:
+        config: Optional configuration dict (forwarded to ``init_services``).
+
+    Returns:
+        Flask application with all services and blueprints wired.
+    """
+    import asyncio
+    from copilot_core.core_setup import init_services, register_blueprints
+
+    cfg = _build_config()
+    _setup_logging(cfg.log_level)
+
+    app = Flask(__name__)
+    app.config["COPILOT_CFG"] = cfg
+    app.config["TESTING"] = True
+
+    # Initialize security middleware
+    init_security_middleware(app)
+
+    # Initialize services (async → sync bridge)
+    try:
+        services = asyncio.run(init_services(config=config or {}))
+    except Exception:
+        logging.getLogger(__name__).exception("init_services failed in full test app")
+        services = {}
+
+    # Register all production blueprints
+    try:
+        register_blueprints(app, services)
+    except Exception:
+        logging.getLogger(__name__).exception("register_blueprints failed in full test app")
+
+    @app.get("/health")
+    def health():
+        return jsonify({"ok": True, "time": _now_iso()})
+
+    @app.get("/version")
+    def version():
+        return jsonify({"version": cfg.version, "time": _now_iso()})
+
+    return app

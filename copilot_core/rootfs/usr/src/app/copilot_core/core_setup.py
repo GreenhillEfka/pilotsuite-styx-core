@@ -9,14 +9,139 @@ Features:
 - Configurable via lazy_load_enabled flag
 - Performance metrics tracking
 - Memory optimization: only load modules when needed
+- Data-driven engine/blueprint registration to reduce boilerplate
 """
 
+import importlib
 import logging
 import time
 from typing import Dict, Any, Optional
 from flask import Flask
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _init_engine_group(
+    services: dict,
+    engine_defs: list[tuple[str, str, str]],
+    group_name: str,
+) -> None:
+    """Initialize a group of engines from (service_key, module_path, class_name) tuples.
+
+    Each engine is instantiated with no arguments. Failures are logged
+    individually; the remaining engines continue to initialize.
+    """
+    ok_count = 0
+    for service_key, module_path, class_name in engine_defs:
+        try:
+            mod = importlib.import_module(module_path)
+            cls = getattr(mod, class_name)
+            services[service_key] = cls()
+            ok_count += 1
+        except Exception:
+            _LOGGER.exception("Failed to init %s.%s", module_path, class_name)
+    _LOGGER.info("%s initialized (%d/%d services)", group_name, ok_count, len(engine_defs))
+
+
+def _wire_bus_events(services: dict) -> None:
+    """Wire IntegrationBus event subscriptions between services.
+
+    Each wiring is isolated — a failure in one does not affect the others.
+    """
+    bus = services.get("integration_bus")
+    if not bus:
+        return
+
+    # 1) Anomaly Detection ← state.changed
+    hub_anomaly = services.get("hub_anomaly")
+    if hub_anomaly and hasattr(hub_anomaly, "ingest"):
+        try:
+            def _anomaly_from_event(event, _svc=hub_anomaly):
+                data = event.data if hasattr(event, "data") else {}
+                entity_id = data.get("entity_id", "")
+                value = data.get("value")
+                if entity_id and value is not None:
+                    try:
+                        _svc.ingest(entity_id, float(value))
+                    except (ValueError, TypeError):
+                        pass
+
+            bus.subscribe("state.changed", _anomaly_from_event)
+            _LOGGER.info("AnomalyDetection wired to state.changed events")
+        except Exception:
+            _LOGGER.exception("Failed to wire AnomalyDetection")
+
+    # 2) Predictive Maintenance ← device.metric
+    hub_maintenance = services.get("hub_maintenance")
+    if hub_maintenance and hasattr(hub_maintenance, "ingest_metric"):
+        try:
+            def _maintenance_from_event(event, _svc=hub_maintenance):
+                data = event.data if hasattr(event, "data") else {}
+                device_id = data.get("device_id", "")
+                metric = data.get("metric", "")
+                value = data.get("value")
+                if device_id and metric and value is not None:
+                    try:
+                        _svc.ingest_metric(device_id, metric, float(value))
+                    except (ValueError, TypeError):
+                        pass
+
+            bus.subscribe("device.metric", _maintenance_from_event)
+            _LOGGER.info("PredictiveMaintenance wired to device.metric events")
+        except Exception:
+            _LOGGER.exception("Failed to wire PredictiveMaintenance")
+
+    # 3) Scene Intelligence ← presence.changed
+    hub_scenes = services.get("hub_scenes")
+    if hub_scenes and hasattr(hub_scenes, "suggest_scenes"):
+        try:
+            def _scene_from_presence(event, _svc=hub_scenes):
+                data = event.data if hasattr(event, "data") else {}
+                zone_id = data.get("zone_id", "")
+                if zone_id:
+                    try:
+                        from copilot_core.hub.scene_intelligence import SceneContext
+                        from datetime import datetime, timezone
+                        now = datetime.now(tz=timezone.utc)
+                        ctx = SceneContext(
+                            hour=now.hour,
+                            is_home=data.get("is_home", True),
+                            occupancy_count=data.get("occupancy_count", 1),
+                            active_zone=zone_id,
+                            is_weekend=now.weekday() >= 5,
+                        )
+                        _svc.suggest_scenes(ctx, limit=3)
+                    except Exception:
+                        pass
+
+            bus.subscribe("presence.changed", _scene_from_presence)
+            _LOGGER.info("SceneIntelligence wired to presence.changed events")
+        except Exception:
+            _LOGGER.exception("Failed to wire SceneIntelligence")
+
+    # 4) Notification Intelligence ← anomaly.detected
+    hub_notifications = services.get("hub_notifications")
+    if hub_notifications and hasattr(hub_notifications, "add_notification"):
+        try:
+            def _notify_on_anomaly(event, _svc=hub_notifications):
+                data = event.data if hasattr(event, "data") else {}
+                severity = data.get("severity", "info")
+                if severity in ("warning", "critical"):
+                    try:
+                        _svc.add_notification(
+                            title=f"Anomalie erkannt: {data.get('entity_id', 'unbekannt')}",
+                            message=data.get("description", ""),
+                            severity=severity,
+                            category="anomaly",
+                            source="anomaly_detection",
+                        )
+                    except Exception:
+                        pass
+
+            bus.subscribe("anomaly.detected", _notify_on_anomaly)
+            _LOGGER.info("NotificationIntelligence wired to anomaly.detected events")
+        except Exception:
+            _LOGGER.exception("Failed to wire NotificationIntelligence")
 
 
 def _safe_int(value, default: int, minimum: int = 1, maximum: int = 100000) -> int:
@@ -534,45 +659,30 @@ async def init_services(hass=None, config: dict = None):
     except Exception:
         _LOGGER.exception("Failed to init BirthdayService")
 
-    # Initialize PilotSuite Hub engines
+    # Initialize PilotSuite Hub engines (data-driven)
+    _HUB_ENGINES = [
+        ("hub_dashboard",       "copilot_core.hub.dashboard",                "DashboardHub"),
+        ("hub_plugin_manager",  "copilot_core.hub.plugin_manager",           "PluginManager"),
+        ("hub_multi_home",      "copilot_core.hub.multi_home",               "MultiHomeManager"),
+        ("hub_maintenance",     "copilot_core.hub.predictive_maintenance",   "PredictiveMaintenanceEngine"),
+        ("hub_anomaly",         "copilot_core.hub.anomaly_detection",        "AnomalyDetector"),
+        ("hub_zones",           "copilot_core.hub.habitus_zones",            "HabitusZoneEngine"),
+        ("hub_light",           "copilot_core.hub.light_intelligence",       "LightIntelligenceEngine"),
+        ("hub_modes",           "copilot_core.hub.zone_modes",               "ZoneModeEngine"),
+        ("hub_media",           "copilot_core.hub.media_follow",             "MediaFollowEngine"),
+        ("hub_energy",          "copilot_core.hub.energy_advisor",           "EnergyAdvisor"),
+        ("hub_templates",       "copilot_core.hub.automation_templates",     "AutomationTemplateEngine"),
+        ("hub_scenes",          "copilot_core.hub.scene_intelligence",       "SceneIntelligenceEngine"),
+        ("hub_presence",        "copilot_core.hub.presence_intelligence",    "PresenceIntelligenceEngine"),
+        ("hub_notifications",   "copilot_core.hub.notification_intelligence","NotificationIntelligenceEngine"),
+        ("hub_integration",     "copilot_core.hub.system_integration",       "SystemIntegrationHub"),
+        ("hub_brain_arch",      "copilot_core.hub.brain_architecture",       "BrainArchitectureEngine"),
+        ("hub_brain_activity",  "copilot_core.hub.brain_activity",           "BrainActivityTracker"),
+    ]
+    _init_engine_group(services, _HUB_ENGINES, "Hub engines")
+
+    # Initialize Hub API with engines
     try:
-        from copilot_core.hub.dashboard import DashboardHub
-        from copilot_core.hub.plugin_manager import PluginManager
-        from copilot_core.hub.multi_home import MultiHomeManager
-        from copilot_core.hub.predictive_maintenance import PredictiveMaintenanceEngine
-        from copilot_core.hub.anomaly_detection import AnomalyDetector
-        from copilot_core.hub.habitus_zones import HabitusZoneEngine
-        from copilot_core.hub.light_intelligence import LightIntelligenceEngine
-        from copilot_core.hub.zone_modes import ZoneModeEngine
-        from copilot_core.hub.media_follow import MediaFollowEngine
-        from copilot_core.hub.energy_advisor import EnergyAdvisor
-        from copilot_core.hub.automation_templates import AutomationTemplateEngine
-        from copilot_core.hub.scene_intelligence import SceneIntelligenceEngine
-        from copilot_core.hub.presence_intelligence import PresenceIntelligenceEngine
-        from copilot_core.hub.notification_intelligence import NotificationIntelligenceEngine
-        from copilot_core.hub.system_integration import SystemIntegrationHub
-        from copilot_core.hub.brain_architecture import BrainArchitectureEngine
-        from copilot_core.hub.brain_activity import BrainActivityTracker
-
-        services["hub_dashboard"] = DashboardHub()
-        services["hub_plugin_manager"] = PluginManager()
-        services["hub_multi_home"] = MultiHomeManager()
-        services["hub_maintenance"] = PredictiveMaintenanceEngine()
-        services["hub_anomaly"] = AnomalyDetector()
-        services["hub_zones"] = HabitusZoneEngine()
-        services["hub_light"] = LightIntelligenceEngine()
-        services["hub_modes"] = ZoneModeEngine()
-        services["hub_media"] = MediaFollowEngine()
-        services["hub_energy"] = EnergyAdvisor()
-        services["hub_templates"] = AutomationTemplateEngine()
-        services["hub_scenes"] = SceneIntelligenceEngine()
-        services["hub_presence"] = PresenceIntelligenceEngine()
-        services["hub_notifications"] = NotificationIntelligenceEngine()
-        services["hub_integration"] = SystemIntegrationHub()
-        services["hub_brain_arch"] = BrainArchitectureEngine()
-        services["hub_brain_activity"] = BrainActivityTracker()
-
-        # Initialize Hub API with engines
         from copilot_core.hub.api import init_hub_api
         init_hub_api(
             dashboard=services["hub_dashboard"],
@@ -593,24 +703,20 @@ async def init_services(hass=None, config: dict = None):
             brain_architecture=services["hub_brain_arch"],
             brain_activity=services["hub_brain_activity"],
         )
-        _LOGGER.info("Hub engines initialized (17 services)")
     except Exception:
-        _LOGGER.exception("Failed to init Hub engines")
+        _LOGGER.exception("Failed to init Hub API")
 
-    # Initialize PilotSuite Module engines (Licht, Helligkeit, Heiz, Bewegung, Praesenz)
+    # Initialize PilotSuite Module engines (data-driven)
+    _MODULE_ENGINES = [
+        ("hub_licht",       "copilot_core.hub.licht_module",       "LichtModuleEngine"),
+        ("hub_helligkeit",  "copilot_core.hub.helligkeit_module",  "HelligkeitModuleEngine"),
+        ("hub_heiz",        "copilot_core.hub.heiz_module",        "HeizModuleEngine"),
+        ("hub_bewegung",    "copilot_core.hub.bewegung_module",    "BewegungModuleEngine"),
+        ("hub_praesenz",    "copilot_core.hub.praesenz_module",    "PraesenzModuleEngine"),
+    ]
+    _init_engine_group(services, _MODULE_ENGINES, "PilotSuite Module engines")
+
     try:
-        from copilot_core.hub.licht_module import LichtModuleEngine
-        from copilot_core.hub.helligkeit_module import HelligkeitModuleEngine
-        from copilot_core.hub.heiz_module import HeizModuleEngine
-        from copilot_core.hub.bewegung_module import BewegungModuleEngine
-        from copilot_core.hub.praesenz_module import PraesenzModuleEngine
-
-        services["hub_licht"] = LichtModuleEngine()
-        services["hub_helligkeit"] = HelligkeitModuleEngine()
-        services["hub_heiz"] = HeizModuleEngine()
-        services["hub_bewegung"] = BewegungModuleEngine()
-        services["hub_praesenz"] = PraesenzModuleEngine()
-
         from copilot_core.api.v1.module_endpoints import init_module_endpoints
         init_module_endpoints(
             licht=services["hub_licht"],
@@ -619,9 +725,8 @@ async def init_services(hass=None, config: dict = None):
             bewegung=services["hub_bewegung"],
             praesenz=services["hub_praesenz"],
         )
-        _LOGGER.info("PilotSuite Module engines initialized (5 modules)")
     except Exception:
-        _LOGGER.exception("Failed to init PilotSuite Module engines")
+        _LOGGER.exception("Failed to init PilotSuite Module endpoints")
 
     # Wire WebhookPusher module_data push via IntegrationBus
     try:
@@ -646,108 +751,8 @@ async def init_services(hass=None, config: dict = None):
     except Exception:
         _LOGGER.exception("Failed to wire WebhookPusher module_data push")
 
-    # Wire Anomaly Detection to IntegrationBus events
-    try:
-        bus = services.get("integration_bus")
-        hub_anomaly = services.get("hub_anomaly")
-        if bus and hub_anomaly and hasattr(hub_anomaly, "ingest"):
-            def _anomaly_from_event(event):
-                """Feed HA state-change events into anomaly detection engine."""
-                data = event.data if hasattr(event, "data") else {}
-                entity_id = data.get("entity_id", "")
-                value = data.get("value")
-                if entity_id and value is not None:
-                    try:
-                        hub_anomaly.ingest(entity_id, float(value))
-                    except (ValueError, TypeError):
-                        pass
-
-            bus.subscribe("state.changed", _anomaly_from_event)
-            _LOGGER.info("AnomalyDetection wired to state.changed events via IntegrationBus")
-    except Exception:
-        _LOGGER.exception("Failed to wire AnomalyDetection to IntegrationBus")
-
-    # Wire Predictive Maintenance to IntegrationBus events
-    try:
-        bus = services.get("integration_bus")
-        hub_maintenance = services.get("hub_maintenance")
-        if bus and hub_maintenance and hasattr(hub_maintenance, "ingest_metric"):
-            def _maintenance_from_event(event):
-                """Feed device metrics into predictive maintenance engine."""
-                data = event.data if hasattr(event, "data") else {}
-                device_id = data.get("device_id", "")
-                metric = data.get("metric", "")
-                value = data.get("value")
-                if device_id and metric and value is not None:
-                    try:
-                        hub_maintenance.ingest_metric(device_id, metric, float(value))
-                    except (ValueError, TypeError):
-                        pass
-
-            bus.subscribe("device.metric", _maintenance_from_event)
-            _LOGGER.info("PredictiveMaintenance wired to device.metric events via IntegrationBus")
-    except Exception:
-        _LOGGER.exception("Failed to wire PredictiveMaintenance to IntegrationBus")
-
-    # Wire Presence Intelligence → Scene suggestions
-    try:
-        bus = services.get("integration_bus")
-        hub_presence = services.get("hub_presence")
-        hub_scenes = services.get("hub_scenes")
-        if bus and hub_scenes and hasattr(hub_scenes, "suggest_scenes"):
-            def _scene_from_presence(event):
-                """Trigger scene suggestions when presence changes."""
-                data = event.data if hasattr(event, "data") else {}
-                zone_id = data.get("zone_id", "")
-                is_home = data.get("is_home", True)
-                occupancy = data.get("occupancy_count", 1)
-                if zone_id:
-                    try:
-                        from copilot_core.hub.scene_intelligence import SceneContext
-                        from datetime import datetime, timezone
-                        now = datetime.now(tz=timezone.utc)
-                        ctx = SceneContext(
-                            hour=now.hour,
-                            is_home=is_home,
-                            occupancy_count=occupancy,
-                            active_zone=zone_id,
-                            is_weekend=now.weekday() >= 5,
-                        )
-                        hub_scenes.suggest_scenes(ctx, limit=3)
-                    except Exception:
-                        pass
-
-            bus.subscribe("presence.changed", _scene_from_presence)
-            _LOGGER.info("SceneIntelligence wired to presence.changed events via IntegrationBus")
-    except Exception:
-        _LOGGER.exception("Failed to wire SceneIntelligence to IntegrationBus")
-
-    # Wire Anomaly Detection → Notification Intelligence
-    try:
-        bus = services.get("integration_bus")
-        hub_anomaly = services.get("hub_anomaly")
-        hub_notifications = services.get("hub_notifications")
-        if bus and hub_notifications and hasattr(hub_notifications, "add_notification"):
-            def _notify_on_anomaly(event):
-                """Create notification when anomaly is detected."""
-                data = event.data if hasattr(event, "data") else {}
-                severity = data.get("severity", "info")
-                if severity in ("warning", "critical"):
-                    try:
-                        hub_notifications.add_notification(
-                            title=f"Anomalie erkannt: {data.get('entity_id', 'unbekannt')}",
-                            message=data.get("description", ""),
-                            severity=severity,
-                            category="anomaly",
-                            source="anomaly_detection",
-                        )
-                    except Exception:
-                        pass
-
-            bus.subscribe("anomaly.detected", _notify_on_anomaly)
-            _LOGGER.info("NotificationIntelligence wired to anomaly.detected events")
-    except Exception:
-        _LOGGER.exception("Failed to wire NotificationIntelligence to IntegrationBus")
+    # Wire services to IntegrationBus events
+    _wire_bus_events(services)
 
     # Calculate startup time
     services["startup_time_ms"] = (time.perf_counter() - start_time) * 1000
@@ -775,87 +780,88 @@ def register_blueprints(app: Flask, services: dict) -> None:
         app: Flask application instance
         services: Dictionary of initialized services
     """
-    # Import blueprints
-    from copilot_core.api.v1.log_fixer_tx import bp as log_fixer_bp
-    from copilot_core.api.v1.events_ingest import bp as events_ingest_bp
-    from copilot_core.api.v1.sensors import bp as sensors_bp
-    from copilot_core.api.v1.homekit import homekit_bp
-    from copilot_core.api.v1.anomaly import anomaly_bp
-    from copilot_core.api.v1.metrics import metrics_bp
-    from copilot_core.api.v1.calendar import calendar_bp
-    from copilot_core.api.v1.energy_forecast import energy_forecast_bp
-    from copilot_core.api.v1.habitus import bp as habitus_bp
-    from copilot_core.api.v1.habitus_zones import bp as habitus_zones_bp
-    from copilot_core.api.v1.mood import bp as mood_bp
-    from copilot_core.api.v1.zone_editor import zone_editor_bp, zone_editor_legacy_bp
-    from copilot_core.api.v1.media_zones import media_zones_bp
-    from copilot_core.api.v1.sonos import sonos_bp
-    from copilot_core.api.v1.tag_system import bp as tag_bp
-    from copilot_core.api.v1.notifications import bp as notifications_bp
-    from copilot_core.api.v1.blueprint import api_v1 as blueprint_bp
-    from copilot_core.api.v1.multihome import bp as multihome_bp
-    from copilot_core.api.v1.module_control import module_control_bp
-    from copilot_core.api.v1.user_preferences import bp as user_preferences_bp
-    from copilot_core.api.v1.mcp import bp as mcp_bp
-    # api_v1.register_blueprint(module_control_bp)  # Can't use api_v1 because module_control_bp has absolute prefix
-    from copilot_core.api.v1.voice import bp as voice_bp
-    from copilot_core.api.v1.vector import bp as vector_bp
-    from copilot_core.api.v1.swagger_ui import bp as swagger_ui_bp
-    from copilot_core.api.v1.rag import bp as rag_bp
-    from copilot_core.api.v1.styx_chat import bp as styx_bp
-    from copilot_core.api.v1.weather import bp as weather_bp
-
     # Make services available via app.config for blueprints using current_app.config
     app.config["COPILOT_SERVICES"] = services
 
-    # Register blueprints
-    app.register_blueprint(log_fixer_bp, url_prefix="/api/v1")
-    app.register_blueprint(events_ingest_bp, url_prefix="/api/v1")
-    app.register_blueprint(sensors_bp, url_prefix="/api/v1")
-    app.register_blueprint(homekit_bp, url_prefix="/api/v1")
-    app.register_blueprint(anomaly_bp, url_prefix="/api/v1")
-    # metrics_bp registered via api_v1 blueprint (copilot_core.api.v1.blueprint)
-    # app.register_blueprint(metrics_bp, url_prefix="/api/v1")  # Removed - duplicate
-    app.register_blueprint(calendar_bp, url_prefix="/api/v1")
-    app.register_blueprint(energy_forecast_bp, url_prefix="/api/v1")
-    app.register_blueprint(habitus_bp, url_prefix="/api/v1")
-    app.register_blueprint(habitus_zones_bp)  # Already has /api/v1/habitus/zones prefix
-    app.register_blueprint(mood_bp, url_prefix="/api/v1")
-    # Wire init functions for zone_editor and habitus_zones
-    from copilot_core.api.v1.zone_editor import init_zone_editor_api
-    init_zone_editor_api(services.get("hub_zones"))
-    app.register_blueprint(zone_editor_bp, url_prefix="/api/v1")
-    app.register_blueprint(zone_editor_legacy_bp)  # Legacy /api/v1/zone/editor routes
+    # ── Data-driven blueprint registration ────────────────────────────────
+    # Each entry: (module_path, blueprint_attr, url_prefix_or_None)
+    # url_prefix=None means the blueprint defines its own prefix internally.
+    _BLUEPRINTS = [
+        # Standalone blueprints under /api/v1
+        ("copilot_core.api.v1.log_fixer_tx",    "bp",                   "/api/v1"),
+        ("copilot_core.api.v1.events_ingest",    "bp",                   "/api/v1"),
+        ("copilot_core.api.v1.sensors",          "bp",                   "/api/v1"),
+        ("copilot_core.api.v1.homekit",          "homekit_bp",           "/api/v1"),
+        ("copilot_core.api.v1.anomaly",          "anomaly_bp",           "/api/v1"),
+        ("copilot_core.api.v1.calendar",         "calendar_bp",          "/api/v1"),
+        ("copilot_core.api.v1.energy_forecast",  "energy_forecast_bp",   "/api/v1"),
+        ("copilot_core.api.v1.habitus",          "bp",                   "/api/v1"),
+        ("copilot_core.api.v1.mood",             "bp",                   "/api/v1"),
+        ("copilot_core.api.v1.tag_system",       "bp",                   "/api/v1"),
+        ("copilot_core.api.v1.notifications",    "bp",                   "/api/v1"),
+        ("copilot_core.api.v1.multihome",        "bp",                   "/api/v1"),
+        ("copilot_core.api.v1.user_preferences", "bp",                   "/api/v1"),
+        ("copilot_core.api.v1.voice",            "bp",                   "/api/v1"),
+        ("copilot_core.api.v1.vector",           "bp",                   "/api/v1"),
+        ("copilot_core.api.v1.swagger_ui",       "bp",                   "/api/v1"),
+        ("copilot_core.api.v1.weather",          "bp",                   "/api/v1"),
+        # Blueprints with built-in absolute prefix (register without url_prefix)
+        ("copilot_core.api.v1.habitus_zones",    "bp",                   None),
+        ("copilot_core.api.v1.sonos",            "sonos_bp",             None),
+        ("copilot_core.api.v1.module_control",   "module_control_bp",    None),
+        ("copilot_core.api.v1.rag",              "bp",                   None),
+        ("copilot_core.api.v1.styx_chat",        "bp",                   None),
+        ("copilot_core.api.v1.mcp",              "bp",                   None),
+        # Nested blueprint registry (api/v1/blueprint.py)
+        ("copilot_core.api.v1.blueprint",        "api_v1",               "/api/v1"),
+    ]
 
-    from copilot_core.api.v1.habitus_zones import init_habitus_zones_api
-    init_habitus_zones_api(services.get("hub_zones"))
+    for module_path, bp_attr, prefix in _BLUEPRINTS:
+        try:
+            mod = importlib.import_module(module_path)
+            bp = getattr(mod, bp_attr)
+            if prefix is not None:
+                app.register_blueprint(bp, url_prefix=prefix)
+            else:
+                app.register_blueprint(bp)
+        except Exception:
+            _LOGGER.exception("Failed to register blueprint %s.%s", module_path, bp_attr)
 
-    # Wire media zones with service references
-    from copilot_core.api.v1.media_zones import init_media_zones_api
-    init_media_zones_api(
-        media_mgr=services.get("media_zone_manager"),
-        proactive_engine=services.get("proactive_engine"),
-    )
-    app.register_blueprint(media_zones_bp, url_prefix="/api/v1")
-    app.register_blueprint(sonos_bp)  # Already has /api/v1/sonos prefix
-    app.register_blueprint(tag_bp, url_prefix="/api/v1")
-    app.register_blueprint(notifications_bp, url_prefix="/api/v1")
-    app.register_blueprint(blueprint_bp, url_prefix="/api/v1")
-    app.register_blueprint(multihome_bp, url_prefix="/api/v1")
-    # module_control_bp has url_prefix="/api/v1/modules" (absolute), register directly
-    from copilot_core.api.v1.module_control import init_module_control_api
-    init_module_control_api(services.get("module_registry"))
-    app.register_blueprint(module_control_bp)
-    app.register_blueprint(user_preferences_bp, url_prefix="/api/v1")
-    app.register_blueprint(voice_bp, url_prefix="/api/v1")
-    app.register_blueprint(vector_bp, url_prefix="/api/v1")
-    app.register_blueprint(swagger_ui_bp, url_prefix="/api/v1")
-    app.register_blueprint(rag_bp)  # Already has /api/v1/rag prefix
-    app.register_blueprint(styx_bp)  # Already has /api/styx prefix
-    app.register_blueprint(weather_bp, url_prefix="/api/v1")  # /api/v1/weather
+    # ── Blueprints requiring service wiring before registration ───────────
 
-    # Register MCP REST API (standalone, absolute prefix /api/v1/mcp)
-    app.register_blueprint(mcp_bp)
+    # Zone Editor (needs hub_zones)
+    try:
+        from copilot_core.api.v1.zone_editor import zone_editor_bp, zone_editor_legacy_bp, init_zone_editor_api
+        init_zone_editor_api(services.get("hub_zones"))
+        app.register_blueprint(zone_editor_bp, url_prefix="/api/v1")
+        app.register_blueprint(zone_editor_legacy_bp)
+    except Exception:
+        _LOGGER.exception("Failed to register zone_editor blueprints")
+
+    # Habitus Zones init (blueprint already registered above)
+    try:
+        from copilot_core.api.v1.habitus_zones import init_habitus_zones_api
+        init_habitus_zones_api(services.get("hub_zones"))
+    except Exception:
+        _LOGGER.exception("Failed to init habitus_zones API")
+
+    # Media Zones (needs media_zone_manager + proactive_engine)
+    try:
+        from copilot_core.api.v1.media_zones import media_zones_bp, init_media_zones_api
+        init_media_zones_api(
+            media_mgr=services.get("media_zone_manager"),
+            proactive_engine=services.get("proactive_engine"),
+        )
+        app.register_blueprint(media_zones_bp, url_prefix="/api/v1")
+    except Exception:
+        _LOGGER.exception("Failed to register media_zones blueprint")
+
+    # Module Control init (blueprint already registered above)
+    try:
+        from copilot_core.api.v1.module_control import init_module_control_api
+        init_module_control_api(services.get("module_registry"))
+    except Exception:
+        _LOGGER.exception("Failed to init module_control API")
 
     # Register PilotSuite Module endpoints (Licht, Helligkeit, Heiz, Bewegung, Praesenz)
     try:
@@ -968,9 +974,35 @@ def register_blueprints(app: Flask, services: dict) -> None:
     app.register_blueprint(sharing_bp, url_prefix="/api/v1")
     app.register_blueprint(federated_bp, url_prefix="/api/v1")
 
-    # --- Wire previously unregistered blueprints ---
+    # ── Additional standalone blueprints (data-driven) ──────────────────
+    _EXTRA_BLUEPRINTS = [
+        ("copilot_core.api.v1.debug",             "bp",                  "/api/v1"),
+        ("copilot_core.api.v1.entity_adoption",    "bp",                  "/api/v1"),
+        ("copilot_core.api.v1.performance",        "performance_bp",      "/api/v1"),
+        # Blueprints with built-in prefix
+        ("copilot_core.api.v1.entity_assignment",  "entity_assignment_bp", None),
+        ("copilot_core.api.v1.haushalt",           "haushalt_bp",          None),
+        ("copilot_core.api.v1.onyx_bridge",        "onyx_bridge_bp",       None),
+        ("copilot_core.api.v1.predictive",         "predictive_bp",        None),
+        ("copilot_core.api.v1.presence",           "presence_bp",          None),
+        ("copilot_core.api.v1.scenes",             "scenes_bp",            None),
+        ("copilot_core.api.v1.shopping",           "shopping_bp",          None),
+    ]
 
-    # Automation API (create automations from suggestions)
+    for module_path, bp_attr, prefix in _EXTRA_BLUEPRINTS:
+        try:
+            mod = importlib.import_module(module_path)
+            bp = getattr(mod, bp_attr)
+            if prefix is not None:
+                app.register_blueprint(bp, url_prefix=prefix)
+            else:
+                app.register_blueprint(bp)
+        except Exception:
+            _LOGGER.exception("Failed to register blueprint %s.%s", module_path, bp_attr)
+
+    # ── Blueprints requiring service wiring ───────────────────────────────
+
+    # Automation API
     try:
         from copilot_core.api.v1.automation_api import automation_bp, init_automation_api
         init_automation_api(services.get("automation_creator"))
@@ -986,27 +1018,6 @@ def register_blueprints(app: Flask, services: dict) -> None:
     except Exception:
         _LOGGER.exception("Failed to register cache_control_bp")
 
-    # Debug API
-    try:
-        from copilot_core.api.v1.debug import bp as debug_bp
-        app.register_blueprint(debug_bp, url_prefix="/api/v1")
-    except Exception:
-        _LOGGER.exception("Failed to register debug_bp")
-
-    # Entity Adoption API
-    try:
-        from copilot_core.api.v1.entity_adoption import bp as entity_adoption_bp
-        app.register_blueprint(entity_adoption_bp, url_prefix="/api/v1")
-    except Exception:
-        _LOGGER.exception("Failed to register entity_adoption_bp")
-
-    # Entity Assignment API
-    try:
-        from copilot_core.api.v1.entity_assignment import entity_assignment_bp
-        app.register_blueprint(entity_assignment_bp)
-    except Exception:
-        _LOGGER.exception("Failed to register entity_assignment_bp")
-
     # Explain API (explainability for suggestions/patterns)
     try:
         from copilot_core.api.v1.explain import explain_bp, init_explain_api
@@ -1020,41 +1031,6 @@ def register_blueprints(app: Flask, services: dict) -> None:
     except Exception:
         _LOGGER.exception("Failed to register explain_bp")
 
-    # Haushalt API (waste + birthday overview)
-    try:
-        from copilot_core.api.v1.haushalt import haushalt_bp
-        app.register_blueprint(haushalt_bp)
-    except Exception:
-        _LOGGER.exception("Failed to register haushalt_bp")
-
-    # Onyx Bridge API (controlled HA service calls)
-    try:
-        from copilot_core.api.v1.onyx_bridge import onyx_bridge_bp
-        app.register_blueprint(onyx_bridge_bp)
-    except Exception:
-        _LOGGER.exception("Failed to register onyx_bridge_bp")
-
-    # Performance API (startup/module metrics)
-    try:
-        from copilot_core.api.v1.performance import performance_bp
-        app.register_blueprint(performance_bp, url_prefix="/api/v1")
-    except Exception:
-        _LOGGER.exception("Failed to register performance_bp")
-
-    # Predictive API (pattern learning + predictions)
-    try:
-        from copilot_core.api.v1.predictive import predictive_bp
-        app.register_blueprint(predictive_bp)
-    except Exception:
-        _LOGGER.exception("Failed to register predictive_bp")
-
-    # Presence API (presence map + history)
-    try:
-        from copilot_core.api.v1.presence import presence_bp
-        app.register_blueprint(presence_bp)
-    except Exception:
-        _LOGGER.exception("Failed to register presence_bp")
-
     # Reminders API (waste + birthday reminders)
     try:
         from copilot_core.api.v1.reminders import reminders_bp, init_reminders_api
@@ -1066,21 +1042,7 @@ def register_blueprints(app: Flask, services: dict) -> None:
     except Exception:
         _LOGGER.exception("Failed to register reminders_bp")
 
-    # Scenes API (zone scenes CRUD)
-    try:
-        from copilot_core.api.v1.scenes import scenes_bp
-        app.register_blueprint(scenes_bp)
-    except Exception:
-        _LOGGER.exception("Failed to register scenes_bp")
-
-    # Shopping API (shopping list + reminders)
-    try:
-        from copilot_core.api.v1.shopping import shopping_bp
-        app.register_blueprint(shopping_bp)
-    except Exception:
-        _LOGGER.exception("Failed to register shopping_bp")
-
-    _LOGGER.info("API blueprints registered (including 14 previously unwired)")
+    _LOGGER.info("All API blueprints registered")
 
 
 async def cleanup_services(services: dict) -> None:
