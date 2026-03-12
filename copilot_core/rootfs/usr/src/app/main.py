@@ -516,8 +516,9 @@ def create_app(config: dict | None = None) -> Flask:
     else:
         # Production: full initialization
         try:
+            import asyncio as _asyncio
             options = _load_options_json()
-            services = init_services(config=options)
+            services = _asyncio.run(init_services(config=options))
             register_blueprints(test_app, services)
         except Exception:
             _main_logger.exception("Service initialization failed")

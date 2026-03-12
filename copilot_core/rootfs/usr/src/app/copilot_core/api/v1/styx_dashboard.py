@@ -268,7 +268,11 @@ def system_config():
     service_health = {}
     for key in ("neuron_manager", "brain_graph_service", "integration_bus",
                 "habitus_service", "hebbian_learning", "candidate_store",
-                "module_registry", "proactive_engine"):
+                "module_registry", "proactive_engine",
+                "zone_automation", "mood_service", "musikwolke_bridge",
+                "hub_licht", "hub_helligkeit", "hub_heiz", "hub_bewegung", "hub_praesenz",
+                "hub_light", "hub_presence", "hub_media",
+                "hub_modes", "hub_scenes", "hub_energy", "hub_notifications"):
         service_health[key] = _services.get(key) is not None
 
     return jsonify({
