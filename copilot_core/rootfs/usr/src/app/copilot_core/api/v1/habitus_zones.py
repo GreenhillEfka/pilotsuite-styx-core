@@ -426,7 +426,8 @@ def _get_zone_metrics(zone_type: ZoneType) -> Dict[str, Any]:
     Queries the live zone automation state to derive entity count,
     light/occupancy status, and energy metrics.
     """
-    from copilot_core.api.v1.zone_dashboard import _zone_automation
+    from copilot_core.api.v1.zone_dashboard import _svc
+    _zone_automation = _svc.get("zone_automation")
 
     zone_id = f"zone:{zone_type.value}" if hasattr(zone_type, "value") else f"zone:{zone_type}"
     metrics: Dict[str, Any] = {
