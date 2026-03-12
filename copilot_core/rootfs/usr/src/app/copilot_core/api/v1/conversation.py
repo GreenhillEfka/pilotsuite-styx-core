@@ -494,7 +494,7 @@ def _get_user_context() -> str:
                 if summary:
                     context_parts.append(f"Regionale Warnungen: {summary}")
             except Exception:
-                pass
+                logger.debug("LLM context: regional warnings failed", exc_info=True)
 
         # Active Musikwolke sessions (v3.1.0)
         media_mgr = services.get("media_zone_manager")
@@ -506,7 +506,7 @@ def _get_user_context() -> str:
                         f"Musikwolke aktiv: {len(sessions)} Session(s)"
                     )
             except Exception:
-                pass
+                logger.debug("LLM context: musikwolke sessions failed", exc_info=True)
 
         # Waste collection context (v3.2.0)
         waste_svc = services.get("waste_service")
@@ -516,7 +516,7 @@ def _get_user_context() -> str:
                 if waste_ctx:
                     context_parts.append(waste_ctx)
             except Exception:
-                pass
+                logger.debug("LLM context: waste service failed", exc_info=True)
 
         # Birthday context (v3.2.0)
         birthday_svc = services.get("birthday_service")
@@ -526,7 +526,7 @@ def _get_user_context() -> str:
                 if bday_ctx:
                     context_parts.append(bday_ctx)
             except Exception:
-                pass
+                logger.debug("LLM context: birthday service failed", exc_info=True)
 
         # Entity tags context (v3.2.3)
         tag_registry = services.get("tag_registry")
@@ -536,7 +536,7 @@ def _get_user_context() -> str:
                 if tags_ctx:
                     context_parts.append(tags_ctx)
             except Exception:
-                pass
+                logger.debug("LLM context: tag registry failed", exc_info=True)
 
         # Presence context (v3.3.0)
         try:
@@ -545,7 +545,7 @@ def _get_user_context() -> str:
             if presence_ctx:
                 context_parts.append(presence_ctx)
         except Exception:
-            pass
+            logger.debug("LLM context: presence failed", exc_info=True)
 
         # Scene context (v3.4.0)
         try:
@@ -554,7 +554,7 @@ def _get_user_context() -> str:
             if scene_ctx:
                 context_parts.append(scene_ctx)
         except Exception:
-            pass
+            logger.debug("LLM context: scenes failed", exc_info=True)
 
         # HomeKit context (v3.4.0)
         try:
@@ -563,7 +563,7 @@ def _get_user_context() -> str:
             if homekit_ctx:
                 context_parts.append(homekit_ctx)
         except Exception:
-            pass
+            logger.debug("LLM context: homekit failed", exc_info=True)
 
         # Calendar context (v3.5.0)
         try:
@@ -572,7 +572,7 @@ def _get_user_context() -> str:
             if cal_ctx:
                 context_parts.append(cal_ctx)
         except Exception:
-            pass
+            logger.debug("LLM context: calendar failed", exc_info=True)
 
         # Shopping list context (v3.5.0)
         try:
@@ -581,7 +581,7 @@ def _get_user_context() -> str:
             if shop_ctx:
                 context_parts.append(shop_ctx)
         except Exception:
-            pass
+            logger.debug("LLM context: shopping failed", exc_info=True)
 
         # Reminders context (v3.5.0)
         try:
@@ -590,7 +590,7 @@ def _get_user_context() -> str:
             if rem_ctx:
                 context_parts.append(rem_ctx)
         except Exception:
-            pass
+            logger.debug("LLM context: reminders failed", exc_info=True)
 
     except Exception as exc:
         logger.debug("Could not load user context: %s", exc)

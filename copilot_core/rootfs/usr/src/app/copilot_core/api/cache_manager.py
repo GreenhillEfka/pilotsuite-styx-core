@@ -256,7 +256,7 @@ class CacheManager:
                 keys = self._redis_client.keys(f"{self._redis_key_prefix}*")
                 stats["redis_size"] = len(keys)
             except Exception:
-                pass
+                _LOGGER.debug("Failed to get Redis cache stats", exc_info=True)
         
         return stats
 
