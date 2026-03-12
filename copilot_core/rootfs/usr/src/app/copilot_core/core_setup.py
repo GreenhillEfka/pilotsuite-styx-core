@@ -771,6 +771,9 @@ def register_blueprints(app: Flask, services: dict) -> None:
         hub_modes=services.get("hub_modes"),
         hub_scenes=services.get("hub_scenes"),
         hub_energy=services.get("hub_energy"),
+        # Zusatz-Engines
+        hub_notifications=services.get("hub_notifications"),
+        hub_musikwolke=services.get("hub_musikwolke"),
     )
     app.register_blueprint(zone_dashboard_bp)
 

@@ -5,6 +5,8 @@ allen Hub-Engines pro Zone:
   - Licht, Helligkeit, Heiz, Bewegung, Praesenz (5 Basis-Module)
   - LightIntelligence, PresenceIntelligence, MediaFollow (3 Intelligence-Engines)
   - ZoneModes, SceneIntelligence, EnergyAdvisor (3 Steuerungs-Engines)
+  - NotificationIntelligence, MusikwolkeBridge (2 Zusatz-Engines)
+  - Household, Playlists, Todos, Notifications (Stammdaten aus example_config)
 
 Endpunkte:
   GET  /api/v1/zone/dashboard              - Alle Zonen mit Moduldaten
@@ -15,7 +17,7 @@ Endpunkte:
   GET  /api/v1/zone/dashboard/<id>         - Einzelzone Detail
 
 Author: Clawdya (via Codex)
-Version: 3.0.0
+Version: 4.0.0
 """
 from __future__ import annotations
 
@@ -55,6 +57,10 @@ _hub_modes = None
 _hub_scenes = None
 _hub_energy = None
 
+# Zusatz-Engines
+_hub_notifications = None
+_hub_musikwolke = None
+
 
 def init_zone_dashboard_api(
     zone_automation=None,
@@ -73,12 +79,16 @@ def init_zone_dashboard_api(
     hub_modes=None,
     hub_scenes=None,
     hub_energy=None,
+    # Zusatz-Engines
+    hub_notifications=None,
+    hub_musikwolke=None,
 ) -> None:
     """Initialize the Zone Dashboard API with all available service references."""
     global _zone_automation, _mood_service
     global _hub_licht, _hub_helligkeit, _hub_heiz, _hub_bewegung, _hub_praesenz
     global _hub_light_intel, _hub_presence_intel, _hub_media
     global _hub_modes, _hub_scenes, _hub_energy
+    global _hub_notifications, _hub_musikwolke
     _zone_automation = zone_automation
     _mood_service = mood_service
     _hub_licht = hub_licht
@@ -92,15 +102,18 @@ def init_zone_dashboard_api(
     _hub_modes = hub_modes
     _hub_scenes = hub_scenes
     _hub_energy = hub_energy
+    _hub_notifications = hub_notifications
+    _hub_musikwolke = hub_musikwolke
 
     all_engines = (
         hub_licht, hub_helligkeit, hub_heiz, hub_bewegung, hub_praesenz,
         hub_light_intel, hub_presence_intel, hub_media,
         hub_modes, hub_scenes, hub_energy,
+        hub_notifications, hub_musikwolke,
     )
     _LOGGER.info(
         "Zone Dashboard API initialized (zone_automation=%s, mood=%s, "
-        "engines=%d/11 wired)",
+        "engines=%d/13 wired)",
         zone_automation is not None, mood_service is not None,
         sum(1 for m in all_engines if m),
     )
@@ -553,6 +566,84 @@ def _get_zone_module_data(zone_id: str) -> Dict[str, Any]:
         except Exception:
             pass
 
+    # ── NotificationIntelligence (Zone-spezifische Nachrichten) ──
+    if _hub_notifications:
+        try:
+            history = _hub_notifications.get_history(limit=20, unread_only=False)
+            zone_notifs = [n for n in history if n.get("zone_id") == zone_id or (not n.get("zone_id") and not n.get("person_id"))]
+            unread = sum(1 for n in zone_notifs if not n.get("read", True))
+            modules["notifications"] = {
+                "total": len(zone_notifs),
+                "unread": unread,
+                "recent": zone_notifs[:5],
+            }
+        except Exception:
+            pass
+
+    # ── MusikwolkeBridge (Sonos-Steuerung pro Zone) ──
+    if _hub_musikwolke:
+        try:
+            status = _hub_musikwolke.get_status()
+            zone_speaker = status.get("zone_speaker_map", {}).get(zone_id)
+            is_active = zone_id in status.get("active_zones", [])
+            musikwolke_data: Dict[str, Any] = {
+                "speaker_mapped": zone_speaker is not None,
+                "speaker_name": zone_speaker or "",
+                "is_active": is_active,
+            }
+            if status.get("media_follow"):
+                musikwolke_data["follow_enabled_zones"] = status["media_follow"].get("follow_enabled_zones", 0)
+            modules["musikwolke"] = musikwolke_data
+        except Exception:
+            pass
+
+    # ── Playlists (Zone-affine Playlisten aus Stammdaten) ──
+    try:
+        from copilot_core.example_config import EXAMPLE_PLAYLISTS
+        zone_playlists = [
+            {"id": p["id"], "name": p["name"], "source": p["source"],
+             "icon": p.get("icon", ""), "time_affinity": p.get("time_affinity", "")}
+            for p in EXAMPLE_PLAYLISTS
+            if zone_id in p.get("zone_affinity", [])
+        ]
+        if zone_playlists:
+            modules["playlists"] = zone_playlists
+    except ImportError:
+        pass
+
+    # ── Todos (Zone-spezifische Aufgaben) ──
+    try:
+        from copilot_core.example_config import EXAMPLE_TODOS
+        zone_todos = [
+            t for t in EXAMPLE_TODOS
+            if t.get("zone_id") == zone_id and t.get("status") != "completed"
+        ]
+        if zone_todos:
+            modules["todos"] = {
+                "count": len(zone_todos),
+                "items": zone_todos,
+            }
+    except ImportError:
+        pass
+
+    # ── Nachrichten / Notifications (Stammdaten-Fallback) ──
+    if not modules.get("notifications"):
+        try:
+            from copilot_core.example_config import EXAMPLE_NOTIFICATIONS
+            zone_notifs_ex = [
+                n for n in EXAMPLE_NOTIFICATIONS
+                if n.get("zone_id") == zone_id
+            ]
+            if zone_notifs_ex:
+                unread_ex = sum(1 for n in zone_notifs_ex if not n.get("acknowledged", True))
+                modules["notifications"] = {
+                    "total": len(zone_notifs_ex),
+                    "unread": unread_ex,
+                    "recent": zone_notifs_ex[:5],
+                }
+        except ImportError:
+            pass
+
     return modules
 
 
@@ -796,6 +887,77 @@ def get_dashboard():
             }
         except Exception:
             pass
+
+    if _hub_notifications:
+        try:
+            stats = _hub_notifications.get_stats()
+            global_ctx["notifications"] = {
+                "unread_count": stats.unread_count,
+                "total_sent": stats.total_sent,
+                "total_suppressed": stats.total_suppressed,
+            }
+        except Exception:
+            pass
+
+    if _hub_musikwolke:
+        try:
+            mw_status = _hub_musikwolke.get_status()
+            global_ctx["musikwolke"] = {
+                "sonos_connected": mw_status.get("sonos_connected", False),
+                "active_zones": mw_status.get("active_zones", []),
+                "zone_speaker_map": mw_status.get("zone_speaker_map", {}),
+            }
+        except Exception:
+            pass
+
+    # Household/Birthdays from example_config
+    try:
+        from copilot_core.example_config import EXAMPLE_HOUSEHOLD
+        from datetime import date
+        today = date.today()
+        household_info = []
+        upcoming_birthdays = []
+        for person in EXAMPLE_HOUSEHOLD:
+            household_info.append({
+                "person_id": person["person_id"],
+                "name": person["name"],
+                "role": person["role"],
+            })
+            bday_str = person.get("birthday", "")
+            if bday_str:
+                bday = date.fromisoformat(bday_str)
+                next_bday = bday.replace(year=today.year)
+                if next_bday < today:
+                    next_bday = next_bday.replace(year=today.year + 1)
+                days_until = (next_bday - today).days
+                if days_until <= 30:
+                    upcoming_birthdays.append({
+                        "name": person["name"],
+                        "date": next_bday.isoformat(),
+                        "days_until": days_until,
+                        "age": next_bday.year - bday.year,
+                    })
+        global_ctx["household"] = household_info
+        if upcoming_birthdays:
+            global_ctx["upcoming_birthdays"] = sorted(upcoming_birthdays, key=lambda x: x["days_until"])
+    except (ImportError, Exception):
+        pass
+
+    # Global todos summary
+    try:
+        from copilot_core.example_config import EXAMPLE_TODOS
+        pending_todos = [t for t in EXAMPLE_TODOS if t.get("status") != "completed"]
+        overdue = [t for t in pending_todos if t.get("due_date") and t["due_date"] < datetime.now(timezone.utc).strftime("%Y-%m-%d")]
+        global_ctx["todos"] = {
+            "total_pending": len(pending_todos),
+            "overdue": len(overdue),
+            "by_zone": {},
+        }
+        for t in pending_todos:
+            zid = t.get("zone_id", "_global")
+            global_ctx["todos"]["by_zone"][zid] = global_ctx["todos"]["by_zone"].get(zid, 0) + 1
+    except (ImportError, Exception):
+        pass
 
     response: Dict[str, Any] = {
         "ok": True,
