@@ -643,7 +643,7 @@ def register_blueprints(app: Flask, services: dict) -> None:
     from copilot_core.api.v1.habitus import bp as habitus_bp
     from copilot_core.api.v1.habitus_zones import bp as habitus_zones_bp
     from copilot_core.api.v1.mood import bp as mood_bp
-    from copilot_core.api.v1.zone_editor import zone_editor_bp
+    from copilot_core.api.v1.zone_editor import zone_editor_bp, zone_editor_legacy_bp
     from copilot_core.api.v1.media_zones import media_zones_bp
     from copilot_core.api.v1.sonos import sonos_bp
     from copilot_core.api.v1.tag_system import bp as tag_bp
@@ -660,6 +660,9 @@ def register_blueprints(app: Flask, services: dict) -> None:
     from copilot_core.api.v1.rag import bp as rag_bp
     from copilot_core.api.v1.styx_chat import bp as styx_bp
     
+    # Make services available via app.config for blueprints using current_app.config
+    app.config["COPILOT_SERVICES"] = services
+
     # Register blueprints
     app.register_blueprint(log_fixer_bp, url_prefix="/api/v1")
     app.register_blueprint(events_ingest_bp, url_prefix="/api/v1")
@@ -673,7 +676,21 @@ def register_blueprints(app: Flask, services: dict) -> None:
     app.register_blueprint(habitus_bp, url_prefix="/api/v1")
     app.register_blueprint(habitus_zones_bp)  # Already has /api/v1/habitus/zones prefix
     app.register_blueprint(mood_bp, url_prefix="/api/v1")
+    # Wire init functions for zone_editor and habitus_zones
+    from copilot_core.api.v1.zone_editor import init_zone_editor_api
+    init_zone_editor_api(services.get("hub_zones"))
     app.register_blueprint(zone_editor_bp, url_prefix="/api/v1")
+    app.register_blueprint(zone_editor_legacy_bp)  # Legacy /api/v1/zone/editor routes
+
+    from copilot_core.api.v1.habitus_zones import init_habitus_zones_api
+    init_habitus_zones_api(services.get("hub_zones"))
+
+    # Wire media zones with service references
+    from copilot_core.api.v1.media_zones import init_media_zones_api
+    init_media_zones_api(
+        media_mgr=services.get("media_zone_manager"),
+        proactive_engine=services.get("proactive_engine"),
+    )
     app.register_blueprint(media_zones_bp, url_prefix="/api/v1")
     app.register_blueprint(sonos_bp)  # Already has /api/v1/sonos prefix
     app.register_blueprint(tag_bp, url_prefix="/api/v1")
@@ -681,6 +698,8 @@ def register_blueprints(app: Flask, services: dict) -> None:
     app.register_blueprint(blueprint_bp, url_prefix="/api/v1")
     app.register_blueprint(multihome_bp, url_prefix="/api/v1")
     # module_control_bp has url_prefix="/api/v1/modules" (absolute), register directly
+    from copilot_core.api.v1.module_control import init_module_control_api
+    init_module_control_api(services.get("module_registry"))
     app.register_blueprint(module_control_bp)
     app.register_blueprint(user_preferences_bp, url_prefix="/api/v1")
     app.register_blueprint(voice_bp, url_prefix="/api/v1")
@@ -802,8 +821,115 @@ def register_blueprints(app: Flask, services: dict) -> None:
 
     app.register_blueprint(sharing_bp, url_prefix="/api/v1")
     app.register_blueprint(federated_bp, url_prefix="/api/v1")
-    
-    _LOGGER.info("API blueprints registered")
+
+    # --- Wire previously unregistered blueprints ---
+
+    # Automation API (create automations from suggestions)
+    try:
+        from copilot_core.api.v1.automation_api import automation_bp, init_automation_api
+        init_automation_api(services.get("automation_creator"))
+        app.register_blueprint(automation_bp, url_prefix="/api/v1")
+    except Exception:
+        _LOGGER.exception("Failed to register automation_bp")
+
+    # Cache Control API
+    try:
+        from copilot_core.api.v1.cache_control import cache_control_bp, init_cache_control_api
+        init_cache_control_api(app)
+        app.register_blueprint(cache_control_bp, url_prefix="/api/v1/cache")
+    except Exception:
+        _LOGGER.exception("Failed to register cache_control_bp")
+
+    # Debug API
+    try:
+        from copilot_core.api.v1.debug import bp as debug_bp
+        app.register_blueprint(debug_bp, url_prefix="/api/v1")
+    except Exception:
+        _LOGGER.exception("Failed to register debug_bp")
+
+    # Entity Adoption API
+    try:
+        from copilot_core.api.v1.entity_adoption import bp as entity_adoption_bp
+        app.register_blueprint(entity_adoption_bp, url_prefix="/api/v1")
+    except Exception:
+        _LOGGER.exception("Failed to register entity_adoption_bp")
+
+    # Entity Assignment API
+    try:
+        from copilot_core.api.v1.entity_assignment import entity_assignment_bp
+        app.register_blueprint(entity_assignment_bp)
+    except Exception:
+        _LOGGER.exception("Failed to register entity_assignment_bp")
+
+    # Explain API (explainability for suggestions/patterns)
+    try:
+        from copilot_core.api.v1.explain import explain_bp, init_explain_api
+        init_explain_api(None)  # ExplainabilityEngine not yet initialized
+        app.register_blueprint(explain_bp)
+    except Exception:
+        _LOGGER.exception("Failed to register explain_bp")
+
+    # Haushalt API (waste + birthday overview)
+    try:
+        from copilot_core.api.v1.haushalt import haushalt_bp
+        app.register_blueprint(haushalt_bp)
+    except Exception:
+        _LOGGER.exception("Failed to register haushalt_bp")
+
+    # Onyx Bridge API (controlled HA service calls)
+    try:
+        from copilot_core.api.v1.onyx_bridge import onyx_bridge_bp
+        app.register_blueprint(onyx_bridge_bp)
+    except Exception:
+        _LOGGER.exception("Failed to register onyx_bridge_bp")
+
+    # Performance API (startup/module metrics)
+    try:
+        from copilot_core.api.v1.performance import performance_bp
+        app.register_blueprint(performance_bp, url_prefix="/api/v1")
+    except Exception:
+        _LOGGER.exception("Failed to register performance_bp")
+
+    # Predictive API (pattern learning + predictions)
+    try:
+        from copilot_core.api.v1.predictive import predictive_bp
+        app.register_blueprint(predictive_bp)
+    except Exception:
+        _LOGGER.exception("Failed to register predictive_bp")
+
+    # Presence API (presence map + history)
+    try:
+        from copilot_core.api.v1.presence import presence_bp
+        app.register_blueprint(presence_bp)
+    except Exception:
+        _LOGGER.exception("Failed to register presence_bp")
+
+    # Reminders API (waste + birthday reminders)
+    try:
+        from copilot_core.api.v1.reminders import reminders_bp, init_reminders_api
+        init_reminders_api(
+            waste_service=services.get("waste_service"),
+            birthday_service=services.get("birthday_service"),
+        )
+        app.register_blueprint(reminders_bp)
+    except Exception:
+        _LOGGER.exception("Failed to register reminders_bp")
+
+    # Scenes API (zone scenes CRUD)
+    try:
+        from copilot_core.api.v1.scenes import scenes_bp
+        app.register_blueprint(scenes_bp)
+    except Exception:
+        _LOGGER.exception("Failed to register scenes_bp")
+
+    # Shopping API (shopping list + reminders)
+    try:
+        from copilot_core.api.v1.shopping import shopping_bp
+        app.register_blueprint(shopping_bp)
+    except Exception:
+        _LOGGER.exception("Failed to register shopping_bp")
+
+    _LOGGER.info("API blueprints registered (including 14 previously unwired)")
 
 
 async def cleanup_services(services: dict) -> None:
