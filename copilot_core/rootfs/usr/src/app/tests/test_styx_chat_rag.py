@@ -119,14 +119,14 @@ class TestSearchInternal:
 class TestBuildPrompt:
     def test_build_prompt_with_context(self, chat_handler, mock_rag_results):
         prompt = chat_handler._build_prompt("Energieverbrauch?", mock_rag_results)
-        assert "Basierend auf dem folgenden Kontext:" in prompt
+        assert "Relevanter Kontext:" in prompt
         assert "[Quelle 1]" in prompt
         assert "[Quelle 2]" in prompt
 
     def test_build_prompt_no_context(self, chat_handler):
         prompt = chat_handler._build_prompt("Testfrage", {"results": [], "sources": [], "query_type": "local"})
-        assert "Beantworte die folgende Frage" in prompt
-        assert "Basierend auf dem folgenden Kontext:" not in prompt
+        assert "Beantworte Fragen praezise" in prompt
+        assert "Relevanter Kontext:" not in prompt
 
     def test_build_prompt_query_type_included(self, chat_handler, mock_rag_results):
         mock_rag_results["query_type"] = "web"

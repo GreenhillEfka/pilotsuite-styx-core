@@ -344,8 +344,9 @@ async def init_services(hass=None, config: dict = None):
                 services["telegram_bot"] = telegram_bot_loader
                 _LOGGER.debug("TelegramBot deferred via lazy loader")
             else:
-                # services["telegram_bot"] = TelegramBot(telegram_config)
-                pass
+                from copilot_core.telegram import TelegramBot
+                services["telegram_bot"] = TelegramBot(telegram_config)
+                _LOGGER.info("TelegramBot initialized (eager)")
     except Exception:
         _LOGGER.exception("Failed to init TelegramBot")
 
@@ -479,8 +480,9 @@ async def init_services(hass=None, config: dict = None):
             services["proactive_engine"] = proactive_engine_loader
             _LOGGER.debug("ProactiveContextEngine deferred via lazy loader")
         else:
-            # services["proactive_engine"] = ProactiveContextEngine()
-            pass
+            from copilot_core.proactive_context import ProactiveContextEngine
+            services["proactive_engine"] = ProactiveContextEngine()
+            _LOGGER.info("ProactiveContextEngine initialized (eager)")
         # Wire proactive engine into NeuronManager for mood-triggered suggestions
         engine = services.get("proactive_engine")
         neuron_mgr = services.get("neuron_manager")
@@ -497,8 +499,9 @@ async def init_services(hass=None, config: dict = None):
             services["web_search_service"] = web_search_loader
             _LOGGER.debug("WebSearchService deferred via lazy loader")
         else:
-            # services["web_search_service"] = WebSearchService()
-            pass
+            from copilot_core.web_search import WebSearchService
+            services["web_search_service"] = WebSearchService()
+            _LOGGER.info("WebSearchService initialized (eager)")
     except Exception:
         _LOGGER.exception("Failed to init WebSearchService")
 
@@ -604,6 +607,29 @@ async def init_services(hass=None, config: dict = None):
         _LOGGER.info("PilotSuite Module engines initialized (5 modules)")
     except Exception:
         _LOGGER.exception("Failed to init PilotSuite Module engines")
+
+    # Wire WebhookPusher module_data push via IntegrationBus
+    try:
+        webhook_pusher = services.get("webhook_pusher")
+        bus = services.get("integration_bus")
+        if webhook_pusher and webhook_pusher.enabled and bus:
+            def _push_module_data_on_eval(event):
+                """Push module summaries to HA after neuron evaluation."""
+                modules = {}
+                for name in ("hub_licht", "hub_helligkeit", "hub_heiz", "hub_bewegung", "hub_praesenz"):
+                    engine = services.get(name)
+                    if engine and hasattr(engine, "get_summary"):
+                        try:
+                            modules[name.replace("hub_", "")] = engine.get_summary()
+                        except Exception:
+                            pass
+                if modules:
+                    webhook_pusher.push_module_data(modules)
+
+            bus.subscribe("neuron.evaluated", _push_module_data_on_eval)
+            _LOGGER.info("WebhookPusher module_data push wired to neuron.evaluated event")
+    except Exception:
+        _LOGGER.exception("Failed to wire WebhookPusher module_data push")
 
     # Calculate startup time
     services["startup_time_ms"] = (time.perf_counter() - start_time) * 1000

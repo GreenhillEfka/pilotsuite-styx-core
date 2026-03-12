@@ -149,17 +149,56 @@ class MusikwolkeBridge:
         self, zone_id: str, sonos_room: str | None,
         actions: dict[str, Any], result: dict[str, Any],
     ) -> None:
-        """Pause music in a zone after absence."""
+        """Pause music in a zone after absence with optional volume fade-out."""
         fade_s = actions.get("music_fade_s", 3)
 
         if self._sonos and sonos_room:
-            # TODO: Implement proper fade by gradually reducing volume
-            # For now, just pause
-            self._sonos.pause(sonos_room)
-            result["executed"].append(f"sonos_pause:{sonos_room}")
+            if fade_s > 0:
+                self._fade_and_pause(sonos_room, fade_s)
+                result["executed"].append(f"sonos_fade_pause:{sonos_room}:{fade_s}s")
+            else:
+                self._sonos.pause(sonos_room)
+                result["executed"].append(f"sonos_pause:{sonos_room}")
             logger.info("Musikwolke: pause '%s' (fade=%ds)", sonos_room, fade_s)
 
         self._active_zones.discard(zone_id)
+
+    def _fade_and_pause(self, room: str, fade_s: int) -> None:
+        """Gradually reduce volume over fade_s seconds, then pause.
+
+        Runs in a background daemon thread so it doesn't block the caller.
+        After fade completes, restores original volume level for next play.
+        """
+        import threading
+
+        original_vol = self._sonos.get_volume(room)
+        if original_vol <= 0:
+            self._sonos.pause(room)
+            return
+
+        def _do_fade():
+            import time
+            steps = min(fade_s * 2, 20)  # 2 steps/second, max 20 steps
+            interval = fade_s / steps if steps > 0 else 0
+            vol_step = original_vol / steps if steps > 0 else original_vol
+
+            for i in range(1, steps + 1):
+                target_vol = max(0, int(original_vol - (vol_step * i)))
+                try:
+                    self._sonos.set_volume(room, target_vol)
+                except Exception:
+                    break
+                time.sleep(interval)
+
+            # Pause and restore original volume for next play
+            try:
+                self._sonos.pause(room)
+                self._sonos.set_volume(room, original_vol)
+            except Exception as exc:
+                logger.warning("Fade cleanup failed for '%s': %s", room, exc)
+
+        t = threading.Thread(target=_do_fade, daemon=True)
+        t.start()
 
     def _handle_music_follow(self, zone_id: str, result: dict[str, Any]) -> None:
         """Handle music follow (Musikwolke) when user moves between zones."""

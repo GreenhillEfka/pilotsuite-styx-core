@@ -63,10 +63,18 @@ _chat_handler: Optional[ChatHandler] = None
 
 
 def _get_chat_handler() -> ChatHandler:
-    """Liefert singleton ChatHandler."""
+    """Liefert singleton ChatHandler mit ConversationMemory-Integration."""
     global _chat_handler
     if _chat_handler is None:
-        _chat_handler = ChatHandler()
+        # Try to get ConversationMemory from services
+        conversation_memory = None
+        try:
+            from flask import current_app
+            services = current_app.config.get("COPILOT_SERVICES", {})
+            conversation_memory = services.get("conversation_memory")
+        except RuntimeError:
+            pass  # Outside app context
+        _chat_handler = ChatHandler(conversation_memory=conversation_memory)
     return _chat_handler
 
 
@@ -96,6 +104,7 @@ def styx_chat(body: ChatRequestSchema) -> Any:
             user_id=body.user_id,
             use_web=body.use_web,
             model=body.model,
+            conversation_id=getattr(body, "conversation_id", ""),
         )
 
         logger.info(

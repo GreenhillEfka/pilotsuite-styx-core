@@ -661,3 +661,52 @@ class ZoneAutomationController:
                     d["zone_id"] = zone_id
                     results.append(d)
         return results
+
+    # ── Periodic evaluation ──────────────────────────────────────────────
+
+    def evaluate_all_zones(self) -> dict[str, Any]:
+        """Evaluate all zones and return actions + state snapshot.
+
+        Called periodically (e.g., every 30-60s) to:
+        - Check absence timeouts (auto-off lights/music after presence clears)
+        - Produce a snapshot for webhook push to HA
+        """
+        now = time.monotonic()
+        results: list[dict[str, Any]] = []
+
+        for zone_id in list(self._configs.keys()):
+            config = self._configs[zone_id]
+            state = self._get_state(zone_id)
+
+            zone_result: dict[str, Any] = {"zone_id": zone_id, "actions": []}
+
+            # Check absence timeout: lights
+            if (state.lights_on and not state.occupied
+                    and state.absence_confirmed
+                    and config.light.enabled
+                    and config.automation_mode == "autonomy"):
+                # Already handled by on_presence_cleared; this is a safety net
+                zone_result["state"] = "absence_confirmed"
+
+            # Check absence timeout: music
+            if (state.music_playing and not state.occupied
+                    and state.absence_confirmed
+                    and config.music.enabled
+                    and config.automation_mode == "autonomy"):
+                zone_result["state"] = "absence_confirmed"
+
+            zone_result["snapshot"] = {
+                "occupied": state.occupied,
+                "lights_on": state.lights_on,
+                "brightness_pct": state.current_brightness_pct,
+                "music_playing": state.music_playing,
+                "automation_mode": config.automation_mode,
+            }
+            results.append(zone_result)
+
+        dashboard = self.get_dashboard()
+        return {
+            "zones": results,
+            "summary": dashboard["summary"],
+            "evaluated_at": time.time(),
+        }

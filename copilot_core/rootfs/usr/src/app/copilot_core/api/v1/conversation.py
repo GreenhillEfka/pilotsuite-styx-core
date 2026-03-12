@@ -736,6 +736,7 @@ def _handle_chat_completions():
         temperature = data.get('temperature')
         max_tokens = data.get('max_tokens') or data.get('max_completion_tokens')
         tools = data.get('tools')  # Client-specified tools (e.g. from extended_openai_conversation)
+        conversation_id = data.get('conversation_id', '')
 
         # Extract last user message for logging
         user_message = ""
@@ -750,7 +751,7 @@ def _handle_chat_completions():
         logger.info("Chat request: %s...", user_message[:80] if user_message else "(system-only)")
 
         # Store user message in conversation memory (lifelong learning)
-        _store_in_memory(user_message, role="user")
+        _store_in_memory(user_message, role="user", conversation_id=conversation_id)
 
         response = _process_conversation(messages, model_override=model_override,
                                          temperature=temperature, max_tokens=max_tokens,
@@ -761,7 +762,8 @@ def _handle_chat_completions():
         if choice.get("finish_reason") != "tool_calls":
             assistant_content = choice.get("message", {}).get("content", "")
             if assistant_content:
-                _store_in_memory(assistant_content, role="assistant")
+                _store_in_memory(assistant_content, role="assistant",
+                                 conversation_id=conversation_id)
 
         # If tool_calls response, return directly (no streaming)
         if choice.get("finish_reason") == "tool_calls":
@@ -1111,7 +1113,7 @@ def memory_preferences():
         return jsonify({"error": str(exc)}), 500
 
 
-def _store_in_memory(content: str, role: str = "user"):
+def _store_in_memory(content: str, role: str = "user", conversation_id: str = ""):
     """Store a message in conversation memory + vector store (fire-and-forget)."""
     try:
         from flask import current_app
@@ -1119,7 +1121,10 @@ def _store_in_memory(content: str, role: str = "user"):
         conv_memory = services.get("conversation_memory")
         if conv_memory and content:
             character = os.environ.get("CONVERSATION_CHARACTER", DEFAULT_CHARACTER)
-            msg_id = conv_memory.store_message(role=role, content=content, character=character)
+            msg_id = conv_memory.store_message(
+                role=role, content=content, character=character,
+                conversation_id=conversation_id or None,
+            )
 
             # RAG: also embed the message in VectorStore for semantic retrieval
             vector_store = services.get("vector_store")

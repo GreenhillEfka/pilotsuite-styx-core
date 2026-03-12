@@ -540,9 +540,21 @@ class VoiceContextBuilder:
             return []
     
     def _get_recent_actions(self, limit: int = 5) -> List[str]:
-        """Get recent actions (placeholder - would integrate with event store)."""
-        # TODO: Integrate with event store to get actual recent actions
-        return []
+        """Get recent actions from the event ingest store."""
+        try:
+            from copilot_core.ingest.event_store import get_recent_events
+            events = get_recent_events(limit=limit)
+            actions = []
+            for ev in events:
+                entity_id = ev.get("entity_id", "")
+                new_state = ev.get("attributes", {}).get("new_state", "")
+                domain = ev.get("attributes", {}).get("domain", "")
+                if entity_id and new_state:
+                    actions.append(f"{domain}.{entity_id} → {new_state}")
+            return actions
+        except Exception as exc:
+            _LOGGER.debug("Could not fetch recent actions: %s", exc)
+            return []
     
     def clear_cache(self):
         """Clear context cache."""
