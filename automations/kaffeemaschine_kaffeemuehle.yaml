@@ -18,6 +18,8 @@
     - service: switch.turn_{{ trigger.to_state.state }}
       target:
         entity_id: switch.kaffeemuhle
+    - delay:
+        milliseconds: 500
     - service: tts.speak
       target:
         entity_id: tts.home_assistant_cloud
@@ -38,6 +40,7 @@
     - platform: state
       entity_id: switch.kaffeemaschine
       to: "on"
+      from: "off"
       for:
         minutes: 30
   action:

@@ -30,6 +30,7 @@ automation:
       - platform: state
         entity_id: binary_sensor.raum_praesenz
         to: "off"
+        from: "on"
         for:
           minutes: 5
     condition:
