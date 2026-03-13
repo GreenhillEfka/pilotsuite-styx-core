@@ -2,6 +2,28 @@
 
 Alle wesentlichen Aenderungen am PilotSuite Styx Core werden in dieser Datei dokumentiert.
 
+## [v13.10.0] - 2026-03-13
+
+### Quality Release — Alle Tests gruen, Code-Bugs behoben
+
+#### Bug Fixes
+- **zone_dashboard.py**: `entity_ids`, `entities_by_role`, `scenes_data` waren undefiniert in `get_zone_detail()` (NameError zur Laufzeit)
+- **core_setup.py**: `sonos_bp` Doppel-Registrierung entfernt, `sharing_bp`/`federated_bp` Dreifach-Registrierung bereinigt
+
+#### Test Infrastructure
+- **pytest-asyncio 0.25.3** installiert — ~120 async-Test-Failures behoben
+- **test_sonos.py** komplett umgeschrieben (Flask Services Injection statt entfernter `init_sonos_api`)
+- **Auth-Isolation**: `_AuthEnabledTestCase` Base-Class fuer Tests die Auth brauchen
+- **ModuleRegistry Singleton-Leak** behoben (DB_PATH Override + conftest Reset)
+- 6 weitere Test-Dateien individuell korrigiert
+
+#### Ergebnis
+- **Vorher**: 152 failed + 58 errors (210 Test-Probleme)
+- **Nachher**: 0 failed, 4133 passed, 118 skipped
+- HA Tests: 373 passed, 0 failed, 41 skipped
+
+---
+
 ## [v13.9.0] - 2026-03-13
 
 ### Offizielles Release — Alle Beitraege seit v13.5.8
