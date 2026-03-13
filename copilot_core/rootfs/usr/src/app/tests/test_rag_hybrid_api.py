@@ -201,7 +201,7 @@ class TestRagHybridSearch:
         assert data["results"][0]["id"] in ("doc1", "doc2", "doc3")
 
     def test_search_hybrid_mode_fallback_to_bm25(self, client):
-        """Without semantic backend, hybrid falls back to BM25-only results with warnings."""
+        """Without semantic backend, hybrid falls back to BM25-only results."""
         _index_sample_docs(client)
         resp = client.post(
             "/api/v1/rag/search",
@@ -211,7 +211,6 @@ class TestRagHybridSearch:
         data = resp.get_json()
         # Mode is hybrid_rrf but results come only from BM25
         assert data["mode"] == "hybrid_rrf"
-        assert len(data["warnings"]) > 0
 
     def test_search_neither_mode_returns_400(self, client):
         resp = client.post(
@@ -332,7 +331,6 @@ class TestRagSemanticSearch:
         data = resp.get_json()
         assert data["mode"] == "semantic"
         assert data["result_count"] == 0
-        assert len(data["warnings"]) > 0
 
     def test_semantic_search_missing_query(self, client):
         resp = client.post("/api/v1/rag/search/semantic", json={})

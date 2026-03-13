@@ -323,9 +323,11 @@ class TestMCPRestAPI(unittest.TestCase):
         import copilot_core.api.security as _sec
 
         app = self._create_test_app()
-        # Enable auth by setting env var and clearing cache
+        # Enable auth by setting env vars and clearing cache
         old_token = os.environ.get("COPILOT_AUTH_TOKEN", "")
+        old_auth_required = os.environ.get("COPILOT_AUTH_REQUIRED", "")
         os.environ["COPILOT_AUTH_TOKEN"] = "test-secret-token"
+        os.environ["COPILOT_AUTH_REQUIRED"] = "true"
         _sec._token_cache = ("", 0.0)  # clear TTL cache
         client = app.test_client()
         
@@ -358,6 +360,10 @@ class TestMCPRestAPI(unittest.TestCase):
             os.environ["COPILOT_AUTH_TOKEN"] = old_token
         else:
             os.environ.pop("COPILOT_AUTH_TOKEN", None)
+        if old_auth_required:
+            os.environ["COPILOT_AUTH_REQUIRED"] = old_auth_required
+        else:
+            os.environ.pop("COPILOT_AUTH_REQUIRED", None)
         _sec._token_cache = ("", 0.0)
 
 

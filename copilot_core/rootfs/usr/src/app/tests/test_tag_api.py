@@ -5,21 +5,28 @@ import os
 from pathlib import Path
 import sys
 
+import pytest
+
 try:  # pragma: no cover - dev envs without Flask should skip gracefully
-    import flask  # noqa: F401
+    from flask import Flask
 except ModuleNotFoundError:  # pragma: no cover - fallback when deps missing
-    print("SKIP: Flask not installed; tag-system API tests skipped")
-    raise SystemExit(0)
-
-ROOT = Path(__file__).resolve().parent.parent
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
-
-from main import app
+    Flask = None
 
 
-def test_list_tags_endpoint():
-    client = app.test_client()
+@pytest.fixture
+def tag_app():
+    """Create a test app with the tag-system blueprint registered."""
+    if Flask is None:
+        pytest.skip("Flask not installed")
+    from copilot_core.api.v1.tag_system import bp as tag_bp
+    app = Flask(__name__)
+    app.config["TESTING"] = True
+    app.register_blueprint(tag_bp)
+    return app
+
+
+def test_list_tags_endpoint(tag_app):
+    client = tag_app.test_client()
     response = client.get("/api/v1/tag-system/tags?lang=en")
     assert response.status_code == 200
     payload = response.get_json()
@@ -27,8 +34,8 @@ def test_list_tags_endpoint():
     assert isinstance(payload["tags"], list)
 
 
-def test_assignments_crud_flow():
-    client = app.test_client()
+def test_assignments_crud_flow(tag_app):
+    client = tag_app.test_client()
     # List assignments (initially empty)
     response = client.get("/api/v1/tag-system/assignments")
     assert response.status_code == 200

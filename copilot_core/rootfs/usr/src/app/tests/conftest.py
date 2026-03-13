@@ -253,6 +253,13 @@ def _reset_all_registries():
     except (ImportError, AttributeError):
         pass
 
+    # Module Registry singleton
+    try:
+        from copilot_core.module_registry import ModuleRegistry
+        ModuleRegistry._reset_instance()
+    except (ImportError, AttributeError):
+        pass
+
 
 # =============================================================================
 # Test Client Fixtures

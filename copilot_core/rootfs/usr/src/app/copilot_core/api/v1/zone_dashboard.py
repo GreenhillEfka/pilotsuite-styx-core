@@ -1066,6 +1066,10 @@ def get_zone_detail(zone_id: str):
     if zone is None:
         return jsonify({"ok": False, "error": "Zone not found"}), 404
 
+    entity_ids = zone.get("entity_ids", [])
+    entities_by_role = zone.get("entities_by_role", {})
+    scenes_data = zone.get("scenes", [])
+
     zone_data: Dict[str, Any] = {
         "zone_id": zone.get("zone_id"),
         "name": zone.get("name"),

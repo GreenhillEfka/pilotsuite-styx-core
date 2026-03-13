@@ -888,7 +888,7 @@ def register_blueprints(app: Flask, services: dict) -> None:
         ("copilot_core.api.v1.weather",          "bp",                   "/api/v1"),
         # Blueprints with built-in absolute prefix (register without url_prefix)
         ("copilot_core.api.v1.habitus_zones",    "bp",                   None),
-        ("copilot_core.api.v1.sonos",            "sonos_bp",             None),
+        # NOTE: sonos_bp is registered individually below (after init_sonos_api wiring)
         ("copilot_core.api.v1.module_control",   "module_control_bp",    None),
         ("copilot_core.api.v1.rag",              "bp",                   None),
         ("copilot_core.api.v1.styx_chat",        "bp",                   None),
@@ -1086,9 +1086,6 @@ def register_blueprints(app: Flask, services: dict) -> None:
 
     # NOTE: sharing_bp and federated_bp are already nested in api_v1
     # (via blueprint.py lines 79-80). No standalone registration needed.
-
-    app.register_blueprint(sharing_bp, url_prefix="/api/v1")
-    app.register_blueprint(federated_bp, url_prefix="/api/v1")
 
     # ── Additional standalone blueprints (data-driven) ──────────────────
     _EXTRA_BLUEPRINTS = [

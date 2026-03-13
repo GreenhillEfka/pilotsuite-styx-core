@@ -68,22 +68,24 @@ class TestHabitusCacheIntegration:
 class TestRAGCacheIntegration:
     """Test RAG BM25 with caching."""
 
-    def test_bm25_search_method_exists(self):
+    def test_bm25_search_method_exists(self, tmp_path):
         """Test that BM25 has search method."""
-        from copilot_core.rag.bm25 import BM25SqliteIndex
+        from copilot_core.rag.bm25 import BM25SqliteIndex, BM25Config
 
-        bm25 = BM25SqliteIndex()
+        config = BM25Config(db_path=str(tmp_path / "test_rag.sqlite3"))
+        bm25 = BM25SqliteIndex(config=config)
 
         # Check search method exists
         assert hasattr(bm25, 'search')
         assert hasattr(bm25, 'upsert_documents')
 
-    def test_bm25_search_signature(self):
+    def test_bm25_search_signature(self, tmp_path):
         """Test that search method signature."""
-        from copilot_core.rag.bm25 import BM25SqliteIndex
+        from copilot_core.rag.bm25 import BM25SqliteIndex, BM25Config
         import inspect
 
-        bm25 = BM25SqliteIndex()
+        config = BM25Config(db_path=str(tmp_path / "test_rag.sqlite3"))
+        bm25 = BM25SqliteIndex(config=config)
 
         # Check signature
         sig = inspect.signature(bm25.search)

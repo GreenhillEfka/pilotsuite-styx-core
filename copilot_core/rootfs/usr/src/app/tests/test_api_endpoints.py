@@ -1,5 +1,6 @@
 """API Endpoint Tests for /api/v1/* endpoints."""
 
+import os
 import tempfile
 import unittest
 from unittest.mock import patch, MagicMock
@@ -16,9 +17,25 @@ class TestAPIEndpoints(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures."""
         self.tmpdir = tempfile.TemporaryDirectory()
+        db_path = os.path.join(self.tmpdir.name, "module_states.db")
+        os.environ["MODULE_STATES_DB"] = db_path
+        # Reset ModuleRegistry singleton AND module-level DB_PATH
+        # (DB_PATH is evaluated at import time, so env alone is not enough)
+        try:
+            import copilot_core.module_registry as mr
+            mr.DB_PATH = db_path
+            mr.ModuleRegistry._reset_instance()
+        except (ImportError, AttributeError):
+            pass
 
     def tearDown(self):
         """Clean up test fixtures."""
+        try:
+            from copilot_core.module_registry import ModuleRegistry
+            ModuleRegistry._reset_instance()
+        except (ImportError, AttributeError):
+            pass
+        os.environ.pop("MODULE_STATES_DB", None)
         self.tmpdir.cleanup()
 
     def _create_test_app(self):

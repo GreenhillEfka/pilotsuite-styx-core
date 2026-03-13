@@ -119,20 +119,21 @@ class TestAdminTokenRequirement:
 
 class TestFailedAuthLogging:
     """Test failed authentication logging (P3-02)."""
-    
+
     def test_validate_token_returns_false_on_failure(self):
         """Test that failed token validation returns False and logs."""
         from copilot_core.api import security
-        
+
         mock_request = Mock()
         mock_request.headers = {"X-Auth-Token": "wrong_token"}
         mock_request.remote_addr = "192.168.1.100"
         mock_request.path = "/api/v1/test"
         mock_request.method = "POST"
-        
-        with patch.object(security, 'get_auth_token', return_value="correct_token"):
-            result = security.validate_token(mock_request)
-            assert result is False  # Should reject invalid token
+
+        with patch.dict(os.environ, {"COPILOT_AUTH_REQUIRED": "true"}):
+            with patch.object(security, 'get_auth_token', return_value="correct_token"):
+                result = security.validate_token(mock_request)
+                assert result is False  # Should reject invalid token
 
 
 if __name__ == "__main__":
