@@ -1,6 +1,6 @@
 # USER_MANUAL.md - PilotSuite User Guide
 
-> **Version:** 4.0.0 (HA Integration) + 4.0.0 (Core Add-on)
+> **Version:** 13.9.0 (HA Integration) + 13.9.0 (Core Add-on)
 > **Last Updated:** 2026-03-07
 
 ---

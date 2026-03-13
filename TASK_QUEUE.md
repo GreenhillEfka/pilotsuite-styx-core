@@ -3,7 +3,7 @@
 **Aktualisiert:** 2026-03-03 09:20 CET  
 **Status:** 🟢 AKTIV (KEINE STILLSTÄNDE)  
 **Nächste Iteration:** SOFORT nach Completion  
-**Version Status:** ✅ v13.0.3 (HA + Core synchronisiert)
+**Version Status:** ✅ v13.9.0 (HA + Core synchronisiert)
 
 ---
 

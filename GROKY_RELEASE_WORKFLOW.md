@@ -1,6 +1,6 @@
 # Groky Release Workflow — Home Assistant / HACS konform
 
-**Status:** v13.0.3 (2026-03-03)  
+**Status:** v13.9.0 (2026-03-13)  
 **Ziel:** Robuster Release-Workflow mit HA Conformance Check  
 **Thinking-Standard:** `--think=high` (MAXIMALES THINKING FÜR ALLE AGENTEN)
 

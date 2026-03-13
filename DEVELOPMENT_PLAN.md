@@ -3,7 +3,7 @@
 **Erstellt:** 2026-02-24
 **Aktualisiert:** 2026-03-03
 **Status:** Aktiver Entwicklungsplan fuer PilotSuite Styx
-**Aktuelle Version:** v13.0.4
+**Aktuelle Version:** v13.9.0
 
 ---
 

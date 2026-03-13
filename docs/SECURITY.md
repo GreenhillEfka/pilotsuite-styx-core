@@ -1,4 +1,4 @@
-# Security-Features - PilotSuite Styx Core v12.7.0
+# Security-Features - PilotSuite Styx Core v13.9.0
 
 ## Übersicht
 

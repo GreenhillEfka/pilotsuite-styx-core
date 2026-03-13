@@ -1,6 +1,6 @@
 # PilotSuite Styx — Installationsanleitung
 
-**Version:** 13.7.0
+**Version:** 13.9.0
 **Datum:** 2026-03-11
 **Zielgruppe:** Endanwender und Integratoren
 

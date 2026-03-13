@@ -2,7 +2,7 @@
 
 ## Übersicht
 
-Die Rate-Limiting-Implementierung in PilotSuite Styx Core v12.7.0 schützt die API vor Missbrauch und stellt faire Nutzung für alle Clients sicher.
+Die Rate-Limiting-Implementierung in PilotSuite Styx Core v13.9.0 schützt die API vor Missbrauch und stellt faire Nutzung für alle Clients sicher.
 
 **Standard-Limit:** 100 Requests pro Minute pro Client
 
@@ -645,6 +645,6 @@ alerts:
 
 ---
 
-*Dokumentation erstellt für PilotSuite Styx Core v12.7.0*
+*Dokumentation erstellt für PilotSuite Styx Core v13.9.0*
 *Rate-Limiting: 100 Req/Min pro Client ✅*
 *Letzte Aktualisierung: 2026-03-01*

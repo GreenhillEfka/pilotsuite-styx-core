@@ -1,6 +1,6 @@
 {
   "name": "PilotSuite Core",
-  "version": "v13.5.8",
+  "version": "v13.9.0",
   "slug": "pilotsuite_core",
   "description": "PilotSuite Styx Core - Home Assistant Copilot with RAG, Chat, and Zone Management",
   "arch": ["amd64", "armv7", "arm64"],

@@ -3,7 +3,7 @@
 **Audit Date:** 2026-03-02  
 **Auditor:** @Perplexya (via OpenClaw)  
 **Scope:** `copilot_core/rootfs/usr/src/app/copilot_core/`  
-**Version:** v12.2.0+
+**Version:** v13.9.0
 
 ---
 

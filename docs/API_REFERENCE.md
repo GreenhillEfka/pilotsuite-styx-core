@@ -1,6 +1,6 @@
 # PilotSuite Styx Core API Reference
 
-**Version:** 13.5.4  
+**Version:** 13.9.0  
 **Base URL:** `http://localhost:8909`  
 **Docs:** `/docs` (Swagger UI)
 
