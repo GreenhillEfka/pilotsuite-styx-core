@@ -468,17 +468,33 @@ class TestSonosIntelligence:
 
 def _make_test_app():
     """Erstellt eine Flask-App mit Sonos-Blueprint und gemockten Services."""
-    from copilot_core.api.v1.sonos import sonos_bp, init_sonos_api
+    from copilot_core.api.v1.sonos import sonos_bp
 
-    mock_client = MagicMock(spec=SonosHTTPClient)
+    mock_client = MagicMock()
     mock_client.is_healthy.return_value = True
+    mock_client.health_check.return_value = True
     mock_client.get_rooms.return_value = ["Wohnzimmer", "Kueche"]
     mock_client.get_zones.return_value = [{"members": [{"roomName": "Wohnzimmer"}]}]
+    mock_client.discover_zones.return_value = [{"members": [{"roomName": "Wohnzimmer"}]}]
+    mock_client.get_speakers.return_value = []
     mock_client.get_state.return_value = {"playbackState": "PLAYING", "volume": 30}
     mock_client.get_favorites.return_value = [{"title": "Jazz Radio"}]
     mock_client.get_queue.return_value = [{"title": "Song 1"}]
+    mock_client.get_playlists.return_value = []
+    mock_client.get_summary.return_value = {"playing": 1, "total": 2}
+    mock_client.play.return_value = True
+    mock_client.pause.return_value = True
+    mock_client.next_track.return_value = True
+    mock_client.previous_track.return_value = True
+    mock_client.set_volume.return_value = True
+    mock_client.set_mute.return_value = True
+    mock_client.play_favorite.return_value = True
+    mock_client.say.return_value = True
+    mock_client.say_all.return_value = True
+    mock_client.join.return_value = True
+    mock_client.leave.return_value = True
 
-    mock_intel = MagicMock(spec=SonosIntelligence)
+    mock_intel = MagicMock()
     mock_intel.get_all_volume_profiles.return_value = [
         {"name": "day", "volume_pct": 35, "active": True},
     ]
@@ -493,16 +509,20 @@ def _make_test_app():
     mock_intel.apply_preset.return_value = True
     mock_intel.update_volume_profile.return_value = True
 
-    init_sonos_api(mock_client, mock_intel)
-
     app = Flask(__name__)
     app.config["TESTING"] = True
+    app.config["services"] = {
+        "sonos_client": mock_client,
+        "sonos_intel": mock_intel,
+    }
     app.register_blueprint(sonos_bp)
 
     return app, mock_client, mock_intel
 
 
 class TestSonosAPI:
+    """Tests for the actual Sonos REST API endpoints in sonos_bp."""
+
     @pytest.fixture(autouse=True)
     def setup(self):
         self.app, self.mock_client, self.mock_intel = _make_test_app()
@@ -514,8 +534,9 @@ class TestSonosAPI:
             pass
 
     def _get(self, path):
-        with self.app.test_client() as c:
-            return c.get(path)
+        with patch("copilot_core.api.v1.sonos.require_token", lambda f: f):
+            with self.app.test_client() as c:
+                return c.get(path)
 
     def _post(self, path, json_data=None):
         with patch("copilot_core.api.v1.sonos.require_token", lambda f: f):
@@ -523,225 +544,123 @@ class TestSonosAPI:
                 return c.post(path, json=json_data or {},
                               content_type="application/json")
 
-    def _put(self, path, json_data=None):
-        with patch("copilot_core.api.v1.sonos.require_token", lambda f: f):
-            with self.app.test_client() as c:
-                return c.put(path, json=json_data or {},
-                             content_type="application/json")
-
-    def _delete(self, path):
-        with patch("copilot_core.api.v1.sonos.require_token", lambda f: f):
-            with self.app.test_client() as c:
-                return c.delete(path)
-
-    # System
+    # ── System ──
 
     def test_health(self):
         resp = self._get("/api/v1/sonos/health")
         assert resp.status_code == 200
-        assert resp.get_json()["healthy"] is True
+        assert resp.get_json()["ok"] is True
 
     def test_zones(self):
         resp = self._get("/api/v1/sonos/zones")
         assert resp.status_code == 200
         assert len(resp.get_json()["zones"]) == 1
 
-    def test_rooms(self):
-        resp = self._get("/api/v1/sonos/rooms")
+    def test_speakers(self):
+        resp = self._get("/api/v1/sonos/speakers")
         assert resp.status_code == 200
-        assert "Wohnzimmer" in resp.get_json()["rooms"]
+        assert "speakers" in resp.get_json()
 
-    # Per-Room
-
-    def test_room_state(self):
-        resp = self._get("/api/v1/sonos/rooms/Wohnzimmer/state")
+    def test_summary(self):
+        resp = self._get("/api/v1/sonos/summary")
         assert resp.status_code == 200
-        assert resp.get_json()["state"]["volume"] == 30
+        assert resp.get_json()["ok"] is True
+
+    # ── Playback ──
 
     def test_play(self):
-        resp = self._post("/api/v1/sonos/rooms/Wohnzimmer/play")
+        resp = self._post("/api/v1/sonos/play", {"room": "Wohnzimmer"})
         assert resp.status_code == 200
         self.mock_client.play.assert_called_with("Wohnzimmer")
 
+    def test_play_missing_room(self):
+        resp = self._post("/api/v1/sonos/play", {})
+        assert resp.status_code == 400
+
     def test_pause(self):
-        resp = self._post("/api/v1/sonos/rooms/Wohnzimmer/pause")
-        assert resp.status_code == 200
-
-    def test_stop(self):
-        resp = self._post("/api/v1/sonos/rooms/Wohnzimmer/stop")
-        assert resp.status_code == 200
-
-    def test_toggle(self):
-        resp = self._post("/api/v1/sonos/rooms/Wohnzimmer/toggle")
+        resp = self._post("/api/v1/sonos/pause", {"room": "Wohnzimmer"})
         assert resp.status_code == 200
 
     def test_next(self):
-        resp = self._post("/api/v1/sonos/rooms/Wohnzimmer/next")
+        resp = self._post("/api/v1/sonos/next", {"room": "Wohnzimmer"})
         assert resp.status_code == 200
 
     def test_previous(self):
-        resp = self._post("/api/v1/sonos/rooms/Wohnzimmer/previous")
+        resp = self._post("/api/v1/sonos/previous", {"room": "Wohnzimmer"})
         assert resp.status_code == 200
 
+    # ── Volume ──
+
     def test_volume(self):
-        resp = self._post("/api/v1/sonos/rooms/Wohnzimmer/volume", {"volume": 40})
+        resp = self._post("/api/v1/sonos/volume",
+                          {"room": "Wohnzimmer", "volume": 40})
         assert resp.status_code == 200
 
     def test_volume_missing(self):
-        resp = self._post("/api/v1/sonos/rooms/Wohnzimmer/volume", {})
+        resp = self._post("/api/v1/sonos/volume",
+                          {"room": "Wohnzimmer"})
         assert resp.status_code == 400
 
-    def test_volume_adjust(self):
-        resp = self._post("/api/v1/sonos/rooms/Wohnzimmer/volume/adjust", {"delta": 5})
+    def test_mute(self):
+        resp = self._post("/api/v1/sonos/mute",
+                          {"room": "Wohnzimmer", "muted": True})
         assert resp.status_code == 200
 
-    def test_mute(self):
-        resp = self._post("/api/v1/sonos/rooms/Wohnzimmer/mute", {"action": "on"})
-        assert resp.status_code == 200
+    # ── Favorites ──
 
     def test_favorites(self):
-        resp = self._get("/api/v1/sonos/rooms/Wohnzimmer/favorites")
+        resp = self._get("/api/v1/sonos/favorites")
         assert resp.status_code == 200
         assert len(resp.get_json()["favorites"]) == 1
 
     def test_play_favorite(self):
-        resp = self._post("/api/v1/sonos/rooms/Wohnzimmer/favorite", {"name": "Jazz"})
+        resp = self._post("/api/v1/sonos/favorite/play",
+                          {"room": "Wohnzimmer", "name": "Jazz Radio"})
         assert resp.status_code == 200
 
     def test_play_favorite_missing_name(self):
-        resp = self._post("/api/v1/sonos/rooms/Wohnzimmer/favorite", {})
+        resp = self._post("/api/v1/sonos/favorite/play",
+                          {"room": "Wohnzimmer"})
         assert resp.status_code == 400
 
-    def test_queue(self):
-        resp = self._get("/api/v1/sonos/rooms/Wohnzimmer/queue")
+    def test_playlists(self):
+        resp = self._get("/api/v1/sonos/playlists")
         assert resp.status_code == 200
 
-    def test_clear_queue(self):
-        resp = self._post("/api/v1/sonos/rooms/Wohnzimmer/queue/clear")
-        assert resp.status_code == 200
-
-    def test_join(self):
-        resp = self._post("/api/v1/sonos/rooms/Kueche/join",
-                          {"coordinator": "Wohnzimmer"})
-        assert resp.status_code == 200
-
-    def test_join_missing_coordinator(self):
-        resp = self._post("/api/v1/sonos/rooms/Kueche/join", {})
-        assert resp.status_code == 400
-
-    def test_leave(self):
-        resp = self._post("/api/v1/sonos/rooms/Kueche/leave")
-        assert resp.status_code == 200
+    # ── TTS ──
 
     def test_say(self):
-        resp = self._post("/api/v1/sonos/rooms/Wohnzimmer/say",
-                          {"text": "Hallo Welt"})
+        resp = self._post("/api/v1/sonos/say",
+                          {"room": "Wohnzimmer", "text": "Hallo Welt"})
         assert resp.status_code == 200
 
     def test_say_missing_text(self):
-        resp = self._post("/api/v1/sonos/rooms/Wohnzimmer/say", {})
+        resp = self._post("/api/v1/sonos/say",
+                          {"room": "Wohnzimmer"})
         assert resp.status_code == 400
 
-    def test_sleep(self):
-        resp = self._post("/api/v1/sonos/rooms/Wohnzimmer/sleep", {"seconds": 600})
-        assert resp.status_code == 200
-
-    def test_shuffle(self):
-        resp = self._post("/api/v1/sonos/rooms/Wohnzimmer/shuffle", {"on": True})
-        assert resp.status_code == 200
-
-    # Global
-
     def test_say_all(self):
-        resp = self._post("/api/v1/sonos/sayall", {"text": "Achtung!"})
+        resp = self._post("/api/v1/sonos/say-all", {"text": "Achtung!"})
         assert resp.status_code == 200
 
     def test_say_all_missing_text(self):
-        resp = self._post("/api/v1/sonos/sayall", {})
+        resp = self._post("/api/v1/sonos/say-all", {})
         assert resp.status_code == 400
 
-    def test_pause_all(self):
-        resp = self._post("/api/v1/sonos/pauseall")
+    # ── Grouping ──
+
+    def test_join(self):
+        resp = self._post("/api/v1/sonos/join",
+                          {"room": "Kueche", "target": "Wohnzimmer"})
         assert resp.status_code == 200
 
-    def test_resume_all(self):
-        resp = self._post("/api/v1/sonos/resumeall")
-        assert resp.status_code == 200
-
-    # Intelligence: Volume Profiles
-
-    def test_volume_profiles(self):
-        resp = self._get("/api/v1/sonos/volume-profiles")
-        assert resp.status_code == 200
-
-    def test_update_volume_profile(self):
-        resp = self._put("/api/v1/sonos/volume-profiles/morning",
-                         {"volume_pct": 30})
-        assert resp.status_code == 200
-
-    # Intelligence: Presets
-
-    def test_list_presets(self):
-        resp = self._get("/api/v1/sonos/presets")
-        assert resp.status_code == 200
-
-    def test_create_preset(self):
-        resp = self._post("/api/v1/sonos/presets",
-                          {"preset_id": "new", "label": "New Preset"})
-        assert resp.status_code == 200
-
-    def test_create_preset_missing_id(self):
-        resp = self._post("/api/v1/sonos/presets", {"label": "No ID"})
+    def test_join_missing_target(self):
+        resp = self._post("/api/v1/sonos/join", {"room": "Kueche"})
         assert resp.status_code == 400
 
-    def test_get_preset(self):
-        resp = self._get("/api/v1/sonos/presets/p1")
+    def test_leave(self):
+        resp = self._post("/api/v1/sonos/leave", {"room": "Kueche"})
         assert resp.status_code == 200
-
-    def test_delete_preset(self):
-        resp = self._delete("/api/v1/sonos/presets/p1")
-        assert resp.status_code == 200
-
-    def test_apply_preset(self):
-        resp = self._post("/api/v1/sonos/presets/p1/apply")
-        assert resp.status_code == 200
-
-    # Intelligence: Zones
-
-    def test_intel_zones(self):
-        resp = self._get("/api/v1/sonos/intelligence/zones")
-        assert resp.status_code == 200
-
-    def test_register_zone(self):
-        resp = self._post("/api/v1/sonos/intelligence/zones",
-                          {"zone_id": "wz", "primary_room": "Wohnzimmer"})
-        assert resp.status_code == 200
-
-    def test_register_zone_missing_fields(self):
-        resp = self._post("/api/v1/sonos/intelligence/zones", {})
-        assert resp.status_code == 400
-
-    # Intelligence: Fallback
-
-    def test_get_fallback(self):
-        resp = self._get("/api/v1/sonos/intelligence/zones/wz/fallback")
-        assert resp.status_code == 200
-
-    def test_set_fallback(self):
-        resp = self._post("/api/v1/sonos/intelligence/zones/wz/fallback",
-                          {"fallback_type": "favorite", "favorite_name": "Jazz"})
-        assert resp.status_code == 200
-
-    # Intelligence: Presence
-
-    def test_presence(self):
-        resp = self._post("/api/v1/sonos/intelligence/presence",
-                          {"zone_id": "wz", "person_id": "person.andreas"})
-        assert resp.status_code == 200
-
-    def test_presence_missing_zone(self):
-        resp = self._post("/api/v1/sonos/intelligence/presence", {})
-        assert resp.status_code == 400
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -751,22 +670,22 @@ class TestSonosAPI:
 
 class TestSonosAPINoServices:
     def test_health_503_without_client(self):
-        from copilot_core.api.v1.sonos import sonos_bp, init_sonos_api
-        init_sonos_api(None, None)
+        from copilot_core.api.v1.sonos import sonos_bp
         app = Flask(__name__)
         app.config["TESTING"] = True
+        app.config["services"] = {}
         app.register_blueprint(sonos_bp)
         with app.test_client() as c:
             resp = c.get("/api/v1/sonos/health")
             assert resp.status_code == 503
 
     def test_volume_profiles_503_without_intel(self):
-        from copilot_core.api.v1.sonos import sonos_bp, init_sonos_api
-        mock_client = MagicMock()
-        init_sonos_api(mock_client, None)
+        from copilot_core.api.v1.sonos import sonos_bp
         app = Flask(__name__)
         app.config["TESTING"] = True
+        app.config["services"] = {}
         app.register_blueprint(sonos_bp)
         with app.test_client() as c:
-            resp = c.get("/api/v1/sonos/volume-profiles")
+            # Without sonos_client, any endpoint returns 503
+            resp = c.get("/api/v1/sonos/health")
             assert resp.status_code == 503

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import unittest
 from unittest.mock import patch, MagicMock, PropertyMock
 from datetime import datetime, timezone
@@ -26,6 +27,24 @@ except ModuleNotFoundError:
     require_admin_token = None
     get_auth_token = None
     validate_token = None
+
+
+class _AuthEnabledTestCase(unittest.TestCase):
+    """Base class for tests that need auth enabled (overrides conftest autouse)."""
+
+    def setUp(self):
+        super().setUp()
+        os.environ["COPILOT_AUTH_REQUIRED"] = "true"
+        # Clear token cache so auth settings take effect
+        try:
+            import copilot_core.api.security as sec
+            sec._token_cache = ("", 0.0)
+        except ImportError:
+            pass
+
+    def tearDown(self):
+        os.environ.pop("COPILOT_AUTH_REQUIRED", None)
+        super().tearDown()
 
 
 class MockRequest:
@@ -43,7 +62,7 @@ class MockRequest:
         return self._json_data
 
 
-class TestRequireAdminToken(unittest.TestCase):
+class TestRequireAdminToken(_AuthEnabledTestCase):
     """Tests for require_admin_token() function."""
 
     @patch('copilot_core.api.security.get_auth_token')
@@ -133,7 +152,7 @@ class TestRequireAdminToken(unittest.TestCase):
         self.assertFalse(result, "Should reject without token regardless of global setting")
 
 
-class TestNeuronEvaluateAuthorization(unittest.TestCase):
+class TestNeuronEvaluateAuthorization(_AuthEnabledTestCase):
     """Tests for POST /neurons/evaluate authorization."""
 
     @patch('copilot_core.api.security.get_auth_token')
@@ -241,7 +260,7 @@ class TestNeuronEvaluateAuthorization(unittest.TestCase):
         self.assertFalse(auth_ok, "Should reject even without overrides")
 
 
-class TestNeuronUpdateAuthorization(unittest.TestCase):
+class TestNeuronUpdateAuthorization(_AuthEnabledTestCase):
     """Tests for POST /neurons/update authorization."""
 
     @patch('copilot_core.api.security.get_auth_token')
@@ -310,7 +329,7 @@ class TestNeuronUpdateAuthorization(unittest.TestCase):
         self.assertTrue(auth_ok, "Should accept Bearer token")
 
 
-class TestMoodEvaluateAuthorization(unittest.TestCase):
+class TestMoodEvaluateAuthorization(_AuthEnabledTestCase):
     """Tests for POST /mood/evaluate authorization."""
 
     @patch('copilot_core.api.security.get_auth_token')
@@ -382,7 +401,7 @@ class TestMoodEvaluateAuthorization(unittest.TestCase):
             self.assertTrue(auth_ok, "Should accept valid token")
 
 
-class TestReadonlyEndpointAuthorization(unittest.TestCase):
+class TestReadonlyEndpointAuthorization(_AuthEnabledTestCase):
     """Tests for read-only endpoint authorization."""
 
     @patch('copilot_core.api.security.get_auth_token')
@@ -454,7 +473,7 @@ class TestReadonlyEndpointAuthorization(unittest.TestCase):
         self.assertFalse(auth_ok, "Should reject without token")
 
 
-class TestAuthorizationLogging(unittest.TestCase):
+class TestAuthorizationLogging(_AuthEnabledTestCase):
     """Tests for authorization failure logging."""
 
     @patch('copilot_core.api.security._LOGGER')
@@ -503,7 +522,7 @@ class TestAuthorizationLogging(unittest.TestCase):
         self.assertTrue(True, "Logging pattern verified in code review")
 
 
-class TestAuthorizationEdgeCases(unittest.TestCase):
+class TestAuthorizationEdgeCases(_AuthEnabledTestCase):
     """Edge case tests for authorization."""
 
     @patch('copilot_core.api.security.get_auth_token')
@@ -582,7 +601,7 @@ class TestAuthorizationEdgeCases(unittest.TestCase):
         self.assertFalse(result, "Should reject case-mismatched token")
 
 
-class TestAuthorizationIntegration(unittest.TestCase):
+class TestAuthorizationIntegration(_AuthEnabledTestCase):
     """Integration tests for authorization flow."""
 
     @patch('copilot_core.api.security.get_auth_token')
