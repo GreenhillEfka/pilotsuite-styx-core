@@ -4,8 +4,8 @@ Candidate Management API - REST endpoints for automation suggestion lifecycle.
 Endpoints:
     GET  /api/v1/candidates         - List candidates with optional filters
     POST /api/v1/candidates         - Create candidate from pattern discovery  
-    GET  /api/v1/candidates/{id}    - Get specific candidate details
-    PUT  /api/v1/candidates/{id}    - Update candidate state (accept/dismiss/defer)
+    GET  /api/v1/candidates/{candidate_id}    - Get specific candidate details
+    PUT  /api/v1/candidates/{candidate_id}    - Update candidate state (accept/dismiss/defer)
     GET  /api/v1/candidates/stats   - Storage statistics and health
 """
 from __future__ import annotations

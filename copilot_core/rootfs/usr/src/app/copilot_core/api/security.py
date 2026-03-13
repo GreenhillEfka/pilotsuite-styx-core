@@ -86,21 +86,27 @@ def is_auth_required(options_path: str = OPTIONS_PATH) -> bool:
 
 def validate_token(request) -> bool:
     """Validate the shared token against the incoming request.
-    
-    Returns True if token is valid or authentication is disabled.
-    Returns False if token is required but invalid.
+
+    Returns True when authentication is disabled or a valid token is provided.
+    Returns False when authentication is required and token validation fails.
     """
 
     # Check if auth is required
     if not is_auth_required():
         # Auth disabled - allow all requests
         return True
-    
+
     # Auth required - validate token
     token = get_auth_token()
     if not token:
-        # No token configured - allow all requests (first-run / unconfigured)
-        return True
+        # Fail closed when auth is required but no token is configured
+        _LOGGER.error(
+            "Authentication required but no auth token is configured; rejecting request "
+            "(path=%s, method=%s)",
+            request.path or "unknown",
+            request.method or "unknown",
+        )
+        return False
 
     header_token = (request.headers.get("X-Auth-Token") or "").strip()
     if header_token and hmac.compare_digest(header_token, token):

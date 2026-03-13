@@ -16,8 +16,8 @@ info:
     
     ## Authentication
     - Notifications API: Bearer Token
-    - Sharing API: API Key (X-API-Key Header)
-    - Collective Intelligence API: API Key (X-API-Key Header)
+    - Sharing API: Auth Token (X-Auth-Token Header, preferred since v13.5.3) or API Key (X-API-Key Header, deprecated)
+    - Collective Intelligence API: Auth Token (X-Auth-Token Header, preferred since v13.5.3) or API Key (X-API-Key Header, deprecated)
   version: 12.0.0
   contact:
     name: PilotSuite
@@ -1000,10 +1000,16 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
+    authTokenAuth:
+      type: apiKey
+      in: header
+      name: X-Auth-Token
+      description: Auth Token (preferred since v13.5.3)
     apiKeyAuth:
       type: apiKey
       in: header
       name: X-API-Key
+      description: API Key (deprecated since v13.5.3, use X-Auth-Token instead)
 
   schemas:
     NotificationRequest:

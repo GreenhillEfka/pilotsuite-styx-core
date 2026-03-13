@@ -6,7 +6,7 @@ Tests verify that:
 3. Invalid tokens are rejected
 4. Token formats (X-Auth-Token and Bearer) are both accepted
 5. Allowlisted paths bypass auth
-6. Empty token config allows all requests (first-run experience)
+6. Missing token configuration fails closed when auth is required
 7. WebSocket connections require authentication
 8. Neuron state overrides require admin tokens
 """
@@ -78,8 +78,8 @@ class TestSecurityModule(unittest.TestCase):
                  patch("copilot_core.api.security.is_auth_required", return_value=True):
                 self.assertFalse(validate_token(request))
 
-    def test_validate_token_allows_when_no_token_configured(self):
-        """Empty auth token = allow all (first-run experience)."""
+    def test_validate_token_rejects_when_no_token_configured(self):
+        """When auth is required, missing token config fails closed."""
         if not _FLASK_AVAILABLE:
             self.skipTest("Flask not installed")
         app = create_app()
@@ -87,7 +87,7 @@ class TestSecurityModule(unittest.TestCase):
             from flask import request
             with patch("copilot_core.api.security.get_auth_token", return_value=""), \
                  patch("copilot_core.api.security.is_auth_required", return_value=True):
-                self.assertTrue(validate_token(request))
+                self.assertFalse(validate_token(request))
 
     def test_validate_token_allows_when_auth_disabled(self):
         """Auth disabled = allow all requests."""

@@ -28,7 +28,7 @@ from copilot_core.voice.proactive import ProactiveVoiceHints, HintConfig, HintPr
 
 _LOGGER = logging.getLogger(__name__)
 
-bp = Blueprint("voice", __name__, url_prefix="/voice")
+bp = Blueprint("voice", __name__, url_prefix="/api/v1/voice")
 
 from copilot_core.api.security import validate_token as _validate_token
 

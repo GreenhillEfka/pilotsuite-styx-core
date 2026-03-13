@@ -166,19 +166,19 @@ def get_client_identifier(request: Request) -> str:
     # 1. Authenticated User (priorisiert)
     if request.state.user_id:
         return f"user:{request.state.user_id}"
-    
-    # 2. API Key
-    api_key = request.headers.get("X-API-Key")
-    if api_key:
-        return f"apikey:{hashlib.sha256(api_key.encode()).hexdigest()[:16]}"
-    
+
+    # 2. Auth Token (X-Auth-Token bevorzugt seit v13.5.3; X-API-Key deprecated)
+    auth_token = request.headers.get("X-Auth-Token") or request.headers.get("X-API-Key")
+    if auth_token:
+        return f"apikey:{hashlib.sha256(auth_token.encode()).hexdigest()[:16]}"
+
     # 3. IP-Adresse (Fallback)
     return f"ip:{get_remote_address(request)}"
 ```
 
 **Identifikations-Priorität:**
 1. Authenticated User-ID (genaueste)
-2. API-Key (für Service-Accounts)
+2. Auth-Token (X-Auth-Token bevorzugt; X-API-Key deprecated seit v13.5.3)
 3. IP-Adresse (Fallback für anonyme Requests)
 
 ## ✅ Input Validation
@@ -397,21 +397,29 @@ zone = ZoneCreateSchema(type="invalid", priority=6, active="yes")
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials, APIKeyHeader
 
 http_bearer = HTTPBearer(auto_error=False)
-api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+auth_token_header = APIKeyHeader(name="X-Auth-Token", auto_error=False)
+api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)  # deprecated since v13.5.3
 
 async def get_current_user(
     bearer: HTTPAuthorizationCredentials = Depends(http_bearer),
-    api_key: str = Depends(api_key_header)
+    auth_token: str = Depends(auth_token_header),
+    api_key: str = Depends(api_key_header)  # deprecated
 ):
-    """Authentifiziert User via Bearer Token oder API Key"""
-    
+    """Authentifiziert User via Bearer Token, X-Auth-Token (bevorzugt) oder X-API-Key (deprecated)"""
+
     # Priorität 1: Bearer Token (OAuth2)
     if bearer and bearer.credentials:
         user = await auth_service.validate_token(bearer.credentials)
         if user:
             return user
-    
-    # Priorität 2: API Key (Service Accounts)
+
+    # Priorität 2: X-Auth-Token (bevorzugt seit v13.5.3)
+    if auth_token:
+        user = await auth_service.validate_token(auth_token)
+        if user:
+            return user
+
+    # Priorität 3: X-API-Key (deprecated seit v13.5.3)
     if api_key:
         user = await auth_service.validate_api_key(api_key)
         if user:
@@ -555,7 +563,8 @@ SECURITY_AUDIT_LOG_LEVEL=INFO
 
 # Authentication
 SECURITY_TOKEN_EXPIRY=3600  # 1 hour
-SECURITY_API_KEY_HEADER=X-API-Key
+SECURITY_AUTH_TOKEN_HEADER=X-Auth-Token  # Preferred since v13.5.3
+SECURITY_API_KEY_HEADER=X-API-Key  # Deprecated since v13.5.3
 SECURITY_ALLOW_CORS=false
 ```
 

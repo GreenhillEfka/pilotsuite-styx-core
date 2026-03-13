@@ -20,7 +20,7 @@ from main import app
 
 def test_list_tags_endpoint():
     client = app.test_client()
-    response = client.get("/api/v1/tags?lang=en")
+    response = client.get("/api/v1/tag-system/tags?lang=en")
     assert response.status_code == 200
     payload = response.get_json()
     assert "tags" in payload
@@ -30,7 +30,7 @@ def test_list_tags_endpoint():
 def test_assignments_crud_flow():
     client = app.test_client()
     # List assignments (initially empty)
-    response = client.get("/api/v1/assignments")
+    response = client.get("/api/v1/tag-system/assignments")
     assert response.status_code == 200
     payload = response.get_json()
     assert "assignments" in payload

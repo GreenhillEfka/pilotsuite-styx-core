@@ -26,6 +26,8 @@ import ipaddress
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 from functools import wraps
 from urllib.parse import urlparse
+
+from copilot_core.security.logging_redaction import as_log_text, sanitize_text, sanitize_url
 from flask import request, jsonify, g, make_response, abort
 
 logger = logging.getLogger(__name__)
@@ -495,9 +497,11 @@ class EnhancedSecurityLogger:
         allowed: bool,
     ) -> None:
         """Log access control event."""
+        safe_client = sanitize_text(client)
+        safe_resource = sanitize_text(resource)
         self.logger.info(
-            f"ACCESS_CONTROL: type={event_type} client={client} "
-            f"resource={resource} role={role} allowed={allowed}"
+            f"ACCESS_CONTROL: type={event_type} client={safe_client} "
+            f"resource={safe_resource} role={role} allowed={allowed}"
         )
     
     def log_injection_attempt(
@@ -508,20 +512,35 @@ class EnhancedSecurityLogger:
         pattern: str,
     ) -> None:
         """Log injection attempt."""
+        safe_client = sanitize_text(client)
+        safe_path = sanitize_text(path)
+        safe_pattern = sanitize_text(pattern)
         self.logger.warning(
-            f"INJECTION_ATTEMPT: type={injection_type} client={client} "
-            f"path={path} pattern={pattern}"
+            f"INJECTION_ATTEMPT: type={injection_type} client={safe_client} "
+            f"path={safe_path} pattern={safe_pattern}"
         )
     
     def log_ssrf_attempt(
         self,
         client: str,
-        url: str,
+        url: Any,
         reason: str,
     ) -> None:
-        """Log SSRF attempt."""
+        """Log SSRF attempt.
+
+        The `url` argument may be a URL string or an entire payload object; both
+        are sanitized before logging.
+        """
+        safe_client = sanitize_text(client)
+        safe_reason = sanitize_text(reason)
+
+        if isinstance(url, str) and (url.startswith("http://") or url.startswith("https://")):
+            safe_url = sanitize_url(url)
+        else:
+            safe_url = as_log_text(url)
+
         self.logger.warning(
-            f"SSRF_ATTEMPT: client={client} url={url} reason={reason}"
+            f"SSRF_ATTEMPT: client={safe_client} url={safe_url} reason={safe_reason}"
         )
     
     def log_crypto_event(
@@ -531,9 +550,10 @@ class EnhancedSecurityLogger:
         details: Optional[Dict[str, Any]] = None,
     ) -> None:
         """Log cryptographic event."""
-        msg = f"CRYPTO: type={event_type} client={client}"
+        safe_client = sanitize_text(client)
+        msg = f"CRYPTO: type={event_type} client={safe_client}"
         if details:
-            msg += f" details={details}"
+            msg += f" details={as_log_text(details)}"
         self.logger.info(msg)
 
 
@@ -604,7 +624,7 @@ class OWASPMiddleware:
                     valid, error = self.ssrf_protection.validate_urls_in_dict(data)
                     if not valid:
                         client = self._get_client_key()
-                        self.security_logger.log_ssrf_attempt(client, str(data), error)
+                        self.security_logger.log_ssrf_attempt(client, data, error)
                         return jsonify({
                             "ok": False,
                             "error": "ssrf_blocked",

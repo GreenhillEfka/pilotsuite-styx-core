@@ -429,61 +429,59 @@ class TestVoiceAPIEndpoints:
         def mock_validate_token(request):
             return True
         
-        # The blueprint already has url_prefix="/voice", so we just register it
-        # Test paths should be /voice/status, /voice/context, etc.
+        # The blueprint has url_prefix="/api/v1/voice"
         with patch('copilot_core.api.v1.voice._validate_token', mock_validate_token):
             app.register_blueprint(voice_bp)
-            
+
             with app.test_client() as client:
                 yield client
-    
+
     def test_voice_status_endpoint(self, client):
         """Test voice status endpoint."""
-        # The blueprint has url_prefix="/voice"
         response = client.get(
-            "/voice/status",
+            "/api/v1/voice/status",
         )
-        
+
         # Should return 200 (success)
         assert response.status_code == 200
-    
+
     def test_voice_context_endpoint(self, client):
         """Test voice context endpoint."""
         response = client.get(
-            "/voice/context",
+            "/api/v1/voice/context",
         )
-        
+
         assert response.status_code == 200
-    
+
     def test_voice_intents_endpoint(self, client):
         """Test voice intents endpoint."""
         response = client.get(
-            "/voice/intents",
+            "/api/v1/voice/intents",
         )
-        
+
         assert response.status_code == 200
-        
+
         if response.status_code == 200:
             data = response.get_json()
             assert "intents" in data
             assert len(data["intents"]) > 0
-    
+
     def test_voice_zones_endpoint(self, client):
         """Test voice zones endpoint."""
         response = client.get(
-            "/voice/zones",
+            "/api/v1/voice/zones",
         )
-        
+
         assert response.status_code == 200
-        
+
         if response.status_code == 200:
             data = response.get_json()
             assert "zones" in data
-    
+
     def test_voice_intent_endpoint_post(self, client):
         """Test voice intent processing endpoint."""
         response = client.post(
-            "/voice/intent",
+            "/api/v1/voice/intent",
             json={"text": "Licht an", "language": "de"},
         )
         

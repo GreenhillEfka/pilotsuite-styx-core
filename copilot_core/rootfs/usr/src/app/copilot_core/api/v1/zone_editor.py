@@ -432,3 +432,56 @@ def remove_room_legacy(zone_id: str, room_id: str):
         "ok": True,
         "zone": engine.get_zone(zone_id),
     })
+
+
+# ============================================================================
+# HA Test Compatibility Aliases
+# These routes provide backward compatibility for HA integration tests
+# ============================================================================
+
+# Additional blueprint for /api/v1/zone/* legacy paths (HA test compatibility)
+zone_legacy_alias_bp = Blueprint("zone_legacy_alias", __name__, url_prefix="/api/v1/zone")
+
+# Export all blueprints for registration
+__all__ = ["zone_editor_bp", "zone_editor_legacy_bp", "zone_legacy_alias_bp"]
+
+
+@zone_legacy_alias_bp.route("/create", methods=["POST"])
+@require_token
+def create_zone_alias():
+    """Create zone alias for HA test compatibility.
+    
+    Redirects to /api/v1/zone/editor/create
+    """
+    from flask import redirect, url_for
+    return redirect(url_for("zone_editor_legacy_bp.create_zone"))
+
+
+@zone_legacy_alias_bp.route("/update", methods=["POST"])
+@zone_legacy_alias_bp.route("/<zone_id>", methods=["PUT"])
+@require_token
+def update_zone_alias(zone_id=None):
+    """Update zone alias for HA test compatibility.
+    
+    Redirects to /api/v1/zone/editor/<zone_id>
+    """
+    from flask import redirect, url_for
+    if zone_id:
+        return redirect(url_for("zone_editor_legacy_bp.update_zone", zone_id=zone_id))
+    # For /api/v1/zone/update without zone_id, expect zone_id in body
+    data = request.get_json(force=True) if request.is_json else {}
+    zone_id = data.get("zone_id")
+    if not zone_id:
+        return jsonify({"error": "Missing zone_id"}), 400
+    return redirect(url_for("zone_editor_legacy_bp.update_zone", zone_id=zone_id))
+
+
+@zone_legacy_alias_bp.route("/delete/<zone_id>", methods=["DELETE"])
+@require_token
+def delete_zone_alias(zone_id: str):
+    """Delete zone alias for HA test compatibility.
+    
+    Redirects to /api/v1/zone/editor/<zone_id> (DELETE)
+    """
+    from flask import redirect, url_for
+    return redirect(url_for("zone_editor_legacy_bp.delete_zone", zone_id=zone_id))

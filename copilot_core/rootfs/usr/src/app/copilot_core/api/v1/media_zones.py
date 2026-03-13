@@ -982,3 +982,54 @@ def proactive_reset_dismissals():
         "person_id": person_id,
         "reset": True,
     })
+
+
+@media_zones_bp.route("/zones/<zone_id>/favorites", methods=["GET"])
+@require_token
+def get_zone_favorites(zone_id: str):
+    """Get Sonos favorites / source list for a zone's media players.
+
+    Queries HA ``source_list`` attribute from each player.
+    Returns the union of all available sources.
+
+    Response::
+
+        {
+            "ok": true,
+            "zone_id": "living",
+            "favorites": ["Spotify", "TuneIn", "Line In", ...],
+            "players": [{"entity_id": "...", "source_list": [...], "current_source": "..."}]
+        }
+    """
+    mgr, err = _require_media_mgr()
+    if err:
+        return err
+
+    result = mgr.get_zone_favorites(zone_id)
+    return jsonify({"ok": True, **result})
+
+
+@media_zones_bp.route("/zones/<zone_id>/select-source", methods=["POST"])
+@require_token
+def select_zone_source(zone_id: str):
+    """Select a source/favorite on all players in a zone.
+
+    Request body::
+
+        {"source": "Spotify"}
+
+    Response::
+
+        {"ok": true, "zone_id": "living", "source": "Spotify"}
+    """
+    mgr, err = _require_media_mgr()
+    if err:
+        return err
+
+    data = request.get_json(silent=True) or {}
+    source = data.get("source", "").strip()
+    if not source:
+        return jsonify({"ok": False, "error": "Missing required field 'source'"}), 400
+
+    result = mgr.select_source(zone_id, source)
+    return jsonify(result)

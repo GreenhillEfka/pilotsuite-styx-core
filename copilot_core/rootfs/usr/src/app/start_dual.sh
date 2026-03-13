@@ -62,6 +62,47 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# node-sonos-http-api (Sonos native control via UPnP)
+# ---------------------------------------------------------------------------
+SONOS_ENABLED="${SONOS_ENABLED:-true}"
+SONOS_PORT="${SONOS_PORT:-5005}"
+
+# Read sonos options from options.json if available
+if [ -f "$OPTIONS_FILE" ]; then
+    eval "$(python3 -c "
+import json
+try:
+    with open('$OPTIONS_FILE') as f:
+        opts = json.load(f)
+    se = opts.get('sonos_enabled', True)
+    sp = opts.get('sonos_port', 5005)
+    if not se:
+        print('export SONOS_ENABLED=false')
+    if sp and sp != 5005:
+        print(f'export SONOS_PORT={int(sp)}')
+except Exception:
+    pass
+" 2>/dev/null)" || true
+fi
+
+SONOS_PID=""
+if [ "$SONOS_ENABLED" = "true" ] && [ -d "/usr/src/sonos/node_modules" ]; then
+    echo "Starting node-sonos-http-api on port ${SONOS_PORT}..."
+    cd /usr/src/sonos && node node_modules/sonos-http-api/server.js &
+    SONOS_PID=$!
+    cd /usr/src/app
+    sleep 1
+    if kill -0 "$SONOS_PID" 2>/dev/null; then
+        echo "Sonos HTTP API running (PID $SONOS_PID, port $SONOS_PORT)"
+    else
+        echo "WARNING: Sonos HTTP API failed to start"
+        SONOS_PID=""
+    fi
+else
+    echo "Sonos HTTP API skipped (enabled=$SONOS_ENABLED, node_modules exists=$([ -d /usr/src/sonos/node_modules ] && echo yes || echo no))"
+fi
+
+# ---------------------------------------------------------------------------
 # Ollama configuration
 # ---------------------------------------------------------------------------
 
@@ -171,6 +212,11 @@ cleanup() {
     if [ -n "$MODEL_PULL_PID" ]; then
         kill "$MODEL_PULL_PID" 2>/dev/null || true
         wait "$MODEL_PULL_PID" 2>/dev/null || true
+    fi
+    if [ -n "$SONOS_PID" ]; then
+        echo "Shutting down Sonos HTTP API (PID $SONOS_PID)..."
+        kill "$SONOS_PID" 2>/dev/null || true
+        wait "$SONOS_PID" 2>/dev/null || true
     fi
     echo "Shutting down Ollama (PID $OLLAMA_PID)..."
     kill "$OLLAMA_PID" 2>/dev/null || true

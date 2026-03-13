@@ -1,0 +1,90 @@
+# PS-HEPH-148: GitHub Action Template for OpenAPI Allowlist Diff
+#
+# Place this file at: .github/workflows/openapi-allowlist-diff.yml
+# in pilotsuite-styx-core and pilotsuite-styx-ha repos.
+#
+# Triggers on PRs that modify docs/openapi.yaml and reports
+# allowlist-relevant path changes.
+
+name: OpenAPI Allowlist Diff
+
+on:
+  pull_request:
+    paths:
+      - 'docs/openapi.yaml'
+      - 'docs/openapi.json'
+
+jobs:
+  openapi-diff:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Get base branch OpenAPI spec
+        run: |
+          git show origin/${{ github.base_ref }}:docs/openapi.yaml > /tmp/openapi_base.yaml || \
+          git show origin/${{ github.base_ref }}:docs/openapi.json > /tmp/openapi_base.json
+
+      - name: Download diff tool + allowlist
+        run: |
+          # In production, these would be fetched from the ops repo or embedded
+          # For now, assume they are vendored in the repo
+          curl -sL "${PILOTSUITE_OPS_RAW_URL:-https://raw.githubusercontent.com/org/pilotsuite-ops/main}/scripts/openapi_allowlist_diff.py" \
+            -o /tmp/openapi_allowlist_diff.py || true
+          curl -sL "${PILOTSUITE_OPS_RAW_URL:-https://raw.githubusercontent.com/org/pilotsuite-ops/main}/config/ps_qa_083_allowlist.txt" \
+            -o /tmp/ps_qa_083_allowlist.txt || true
+
+      - name: Run OpenAPI Allowlist Diff
+        id: diff
+        run: |
+          BASE_FILE="/tmp/openapi_base.yaml"
+          [ -f "$BASE_FILE" ] || BASE_FILE="/tmp/openapi_base.json"
+
+          HEAD_FILE="docs/openapi.yaml"
+          [ -f "$HEAD_FILE" ] || HEAD_FILE="docs/openapi.json"
+
+          python3 /tmp/openapi_allowlist_diff.py \
+            --base "$BASE_FILE" \
+            --head "$HEAD_FILE" \
+            --allowlist /tmp/ps_qa_083_allowlist.txt \
+            --format md \
+            --output /tmp/openapi_diff_report.md || true
+
+          echo "exit_code=$?" >> $GITHUB_OUTPUT
+
+      - name: Post PR comment with diff report
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const report = fs.readFileSync('/tmp/openapi_diff_report.md', 'utf8');
+            const exitCode = '${{ steps.diff.outputs.exit_code }}';
+
+            let status = '✅ No allowlist-relevant drift';
+            if (exitCode === '2') {
+              status = '⚠️ Allowlist-relevant drift detected';
+            } else if (exitCode === '1') {
+              status = '❌ Diff tool error';
+            }
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `## OpenAPI Allowlist Diff — ${status}\n\n${report}`
+            });
+
+      - name: Fail on allowlist-relevant drift
+        if: steps.diff.outputs.exit_code == '2'
+        run: |
+          echo "::error::Allowlist-relevant OpenAPI drift detected. Review the diff report."
+          exit 1

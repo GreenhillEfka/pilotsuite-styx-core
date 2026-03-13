@@ -29,3 +29,15 @@ configuration:
   conversation_enabled:
     name: Conversation Enabled
     description: Enable or disable the conversation/chat feature
+  searxng_enabled:
+    name: SearXNG Enabled
+    description: Enable or disable SearXNG web search integration
+  searxng_base_url:
+    name: SearXNG Base URL
+    description: URL of the SearXNG server for web search queries
+  sonos_enabled:
+    name: Sonos Enabled
+    description: Enable or disable Sonos speaker control via node-sonos-http-api
+  sonos_port:
+    name: Sonos API Port
+    description: Port for the node-sonos-http-api service (default 5005)

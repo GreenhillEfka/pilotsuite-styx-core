@@ -1,0 +1,46 @@
+name: Webhook Contract Guards (optional)
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main, dev]
+
+jobs:
+  webhook-contract-guards:
+    name: Webhook Contract Guards (PS-DAI-055)
+    runs-on: ubuntu-latest
+    # Optional on PRs: only run when label is present. Always allowed via workflow_dispatch.
+    if: github.event_name == "workflow_dispatch" || contains(github.event.pull_request.labels.*.name, "run-webhook-guards")
+
+    steps:
+      - name: Checkout Core (this repo)
+        uses: actions/checkout@v4
+
+      - name: Checkout HA
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/pilotsuite-styx-ha
+          ref: main
+          path: ha
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run Webhook Contract Guard Suite (Exit-Code 2 = Drift)
+        run: |
+          python pilotsuite_ops/scripts/webhook_contract_guard_suite.py \\
+            --core-openapi docs/openapi.yaml \\
+            --ha-openapi ha/docs/openapi.yaml \\
+            --ha-runtime ha/custom_components/copilot_ha/webhook.py \\
+            --schema pilotsuite_ops/schemas/webhook_response.schema.json \\
+            --out-md pilotsuite_ops/reports/CI_PS-DAI-055_WEBHOOK_CONTRACT_GUARD_SUITE.md
+
+      - name: Upload guard reports (Markdown)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: webhook-contract-guards
+          path: pilotsuite_ops/reports/*.md
+          retention-days: 7

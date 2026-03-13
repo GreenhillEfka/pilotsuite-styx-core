@@ -23,7 +23,7 @@ info:
     \  \"status\": \"error\",\n  \"error\": {\n    \"code\": \"ERROR_CODE\",\n   \
     \ \"message\": \"Human-readable error message\",\n    \"details\": { ... }\n \
     \ }\n}\n```\n"
-  version: 13.1.0
+  version: 13.5.0
   contact:
     name: PilotSuite
     url: https://github.com/GreenhillEfka/pilotsuite-styx-core
@@ -477,7 +477,7 @@ paths:
               $ref: '#/components/schemas/CandidateInput'
       security:
       - apiKeyAuth: []
-  /api/v1/candidates/{id}:
+  /api/v1/candidates/{candidate_id}:
     get:
       summary: Get candidate details
       description: Retrieve a specific candidate by ID.
@@ -490,7 +490,7 @@ paths:
         '404':
           description: Candidate not found
       parameters:
-      - name: id
+      - name: candidate_id
         in: path
         required: true
         schema:
@@ -507,7 +507,7 @@ paths:
         '200':
           description: Candidate updated
       parameters:
-      - name: id
+      - name: candidate_id
         in: path
         required: true
         schema:
@@ -965,10 +965,10 @@ paths:
           description: UniFi snapshot
       security:
       - bearerAuth: []
-  /api/v1/tags:
+  /api/v1/tag-system/tags:
     get:
-      summary: List all tags
-      description: Returns all tags.
+      summary: List tag registry entries
+      description: Returns all tags from the canonical tag registry.
       operationId: listTags
       tags:
       - Tags
@@ -977,33 +977,109 @@ paths:
           description: List of tags
       security:
       - bearerAuth: []
-    post:
-      summary: Create tag
-      description: Creates a new tag.
-      operationId: createTag
+  /api/v1/tag-system/tags/{tag_id}:
+    get:
+      summary: Get tag registry entry
+      description: Returns a single tag by id from the canonical tag registry.
+      operationId: getTag
       tags:
       - Tags
       responses:
-        '201':
-          description: Tag created
-      security:
-      - bearerAuth: []
-  /api/v1/tags/{id}:
-    delete:
-      summary: Delete tag
-      description: Deletes a tag.
-      operationId: deleteTag
-      tags:
-      - Tags
-      responses:
-        '204':
-          description: Tag deleted
+        '200':
+          description: Tag details
+        '404':
+          description: Tag not found
       parameters:
-      - name: id
+      - name: tag_id
         in: path
         required: true
         schema:
           type: string
+      security:
+      - bearerAuth: []
+  /api/v1/tag-system/assignments:
+    get:
+      summary: List tag assignments
+      description: Returns tag assignments with optional subject/tag filters.
+      operationId: listTagAssignments
+      tags:
+      - Tags
+      responses:
+        '200':
+          description: Tag assignments
+      parameters:
+      - name: subject_id
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: subject_kind
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: tag_id
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: materialized
+        in: query
+        required: false
+        schema:
+          type: boolean
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 200
+      security:
+      - bearerAuth: []
+    post:
+      summary: Create or update tag assignment
+      description: Upserts a tag assignment for a subject.
+      operationId: upsertTagAssignment
+      tags:
+      - Tags
+      responses:
+        '200':
+          description: Assignment updated
+        '201':
+          description: Assignment created
+        '400':
+          description: Invalid assignment payload
+        '404':
+          description: Tag not found
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - subject_id
+              - subject_kind
+              - tag_id
+              properties:
+                subject_id:
+                  type: string
+                subject_kind:
+                  type: string
+                tag_id:
+                  type: string
+                source:
+                  type: string
+                  default: core
+                confidence:
+                  type: number
+                  format: float
+                  minimum: 0
+                  maximum: 1
+                meta:
+                  type: object
+                materialized:
+                  type: boolean
       security:
       - bearerAuth: []
   /api/v1/dev/logs:

@@ -14,6 +14,7 @@ Features:
 
 import importlib
 import logging
+import os
 import time
 from typing import Dict, Any, Optional
 from flask import Flask
@@ -213,6 +214,7 @@ async def init_services(hass=None, config: dict = None):
         "graph_renderer": None,
         "candidate_store": None,
         "habitus_service": None,
+        "chat_handler": None,
         "mood_service": None,
         "event_processor": None,
         "tag_registry": None,
@@ -349,6 +351,15 @@ async def init_services(hass=None, config: dict = None):
     except Exception:
         _LOGGER.exception("Failed to init HabitusService")
 
+    # Initialize ChatHandler for Styx Chat API
+    try:
+        from copilot_core.styx.chat_handler import ChatHandler
+        chat_handler = ChatHandler()
+        services["chat_handler"] = chat_handler
+        _LOGGER.info("ChatHandler initialized (Styx Chat)")
+    except Exception:
+        _LOGGER.exception("Failed to init ChatHandler")
+
     # Initialize mood service and API
     try:
         mood_service = MoodService()
@@ -421,7 +432,75 @@ async def init_services(hass=None, config: dict = None):
     try:
         webhook_url = config.get("webhook_url", "") if config else ""
         webhook_token = config.get("webhook_token", "") if config else ""
-        services["webhook_pusher"] = WebhookPusher(webhook_url, webhook_token)
+        # Signing key rotation: legacy `webhook_signing_secret` stays supported.
+        webhook_signing_secret = config.get("webhook_signing_secret", "") if config else ""
+        webhook_signing_secret_primary = (
+            config.get("webhook_signing_secret_primary", "") if config else ""
+        )
+        webhook_signing_secret_secondary = (
+            config.get("webhook_signing_secret_secondary", "") if config else ""
+        )
+        webhook_signing_timestamp_ttl_seconds = _safe_int(
+            config.get("webhook_signing_timestamp_ttl_seconds", 300) if config else 300,
+            default=300,
+            minimum=1,
+            maximum=60 * 60 * 24,
+        )
+
+        if webhook_url and not (webhook_signing_secret or webhook_signing_secret_primary):
+            _LOGGER.warning(
+                "Webhook signing is not configured (webhook_signing_secret_primary is empty) — "
+                "outgoing webhooks will not be signed. Set a signing secret for integrity protection."
+            )
+
+        # Optional per-destination caps (config first, then env fallback)
+        dest_max_conc_value = config.get("webhook_destination_max_concurrency") if config else None
+        if dest_max_conc_value is None:
+            dest_max_conc_value = os.environ.get("PILOTSUITE_WEBHOOK_DESTINATION_MAX_CONCURRENCY")
+        destination_max_concurrency: Optional[int] = 5
+        if dest_max_conc_value is not None:
+            destination_max_concurrency = _safe_int(
+                dest_max_conc_value,
+                default=5,
+                minimum=1,
+                maximum=1000,
+            )
+
+        dest_rate_per_sec_value = config.get("webhook_destination_rate_limit_per_second") if config else None
+        if dest_rate_per_sec_value is None:
+            dest_rate_per_sec_value = os.environ.get("PILOTSUITE_WEBHOOK_DESTINATION_RATE_LIMIT_PER_SECOND")
+        destination_rate_limit_per_second: Optional[float] = 10.0
+        if dest_rate_per_sec_value is not None:
+            destination_rate_limit_per_second = _safe_float(
+                dest_rate_per_sec_value,
+                default=10.0,
+                minimum=0.01,
+                maximum=1e6,
+            )
+
+        dest_rate_burst_value = config.get("webhook_destination_rate_limit_burst") if config else None
+        if dest_rate_burst_value is None:
+            dest_rate_burst_value = os.environ.get("PILOTSUITE_WEBHOOK_DESTINATION_RATE_LIMIT_BURST")
+        destination_rate_limit_burst = 5
+        if dest_rate_burst_value is not None:
+            destination_rate_limit_burst = _safe_int(
+                dest_rate_burst_value,
+                default=5,
+                minimum=1,
+                maximum=100000,
+            )
+
+        services["webhook_pusher"] = WebhookPusher(
+            webhook_url,
+            webhook_token,
+            webhook_signing_secret=webhook_signing_secret,
+            webhook_signing_secret_primary=webhook_signing_secret_primary,
+            webhook_signing_secret_secondary=webhook_signing_secret_secondary,
+            webhook_signing_timestamp_ttl_seconds=webhook_signing_timestamp_ttl_seconds,
+            destination_max_concurrency=destination_max_concurrency,
+            destination_rate_limit_per_second=destination_rate_limit_per_second,
+            destination_rate_limit_burst=destination_rate_limit_burst,
+        )
     except Exception:
         _LOGGER.exception("Failed to init WebhookPusher")
 
@@ -981,13 +1060,32 @@ def register_blueprints(app: Flask, services: dict) -> None:
         from flask import render_template
         return render_template("styx_dashboard.html")
     
+    # Register Sonos API (native Sonos control via node-sonos-http-api)
+    from copilot_core.api.v1.sonos import sonos_bp, init_sonos_api
+    init_sonos_api(services.get("sonos_client"), services.get("sonos_intelligence"))
+    app.register_blueprint(sonos_bp)           # prefix: /api/v1/sonos
+
+    # Register Alarm API (Lichtwecker mit Sunrise/Sunset)
+    from copilot_core.api.v1.alarm import alarm_bp, init_alarm_api
+    init_alarm_api(services.get("alarm_engine"))
+    app.register_blueprint(alarm_bp)           # prefix: /api/v1/alarm
+
+    # Register Conversation History API
+    from copilot_core.api.v1.conversation_history import conversation_history_bp, init_conversation_history_api
+    init_conversation_history_api(services.get("conversation_memory"))
+    app.register_blueprint(conversation_history_bp)  # prefix: /api/v1/conversation
+
+    # Register Error Digest API
+    from copilot_core.api.v1.error_digest import error_digest_bp, init_error_digest_api
+    init_error_digest_api(llm_provider=services.get("llm_provider"))
+    app.register_blueprint(error_digest_bp)    # prefix: /api/v1/errors
+
     # Register PilotSuite Hub API (standalone, absolute prefix /api/v1/hub)
     from copilot_core.hub.api import hub_bp
     app.register_blueprint(hub_bp)
 
-    # Register PilotSuite Phase 5 APIs
-    from copilot_core.sharing.api import sharing_bp
-    from copilot_core.collective_intelligence.api import federated_bp
+    # NOTE: sharing_bp and federated_bp are already nested in api_v1
+    # (via blueprint.py lines 79-80). No standalone registration needed.
 
     app.register_blueprint(sharing_bp, url_prefix="/api/v1")
     app.register_blueprint(federated_bp, url_prefix="/api/v1")

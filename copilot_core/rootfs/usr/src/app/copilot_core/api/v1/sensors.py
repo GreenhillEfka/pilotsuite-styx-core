@@ -19,7 +19,7 @@ from typing import Any, Dict, List, Optional
 
 _LOGGER = logging.getLogger(__name__)
 
-bp = Blueprint("sensors", __name__, url_prefix="/sensors")
+bp = Blueprint("sensors", __name__, url_prefix="/api/v1/sensors")
 
 from copilot_core.api.security import validate_token as _validate_token
 from copilot_core.cache import get_sensor_cache

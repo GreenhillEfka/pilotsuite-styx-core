@@ -1,8 +1,22 @@
 # PilotSuite Styx Core API Reference
 
-**Version:** 12.6.0  
+**Version:** 13.5.4  
 **Base URL:** `http://localhost:8909`  
 **Docs:** `/docs` (Swagger UI)
+
+---
+
+> **⚡ Migration Quick Reference (v13.5.3)**
+>
+> | Legacy | Active | Note |
+> |--------|--------|------|
+> | `/api/v1/tags` | `/api/v1/tag-system/tags` | Tag-System namespace |
+> | `/api/v1/tags/{id}` | `/api/v1/tag-system/tags/{tag_id}` | Tag-System namespace |
+> | `/api/v1/candidates/{id}` | `/api/v1/candidates/{candidate_id}` | Parameter name unified |
+> | `X-API-Key` header | `X-Auth-Token` header | Auth header preferred |
+> | `mood_changed` event | `mood` event | Canonical event type |
+>
+> Use active v13 surface for all new integrations.
 
 ---
 
@@ -13,7 +27,7 @@
 curl http://localhost:8909/health
 
 # API with auth
-curl -H "X-API-Key: your-key" http://localhost:8909/api/v1/system_health
+curl -H "X-Auth-Token: your-key" http://localhost:8909/api/v1/system_health
 ```
 
 ---
@@ -24,8 +38,9 @@ All `/api/v1/*` endpoints require authentication:
 
 **API Key (most endpoints):**
 ```
-X-API-Key: your-api-key
+X-Auth-Token: your-api-key
 ```
+> Note: `X-API-Key` is deprecated. Use `X-Auth-Token` or `Authorization: Bearer ...`.
 
 **Bearer Token (Notifications, Telegram, Hub):**
 ```
@@ -49,7 +64,7 @@ Authorization: Bearer your-token
 | GET | `/api/v1/health/deep` | Deep health check (all services) |
 | GET | `/api/v1/health/metrics` | Request timing metrics |
 
-### Brain Graph (Knowledge Graph)
+### Brain Graph (Visualization)
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -58,6 +73,28 @@ Authorization: Bearer your-token
 | POST | `/api/v1/graph/query` | Execute graph query |
 | GET | `/api/v1/graph/summary` | Graph statistics |
 | POST | `/api/v1/graph/ingest` | Ingest events into graph |
+
+### Knowledge Graph (KG)
+
+> **New in v13.5.4:** Knowledge Graph API for entity/relationship management.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/v1/kg/nodes` | List all KG nodes |
+| GET | `/api/v1/kg/nodes/{node_id}` | Get specific node |
+| GET | `/api/v1/kg/edges` | List all KG edges (relationships) |
+| POST | `/api/v1/kg/edges` | Create a new edge |
+| POST | `/api/v1/kg/entities` | Upsert an entity |
+| GET | `/api/v1/kg/entity/{entity_id}/related` | Get related entities |
+| POST | `/api/v1/kg/import/entities` | Bulk import entities |
+| POST | `/api/v1/kg/import/patterns` | Import patterns from Habitus |
+| GET | `/api/v1/kg/moods` | List mood-related patterns |
+| GET | `/api/v1/kg/mood/{mood}/patterns` | Get patterns for specific mood |
+| GET | `/api/v1/kg/pattern/{pattern_id}` | Get specific pattern |
+| POST | `/api/v1/kg/query` | Execute KG query |
+| GET | `/api/v1/kg/stats` | KG statistics |
+| GET | `/api/v1/kg/zones` | List zones in KG |
+| GET | `/api/v1/kg/zone/{zone_id}/entities` | Get entities for zone |
 
 ### Habitus (Pattern Mining)
 
@@ -91,14 +128,41 @@ Authorization: Bearer your-token
 
 ### Notifications
 
+#### Core Operations
+
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/api/v1/notifications` | List notifications |
 | POST | `/api/v1/notifications` | Create notification |
-| GET | `/api/v1/notifications/<id>` | Get notification |
-| PUT | `/api/v1/notifications/<id>/read` | Mark as read |
-| DELETE | `/api/v1/notifications/<id>` | Delete notification |
-| GET | `/api/v1/notifications/unread/count` | Unread count |
+| GET | `/api/v1/notifications/{notification_id}` | Get notification |
+| POST | `/api/v1/notifications/{notification_id}/read` | Mark as read |
+| DELETE | `/api/v1/notifications/{notification_id}` | Delete notification |
+| POST | `/api/v1/notifications/clear` | Clear all notifications |
+| POST | `/api/v1/notifications/send` | Send notification |
+
+#### Home Assistant Integration
+
+> **New in v13.5.4:** HA device registration and notification services.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/v1/notifications/ha/register` | Register HA device |
+| GET | `/api/v1/notifications/ha/devices` | List HA devices |
+| POST | `/api/v1/notifications/ha/devices/{device_id}/enable` | Enable HA device |
+| POST | `/api/v1/notifications/ha/devices/{device_id}/disable` | Disable HA device |
+| DELETE | `/api/v1/notifications/ha/devices/{device_id}` | Unregister HA device |
+| GET | `/api/v1/notifications/ha/services` | List HA notify services |
+| GET | `/api/v1/notifications/ha/test` | Test HA connection |
+| POST | `/api/v1/notifications/send/ha` | Send via HA notification |
+
+#### Subscriptions
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/v1/notifications/subscribe` | Subscribe device |
+| POST | `/api/v1/notifications/unsubscribe` | Unsubscribe device |
+| GET | `/api/v1/notifications/subscriptions` | List subscriptions |
+| PUT | `/api/v1/notifications/subscriptions/{device_id}` | Update subscription |
 
 ### Multi-Home & Sharing
 
@@ -170,10 +234,12 @@ Authorization: Bearer your-token
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/v1/tags` | List all tags |
-| POST | `/api/v1/tags` | Create tag |
-| DELETE | `/api/v1/tags/<id>` | Delete tag |
-| GET | `/api/v1/tags/registry` | Tag registry |
+| GET | `/api/v1/tag-system/tags` | List all tags |
+| POST | `/api/v1/tag-system/tags` | Create tag |
+| DELETE | `/api/v1/tag-system/tags/{tag_id}` | Delete tag |
+| GET | `/api/v1/tag-system/tags` | Tag registry |
+| GET | `/api/v1/tag-system/assignments` | List tag assignments |
+| POST | `/api/v1/tag-system/assignments` | Create tag assignment |
 
 ### Calendar
 

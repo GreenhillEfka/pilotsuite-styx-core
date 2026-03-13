@@ -408,6 +408,63 @@ class MediaZoneManager:
         return {"ok": result.get("ok", False), "zones": zone_ids,
                 "master": master_entity, "members": members}
 
+    def get_zone_favorites(self, zone_id: str) -> dict:
+        """Get Sonos favorites / source list for a zone's media players.
+
+        Queries HA ``source_list`` attribute from each player in the zone.
+        Returns the union of all available sources (typically Sonos Favorites,
+        TuneIn, Spotify playlists, etc.).
+        """
+        players = self.get_zone_players(zone_id)
+        if not players:
+            return {"zone_id": zone_id, "favorites": [], "players": []}
+
+        token = os.environ.get("SUPERVISOR_TOKEN", "")
+        if not token:
+            return {"zone_id": zone_id, "favorites": [], "error": "No SUPERVISOR_TOKEN"}
+
+        all_sources: list[str] = []
+        player_info: list[dict] = []
+        for p in players:
+            try:
+                resp = requests.get(
+                    f"{SUPERVISOR_API}/states/{p['entity_id']}",
+                    headers=self._ha_headers(), timeout=5,
+                )
+                if resp.ok:
+                    attrs = resp.json().get("attributes", {})
+                    sources = attrs.get("source_list", [])
+                    current = attrs.get("source")
+                    player_info.append({
+                        "entity_id": p["entity_id"],
+                        "source_list": sources,
+                        "current_source": current,
+                    })
+                    for s in sources:
+                        if s not in all_sources:
+                            all_sources.append(s)
+            except Exception:
+                player_info.append({"entity_id": p["entity_id"], "source_list": []})
+
+        return {
+            "zone_id": zone_id,
+            "favorites": all_sources,
+            "players": player_info,
+        }
+
+    def select_source(self, zone_id: str, source: str) -> dict:
+        """Select a source/favorite on all players in a zone."""
+        players = self.get_zone_players(zone_id)
+        results = []
+        for p in players:
+            r = self._call_service("media_player", "select_source", {
+                "entity_id": p["entity_id"],
+                "source": source,
+            })
+            results.append({**r, "entity_id": p["entity_id"]})
+        _LOGGER.info("Source selected in zone %s: %s", zone_id, source)
+        return {"ok": True, "zone_id": zone_id, "source": source, "results": results}
+
     def get_summary(self) -> dict:
         """Get full media zone summary for dashboard."""
         assignments = self.get_all_assignments()

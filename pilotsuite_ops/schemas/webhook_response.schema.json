@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pilotsuite.local/schemas/webhook-response.schema.json",
+  "title": "PilotSuite Webhook Response",
+  "description": "Response contract for the HA webhook endpoint (success + structured error JSON). Auth failures (HTTP 401) also return a JSON error body.",
+
+  "oneOf": [
+    {
+      "title": "Success response",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ok"],
+      "properties": {
+        "ok": {"const": true}
+      }
+    },
+    {
+      "title": "Error response",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ok", "error"],
+      "properties": {
+        "ok": {"const": false},
+        "error": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["code", "message"],
+          "properties": {
+            "code": {
+              "type": "string",
+              "enum": [
+                "invalid_json",
+                "invalid_payload",
+                "missing_type",
+                "missing_data",
+                "invalid_data",
+                "unknown_type",
+                "legacy_type_unsupported",
+                "invalid_token",
+                "legacy_header_sunset"
+              ],
+              "description": "Deterministic HA contract error code. Extend only via a versioned contract update."
+            },
+            "message": {
+              "type": "string",
+              "minLength": 1
+            },
+            "details": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Optional structured error details."
+            }
+          }
+        }
+      }
+    }
+  ]
+}

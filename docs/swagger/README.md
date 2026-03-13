@@ -45,7 +45,8 @@ app.register_blueprint(swagger_bp)
 - Schema validation
 
 ✅ **Authentication Support**
-- API Key (X-API-Key header)
+- Auth Token (X-Auth-Token header, bevorzugt seit v13.5.3)
+- API Key (X-API-Key header, deprecated seit v13.5.3)
 - Bearer Token (Authorization header)
 - Persistent auth in browser session
 
@@ -91,13 +92,15 @@ For offline/air-gapped environments:
    <script src="./swagger-ui-standalone-preset.js"></script>
    ```
 
-## API Key Management
+## Auth Token Management
 
-The Swagger UI includes a built-in API Key input field:
+The Swagger UI includes a built-in Auth Token input field:
 
-1. Enter your API Key in the input field at the top
+1. Enter your Auth Token (X-Auth-Token) in the input field at the top
 2. Click "Save Key"
-3. The key is stored in localStorage and automatically included in all requests
+3. The token is stored in localStorage and automatically included in all requests
+
+> **Note:** Since v13.5.3, `X-Auth-Token` is preferred over `X-API-Key` (deprecated).
 
 ## Endpoints
 

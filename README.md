@@ -1,9 +1,8 @@
-# PilotSuite - Smart Home Intelligence
+# PilotSuite Core
 
-[![GitHub Release](https://img.shields.io/github/release/GreenhillEfka/pilotsuite-styx-ha.svg)](https://github.com/GreenhillEfka/pilotsuite-styx-ha/releases)
-[![HACS](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
+Home Assistant Copilot mit RAG, Chat, und Zone Management.
 
-## 🚀 Features
+## Installation
 
 - **ML-basierte Vorhersagen** - Predictive Automation für dein Smart Home
 - **Anomaly Detection** - Erkennt ungewöhnliches Verhalten automatisch
@@ -16,20 +15,20 @@
 - **Keyboard Shortcuts** - 1-8 für Tabs, Escape für Modal, r für Refresh
 - **Zero-Config Example** - Vollständige Beispielkonfiguration für alle 10 Zonen mit echten HA-Entitäten
 
-## 📦 Installation
+1. Repository hinzufügen: `https://github.com/GreenhillEfka/pilotsuite-styx-core`
+2. Add-on Store → Refresh
+3. PilotSuite Core installieren
+4. Starten
 
-### Über HACS (Empfohlen):
+### Ports
+- 8909: Core API
 
-1. HACS öffnen
-2. Rechts oben auf "⋮" → "Custom repositories"
-3. Repository: `https://github.com/GreenhillEfka/pilotsuite-styx-ha`
-4. Category: `Integration`
-5. Auf "Add" klicken
-6. PilotSuite in HACS finden und installieren
-7. Home Assistant neu starten
-8. Integration einrichten: Einstellungen → Geräte & Dienste → PilotSuite
+## Endpoints
 
-### Manuell:
+- `/api/styx/chat` - Chat mit RAG
+- `/api/styx/health` - Health Check
+- `/api/v1/habitus/*` - Habitus Zones
+- `/api/v1/legacy/health` - Legacy (deprecated)
 
 1. Repository klonen:
    ```bash

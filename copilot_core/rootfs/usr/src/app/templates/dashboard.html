@@ -201,6 +201,32 @@ a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
 @keyframes spin{to{transform:rotate(360deg)}}
 .empty{text-align:center;padding:30px;color:var(--dim);font-size:12px;line-height:1.6}
 
+/* Shared UI state components */
+.ui-state{border:1px solid var(--border);background:var(--card);border-radius:12px;padding:20px 16px;margin:12px 0;display:flex;flex-direction:column;gap:10px;align-items:stretch}
+.ui-state .state-title{font-size:14px;font-weight:700;color:var(--text)}
+.ui-state .state-text{font-size:12px;color:var(--dim);line-height:1.4}
+.ui-state .state-chip{align-self:flex-start;font-size:10px;font-weight:700;padding:2px 8px;border-radius:8px;border:1px solid var(--border);background:rgba(124,106,239,.12);color:var(--accent2);text-transform:uppercase;letter-spacing:.4px}
+.ui-state .state-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:2px}
+.ui-state .state-skeleton-lines{display:flex;flex-direction:column;gap:8px;margin-top:6px}
+.ui-state .state-skeleton-line{height:10px;border-radius:999px;background:linear-gradient(90deg,rgba(124,106,239,.08),rgba(124,106,239,.28),rgba(124,106,239,.08));background-size:200% 100%;animation:skeletonShimmer 1.3s infinite}
+@keyframes skeletonShimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+.ui-state-empty .state-title{color:var(--cyan)}
+.ui-state-error .state-title{color:var(--yellow)}
+.ui-state .state-btn{border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:11px;padding:6px 12px;border-radius:8px;cursor:pointer;transition:.2s}
+.ui-state .state-btn:hover{border-color:var(--accent);background:rgba(124,106,239,.12)}
+.ui-state .state-btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.ui-state .state-btn.primary:hover{filter:brightness(1.05)}
+.ui-state .state-btn:disabled{opacity:.5;cursor:not-allowed}
+.ui-state .state-error-meta{font-size:10px;color:var(--dim)}
+
+.global-degraded-banner{position:sticky;top:46px;z-index:95;display:none;align-items:center;justify-content:space-between;background:linear-gradient(90deg,#2a1e0a, #3b260f);border:1px solid #7c6aef33;border-left:4px solid var(--yellow);color:var(--yellow);padding:10px 14px;font-size:11px;gap:10px;box-shadow:var(--shadow)}
+.global-degraded-banner.is-visible{display:flex}
+.global-degraded-banner__label{font-size:12px;font-weight:700;display:flex;align-items:center;gap:8px;white-space:nowrap}
+.global-degraded-banner__label b{color:var(--text)}
+.global-degraded-banner__msg{font-size:11px;color:var(--text)}
+.global-degraded-banner__actions{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.global-degraded-banner .state-btn{padding:4px 8px;font-size:10px}
+
 /* Responsive */
 @media(max-width:900px){
   .styx-layout{grid-template-columns:1fr;grid-template-rows:auto auto auto;height:auto}
@@ -224,6 +250,16 @@ a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
 <h1 id="app-title">Styx — PilotSuite</h1>
 <span class="status-pill" id="provider-status"><span class="dot dot-yellow" id="status-dot"></span><span id="status-text">Verbinde...</span></span>
 <span class="ver" id="ver-badge">--</span>
+</div>
+
+<!-- Global degraded banner -->
+<div class="global-degraded-banner" id="global-degraded-banner" role="status" aria-live="polite">
+  <div class="global-degraded-banner__label">⚠️ <b>Verbindung eingeschränkt</b></div>
+  <div class="global-degraded-banner__msg" id="global-degraded-banner-msg">Verbindung zu Core ist eingeschränkt.</div>
+  <div class="global-degraded-banner__actions">
+    <button class="state-btn" id="global-status-check-btn">Status prüfen</button>
+    <button class="state-btn primary" id="global-repair-btn">Repair öffnen</button>
+  </div>
 </div>
 
 <!-- Navigation -->
@@ -652,9 +688,165 @@ let _moduleStatesSyncedAt=0;
 let _selectedModuleConfig='habitus_miner';
 let _chatStatus=null;
 const CHAT_MODEL_STORAGE_KEY='styx_chat_model';
+const UI_STATE_EVENTS={
+  LOADING_SHOWN:'ui_state_loading_shown',
+  EMPTY_SHOWN:'ui_state_empty_shown',
+  ERROR_SHOWN:'ui_state_error_shown',
+  GLOBAL_DEGRADED_ON:'ui_global_degraded_on',
+  GLOBAL_DEGRADED_OFF:'ui_global_degraded_off',
+  RETRY_CLICKED:'ui_state_retry_clicked',
+  RETRY_SUCCEEDED:'ui_state_retry_succeeded',
+  RETRY_FAILED:'ui_state_retry_failed',
+};
+
+let _isGlobalDegraded=false;
+const _globalDegradedBanner=GlobalDegradedBanner();
 
 // -- Helpers --
 function $(id){return document.getElementById(id)}
+function emitUiStateTelemetry(eventName,payload={}){
+  const detail={event:eventName,ts:new Date().toISOString(),...(payload||{})};
+  console.debug('[ui-state]',eventName,detail);
+  try{
+    window.dispatchEvent(new CustomEvent('athene-ui-state',{detail}));
+  }catch(_err){ }
+}
+function _coerceUiErrorClass(input='unknown'){
+  const normalized=String(input||'unknown').trim().toLowerCase();
+  if(normalized.startsWith('auth')) return 'AUTH';
+  if(['network','offline','timeout'].includes(normalized)) return 'NETWORK';
+  return 'UNKNOWN';
+}
+function _setContainerState(container, node){
+  if(!container||!node)return;
+  container.innerHTML='';
+  container.appendChild(node);
+}
+function _normalizeSource(source){
+  if(typeof source==='string'&&source.trim())return source.trim();
+  return 'unknown';
+}
+function StateSkeleton({title='Lädt...',text='',lines=3,source='unknown'}={}){
+  emitUiStateTelemetry(UI_STATE_EVENTS.LOADING_SHOWN,{source:_normalizeSource(source),lines});
+  const node=el('div','ui-state');
+  node.appendChild(el('div','state-title',escapeHtml(title)));
+  if(text)node.appendChild(el('div','state-text',escapeHtml(text)));
+  const linesWrap=el('div','state-skeleton-lines');
+  for(let i=0;i<Math.max(1,Math.min(6,lines));i++){
+    linesWrap.appendChild(el('div','state-skeleton-line'));
+  }
+  node.appendChild(linesWrap);
+  return node;
+}
+function StateEmpty({title='Keine Daten',text='Der Bereich ist aktuell leer.',source='unknown',primaryLabel,primaryAction,secondaryLabel,secondaryAction}={}){
+  emitUiStateTelemetry(UI_STATE_EVENTS.EMPTY_SHOWN,{source:_normalizeSource(source)});
+  const node=el('div','ui-state ui-state-empty');
+  node.appendChild(el('div','state-title',escapeHtml(title)));
+  node.appendChild(el('div','state-text',escapeHtml(text)));
+  const actions=el('div','state-actions');
+  if(primaryLabel&&typeof primaryAction==='function'){
+    const btn=el('button', 'state-btn primary', escapeHtml(primaryLabel));
+    btn.addEventListener('click',async ()=>{await primaryAction();});
+    actions.appendChild(btn);
+  }
+  if(secondaryLabel&&typeof secondaryAction==='function'){
+    const btn=el('button', 'state-btn', escapeHtml(secondaryLabel));
+    btn.addEventListener('click',async ()=>{await secondaryAction();});
+    actions.appendChild(btn);
+  }
+  if(actions.innerHTML) node.appendChild(actions);
+  return node;
+}
+function StateError({
+  title='Etwas ist schiefgelaufen',
+  text='Der Vorgang konnte nicht abgeschlossen werden.',
+  errorClass='unknown',
+  source='unknown',
+  retryLabel='Erneut versuchen',
+  retryAction,
+  detailsLabel,
+  detailsAction,
+}){
+  const norm= _coerceUiErrorClass(errorClass);
+  emitUiStateTelemetry(UI_STATE_EVENTS.ERROR_SHOWN,{source:_normalizeSource(source),error_class:norm});
+  const node=el('div','ui-state ui-state-error');
+  node.appendChild(el('div','state-title',escapeHtml(title)));
+  node.appendChild(el('div','state-chip',norm));
+  node.appendChild(el('div','state-text',escapeHtml(text)));
+  const actions=el('div','state-actions');
+  if(typeof retryAction==='function'){
+    const retryBtn=el('button', 'state-btn primary', escapeHtml(retryLabel));
+    retryBtn.addEventListener('click',async ()=>{
+      emitUiStateTelemetry(UI_STATE_EVENTS.RETRY_CLICKED,{source:_normalizeSource(source),error_class:norm});
+      const originalText=retryBtn.textContent;
+      retryBtn.disabled=true;
+      retryBtn.textContent='Wird erneut versucht...';
+      try{
+        await Promise.resolve(retryAction());
+        emitUiStateTelemetry(UI_STATE_EVENTS.RETRY_SUCCEEDED,{source:_normalizeSource(source),error_class:norm});
+      }catch(e){
+        emitUiStateTelemetry(UI_STATE_EVENTS.RETRY_FAILED,{source:_normalizeSource(source),error_class:norm,error:String(e&&e.message||e||'unbekannt')});
+        retryBtn.textContent='Erneut versuchen';
+        addHistory('Retry fehlgeschlagen: '+(e&&e.message||String(e)||'unbekannt'));
+      }finally{
+        retryBtn.disabled=false;
+        if(retryBtn.textContent==='Wird erneut versucht...')retryBtn.textContent=originalText;
+      }
+    });
+    actions.appendChild(retryBtn);
+  }
+  if(typeof detailsAction==='function'&&detailsLabel){
+    const detailsBtn=el('button','state-btn',escapeHtml(detailsLabel));
+    detailsBtn.addEventListener('click',async ()=>{await detailsAction();});
+    actions.appendChild(detailsBtn);
+  }
+  if(actions.innerHTML) node.appendChild(actions);
+  return node;
+}
+function GlobalDegradedBanner(){
+  const banner=$('global-degraded-banner');
+  const message=$('global-degraded-banner-msg');
+  const statusBtn=$('global-status-check-btn');
+  const repairBtn=$('global-repair-btn');
+  let bound=false;
+  return {
+    show({reason=''}={}){
+      if(!banner)return;
+      if(message)message.textContent=reason||'Verbindung zu Core eingeschränkt.';
+      banner.classList.add('is-visible');
+      banner.hidden=false;
+      if(!bound){
+        bound=true;
+        if(statusBtn)statusBtn.addEventListener('click',()=>{
+          setGlobalDegraded(false);
+          loadStyx().catch(()=>{});
+        });
+        if(repairBtn)repairBtn.addEventListener('click',()=>{
+          navigateTo('modules');
+          addHistory('Repair-Pfad aufgerufen (Fallback)');
+        });
+      }
+    },
+    hide(){
+      if(!banner)return;
+      banner.classList.remove('is-visible');
+      banner.hidden=true;
+    },
+  };
+}
+function setGlobalDegraded(nextState,reason=''){
+  if(!nextState&&_isGlobalDegraded===false)return;
+  if(nextState&&_isGlobalDegraded===true)return;
+  _isGlobalDegraded=!!nextState;
+  if(_isGlobalDegraded){
+    _globalDegradedBanner?.show({reason});
+    emitUiStateTelemetry(UI_STATE_EVENTS.GLOBAL_DEGRADED_ON,{reason});
+  }else{
+    _globalDegradedBanner?.hide();
+    emitUiStateTelemetry(UI_STATE_EVENTS.GLOBAL_DEGRADED_OFF,{});
+  }
+}
+
 function escapeHtml(s){if(s===null||s===undefined)return'';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')}
 function withAuth(init={}){
   const headers={...(init.headers||{})};
@@ -913,6 +1105,7 @@ async function loadStyx(){
       dot.className='dot dot-red';txt.textContent='API offline';
       addHistory('\u26a0\ufe0f Core API nicht erreichbar');
       renderChatMessages(chatHistory);
+      setGlobalDegraded(true,'Core API nicht erreichbar');
     }
     // Load pipelines (real health)
     loadPipelines();
@@ -921,7 +1114,10 @@ async function loadStyx(){
     // Load suggestion inbox
     loadSuggestionInbox();
     addHistory('Dashboard geladen');
+    if(status&&status.ok){setGlobalDegraded(false);}
+    if(!status||!status.ok)setGlobalDegraded(true,'status degraded');
   }catch(e){
+    setGlobalDegraded(true,'load_styx_error');
     console.error('loadStyx error:',e);
     const dot=$('status-dot'),txt=$('status-text');
     if(dot)dot.className='dot dot-red';
@@ -946,21 +1142,45 @@ async function loadPipelines(){
       c.appendChild(d);
     });
   }catch(e){
-    c.innerHTML='<div style="font-size:10px;color:var(--red);padding:5px 0">\u26a0\ufe0f Modul-Status nicht ladbar</div>';
+    _setContainerState(c,StateError({
+      source:'styx_pipelines',
+      title:'Etwas ist schiefgelaufen',
+      text:'Modul-Status ist temporär nicht verfügbar.',
+      errorClass:'NETWORK',
+      retryLabel:'Erneut versuchen',
+      retryAction:()=>loadPipelines(),
+      detailsLabel:'Details anzeigen',
+      detailsAction:()=>addHistory('Pipeline-Fehler: '+(e&&e.message||'unbekannt')),
+    }));
   }
 }
 
 // -- Brain Graph --
 let brainNodes=[],brainEdges=[];
 async function loadBrainGraph(){
-  const data=await api('/api/v1/graph/state?limitNodes=120&limitEdges=300');
   const c=$('brain-canvas');
+  if(!c)return;
+  _setContainerState(c, StateSkeleton({
+    source:'dashboard_brain',
+    title:'Brain Graph lädt',
+    text:'Aktive Entitäten und Beziehungen werden geladen...',
+    lines:4,
+  }));
+  const data=await api('/api/v1/graph/state?limitNodes=120&limitEdges=300');
   if(!data||!data.nodes||!data.nodes.length){
-    const inner=c.querySelector('.loading');
-    if(inner)inner.innerHTML='<div class="empty">Brain Graph ist noch leer.<br>Events von HA werden automatisch verarbeitet.</div>';
+    _setContainerState(c,StateEmpty({
+      source:'dashboard_brain',
+      title:'Keine Systemdaten',
+      text:'Noch keine Systemdaten vorhanden. Core sammelt gerade Aktivitätsdaten aus Home Assistant.',
+      primaryLabel:'Core-Status prüfen',
+      primaryAction:()=>loadStyx(),
+      secondaryLabel:'Setup öffnen',
+      secondaryAction:()=>navigateTo('modules'),
+    }));
     return;
   }
   brainNodes=data.nodes;brainEdges=data.edges||[];
+  setGlobalDegraded(false);
   addHistory(brainNodes.length+' Brain-Nodes geladen');
   renderBrain(c,brainNodes,brainEdges);
   renderLegend();
@@ -1206,7 +1426,15 @@ function renderSuggestionInbox(){
   const pending=suggestionItems.filter(s=>s.status==='pending');
   if(countEl)countEl.textContent=pending.length;
   if(!pending.length&&!suggestionItems.length){
-    list.innerHTML='<div class="sugg-empty">Noch keine Vorschlaege. Styx lernt aus Events und erstellt automatisch Muster.</div>';
+    _setContainerState(list,StateEmpty({
+      source:'dashboard_suggestions',
+      title:'Keine aktiven Suggestions',
+      text:'Aktuell gibt es keine offenen Empfehlungen.',
+      primaryLabel:'Archiv ansehen',
+      primaryAction:()=>addHistory('Suggestion-Archiv aufgerufen'),
+      secondaryLabel:'Setup öffnen',
+      secondaryAction:()=>navigateTo('settings'),
+    }));
     return;
   }
   list.innerHTML='';
@@ -1451,7 +1679,16 @@ async function loadHabitus(){
   const rules=data?.rules||data?.data||[];
   $('hab-count').textContent=rules.length+' Regeln';
   const c=$('hab-rules');
-  if(!rules.length){c.innerHTML='<div class="empty">Noch keine Muster. PilotSuite lernt automatisch aus Events.</div>';return}
+  if(!rules.length){
+    _setContainerState(c,StateEmpty({
+      source:'habitus_rules',
+      title:'Noch keine Muster',
+      text:'PilotSuite lernt automatisch aus Events. Sobald Muster entstehen, werden sie hier angezeigt.',
+      primaryLabel:'Status prüfen',
+      primaryAction:()=>loadStyx(),
+    }));
+    return;
+  }
   c.innerHTML='';
   rules.forEach(r=>{
     const m=r.metadata||r;
@@ -1502,7 +1739,13 @@ async function loadHabitus(){
       zc.appendChild(card);
     });
   }else{
-    zc.innerHTML='<div class="empty">Hub-Zonen API nicht erreichbar oder keine Zonen vorhanden.</div>';
+    _setContainerState(zc,StateEmpty({
+      source:'habitus_zones',
+      title:'Keine Zonen vorhanden',
+      text:'Die Hub-Zonen API liefert aktuell keine Zonen oder ist nicht erreichbar.',
+      primaryLabel:'Neu laden',
+      primaryAction:()=>loadHabitus(),
+    }));
   }
 
   await loadZoneRoomOptions();
@@ -1588,7 +1831,13 @@ async function loadEntitySuggestions(targetId){
   try{
     const r=await api('/api/v1/entity-assignment/suggestions');
     if(!r?.ok||!r.suggestions?.length){
-      c.innerHTML='<div class="empty">Keine Vorschläge verfügbar. Stelle sicher, dass Entitäten in HA vorhanden sind.</div>';
+      _setContainerState(c,StateEmpty({
+        source:'habitus_entity_suggestions',
+        title:'Keine aktiven Suggestions',
+        text:'Im Habitus-Flow sind aktuell keine offenen Vorschläge vorhanden.',
+        primaryLabel:'Archiv ansehen',
+        primaryAction:()=>navigateTo('settings'),
+      }));
       return;
     }
     let html='<div style="font-size:11px;color:var(--dim);margin-bottom:8px">'+r.suggestion_count+' Gruppen gefunden — klicke zum Aufklappen</div>';
@@ -1614,7 +1863,18 @@ async function loadEntitySuggestions(targetId){
       </div>`;
     });
     c.innerHTML=html;
-  }catch(e){c.innerHTML='<div class="empty">Entity Assignment API nicht erreichbar</div>'}
+  }catch(e){
+    _setContainerState(c,StateError({
+      source:'habitus_entity_suggestions',
+      title:'Etwas ist schiefgelaufen',
+      text:'Der Vorgang konnte nicht abgeschlossen werden.',
+      errorClass:'NETWORK',
+      retryLabel:'Erneut versuchen',
+      retryAction:()=>loadEntitySuggestions(c.id),
+      detailsLabel:'Details anzeigen',
+      detailsAction:()=>addHistory('Entity Assignment Fehlerdetails: '+(e&&e.message||'unbekannt')),
+    }));
+  }
 }
 function toggleSuggGroup(i){
   const b=$('sgb-'+i);if(b)b.classList.toggle('open');
@@ -1701,7 +1961,16 @@ async function loadCalendar(){
   const c=$('haushalt-calendar');if(!c)return;
   try{
     const d=await api('/api/v1/calendar/events/today');
-    if(!d||!d.events||d.events.length===0){c.innerHTML='<div class="empty">Keine Termine heute</div>';return}
+    if(!d||!d.events||d.events.length===0){
+      _setContainerState(c,StateEmpty({
+        source:'haushalt_calendar',
+        title:'Keine Termine heute',
+        text:'Aktuell gibt es heute keine anstehenden Termine.',
+        primaryLabel:'Status prüfen',
+        primaryAction:()=>loadStyx(),
+      }));
+      return;
+    }
     let h='';
     for(const ev of d.events.slice(0,8)){
       const s=ev.start||{};const t=s.dateTime?new Date(s.dateTime).toLocaleTimeString('de',{hour:'2-digit',minute:'2-digit'}):'Ganztaegig';
@@ -1709,7 +1978,18 @@ async function loadCalendar(){
     }
     if(d.events.length>8)h+=`<div style="font-size:11px;color:var(--dim);margin-top:4px">+${d.events.length-8} weitere</div>`;
     c.innerHTML=h;
-  }catch(e){c.innerHTML='<div class="empty">Kalender nicht verfuegbar</div>'}
+  }catch(e){
+    _setContainerState(c,StateError({
+      source:'haushalt_calendar',
+      title:'Etwas ist schiefgelaufen',
+      text:'Core ist aktuell nicht erreichbar.',
+      errorClass:'NETWORK',
+      retryLabel:'Erneut versuchen',
+      retryAction:()=>loadCalendar(),
+      detailsLabel:'Status prüfen',
+      detailsAction:()=>loadStyx(),
+    }));
+  }
 }
 
 // Shopping List (v3.5.0)
@@ -1717,14 +1997,32 @@ async function loadShopping(){
   const c=$('haushalt-shopping');if(!c)return;
   try{
     const d=await api('/api/v1/shopping?completed=0');
-    if(!d||!d.items||d.items.length===0){c.innerHTML='<div class="empty">Einkaufsliste leer</div>';return}
+    if(!d||!d.items||d.items.length===0){
+      _setContainerState(c,StateEmpty({
+        source:'haushalt_shopping',
+        title:'Keine aktiven Suggestions',
+        text:'Deine Einkaufsliste ist gerade leer.',
+        primaryLabel:'Neu laden',
+        primaryAction:()=>loadShopping(),
+      }));
+      return;
+    }
     let h='';
     for(const it of d.items){
       const qty=it.quantity?` (${escapeHtml(it.quantity)})`:'';
       h+=`<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--border)"><span>${escapeHtml(it.name)}${qty}</span><button class="btn-sm" onclick="completeShoppingItem('${it.id}')" style="font-size:11px;padding:2px 8px">&#x2714;</button></div>`;
     }
     c.innerHTML=h;
-  }catch(e){c.innerHTML='<div class="empty">Einkaufsliste nicht verfuegbar</div>'}
+  }catch(e){
+    _setContainerState(c,StateError({
+      source:'haushalt_shopping',
+      title:'Etwas ist schiefgelaufen',
+      text:'Der Vorgang konnte nicht abgeschlossen werden.',
+      errorClass:'NETWORK',
+      retryLabel:'Erneut versuchen',
+      retryAction:()=>loadShopping(),
+    }));
+  }
 }
 async function addShoppingItem(){
   const inp=$('shop-input');if(!inp||!inp.value.trim())return;
@@ -1742,7 +2040,16 @@ async function loadReminders(){
   const c=$('haushalt-reminders');if(!c)return;
   try{
     const d=await api('/api/v1/reminders?completed=0');
-    if(!d||!d.reminders||d.reminders.length===0){c.innerHTML='<div class="empty">Keine aktiven Erinnerungen</div>';return}
+    if(!d||!d.reminders||d.reminders.length===0){
+      _setContainerState(c,StateEmpty({
+        source:'haushalt_reminders',
+        title:'Keine aktiven Erinnerungen',
+        text:'Aktuell sind keine offenen Erinnerungen vorhanden.',
+        primaryLabel:'Neu laden',
+        primaryAction:()=>loadReminders(),
+      }));
+      return;
+    }
     let h='';
     for(const r of d.reminders){
       const due=r.due_at?new Date(r.due_at*1000).toLocaleString('de',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'';
@@ -1750,7 +2057,16 @@ async function loadReminders(){
       h+=`<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--border)"><div><span${overdue}>${escapeHtml(r.title)}</span>${due?` <span style="font-size:11px;color:var(--dim)">${due}</span>`:''}</div><div style="display:flex;gap:4px"><button class="btn-sm" onclick="completeReminder('${r.id}')" style="font-size:11px;padding:2px 8px">&#x2714;</button><button class="btn-sm" onclick="snoozeReminder('${r.id}')" style="font-size:11px;padding:2px 8px">&#x1f4a4;</button></div></div>`;
     }
     c.innerHTML=h;
-  }catch(e){c.innerHTML='<div class="empty">Erinnerungen nicht verfuegbar</div>'}
+  }catch(e){
+    _setContainerState(c,StateError({
+      source:'haushalt_reminders',
+      title:'Etwas ist schiefgelaufen',
+      text:'Der Vorgang konnte nicht abgeschlossen werden.',
+      errorClass:'NETWORK',
+      retryLabel:'Erneut versuchen',
+      retryAction:()=>loadReminders(),
+    }));
+  }
 }
 async function addReminderFromInput(){
   const inp=$('rem-input');if(!inp||!inp.value.trim())return;
@@ -1866,42 +2182,83 @@ async function haushaltRemind(type){
 // MOOD
 // ==================================================
 async function loadMood(){
-  const wrapped=await apiTry(['/api/v1/mood','/api/v1/mood/state']);
-  const data=wrapped?.data||null;
   const c=$('mood-zones'),sc=$('mood-stats');
-  if(!data){c.innerHTML='<div class="empty">Noch keine Stimmungsdaten. Mood Engine benoetigt Events aus Zonen.</div>';return}
-  let zonesData=data.zones||data.moods||null;
-  if(!zonesData&&data.mood){
-    zonesData={global:data.mood};
+  if(!c||!sc)return;
+  try{
+    const wrapped=await apiTry(['/api/v1/mood','/api/v1/mood/state']);
+    const data=wrapped?.data||null;
+    if(!data){
+      _setContainerState(c,StateEmpty({
+        source:'mood_data',
+        title:'Noch keine Stimmungsdaten',
+        text:'Mood Engine benötigt erst ausreichend Events aus den Zonen.',
+        primaryLabel:'Neu laden',
+        primaryAction:()=>loadMood(),
+      }));
+      sc.innerHTML='';
+      return;
+    }
+    let zonesData=data.zones||data.moods||null;
+    if(!zonesData&&data.mood){
+      zonesData={global:data.mood};
+    }
+    if(!zonesData||typeof zonesData!=='object'){
+      _setContainerState(c,StateEmpty({
+        source:'mood_data',
+        title:'Keine Stimmungsdaten',
+        text:'Keine gültigen Mood-Daten verfügbar.',
+      }));
+      sc.innerHTML='';
+      return;
+    }
+    c.innerHTML='';
+    const zones=Object.entries(zonesData||{});
+    if(!zones.length){
+      _setContainerState(c,StateEmpty({
+        source:'mood_data',
+        title:'Keine Zonen konfiguriert',
+        text:'Mood Engine hat noch keine Zonen registriert.',
+      }));
+      sc.innerHTML='';
+      return;
+    }
+    zones.forEach(([name,z])=>{
+      const comfort=z.comfort||0,joy=z.joy||0,frug=z.frugality||0;
+      c.appendChild(el('div','',
+        `<h3 style="font-size:13px;margin:12px 0 6px;font-weight:600">${escapeHtml(name)}</h3>`+
+        gaugeHTML('Comfort',comfort,'var(--green)')+gaugeHTML('Joy',joy,'var(--yellow)')+gaugeHTML('Frugality',frug,'var(--accent)')));
+    });
+    if(data.summary){
+      sc.innerHTML=
+        `<div class="card stat"><div class="v">${(data.summary.average_comfort||0).toFixed(1)}</div><div class="l">Avg Comfort</div></div>`+
+        `<div class="card stat"><div class="v">${(data.summary.average_joy||0).toFixed(1)}</div><div class="l">Avg Joy</div></div>`+
+        `<div class="card stat"><div class="v">${(data.summary.average_frugality||0).toFixed(1)}</div><div class="l">Avg Frugality</div></div>`;
+    }else{
+      const comforts=zones.map(([_,z])=>Number(z.comfort||0));
+      const joys=zones.map(([_,z])=>Number(z.joy||0));
+      const frugs=zones.map(([_,z])=>Number(z.frugality||0));
+      const avg=a=>a.length?a.reduce((x,y)=>x+y,0)/a.length:0;
+      sc.innerHTML=
+        `<div class="card stat"><div class="v">${avg(comforts).toFixed(2)}</div><div class="l">Avg Comfort</div></div>`+
+        `<div class="card stat"><div class="v">${avg(joys).toFixed(2)}</div><div class="l">Avg Joy</div></div>`+
+        `<div class="card stat"><div class="v">${avg(frugs).toFixed(2)}</div><div class="l">Avg Frugality</div></div>`;
+    }
+    // Mood trend from real comfort values per zone
+    const moodTrend=zones.map(([_,z])=>z.comfort||0);
+    drawTrend('mood-trend-canvas',zones.length*3,moodTrend.length>=2?moodTrend:null);
+  }catch(e){
+    _setContainerState(c,StateError({
+      source:'mood_data',
+      title:'Etwas ist schiefgelaufen',
+      text:'Die Mood-Engine konnte nicht geladen werden.',
+      errorClass:'NETWORK',
+      retryLabel:'Erneut versuchen',
+      retryAction:()=>loadMood(),
+      detailsLabel:'Details anzeigen',
+      detailsAction:()=>addHistory('Mood-Error: '+(e&&e.message||'unbekannt')),
+    }));
+    sc.innerHTML='';
   }
-  if(!zonesData||typeof zonesData!=='object'){c.innerHTML='<div class="empty">Keine Stimmungsdaten verfuegbar.</div>';return}
-  c.innerHTML='';
-  const zones=Object.entries(zonesData||{});
-  if(!zones.length){c.innerHTML='<div class="empty">Keine Zonen konfiguriert.</div>';return}
-  zones.forEach(([name,z])=>{
-    const comfort=z.comfort||0,joy=z.joy||0,frug=z.frugality||0;
-    c.appendChild(el('div','',
-      `<h3 style="font-size:13px;margin:12px 0 6px;font-weight:600">${escapeHtml(name)}</h3>`+
-      gaugeHTML('Comfort',comfort,'var(--green)')+gaugeHTML('Joy',joy,'var(--yellow)')+gaugeHTML('Frugality',frug,'var(--accent)')));
-  });
-  if(data.summary){
-    sc.innerHTML=
-      `<div class="card stat"><div class="v">${(data.summary.average_comfort||0).toFixed(1)}</div><div class="l">Avg Comfort</div></div>`+
-      `<div class="card stat"><div class="v">${(data.summary.average_joy||0).toFixed(1)}</div><div class="l">Avg Joy</div></div>`+
-      `<div class="card stat"><div class="v">${(data.summary.average_frugality||0).toFixed(1)}</div><div class="l">Avg Frugality</div></div>`;
-  }else{
-    const comforts=zones.map(([_,z])=>Number(z.comfort||0));
-    const joys=zones.map(([_,z])=>Number(z.joy||0));
-    const frugs=zones.map(([_,z])=>Number(z.frugality||0));
-    const avg=a=>a.length?a.reduce((x,y)=>x+y,0)/a.length:0;
-    sc.innerHTML=
-      `<div class="card stat"><div class="v">${avg(comforts).toFixed(2)}</div><div class="l">Avg Comfort</div></div>`+
-      `<div class="card stat"><div class="v">${avg(joys).toFixed(2)}</div><div class="l">Avg Joy</div></div>`+
-      `<div class="card stat"><div class="v">${avg(frugs).toFixed(2)}</div><div class="l">Avg Frugality</div></div>`;
-  }
-  // Mood trend from real comfort values per zone
-  const moodTrend=zones.map(([_,z])=>z.comfort||0);
-  drawTrend('mood-trend-canvas',zones.length*3,moodTrend.length>=2?moodTrend:null);
 }
 function gaugeHTML(label,val,color){
   const pct=Math.max(0,Math.min(100,val*100));
@@ -2103,13 +2460,33 @@ async function loadAutomations(){
   try{
     const data=await api('/api/v1/automations');
     const items=data?.automations||[];
-    if(!items.length){c.innerHTML='<div class="empty">Noch keine Automationen erstellt. Akzeptiere Vorschlaege um HA-Automationen zu erzeugen.</div>';return}
+    if(!items.length){
+      _setContainerState(c,StateEmpty({
+        source:'modules_automations',
+        title:'Noch keine Automationen',
+        text:'Akzeptiere Vorschläge im Vorschläge-Panel, um HA-Automationen zu erzeugen.',
+        primaryLabel:'Vorschläge öffnen',
+        primaryAction:()=>navigateTo('habitus'),
+      }));
+      return;
+    }
     c.innerHTML='';
     items.forEach(a=>{
       c.appendChild(el('div','pat',
         `<span>${escapeHtml(a.alias||a.id||'?')}</span><span class="meta">${escapeHtml(a.created_at||'')}</span>`));
     });
-  }catch(e){c.innerHTML='<div class="empty">Automationen-API nicht erreichbar</div>'}
+  }catch(e){
+    _setContainerState(c,StateError({
+      source:'modules_automations',
+      title:'Etwas ist schiefgelaufen',
+      text:'Core ist aktuell nicht erreichbar.',
+      errorClass:'NETWORK',
+      retryLabel:'Erneut versuchen',
+      retryAction:()=>loadAutomations(),
+      detailsAction:()=>addHistory('Automation API Fehler: '+(e&&e.message||'unbekannt')),
+      detailsLabel:'Details anzeigen',
+    }));
+  }
 }
 
 // -- Media Zones & Musikwolke Panel (v3.1.0) --
@@ -2123,6 +2500,16 @@ async function loadMediaZones(){
     const zoneIds=Object.keys(zoneData);
     const sessions=mk?.sessions||[];
     let html='';
+    if(!zoneIds.length){
+      _setContainerState(c,StateEmpty({
+        source:'media_zones_panel',
+        title:'Keine Media-Zonen',
+        text:'Keine Zonen sind aktiv konfiguriert.',
+        primaryLabel:'Neu laden',
+        primaryAction:()=>loadMediaZones(),
+      }));
+      return;
+    }
     if(zoneIds.length){
       html+='<table class="tbl"><tr><th>Zone</th><th>Player</th></tr>';
       zoneIds.forEach(z=>{
@@ -2131,8 +2518,6 @@ async function loadMediaZones(){
         html+=`<tr><td>${escapeHtml(z)}</td><td>${pList}</td></tr>`;
       });
       html+='</table>';
-    }else{
-      html+='<div style="font-size:11px;color:var(--dim);margin-bottom:8px">Keine Zonen konfiguriert. Weise Media Player ueber die API Zonen zu.</div>';
     }
     if(sessions.length){
       html+='<div style="margin-top:10px;font-size:11px"><strong>Musikwolke Sessions:</strong></div>';
@@ -2146,7 +2531,16 @@ async function loadMediaZones(){
       html+='<div style="margin-top:8px;font-size:11px;color:var(--dim)">Keine aktiven Musikwolke-Sessions. Starte via Chat: &quot;Musikwolke starten&quot;</div>';
     }
     c.innerHTML=html;
-  }catch(e){c.innerHTML='<div class="empty">Media Zones nicht erreichbar</div>'}
+  }catch(e){
+    _setContainerState(c,StateError({
+      source:'media_zones_panel',
+      title:'Etwas ist schiefgelaufen',
+      text:'Core ist aktuell nicht erreichbar.',
+      errorClass:'NETWORK',
+      retryLabel:'Erneut versuchen',
+      retryAction:()=>loadMediaZones(),
+    }));
+  }
 }
 
 // -- Waste Collection Panel (v3.2.0) --
@@ -2552,17 +2946,27 @@ const _loaders={styx:loadStyx,habitus:async()=>{await loadHabitus();loadEntitySu
 function loadPage(p){
   const fn=_loaders[p];
   if(!fn)return;
-  fn().catch(e=>{
-    console.error('Page load error ['+p+']:',e);
-    const pg=$('page-'+p);
-    if(pg&&!pg.querySelector('.page-error')){
-      const err=el('div','card page-error',
-        `<p style="color:var(--red)">\u26a0\ufe0f Fehler beim Laden: ${escapeHtml(e.message)}</p>
-         <button onclick="loadPage('${escapeHtml(p)}')" style="margin-top:8px;padding:6px 14px;background:var(--accent);color:#fff;border:none;border-radius:6px;cursor:pointer">Erneut versuchen</button>`);
-      err.style.margin='16px';
-      pg.insertBefore(err,pg.firstChild);
-    }
-  });
+  fn()
+    .then(()=>setGlobalDegraded(false))
+    .catch(e=>{
+      setGlobalDegraded(true,'page_'+p+'_load_failed');
+      console.error('Page load error ['+p+']:',e);
+      const pg=$('page-'+p);
+      if(pg&&!pg.querySelector('.page-error')){
+        const err=StateError({
+          source:'page_'+p,
+          title:'Seitenteil konnte nicht geladen werden',
+          text:`Fehler beim Laden von ${escapeHtml(p.toUpperCase())}: ${escapeHtml(e.message||'unbekannt')}`,
+          errorClass:'NETWORK',
+          retryLabel:'Erneut versuchen',
+          retryAction:()=>loadPage(p),
+          detailsLabel:'Details anzeigen',
+          detailsAction:()=>addHistory(`LoadPage fehlgeschlagen [${p}]: ${e.message||'unbekannt'}`),
+        });
+        err.style.margin='16px';
+        pg.insertBefore(err,pg.firstChild);
+      }
+    });
 }
 
 // Connection Pool Metrics

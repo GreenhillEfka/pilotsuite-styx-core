@@ -266,6 +266,118 @@
   .entity-add-row button { padding: 6px 12px; font-size: 0.78rem; background: var(--accent); color: #000; border: none; border-radius: 6px; cursor: pointer; }
   .entity-remove-btn { background: none; border: none; color: var(--red); cursor: pointer; font-size: 0.9rem; padding: 0 4px; }
 
+  /* ── Neuron Layer Visualization (Beyond State of the Art) ─── */
+  .neuron-layer-viz {
+    position: relative; width: 100%; height: 500px;
+    background: #060810; border-radius: 12px; overflow: hidden;
+  }
+  .neuron-layer-bg {
+    position: absolute; top: 0; bottom: 0; border-radius: 8px;
+    display: flex; flex-direction: column; align-items: center;
+    padding-top: 8px; z-index: 0;
+  }
+  .neuron-layer-bg.layer-context { left: 2%; width: 28%; background: linear-gradient(180deg, #0a1a2a 0%, #0a1220 100%); }
+  .neuron-layer-bg.layer-state   { left: 36%; width: 28%; background: linear-gradient(180deg, #0a2a1a 0%, #0a2010 100%); }
+  .neuron-layer-bg.layer-mood    { left: 70%; width: 28%; background: linear-gradient(180deg, #1a0a2a 0%, #150a20 100%); }
+  .neuron-layer-label {
+    font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 2px;
+    padding: 4px 12px; border-radius: 4px; background: rgba(0,0,0,0.4);
+  }
+  .neuron-layer-label.ctx { color: #4fc3f7; }
+  .neuron-layer-label.sta { color: #81c784; }
+  .neuron-layer-label.moo { color: #ce93d8; }
+
+  @keyframes neuronPulse {
+    0% { box-shadow: 0 0 4px 2px currentColor; }
+    50% { box-shadow: 0 0 16px 6px currentColor; }
+    100% { box-shadow: 0 0 4px 2px currentColor; }
+  }
+  @keyframes neuronFire {
+    0% { transform: scale(1); filter: brightness(1); }
+    30% { transform: scale(1.3); filter: brightness(1.8); }
+    100% { transform: scale(1); filter: brightness(1); }
+  }
+  @keyframes signalFlow {
+    0% { offset-distance: 0%; opacity: 0; }
+    10% { opacity: 1; }
+    90% { opacity: 1; }
+    100% { offset-distance: 100%; opacity: 0; }
+  }
+  .neuron-stats-panel {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 8px; margin-top: 12px;
+  }
+  .neuron-stat-chip {
+    background: var(--surface2); border-radius: 8px; padding: 8px 12px; text-align: center;
+  }
+  .neuron-stat-chip .nsc-label { font-size: 0.65rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+  .neuron-stat-chip .nsc-value { font-size: 1.1rem; font-weight: 700; margin-top: 2px; font-variant-numeric: tabular-nums; }
+
+  /* ── HomeKit Cards ─────────────────────────────────── */
+  .homekit-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; margin-top: 12px; }
+  .homekit-card {
+    background: var(--surface); border-radius: var(--radius); padding: 16px;
+    border: 1px solid var(--surface2); transition: all 0.2s;
+  }
+  .homekit-card:hover { border-color: #999; }
+  .homekit-card.hk-enabled { border-color: #81c784; }
+  .homekit-card .hk-header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .homekit-card .hk-icon { font-size: 1.3rem; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; background: #1a1a2e; border-radius: 8px; }
+  .homekit-card .hk-title { font-weight: 600; font-size: 0.9rem; }
+  .homekit-card .hk-subtitle { font-size: 0.72rem; color: var(--muted); }
+  .homekit-card .hk-qr { display: flex; justify-content: center; margin: 12px 0; background: #fff; border-radius: 8px; padding: 8px; }
+  .homekit-card .hk-qr img, .homekit-card .hk-qr svg { width: 120px; height: 120px; }
+  .homekit-card .hk-code {
+    text-align: center; font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 1.1rem; font-weight: 700; letter-spacing: 2px;
+    color: var(--accent); margin: 8px 0;
+  }
+  .homekit-card .hk-entities { font-size: 0.75rem; color: var(--muted); text-align: center; }
+  .homekit-card .hk-badge {
+    display: inline-block; font-size: 0.65rem; padding: 2px 8px;
+    border-radius: 10px; font-weight: 600;
+  }
+  .homekit-card .hk-badge.active { background: #1a3a2a; color: var(--green); }
+  .homekit-card .hk-badge.inactive { background: #3a1a1a; color: var(--red); }
+
+  /* ── Zone Mood Bars ────────────────────────────────── */
+  .zone-mood { display: flex; gap: 6px; margin-top: 8px; align-items: center; }
+  .zone-mood-bar {
+    flex: 1; height: 4px; background: var(--surface2); border-radius: 2px; overflow: hidden; position: relative;
+  }
+  .zone-mood-bar .fill { height: 100%; border-radius: 2px; transition: width 0.5s ease; }
+  .zone-mood-label { font-size: 0.6rem; color: var(--muted); min-width: 50px; }
+  .zone-status-badge {
+    display: inline-block; font-size: 0.65rem; padding: 2px 8px;
+    border-radius: 10px; font-weight: 600;
+  }
+  .zone-status-badge.active { background: #1a3a2a; color: var(--green); }
+  .zone-status-badge.idle { background: #2a2a1a; color: var(--orange); }
+  .zone-status-badge.disabled { background: #2a1a1a; color: var(--red); }
+
+  /* ── Zone Detail Modal Enhanced ───────────────────── */
+  .zd-section { margin-bottom: 16px; }
+  .zd-section-title { font-size: 0.78rem; font-weight: 600; color: var(--accent); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+  .zd-agg-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 6px; }
+  .zd-agg-chip { background: var(--surface2); border-radius: 8px; padding: 8px 10px; text-align: center; }
+  .zd-agg-chip .zd-agg-icon { font-size: 1.2rem; }
+  .zd-agg-chip .zd-agg-count { font-size: 1.1rem; font-weight: 700; }
+  .zd-agg-chip .zd-agg-label { font-size: 0.65rem; color: var(--muted); }
+  .zd-entity-list { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+  .zd-entity-tag { font-size: 0.7rem; background: var(--surface2); color: var(--text); padding: 2px 8px; border-radius: 6px; white-space: nowrap; }
+  .zd-scene-grid { display: flex; flex-wrap: wrap; gap: 6px; }
+  .zd-scene-chip { background: var(--surface2); border: 1px solid transparent; border-radius: 8px; padding: 6px 12px; cursor: pointer; transition: all 0.2s; font-size: 0.78rem; }
+  .zd-scene-chip:hover { border-color: var(--accent); background: #222260; }
+  .zd-scene-chip .sc-icon { margin-right: 4px; }
+  .zd-mood-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .zd-mood-item { text-align: center; }
+  .zd-mood-item .zd-mood-ring { width: 56px; height: 56px; border-radius: 50%; border: 3px solid var(--surface2); display: inline-flex; align-items: center; justify-content: center; font-size: 1.1rem; font-weight: 700; margin-bottom: 4px; position: relative; }
+  .zd-mood-item .zd-mood-label { font-size: 0.65rem; color: var(--muted); }
+  .zd-quick-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+  .zd-fav-select { background: var(--surface2); color: var(--text); border: 1px solid #444; border-radius: 6px; padding: 6px 10px; font-size: 0.8rem; width: 100%; margin-top: 6px; }
+  .zd-media-now { display: flex; align-items: center; gap: 10px; background: var(--surface2); border-radius: 8px; padding: 10px; margin-top: 6px; }
+  .zd-media-now .mnp-art { width: 40px; height: 40px; background: var(--surface); border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 1.3rem; }
+
   /* ── Keyboard Hint ──────────────────────────────── */
   .kbd-hint { display: inline-block; font-size: 0.6rem; color: var(--muted); background: var(--surface2); padding: 1px 4px; border-radius: 3px; margin-left: 4px; vertical-align: middle; }
 
@@ -351,22 +463,62 @@
 
   <!-- ═══════════════ TAB: Zonen ═══════════════ -->
   <div class="tab-content" id="tab-zones">
-    <div class="section-title">&#x1F3E0; Habitus-Zonen &#x2014; Raum&uuml;bersicht</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+      <div class="section-title" style="margin:0">&#x1F3E0; Habitus-Zonen &#x2014; Raum&uuml;bersicht</div>
+      <div style="display:flex;gap:6px">
+        <span class="zone-status-badge active" id="zone-count-active">0 aktiv</span>
+        <span class="zone-status-badge idle" id="zone-count-idle">0 idle</span>
+        <span style="font-size:0.75rem;color:var(--muted);padding:2px 8px" id="zone-count-entities">0 Entit&auml;ten</span>
+      </div>
+    </div>
     <div class="zone-grid" id="zone-cards"></div>
+
+    <!-- HomeKit per Zone -->
+    <div class="section-title" style="margin-top:24px">&#xF8FF; HomeKit &#x2014; Pro Zone automatisch erstellt</div>
+    <p style="font-size:0.82rem;color:var(--muted);margin-bottom:12px">Jede Habitus-Zone erh&auml;lt automatisch eine eigene HomeKit-Bridge. QR-Code scannen zum Pairen mit Apple Home.</p>
+    <div class="homekit-grid" id="homekit-cards">
+      <div class="loading-overlay"><span class="loading"></span> HomeKit-Status laden...</div>
+    </div>
   </div>
 
   <!-- ═══════════════ TAB: Musikwolke ═══════════════ -->
   <div class="tab-content" id="tab-media">
     <div class="musikwolke-panel">
-      <h3>&#x2601;&#xFE0F; Musikwolke</h3>
+      <h3>&#x2601;&#xFE0F; Musikwolke <span id="sonos-health-badge" style="font-size:0.7rem;padding:2px 8px;border-radius:8px;margin-left:8px;vertical-align:middle"></span></h3>
       <p style="font-size:0.82rem;color:var(--muted);margin-bottom:12px">Audio-Follows-User &mdash; Musik folgt dir automatisch durch die Zonen.</p>
       <div style="display:flex;gap:8px;flex-wrap:wrap" id="musikwolke-controls">
         <button class="btn-sm btn-primary" onclick="musikwolkeGroupAll()">Alle Zonen gruppieren</button>
         <button class="btn-sm btn-secondary" onclick="musikwolkeUngroupAll()">Alle trennen</button>
+        <button class="btn-sm btn-secondary" onclick="sonosPauseAll()">Alle pausieren</button>
+        <button class="btn-sm btn-secondary" onclick="sonosResumeAll()">Alle fortsetzen</button>
       </div>
       <div id="musikwolke-status" style="margin-top:10px;font-size:0.78rem;color:var(--muted)"></div>
     </div>
-    <div class="section-title">&#x1F50A; Zonen-Player</div>
+
+    <!-- Sonos Volume Profile -->
+    <div class="section-title">&#x23F0; Lautst&auml;rke-Profil</div>
+    <div id="sonos-volume-profiles" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px"></div>
+
+    <!-- Sonos TTS -->
+    <div class="section-title">&#x1F4E2; TTS-Durchsage</div>
+    <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+      <input type="text" id="sonos-tts-text" placeholder="Durchsage-Text..." style="flex:1;min-width:200px;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface2);color:var(--text);font-size:0.85rem"/>
+      <select id="sonos-tts-room" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface2);color:var(--text);font-size:0.85rem">
+        <option value="">Alle R&auml;ume</option>
+      </select>
+      <button class="btn-sm btn-primary" onclick="sonosSay()">Senden</button>
+    </div>
+
+    <!-- Sonos Rooms -->
+    <div class="section-title">&#x1F50A; Sonos-R&auml;ume</div>
+    <div class="media-zone-grid" id="sonos-room-cards"></div>
+
+    <!-- Sonos Presets -->
+    <div class="section-title" style="margin-top:16px">&#x2B50; Presets</div>
+    <div id="sonos-presets" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px"></div>
+
+    <!-- Zone-Player (existing) -->
+    <div class="section-title" style="margin-top:16px">&#x1F3B5; Zonen-Player</div>
     <div class="media-zone-grid" id="media-zone-cards"></div>
   </div>
 
@@ -436,11 +588,36 @@
 
   <!-- ═══════════════ TAB: Neurons ═══════════════ -->
   <div class="tab-content" id="tab-neurons">
-    <div class="card wide">
-      <h2><span class="icon" style="background:#1a2a4a">&#x1F52C;</span> Brain Visualisierung</h2>
-      <canvas id="brain-canvas-2"></canvas>
-      <div class="brain-tooltip" id="brain-tooltip-2"></div>
+    <!-- Layer Visualization Panel -->
+    <div class="card wide" style="padding:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <h2 style="margin:0"><span class="icon" style="background:#1a2a4a">&#x1F9E0;</span> Neuronen-Brain &mdash; 3-Layer Pipeline</h2>
+        <div style="display:flex;gap:6px">
+          <span class="neuron-layer-label ctx" style="font-size:0.65rem">Kontext</span>
+          <span style="color:var(--muted);font-size:0.8rem">&#x2192;</span>
+          <span class="neuron-layer-label sta" style="font-size:0.65rem">Zustand</span>
+          <span style="color:var(--muted);font-size:0.8rem">&#x2192;</span>
+          <span class="neuron-layer-label moo" style="font-size:0.65rem">Stimmung</span>
+        </div>
+      </div>
+      <div class="neuron-layer-viz">
+        <div class="neuron-layer-bg layer-context"><span class="neuron-layer-label ctx">CONTEXT</span></div>
+        <div class="neuron-layer-bg layer-state"><span class="neuron-layer-label sta">STATE</span></div>
+        <div class="neuron-layer-bg layer-mood"><span class="neuron-layer-label moo">MOOD</span></div>
+        <canvas id="brain-canvas-2" style="position:absolute;inset:0;width:100%;height:100%;z-index:1"></canvas>
+        <div class="brain-tooltip" id="brain-tooltip-2"></div>
+      </div>
+      <!-- Neuron Stats Strip -->
+      <div class="neuron-stats-panel" id="neuron-stats-panel">
+        <div class="neuron-stat-chip"><div class="nsc-label">Neuronen</div><div class="nsc-value" id="nstat-total">14</div></div>
+        <div class="neuron-stat-chip"><div class="nsc-label">Aktiv</div><div class="nsc-value" id="nstat-active" style="color:var(--green)">0</div></div>
+        <div class="neuron-stat-chip"><div class="nsc-label">Feuern</div><div class="nsc-value" id="nstat-firing" style="color:var(--orange)">0</div></div>
+        <div class="neuron-stat-chip"><div class="nsc-label">Synapsen</div><div class="nsc-value" id="nstat-synapses" style="color:var(--purple)">18</div></div>
+        <div class="neuron-stat-chip"><div class="nsc-label">Dom. Mood</div><div class="nsc-value" id="nstat-dominant" style="color:var(--accent)">&mdash;</div></div>
+        <div class="neuron-stat-chip"><div class="nsc-label">Signal&middot;St&auml;rke</div><div class="nsc-value" id="nstat-signal">0%</div></div>
+      </div>
     </div>
+
     <div class="section-title">Neuronen-Konfiguration</div>
     <div class="neuron-config-grid" id="neuron-config"></div>
 
@@ -463,6 +640,32 @@
       </p>
       <div id="automation-zones" class="auto-zone-grid"></div>
     </div>
+    <!-- Wecker / Alarm Section -->
+    <div class="card wide" style="margin-top:16px">
+      <h2><span class="icon" style="background:#3a2a1a">&#x23F0;</span> Lichtwecker</h2>
+      <p style="color:var(--muted);font-size:0.82rem;margin-bottom:12px">
+        Sunrise/Sunset Lichtwecker mit Musiksteuerung. Verlaeufe, Presets und Zeitplaene.
+      </p>
+      <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+        <button onclick="showAlarmCreate()" style="padding:6px 14px;background:var(--accent);color:#000;border:none;border-radius:6px;cursor:pointer;font-size:0.82rem">+ Neuer Wecker</button>
+        <button onclick="loadAlarmData()" style="padding:6px 14px;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:6px;cursor:pointer;font-size:0.82rem">Aktualisieren</button>
+      </div>
+      <div id="alarm-list" style="margin-bottom:16px"></div>
+      <div id="alarm-presets" style="margin-bottom:12px"></div>
+      <div id="alarm-curves" style="margin-bottom:8px"></div>
+    </div>
+
+    <!-- Alarm Create/Edit Modal -->
+    <div class="modal-overlay" id="alarm-modal" style="display:none" onclick="if(event.target===this)this.style.display='none'">
+      <div class="modal" style="max-width:580px;max-height:85vh;overflow-y:auto">
+        <div class="modal-header">
+          <h3 id="alarm-modal-title">Neuer Wecker</h3>
+          <button class="modal-close" onclick="document.getElementById('alarm-modal').style.display='none'">&times;</button>
+        </div>
+        <div id="alarm-modal-content"></div>
+      </div>
+    </div>
+
     <div class="card wide" style="margin-top:16px">
       <h2><span class="icon" style="background:#2a1a3a">&#x1F3F7;&#xFE0F;</span> Entitaeten &amp; Tags</h2>
       <p style="color:var(--muted);font-size:0.82rem;margin-bottom:12px">
@@ -492,7 +695,7 @@
 
 <!-- Zone Detail Modal -->
 <div class="modal-overlay" id="zone-modal" onclick="if(event.target===this)closeZoneModal()">
-  <div class="modal">
+  <div class="modal" style="max-width:720px;max-height:85vh;overflow-y:auto">
     <div class="modal-header">
       <h3 id="zone-modal-title">Zone</h3>
       <button class="modal-close" onclick="closeZoneModal()">&times;</button>
@@ -556,6 +759,8 @@ function switchTab(tabName) {
   if (content) content.classList.add('active');
   if (tabName === 'neurons') { initBrain('brain-canvas-2', 'brain-tooltip-2'); drawBrain(); loadSynapses(); }
   if (tabName === 'overview') { initBrain('brain-canvas', 'brain-tooltip'); drawBrain(); }
+  if (tabName === 'media') { loadSonosData(); }
+  if (tabName === 'automation') { loadAlarmData(); }
   try { localStorage.setItem('styx-active-tab', tabName); } catch(e) {}
 }
 
@@ -1042,99 +1247,211 @@ function drawBrainOn(canvasId) {
   const canvas = document.getElementById(canvasId);
   if (!canvas || !canvas.offsetParent) return;
   const rect = canvas.parentElement.getBoundingClientRect();
-  canvas.width = rect.width - 42;
-  canvas.height = 400;
+  const isLayerViz = canvasId === "brain-canvas-2";
+  canvas.width = rect.width;
+  canvas.height = isLayerViz ? rect.height : 400;
   const ctx = canvas.getContext("2d");
   const W = canvas.width, H = canvas.height;
+  const now = Date.now();
 
-  ctx.fillStyle = "#0a0a14";
-  ctx.fillRect(0, 0, W, H);
-
-  ctx.font = "bold 11px Inter, sans-serif";
-  ctx.textAlign = "center";
-  for (let i = 0; i < 3; i++) {
-    ctx.fillStyle = LAYER_COLORS[i];
-    ctx.globalAlpha = 0.5;
-    ctx.fillText(LAYER_LABELS[i], [0.12, 0.42, 0.72][i] * W, 20);
-    ctx.globalAlpha = 1;
+  // Background (only for overview canvas; layer-viz has CSS backgrounds)
+  if (!isLayerViz) {
+    ctx.fillStyle = "#0a0a14";
+    ctx.fillRect(0, 0, W, H);
+  } else {
+    ctx.clearRect(0, 0, W, H);
   }
 
+  // Layer labels (overview canvas only)
+  if (!isLayerViz) {
+    ctx.font = "bold 11px Inter, sans-serif";
+    ctx.textAlign = "center";
+    for (let i = 0; i < 3; i++) {
+      ctx.fillStyle = LAYER_COLORS[i];
+      ctx.globalAlpha = 0.5;
+      ctx.fillText(LAYER_LABELS[i], [0.12, 0.42, 0.72][i] * W, 20);
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  // ── Draw Edges with Signal Particles ──
+  let totalSignal = 0;
   for (const [src, tgt, weight] of BRAIN_EDGES) {
     const sn = BRAIN_NEURONS.find(n => n.id === src);
     const tn = BRAIN_NEURONS.find(n => n.id === tgt);
     if (!sn || !tn) continue;
     const sx = sn.x * W, sy = sn.y * H, tx = tn.x * W, ty = tn.y * H;
     const srcVal = brainNodeValues[src] || 0;
+    const tgtVal = brainNodeValues[tgt] || 0;
     const sig = srcVal * Math.abs(weight);
-    const isActive = sig > 0.1;
+    const isActive = sig > 0.08;
+    totalSignal += sig;
 
+    // Edge curve
+    const cpx1 = sx + (tx - sx) * 0.4, cpy1 = sy;
+    const cpx2 = sx + (tx - sx) * 0.6, cpy2 = ty;
     ctx.beginPath();
     ctx.moveTo(sx, sy);
-    ctx.bezierCurveTo((sx+tx)/2, sy, (sx+tx)/2, ty, tx, ty);
-    ctx.strokeStyle = weight > 0 ? (isActive ? "#34D399" : "#1a3a2a") : (isActive ? "#F87171" : "#3a1a1a");
-    ctx.lineWidth = isActive ? 1 + sig * 3 : 0.5;
-    ctx.globalAlpha = isActive ? 0.4 + sig * 0.6 : 0.15;
+    ctx.bezierCurveTo(cpx1, cpy1, cpx2, cpy2, tx, ty);
+
+    if (isActive) {
+      // Glowing active edge
+      ctx.strokeStyle = weight > 0 ? "#34D399" : "#F87171";
+      ctx.lineWidth = 1 + sig * 4;
+      ctx.globalAlpha = 0.2 + sig * 0.5;
+      ctx.shadowColor = weight > 0 ? "#34D399" : "#F87171";
+      ctx.shadowBlur = sig * 12;
+    } else {
+      ctx.strokeStyle = weight > 0 ? "#1a3a2a" : "#3a1a1a";
+      ctx.lineWidth = 0.5;
+      ctx.globalAlpha = 0.12;
+      ctx.shadowBlur = 0;
+    }
     ctx.setLineDash(weight <= 0 ? [4, 4] : []);
     ctx.stroke();
     ctx.globalAlpha = 1;
     ctx.setLineDash([]);
+    ctx.shadowBlur = 0;
 
+    // Signal particles (multiple per edge when active)
     if (isActive) {
-      const t = (Date.now() % 2000) / 2000;
-      ctx.beginPath();
-      ctx.arc(sx + (tx-sx)*t, sy + (ty-sy)*t, 2, 0, Math.PI*2);
-      ctx.fillStyle = weight > 0 ? "#34D399" : "#F87171";
-      ctx.globalAlpha = 0.6;
-      ctx.fill();
-      ctx.globalAlpha = 1;
+      const particleCount = Math.max(1, Math.floor(sig * 4));
+      for (let p = 0; p < particleCount; p++) {
+        const speed = 2500 + p * 800;
+        const t = ((now + p * 400) % speed) / speed;
+        const u = 1 - t;
+        const px = u*u*u*sx + 3*u*u*t*cpx1 + 3*u*t*t*cpx2 + t*t*t*tx;
+        const py = u*u*u*sy + 3*u*u*t*cpy1 + 3*u*t*t*cpy2 + t*t*t*ty;
+        const pr = 2 + sig * 3;
+        const particleAlpha = Math.sin(t * Math.PI) * (0.4 + sig * 0.6);
+
+        ctx.beginPath();
+        ctx.arc(px, py, pr, 0, Math.PI * 2);
+        const pg = ctx.createRadialGradient(px, py, 0, px, py, pr);
+        pg.addColorStop(0, weight > 0 ? "#34D399" : "#F87171");
+        pg.addColorStop(1, "transparent");
+        ctx.fillStyle = pg;
+        ctx.globalAlpha = particleAlpha;
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
     }
   }
 
+  // ── Draw Neurons ──
+  let activeCount = 0, firingCount = 0;
   for (const n of BRAIN_NEURONS) {
     const x = n.x * W, y = n.y * H;
     const val = brainNodeValues[n.id] || 0;
-    const r = 18 + val * 8;
+    const isFiring = val > 0.6;
+    const isActive = val > 0.2;
+    if (isActive) activeCount++;
+    if (isFiring) firingCount++;
+    const baseR = isLayerViz ? 20 : 18;
+    const r = baseR + val * 10;
     const isHovered = hoveredNode === n.id;
 
-    if (val > 0.3) {
-      ctx.beginPath();
-      ctx.arc(x, y, r + 8, 0, Math.PI * 2);
-      const glow = ctx.createRadialGradient(x, y, r, x, y, r + 8);
-      glow.addColorStop(0, LAYER_COLORS[n.layer] + "40");
-      glow.addColorStop(1, "transparent");
-      ctx.fillStyle = glow;
-      ctx.fill();
+    // Outer glow (3 layers for depth)
+    if (val > 0.15) {
+      for (let g = 3; g >= 1; g--) {
+        ctx.beginPath();
+        ctx.arc(x, y, r + g * 8, 0, Math.PI * 2);
+        const glow = ctx.createRadialGradient(x, y, r, x, y, r + g * 8);
+        glow.addColorStop(0, LAYER_COLORS[n.layer] + (isFiring ? "50" : "20"));
+        glow.addColorStop(1, "transparent");
+        ctx.fillStyle = glow;
+        ctx.fill();
+      }
     }
 
+    // Firing pulse ring
+    if (isFiring) {
+      const pulseT = ((now + n.id.charCodeAt(5) * 100) % 1200) / 1200;
+      const pulseR = r + 4 + pulseT * 18;
+      ctx.beginPath();
+      ctx.arc(x, y, pulseR, 0, Math.PI * 2);
+      ctx.strokeStyle = LAYER_COLORS[n.layer];
+      ctx.lineWidth = 2 * (1 - pulseT);
+      ctx.globalAlpha = 0.6 * (1 - pulseT);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+
+    // Neuron body
     ctx.beginPath();
     ctx.arc(x, y, r, 0, Math.PI * 2);
-    ctx.fillStyle = val < 0.2 ? "#3a3a4a" : val < 0.5 ? LAYER_COLORS[n.layer] + "aa" : LAYER_COLORS[n.layer];
+    const bodyGrad = ctx.createRadialGradient(x - r * 0.3, y - r * 0.3, 0, x, y, r);
+    if (val < 0.15) {
+      bodyGrad.addColorStop(0, "#4a4a5a");
+      bodyGrad.addColorStop(1, "#2a2a3a");
+    } else if (isFiring) {
+      bodyGrad.addColorStop(0, LAYER_COLORS[n.layer]);
+      bodyGrad.addColorStop(1, LAYER_COLORS[n.layer] + "cc");
+    } else {
+      bodyGrad.addColorStop(0, LAYER_COLORS[n.layer] + "cc");
+      bodyGrad.addColorStop(1, LAYER_COLORS[n.layer] + "66");
+    }
+    ctx.fillStyle = bodyGrad;
     ctx.fill();
-    ctx.strokeStyle = isHovered ? "#fff" : LAYER_COLORS[n.layer];
-    ctx.lineWidth = isHovered ? 2 : 1;
+
+    // Border
+    ctx.strokeStyle = isHovered ? "#fff" : (isFiring ? LAYER_COLORS[n.layer] : LAYER_COLORS[n.layer] + "88");
+    ctx.lineWidth = isHovered ? 2.5 : (isFiring ? 2 : 1);
     ctx.stroke();
 
-    ctx.fillStyle = val > 0.3 ? "#fff" : "#aaa";
-    ctx.font = "bold 10px Inter, sans-serif";
+    // Value text
+    ctx.fillStyle = val > 0.25 ? "#fff" : "#aaa";
+    ctx.font = `bold ${isLayerViz ? 11 : 10}px Inter, sans-serif`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText((val * 100).toFixed(0), x, y);
 
-    ctx.fillStyle = isHovered ? "#fff" : "#888";
-    ctx.font = "9px Inter, sans-serif";
-    ctx.fillText(n.label, x, y + r + 12);
+    // Label
+    ctx.fillStyle = isHovered ? "#fff" : (val > 0.3 ? "#ccc" : "#666");
+    ctx.font = `${isLayerViz ? 10 : 9}px Inter, sans-serif`;
+    ctx.fillText(n.label, x, y + r + (isLayerViz ? 14 : 12));
+
+    // Firing indicator dot
+    if (isFiring) {
+      ctx.beginPath();
+      ctx.arc(x + r * 0.7, y - r * 0.7, 4, 0, Math.PI * 2);
+      ctx.fillStyle = "#ffb74d";
+      ctx.fill();
+      ctx.strokeStyle = "#0a0a14";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
   }
 
+  // ── Dominant Mood Output ──
   const dominant = Object.entries(brainNodeValues).filter(([k]) => k.startsWith("mood.")).sort((a, b) => b[1] - a[1])[0];
   if (dominant && dominant[1] > 0) {
+    const outX = 0.94 * W, outY = H / 2;
+    // Output arrow
     ctx.fillStyle = LAYER_COLORS[2];
-    ctx.font = "bold 13px Inter, sans-serif";
+    ctx.globalAlpha = 0.8;
+    ctx.font = "bold 14px Inter, sans-serif";
     ctx.textAlign = "center";
     const mName = dominant[0].split(".")[1];
-    ctx.fillText("\u2192 " + mName.charAt(0).toUpperCase() + mName.slice(1), 0.9 * W, H / 2);
-    ctx.font = "11px Inter, sans-serif";
-    ctx.fillStyle = "#888";
-    ctx.fillText((dominant[1] * 100).toFixed(0) + "%", 0.9 * W, H / 2 + 18);
+    ctx.fillText(mName.charAt(0).toUpperCase() + mName.slice(1), outX, outY);
+    ctx.font = "bold 20px Inter, sans-serif";
+    ctx.fillText((dominant[1] * 100).toFixed(0) + "%", outX, outY + 22);
+    ctx.globalAlpha = 1;
+  }
+
+  // ── Update Stats Panel (layer viz only) ──
+  if (isLayerViz) {
+    const el = (id) => document.getElementById(id);
+    if (el("nstat-total")) el("nstat-total").textContent = BRAIN_NEURONS.length;
+    if (el("nstat-active")) el("nstat-active").textContent = activeCount;
+    if (el("nstat-firing")) el("nstat-firing").textContent = firingCount;
+    if (el("nstat-synapses")) el("nstat-synapses").textContent = BRAIN_EDGES.length;
+    if (dominant && dominant[1] > 0) {
+      const mName = dominant[0].split(".")[1];
+      if (el("nstat-dominant")) { el("nstat-dominant").textContent = mName.charAt(0).toUpperCase() + mName.slice(1); }
+    }
+    const avgSig = BRAIN_EDGES.length > 0 ? Math.round((totalSignal / BRAIN_EDGES.length) * 100) : 0;
+    if (el("nstat-signal")) el("nstat-signal").textContent = avgSig + "%";
   }
 }
 
@@ -1231,32 +1548,209 @@ function renderZoneCards(zones) {
   }).join("");
 }
 
-function openZoneDetail(zoneId) {
+async function openZoneDetail(zoneId) {
   const z = dashboardZones.find(zz => zz.id === zoneId);
   if (!z) return;
   document.getElementById("zone-modal-title").innerHTML = `${z.icon || ZONE_ICONS[zoneId] || ''} ${z.name_de || zoneId}`;
-  let html = `<div style="margin-bottom:12px;font-size:0.82rem;color:var(--muted)">${z.name_en || ''} &middot; Priorit&auml;t ${z.priority || 0} &middot; ${z.entity_count || 0} Entit&auml;ten</div>`;
+  document.getElementById("zone-modal-content").innerHTML = '<div style="text-align:center;padding:24px;color:var(--muted)">Laden...</div>';
+  document.getElementById("zone-modal").classList.add("show");
 
-  // Load entity details from example config via dashboard data
-  const roles = z.roles || {};
-  // Show role summary with entity counts
-  for (const [role, count] of Object.entries(roles)) {
-    if (count === 0) continue;
-    html += `<div class="entity-group">
-      <h4>${ROLE_ICONS[role] || ''} ${role} (${count})</h4>`;
-    // We don't have entity IDs in the dashboard data, but we show counts
-    html += `<div class="entity-item">${count} Entit&auml;t${count > 1 ? 'en' : ''} zugewiesen</div>`;
-    html += `</div>`;
-  }
+  // Fetch detail, scenes, presets in parallel
+  const [detail, scenesResp, presetsResp] = await Promise.all([
+    fetchJSON(`/api/v1/zone/dashboard/${zoneId}`),
+    fetchJSON(`/api/v1/scenes?zone_id=${zoneId}`),
+    fetchJSON("/api/v1/scenes/presets"),
+  ]);
 
-  // Quick actions
-  html += `<div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap">
-    <button class="btn-sm btn-primary" onclick="askStyxAboutZone('${zoneId}')">&#x1F4AC; Im Chat fragen</button>
-    <button class="btn-sm btn-secondary" onclick="mediaGroupZone('${zoneId}')">&#x1F50A; Gruppieren</button>
+  const zd = (detail && detail.ok) ? detail.zone : null;
+  const scenes = scenesResp ? (scenesResp.scenes || []) : [];
+  const presets = presetsResp ? (presetsResp.presets || []) : [];
+  const entities = zd ? (zd.entities || {}) : (z.roles_entities || {});
+  const domainEnts = zd ? (zd.domain_entities || {}) : {};
+  const mood = zd ? zd.mood : null;
+  const entityIds = zd ? (zd.entity_ids || []) : [];
+  const quickActions = zd ? (zd.quick_actions || []) : [];
+
+  let html = '';
+
+  // ── Status Header ──
+  const status = zd ? zd.status : "idle";
+  const statusLabel = {active:"Aktiv",idle:"Idle",disabled:"Aus"}[status] || status;
+  const personCount = zd ? (zd.person_count || 0) : 0;
+  html += `<div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+    <span class="zone-status-badge ${status}">${statusLabel}</span>
+    <span style="font-size:0.8rem;color:var(--muted)">${personCount} Person${personCount !== 1 ? 'en' : ''} &middot; ${entityIds.length} Entit&auml;ten &middot; Priorit&auml;t ${z.priority || 0}</span>
   </div>`;
 
+  // ── Mood Rings ──
+  if (mood) {
+    const dims = [
+      {key:"comfort", label:"Komfort", color:"var(--green)"},
+      {key:"joy", label:"Freude", color:"var(--accent)"},
+      {key:"frugality", label:"Sparsamkeit", color:"var(--orange)"},
+    ];
+    html += '<div class="zd-section"><div class="zd-section-title">Stimmung</div><div class="zd-mood-grid">';
+    for (const d of dims) {
+      const pct = Math.round((mood[d.key] || 0) * 100);
+      const deg = Math.round(pct * 3.6);
+      html += `<div class="zd-mood-item">
+        <div class="zd-mood-ring" style="border-color:${d.color};background:conic-gradient(${d.color} ${deg}deg, var(--surface2) ${deg}deg)">${pct}%</div>
+        <div class="zd-mood-label">${d.label}</div>
+      </div>`;
+    }
+    html += '</div></div>';
+  }
+
+  // ── Domain Aggregates ──
+  const DOMAIN_ICONS = {light:"\u{1F4A1}",switch:"\u2B55",binary_sensor:"\u{1F440}",sensor:"\u{1F321}",climate:"\u2744\uFE0F",media_player:"\u{1F3B5}",cover:"\u{1F6AA}",person:"\u{1F464}",device_tracker:"\u{1F4F1}",fan:"\u{1F32C}",lock:"\u{1F512}",camera:"\u{1F4F7}",input_boolean:"\u2611\uFE0F"};
+  if (Object.keys(domainEnts).length > 0) {
+    html += '<div class="zd-section"><div class="zd-section-title">Entit&auml;ten nach Typ</div><div class="zd-agg-grid">';
+    for (const [dom, eids] of Object.entries(domainEnts)) {
+      html += `<div class="zd-agg-chip">
+        <div class="zd-agg-icon">${DOMAIN_ICONS[dom] || "\u2699\uFE0F"}</div>
+        <div class="zd-agg-count">${eids.length}</div>
+        <div class="zd-agg-label">${dom}</div>
+      </div>`;
+    }
+    html += '</div></div>';
+  }
+
+  // ── Entities by Role ──
+  if (Object.keys(entities).length > 0) {
+    html += '<div class="zd-section"><div class="zd-section-title">Entit&auml;ten nach Rolle</div>';
+    for (const [role, roleEnts] of Object.entries(entities)) {
+      const eids = Array.isArray(roleEnts) ? roleEnts : [];
+      if (eids.length === 0) continue;
+      html += `<div style="margin-bottom:8px"><span style="font-size:0.78rem;font-weight:600">${ROLE_ICONS[role] || ''} ${role} (${eids.length})</span>`;
+      html += '<div class="zd-entity-list">';
+      for (const eid of eids) {
+        const short = eid.split(".").pop();
+        html += `<span class="zd-entity-tag" title="${eid}">${short}</span>`;
+      }
+      html += '</div></div>';
+    }
+    html += '</div>';
+  }
+
+  // ── Scenes ──
+  html += '<div class="zd-section"><div class="zd-section-title">Szenen</div>';
+  html += '<div class="zd-scene-grid">';
+  for (const p of presets) {
+    html += `<div class="zd-scene-chip" onclick="applyPreset('${zoneId}','${p.preset_id}')" title="${p.description}"><span class="sc-icon">${p.icon ? p.icon.replace('mdi:','') : ''}</span>${p.name}</div>`;
+  }
+  for (const s of scenes) {
+    html += `<div class="zd-scene-chip" onclick="applyScene('${s.scene_id}')" title="Gespeichert: ${s.name}"><span class="sc-icon">\u2B50</span>${s.name}</div>`;
+  }
+  html += '</div>';
+  html += `<button class="btn-sm btn-secondary" style="margin-top:8px" onclick="saveZoneScene('${zoneId}','${z.name_de || zoneId}')">&#x1F4BE; Aktuelle Szene speichern</button>`;
+  html += '</div>';
+
+  // ── Media / Sonos Favorites ──
+  const hasMedia = entityIds.some(e => e.startsWith("media_player."));
+  if (hasMedia) {
+    html += '<div class="zd-section"><div class="zd-section-title">Medien &amp; Musikwolke</div>';
+    html += `<div id="zd-media-${zoneId}" style="color:var(--muted);font-size:0.8rem">Lade Medien...</div>`;
+    html += '</div>';
+  }
+
+  // ── Quick Actions ──
+  html += '<div class="zd-section"><div class="zd-section-title">Schnellaktionen</div><div class="zd-quick-actions">';
+  for (const a of quickActions) {
+    html += `<button class="btn-sm btn-secondary" onclick="executeQuickAction('${zoneId}','${a.action_id}','${a.service}')">${a.name}</button>`;
+  }
+  html += `<button class="btn-sm btn-primary" onclick="askStyxAboutZone('${zoneId}')">&#x1F4AC; Im Chat fragen</button>`;
+  html += `<button class="btn-sm btn-secondary" onclick="mediaGroupZone('${zoneId}')">&#x1F50A; Gruppieren</button>`;
+  html += '</div></div>';
+
   document.getElementById("zone-modal-content").innerHTML = html;
-  document.getElementById("zone-modal").classList.add("show");
+
+  // Async: load media state + favorites
+  if (hasMedia) {
+    loadZoneMedia(zoneId);
+  }
+}
+
+async function loadZoneMedia(zoneId) {
+  const el = document.getElementById(`zd-media-${zoneId}`);
+  if (!el) return;
+  const [stateResp, favResp] = await Promise.all([
+    fetchJSON(`/api/v1/media/zones/${zoneId}/state`),
+    fetchJSON(`/api/v1/media/zones/${zoneId}/favorites`),
+  ]);
+  let html = '';
+
+  // Now Playing
+  const players = stateResp ? (stateResp.players || []) : [];
+  const playing = players.find(p => p.state === "playing");
+  if (playing) {
+    html += `<div class="zd-media-now">
+      <div class="mnp-art">&#x1F3B6;</div>
+      <div>
+        <div style="font-weight:600;font-size:0.85rem">${playing.media_title || 'Unbekannt'}</div>
+        <div style="font-size:0.75rem;color:var(--muted)">${playing.media_artist || ''} &middot; ${playing.source || ''}</div>
+      </div>
+    </div>`;
+  } else {
+    html += '<div style="font-size:0.8rem;color:var(--muted);margin-bottom:6px">Keine Wiedergabe aktiv</div>';
+  }
+
+  // Favorites dropdown
+  const favs = (favResp && favResp.ok) ? (favResp.favorites || []) : [];
+  if (favs.length > 0) {
+    html += `<select class="zd-fav-select" onchange="selectZoneSource('${zoneId}',this.value)">
+      <option value="">Favorit / Quelle w&auml;hlen...</option>`;
+    for (const f of favs) {
+      const sel = playing && playing.source === f ? ' selected' : '';
+      html += `<option value="${f}"${sel}>${f}</option>`;
+    }
+    html += '</select>';
+  }
+
+  el.innerHTML = html;
+}
+
+async function applyScene(sceneId) {
+  const r = await postJSON(`/api/v1/scenes/${sceneId}/apply`, {});
+  showToast(r && r.success ? "Szene angewendet" : "Fehler beim Anwenden");
+}
+
+async function applyPreset(zoneId, presetId) {
+  showToast(`Preset "${presetId}" f\u00FCr ${zoneId} (Demo)`);
+}
+
+async function saveZoneScene(zoneId, zoneName) {
+  const name = prompt("Name f\u00FCr die Szene:", `${zoneName} — ${new Date().toLocaleString("de-DE")}`);
+  if (!name) return;
+  // Get zone entity IDs
+  const z = dashboardZones.find(zz => zz.id === zoneId);
+  const entityIds = [];
+  if (z && z.roles_entities) {
+    for (const eids of Object.values(z.roles_entities)) {
+      if (Array.isArray(eids)) entityIds.push(...eids);
+    }
+  }
+  // Fallback: use zone dashboard data
+  if (entityIds.length === 0 && zoneDashboardData) {
+    const zd = (zoneDashboardData.zones || []).find(zz => zz.zone_id === zoneId);
+    if (zd && zd.entity_ids) entityIds.push(...zd.entity_ids);
+  }
+  const r = await postJSON("/api/v1/scenes/create", {
+    zone_id: zoneId, zone_name: zoneName, name: name, entity_ids: entityIds,
+  });
+  showToast(r && r.success ? `Szene "${name}" gespeichert` : "Fehler: " + (r ? r.error : "unbekannt"));
+}
+
+async function selectZoneSource(zoneId, source) {
+  if (!source) return;
+  const r = await postJSON(`/api/v1/media/zones/${zoneId}/select-source`, {source});
+  showToast(r && r.ok ? `Quelle: ${source}` : "Fehler beim Wechseln");
+}
+
+async function executeQuickAction(zoneId, actionId, service) {
+  const r = await postJSON("/api/v1/zone/dashboard/quick-action", {
+    zone_id: zoneId, action_id: actionId, service: service,
+  });
+  showToast(r && r.ok ? "Aktion ausgef\u00FChrt" : "Fehler");
 }
 
 function closeZoneModal() {
@@ -1274,6 +1768,167 @@ function askStyxAboutZone(zoneId) {
   const z = dashboardZones.find(zz => zz.id === zoneId);
   input.value = `Was ist der aktuelle Status der Zone "${z ? z.name_de : zoneId}"?`;
   input.focus();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Sonos Native Control
+// ═══════════════════════════════════════════════════════════════
+
+async function loadSonosData() {
+  // Health badge
+  const health = await fetchJSON("/api/v1/sonos/health");
+  const badge = document.getElementById("sonos-health-badge");
+  if (badge) {
+    if (health && health.healthy) {
+      badge.textContent = "Sonos Online";
+      badge.style.background = "var(--green)20";
+      badge.style.color = "var(--green)";
+    } else {
+      badge.textContent = "Sonos Offline";
+      badge.style.background = "var(--danger)20";
+      badge.style.color = "var(--danger)";
+    }
+  }
+
+  // Rooms -> TTS dropdown + room cards
+  const roomsResp = await fetchJSON("/api/v1/sonos/rooms");
+  const rooms = (roomsResp && roomsResp.rooms) || [];
+  const sel = document.getElementById("sonos-tts-room");
+  if (sel) {
+    sel.innerHTML = '<option value="">Alle R\u00e4ume</option>' +
+      rooms.map(r => `<option value="${r}">${r}</option>`).join("");
+  }
+
+  // Room cards with now-playing
+  const cardsEl = document.getElementById("sonos-room-cards");
+  if (cardsEl && rooms.length > 0) {
+    const cards = [];
+    for (const room of rooms) {
+      const st = await fetchJSON(`/api/v1/sonos/rooms/${encodeURIComponent(room)}/state`);
+      const state = (st && st.state) || {};
+      const pb = (state.playbackState || state.currentState || "STOPPED").toUpperCase();
+      const vol = state.volume || 0;
+      const track = state.currentTrack || {};
+      const title = track.title || track.artist || "";
+      const stClass = pb === "PLAYING" ? "playing" : pb === "PAUSED_PLAYBACK" ? "paused" : "idle";
+      const stLabel = pb === "PLAYING" ? "Spielt" : pb === "PAUSED_PLAYBACK" ? "Pause" : "Idle";
+      cards.push(`<div class="media-zone-card ${stClass}">
+        <div class="mz-header">
+          <span style="font-size:1.2rem">&#x1F50A;</span>
+          <span style="font-weight:600;font-size:0.9rem">${room}</span>
+          <span class="mz-state ${stClass}">${stLabel}</span>
+        </div>
+        ${title ? `<div style="font-size:0.78rem;margin-top:4px">&#x1F3B6; ${title}${track.artist ? ' &mdash; ' + track.artist : ''}</div>` : ''}
+        <div class="volume-row">
+          <span style="font-size:0.72rem;color:var(--muted)">&#x1F50A;</span>
+          <input type="range" min="0" max="100" value="${vol}" onchange="sonosSetVolume('${room}',this.value)" oninput="this.nextElementSibling.textContent=this.value+'%'"/>
+          <span class="vol-val">${vol}%</span>
+        </div>
+        <div class="mz-controls">
+          <button class="btn-sm btn-success" onclick="sonosPlay('${room}')">&#x25B6;</button>
+          <button class="btn-sm btn-secondary" onclick="sonosPause('${room}')">&#x23F8;</button>
+          <button class="btn-sm btn-secondary" onclick="sonosNext('${room}')">&#x23ED;</button>
+          <select style="font-size:0.75rem;padding:2px 6px;border:1px solid var(--border);border-radius:4px;background:var(--surface2);color:var(--text)" onchange="sonosPlayFavorite('${room}',this.value);this.selectedIndex=0" id="sonos-fav-${room.replace(/\\s/g,'_')}">
+            <option value="">Favoriten...</option>
+          </select>
+        </div>
+      </div>`);
+    }
+    cardsEl.innerHTML = cards.join("");
+
+    // Load favorites per room
+    for (const room of rooms) {
+      const favResp = await fetchJSON(`/api/v1/sonos/rooms/${encodeURIComponent(room)}/favorites`);
+      const favs = (favResp && favResp.favorites) || [];
+      const favSel = document.getElementById(`sonos-fav-${room.replace(/\s/g,'_')}`);
+      if (favSel && favs.length > 0) {
+        favSel.innerHTML = '<option value="">Favoriten...</option>' +
+          favs.map(f => `<option value="${f.title || f.name || f}">${f.title || f.name || f}</option>`).join("");
+      }
+    }
+  } else if (cardsEl) {
+    cardsEl.innerHTML = '<div style="color:var(--muted);font-size:0.85rem;padding:12px">Keine Sonos-R&auml;ume gefunden</div>';
+  }
+
+  // Volume profiles
+  const vpResp = await fetchJSON("/api/v1/sonos/volume-profiles");
+  const profiles = (vpResp && vpResp.profiles) || [];
+  const vpEl = document.getElementById("sonos-volume-profiles");
+  if (vpEl) {
+    vpEl.innerHTML = profiles.map(p =>
+      `<div style="padding:8px 14px;border-radius:8px;font-size:0.82rem;border:1px solid ${p.active ? 'var(--accent)' : 'var(--border)'};background:${p.active ? 'var(--accent)15' : 'var(--surface2)'};color:${p.active ? 'var(--accent)' : 'var(--muted)'}">
+        <div style="font-weight:${p.active ? '600' : '400'}">${p.label_de || p.name}</div>
+        <div style="font-size:0.72rem">${p.start_hour}:00&ndash;${p.end_hour}:00 &middot; ${p.volume_pct}% (max ${p.max_volume_pct}%)</div>
+      </div>`
+    ).join("");
+  }
+
+  // Presets
+  const prResp = await fetchJSON("/api/v1/sonos/presets");
+  const presets = (prResp && prResp.presets) || [];
+  const prEl = document.getElementById("sonos-presets");
+  if (prEl) {
+    if (presets.length > 0) {
+      prEl.innerHTML = presets.map(p =>
+        `<button class="btn-sm btn-secondary" onclick="sonosApplyPreset('${p.preset_id}')">${p.label || p.preset_id}</button>`
+      ).join("");
+    } else {
+      prEl.innerHTML = '<span style="color:var(--muted);font-size:0.82rem">Keine Presets gespeichert</span>';
+    }
+  }
+}
+
+async function sonosPlay(room) {
+  await postJSON(`/api/v1/sonos/rooms/${encodeURIComponent(room)}/play`, {});
+  showToast(`${room}: Play`);
+}
+
+async function sonosPause(room) {
+  await postJSON(`/api/v1/sonos/rooms/${encodeURIComponent(room)}/pause`, {});
+  showToast(`${room}: Pause`);
+}
+
+async function sonosNext(room) {
+  await postJSON(`/api/v1/sonos/rooms/${encodeURIComponent(room)}/next`, {});
+  showToast(`${room}: N\u00e4chster Titel`);
+}
+
+async function sonosSetVolume(room, vol) {
+  await postJSON(`/api/v1/sonos/rooms/${encodeURIComponent(room)}/volume`, {volume: parseInt(vol)});
+}
+
+async function sonosPlayFavorite(room, name) {
+  if (!name) return;
+  await postJSON(`/api/v1/sonos/rooms/${encodeURIComponent(room)}/favorite`, {name});
+  showToast(`${room}: ${name}`);
+}
+
+async function sonosSay() {
+  const text = document.getElementById("sonos-tts-text").value.trim();
+  if (!text) return showToast("Bitte Text eingeben");
+  const room = document.getElementById("sonos-tts-room").value;
+  if (room) {
+    await postJSON(`/api/v1/sonos/rooms/${encodeURIComponent(room)}/say`, {text});
+  } else {
+    await postJSON("/api/v1/sonos/sayall", {text});
+  }
+  showToast("Durchsage gesendet");
+  document.getElementById("sonos-tts-text").value = "";
+}
+
+async function sonosPauseAll() {
+  await postJSON("/api/v1/sonos/pauseall", {});
+  showToast("Alle pausiert");
+}
+
+async function sonosResumeAll() {
+  await postJSON("/api/v1/sonos/resumeall", {});
+  showToast("Alle fortgesetzt");
+}
+
+async function sonosApplyPreset(presetId) {
+  const r = await postJSON(`/api/v1/sonos/presets/${presetId}/apply`, {});
+  showToast(r.ok ? `Preset ${presetId} angewendet` : "Fehler beim Anwenden");
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1665,6 +2320,335 @@ async function importExampleEntities() {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// Alarm / Lichtwecker
+// ═══════════════════════════════════════════════════════════════
+
+let alarmDashboard = null;
+
+async function loadAlarmData() {
+  const data = await fetchJSON("/api/v1/alarm/dashboard");
+  if (!data || !data.ok) return;
+  alarmDashboard = data;
+  renderAlarmList(data.alarms || []);
+  renderAlarmPresets(data.presets || []);
+  renderAlarmCurves(data.curves || []);
+}
+
+function renderAlarmList(alarms) {
+  const el = document.getElementById("alarm-list");
+  if (!el) return;
+  if (!alarms.length) { el.innerHTML = '<p style="color:var(--muted);font-size:0.82rem">Keine Wecker konfiguriert. Erstelle einen neuen oder verwende ein Preset.</p>'; return; }
+  el.innerHTML = alarms.map(a => {
+    const rt = a.runtime || {};
+    const sched = a.schedule || {};
+    const stateColors = {running:'var(--green)',snoozed:'var(--accent)',armed:'var(--blue,#60a5fa)',idle:'var(--muted)',completed:'var(--muted)',cancelled:'var(--red,#f87171)'};
+    const stateLabels = {running:'Laeuft',snoozed:'Snooze',armed:'Aktiv',idle:'Inaktiv',completed:'Fertig',cancelled:'Abgebrochen'};
+    const stateColor = stateColors[rt.state] || 'var(--muted)';
+    const stateLabel = stateLabels[rt.state] || rt.state;
+    const modeIcon = a.mode === 'wake' ? '&#x1F305;' : '&#x1F307;';
+    const modeLabel = a.mode === 'wake' ? 'Aufwachen' : 'Einschlafen';
+    const days = (sched.days || []).map(d => d.substring(0,2).toUpperCase()).join(' ');
+    const progress = rt.state === 'running' ? `<div style="margin-top:6px;background:var(--border);border-radius:4px;height:6px;overflow:hidden"><div style="width:${rt.progress_pct||0}%;height:100%;background:var(--accent);transition:width 1s"></div></div>` : '';
+    return `<div class="auto-zone-card" style="position:relative">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <h3>${modeIcon} ${a.name || 'Wecker'}</h3>
+        <span style="color:${stateColor};font-size:0.75rem;font-weight:600">${stateLabel}</span>
+      </div>
+      <div style="color:var(--muted);font-size:0.78rem;margin:4px 0">
+        ${sched.time || '--:--'} &middot; ${days} &middot; ${modeLabel}
+        ${a.zone_id ? ` &middot; Zone: ${a.zone_id}` : ''}
+      </div>
+      <div style="font-size:0.75rem;color:var(--muted)">
+        Kurve: ${a.light?.curve_type || 'quadratic'} &middot; ${a.light?.duration_minutes || 30} Min &middot; ${a.light?.cct_start_k || 1800}K&#x2192;${a.light?.cct_end_k || 5000}K
+      </div>
+      ${progress}
+      <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+        ${rt.state === 'running' || rt.state === 'snoozed' ? `
+          <button onclick="alarmSnooze('${a.alarm_id}')" style="padding:4px 10px;background:var(--accent);color:#000;border:none;border-radius:4px;cursor:pointer;font-size:0.75rem">Snooze</button>
+          <button onclick="alarmCancel('${a.alarm_id}')" style="padding:4px 10px;background:var(--red,#f87171);color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:0.75rem">Stop</button>
+        ` : `
+          <button onclick="alarmTrigger('${a.alarm_id}')" style="padding:4px 10px;background:var(--green);color:#000;border:none;border-radius:4px;cursor:pointer;font-size:0.75rem">Starten</button>
+        `}
+        <button onclick="alarmDelete('${a.alarm_id}')" style="padding:4px 10px;background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:4px;cursor:pointer;font-size:0.75rem">Loeschen</button>
+      </div>
+    </div>`;
+  }).join("");
+}
+
+function renderAlarmPresets(presets) {
+  const el = document.getElementById("alarm-presets");
+  if (!el || !presets.length) { if(el) el.innerHTML = ''; return; }
+  let html = '<div style="font-size:0.82rem;font-weight:600;margin-bottom:6px;color:var(--text)">Presets</div><div class="auto-zone-grid">';
+  html += presets.map(p => {
+    const modeIcon = p.mode === 'wake' ? '&#x1F305;' : '&#x1F307;';
+    return `<div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px;font-size:0.78rem">
+      <div style="font-weight:600">${modeIcon} ${p.label}</div>
+      <div style="color:var(--muted);margin:3px 0">${p.description || ''}</div>
+      <button onclick="alarmFromPreset('${p.preset_id}')" style="margin-top:4px;padding:3px 10px;background:var(--accent);color:#000;border:none;border-radius:4px;cursor:pointer;font-size:0.72rem">Wecker erstellen</button>
+    </div>`;
+  }).join("");
+  html += '</div>';
+  el.innerHTML = html;
+}
+
+function renderAlarmCurves(curves) {
+  const el = document.getElementById("alarm-curves");
+  if (!el || !curves.length) { if(el) el.innerHTML = ''; return; }
+  let html = '<div style="font-size:0.82rem;font-weight:600;margin-bottom:6px;color:var(--text)">Kurventypen</div><div style="display:flex;gap:8px;flex-wrap:wrap">';
+  html += curves.map(c => {
+    const pts = c.samples.map((v, i) => `${i*10},${100-v*100}`).join(' ');
+    return `<div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:8px;text-align:center;min-width:100px">
+      <svg viewBox="0 0 100 100" style="width:60px;height:40px;display:block;margin:0 auto"><polyline points="${pts}" fill="none" stroke="var(--accent)" stroke-width="2"/></svg>
+      <div style="font-size:0.72rem;font-weight:600;margin-top:2px">${c.type}</div>
+      <div style="font-size:0.65rem;color:var(--muted)">${c.description.split('—')[0].trim()}</div>
+    </div>`;
+  }).join("");
+  html += '</div>';
+  el.innerHTML = html;
+}
+
+async function alarmTrigger(alarmId) {
+  const r = await postJSON(`/api/v1/alarm/alarms/${alarmId}/trigger`, {});
+  if (r && r.ok) { showToast('Wecker gestartet'); loadAlarmData(); }
+}
+
+async function alarmSnooze(alarmId) {
+  const r = await postJSON(`/api/v1/alarm/alarms/${alarmId}/snooze`, {});
+  if (r && r.ok) showToast(`Snooze (${r.snooze_minutes} Min)`);
+  loadAlarmData();
+}
+
+async function alarmCancel(alarmId) {
+  const r = await postJSON(`/api/v1/alarm/alarms/${alarmId}/cancel`, {});
+  if (r && r.ok) showToast('Wecker gestoppt');
+  loadAlarmData();
+}
+
+async function alarmDelete(alarmId) {
+  if (!confirm('Wecker loeschen?')) return;
+  await fetch(BASE + `/api/v1/alarm/alarms/${alarmId}`, {method:'DELETE', headers: HEADERS});
+  showToast('Wecker geloescht');
+  loadAlarmData();
+}
+
+async function alarmFromPreset(presetId) {
+  const r = await postJSON(`/api/v1/alarm/presets/${presetId}/create-alarm`, {
+    schedule: {time: '07:00', days: ['mon','tue','wed','thu','fri']},
+  });
+  if (r && r.ok) { showToast('Wecker aus Preset erstellt'); loadAlarmData(); }
+}
+
+function showAlarmCreate() {
+  const modal = document.getElementById('alarm-modal');
+  const content = document.getElementById('alarm-modal-content');
+  if (!modal || !content) return;
+  document.getElementById('alarm-modal-title').textContent = 'Neuer Wecker';
+  const curves = (alarmDashboard?.curves || []).map(c => `<option value="${c.type}">${c.type} — ${c.description.split('—')[0].trim()}</option>`).join('');
+  content.innerHTML = `
+    <div style="display:flex;flex-direction:column;gap:10px;padding:8px 0">
+      <label style="font-size:0.82rem;font-weight:600">Name</label>
+      <input id="alarm-new-name" type="text" value="Wecker" style="padding:6px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:4px">
+      <label style="font-size:0.82rem;font-weight:600">Modus</label>
+      <select id="alarm-new-mode" style="padding:6px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:4px">
+        <option value="wake">Aufwachen (Sunrise)</option>
+        <option value="sleep">Einschlafen (Sunset)</option>
+      </select>
+      <label style="font-size:0.82rem;font-weight:600">Zeit</label>
+      <input id="alarm-new-time" type="time" value="07:00" style="padding:6px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:4px">
+      <label style="font-size:0.82rem;font-weight:600">Tage</label>
+      <div id="alarm-new-days" style="display:flex;gap:4px;flex-wrap:wrap">
+        ${['mon','tue','wed','thu','fri','sat','sun'].map(d => `<label style="font-size:0.78rem;display:flex;align-items:center;gap:2px"><input type="checkbox" value="${d}" ${['mon','tue','wed','thu','fri'].includes(d)?'checked':''}>${d.toUpperCase()}</label>`).join('')}
+      </div>
+      <label style="font-size:0.82rem;font-weight:600">Lichtkurve</label>
+      <select id="alarm-new-curve" style="padding:6px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:4px">${curves}</select>
+      <label style="font-size:0.82rem;font-weight:600">Dauer (Min)</label>
+      <input id="alarm-new-duration" type="number" value="30" min="5" max="120" style="padding:6px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:4px">
+      <label style="font-size:0.82rem;font-weight:600">Snooze (Min)</label>
+      <input id="alarm-new-snooze" type="number" value="9" min="1" max="30" style="padding:6px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:4px">
+      <label style="font-size:0.82rem;font-weight:600">Licht-Entitaeten (kommagetrennt)</label>
+      <input id="alarm-new-lights" type="text" placeholder="light.schlafzimmer, light.nachttisch" style="padding:6px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:4px">
+      <label style="font-size:0.82rem;font-weight:600">Sonos-Raum (optional)</label>
+      <input id="alarm-new-sonos" type="text" placeholder="Schlafzimmer" style="padding:6px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:4px">
+      <label style="font-size:0.82rem;font-weight:600">Sonos Favorit (optional)</label>
+      <input id="alarm-new-fav" type="text" placeholder="Morning Jazz" style="padding:6px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:4px">
+      <button onclick="submitAlarmCreate()" style="padding:10px;background:var(--accent);color:#000;border:none;border-radius:6px;cursor:pointer;font-weight:600;margin-top:8px">Wecker erstellen</button>
+    </div>`;
+  modal.style.display = 'flex';
+}
+
+async function submitAlarmCreate() {
+  const name = document.getElementById('alarm-new-name')?.value || 'Wecker';
+  const mode = document.getElementById('alarm-new-mode')?.value || 'wake';
+  const time = document.getElementById('alarm-new-time')?.value || '07:00';
+  const days = [...document.querySelectorAll('#alarm-new-days input:checked')].map(c => c.value);
+  const curve = document.getElementById('alarm-new-curve')?.value || 'quadratic';
+  const duration = parseInt(document.getElementById('alarm-new-duration')?.value || '30');
+  const snooze = parseInt(document.getElementById('alarm-new-snooze')?.value || '9');
+  const lights = (document.getElementById('alarm-new-lights')?.value || '').split(',').map(s=>s.trim()).filter(Boolean);
+  const sonos = document.getElementById('alarm-new-sonos')?.value || '';
+  const fav = document.getElementById('alarm-new-fav')?.value || '';
+
+  const isWake = mode === 'wake';
+  const data = {
+    name, mode,
+    schedule: {time, days, enabled: true},
+    light: {
+      entity_ids: lights,
+      curve_type: curve,
+      duration_minutes: duration,
+      brightness_start_pct: isWake ? 0 : 80,
+      brightness_end_pct: isWake ? 100 : 0,
+      cct_start_k: isWake ? 1800 : 3000,
+      cct_end_k: isWake ? 5000 : 1800,
+    },
+    music: {
+      source_type: 'favorite',
+      source_name: fav,
+      sonos_room: sonos,
+      volume_start_pct: isWake ? 5 : 30,
+      volume_end_pct: isWake ? 40 : 5,
+      enabled: !!(sonos || fav),
+    },
+    snooze_minutes: snooze,
+  };
+  const r = await postJSON('/api/v1/alarm/alarms', data);
+  if (r && r.ok) {
+    showToast('Wecker erstellt');
+    document.getElementById('alarm-modal').style.display = 'none';
+    loadAlarmData();
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// HomeKit per Zone
+// ═══════════════════════════════════════════════════════════════
+
+let homekitData = null;
+
+async function loadHomeKit() {
+  const data = await fetchJSON("/api/v1/homekit/all-zones-info");
+  if (!data || !data.ok) {
+    // Fallback: try status endpoint
+    const status = await fetchJSON("/api/v1/homekit/status");
+    if (status && status.ok) { homekitData = status; renderHomeKitCards(status.zones || []); }
+    else { document.getElementById("homekit-cards").innerHTML = '<div style="color:var(--muted);padding:16px">HomeKit-Status nicht verfuegbar. API-Endpunkt antwortet nicht.</div>'; }
+    return;
+  }
+  homekitData = data;
+  renderHomeKitCards(data.zones || []);
+}
+
+function renderHomeKitCards(zones) {
+  const el = document.getElementById("homekit-cards");
+  if (!el) return;
+  if (!zones || zones.length === 0) {
+    el.innerHTML = '<div style="color:var(--muted);padding:16px">Keine HomeKit-Zonen konfiguriert. Aktiviere HomeKit fuer eine Habitus-Zone.</div>';
+    return;
+  }
+  el.innerHTML = zones.map(z => {
+    const enabled = z.enabled !== false;
+    const zoneId = z.zone_id || z.id || "";
+    const zoneName = z.zone_name || z.name || zoneId;
+    const icon = ZONE_ICONS[zoneId.replace("zone:","")] || "\u{1F3E0}";
+    const setupCode = z.setup_code || z.setup_info?.setup_code || "—";
+    const entityCount = z.entity_count || (z.entity_ids || []).length || 0;
+    const qrUrl = z.qr_svg_url || `${BASE}/api/v1/homekit/qr/${encodeURIComponent(zoneId)}.svg`;
+    const serial = z.serial || z.setup_info?.serial || "";
+
+    return `<div class="homekit-card ${enabled ? 'hk-enabled' : ''}">
+      <div class="hk-header">
+        <span class="hk-icon">${icon}</span>
+        <div style="flex:1">
+          <div class="hk-title">${zoneName}</div>
+          <div class="hk-subtitle">${serial}</div>
+        </div>
+        <span class="hk-badge ${enabled ? 'active' : 'inactive'}">${enabled ? 'Aktiv' : 'Inaktiv'}</span>
+      </div>
+      ${enabled ? `
+      <div class="hk-qr"><img src="${qrUrl}" alt="HomeKit QR ${zoneName}" onerror="this.parentElement.innerHTML='<span style=\\'color:var(--muted);font-size:0.75rem\\'>QR nicht verfuegbar</span>'"/></div>
+      <div class="hk-code">${setupCode}</div>
+      ` : '<div style="text-align:center;color:var(--muted);font-size:0.82rem;padding:16px">HomeKit deaktiviert</div>'}
+      <div class="hk-entities">${entityCount} Entit&auml;ten exponiert</div>
+      <div style="text-align:center;margin-top:8px">
+        <button class="btn-sm ${enabled ? 'btn-danger' : 'btn-success'}" onclick="toggleHomeKit('${zoneId}',${!enabled})">${enabled ? 'Deaktivieren' : 'Aktivieren'}</button>
+      </div>
+    </div>`;
+  }).join("");
+}
+
+async function toggleHomeKit(zoneId, enable) {
+  const result = await postJSON("/api/v1/homekit/toggle", {zone_id: zoneId, enabled: enable});
+  if (result && result.ok) {
+    showToast(`HomeKit ${enable ? 'aktiviert' : 'deaktiviert'} fuer ${zoneId}`);
+    loadHomeKit();
+  } else {
+    showToast(`Fehler: ${(result && result.error) || 'Unbekannt'}`, 4000);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Enhanced Zone Cards with Status + Mood
+// ═══════════════════════════════════════════════════════════════
+
+let zoneDashboardData = null;
+
+async function loadZoneDashboard() {
+  const data = await fetchJSON("/api/v1/zone/dashboard?include_entities=true&include_mood=true&include_actions=true");
+  if (data && data.ok) {
+    zoneDashboardData = data;
+    enrichZoneCards(data.zones || []);
+    // Update zone counters
+    const zones = data.zones || [];
+    const activeCount = zones.filter(z => z.status === "active").length;
+    const idleCount = zones.filter(z => z.status === "idle").length;
+    const totalEntities = zones.reduce((s, z) => s + (z.entity_count || 0), 0);
+    const el = (id) => document.getElementById(id);
+    if (el("zone-count-active")) el("zone-count-active").textContent = `${activeCount} aktiv`;
+    if (el("zone-count-idle")) el("zone-count-idle").textContent = `${idleCount} idle`;
+    if (el("zone-count-entities")) el("zone-count-entities").textContent = `${totalEntities} Entitaeten`;
+  }
+}
+
+function enrichZoneCards(zonesDashData) {
+  // Merge zone dashboard data into existing zone cards
+  if (!dashboardZones.length || !zonesDashData.length) return;
+  for (const zd of zonesDashData) {
+    const card = document.querySelector(`[onclick="openZoneDetail('${zd.zone_id || zd.id}')"]`);
+    if (!card) continue;
+    // Add status badge
+    const status = zd.status || "idle";
+    const statusLabel = status === "active" ? "Aktiv" : status === "idle" ? "Idle" : "Aus";
+    let statusBadge = card.querySelector(".zone-status-injected");
+    if (!statusBadge) {
+      statusBadge = document.createElement("span");
+      statusBadge.className = `zone-status-badge ${status} zone-status-injected`;
+      statusBadge.style.cssText = "position:absolute;top:12px;right:80px";
+      card.style.position = "relative";
+      card.appendChild(statusBadge);
+    }
+    statusBadge.className = `zone-status-badge ${status} zone-status-injected`;
+    statusBadge.textContent = statusLabel;
+
+    // Add mood bars
+    const mood = zd.mood;
+    if (mood && !card.querySelector(".zone-mood")) {
+      const moodDiv = document.createElement("div");
+      moodDiv.className = "zone-mood";
+      const dims = [
+        {key:"comfort", label:"Komfort", color:"var(--green)"},
+        {key:"joy", label:"Freude", color:"var(--accent)"},
+        {key:"frugality", label:"Sparsamkeit", color:"var(--orange)"},
+      ];
+      moodDiv.innerHTML = dims.map(d => {
+        const val = Math.round((mood[d.key] || 0) * 100);
+        return `<span class="zone-mood-label">${d.label}</span><div class="zone-mood-bar"><div class="fill" style="width:${val}%;background:${d.color}"></div></div>`;
+      }).join("");
+      card.appendChild(moodDiv);
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
 // Main Load
 // ═══════════════════════════════════════════════════════════════
 
@@ -1698,7 +2682,7 @@ async function loadDashboard() {
 }
 
 async function loadAll() {
-  await Promise.all([loadDashboard(), loadLLM(), loadAutomation()]);
+  await Promise.all([loadDashboard(), loadLLM(), loadAutomation(), loadAlarmData(), loadHomeKit(), loadZoneDashboard()]);
 }
 
 // Initialize

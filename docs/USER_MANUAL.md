@@ -1,7 +1,23 @@
 # USER_MANUAL.md - PilotSuite User Guide
 
 > **Version:** 4.0.0 (HA Integration) + 4.0.0 (Core Add-on)
-> **Last Updated:** 2026-02-20
+> **Last Updated:** 2026-03-07
+
+---
+
+## ⚡ Migration Quick Reference (v13.5.3)
+
+> **Für bestehende Integrationen:**
+>
+> | Legacy | Aktiv | Hinweis |
+> |--------|-------|---------|
+> | `/api/v1/tags` | `/api/v1/tag-system/tags` | Tag-System Namespace |
+> | `/api/v1/tags/{id}` | `/api/v1/tag-system/tags/{tag_id}` | Tag-System Namespace |
+> | `/api/v1/candidates/{id}` | `/api/v1/candidates/{candidate_id}` | Parameter-Name vereinheitlicht |
+> | `X-API-Key` Header | `X-Auth-Token` Header | Auth-Header bevorzugt |
+> | `mood_changed` Event | `mood` Event | Kanonischer Event-Typ |
+>
+> Für neue Integrationen ausschliesslich die aktive v13-Surface verwenden.
 
 ---
 

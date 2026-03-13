@@ -13,7 +13,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Framework:** Flask 3.0.2 (Web) + Waitress 3.0.0 (WSGI)
 - **Sprache:** Python 3.11+
 - **Lizenz:** Privat, alle Rechte vorbehalten
-- **Version:** Muss in `copilot_core/config.yaml`, `copilot_core/manifest.json` und `copilot_core/VERSION` uebereinstimmen
+- **Version:** Muss in `copilot_core/config.yaml`, `copilot_core/manifest.json`, `copilot_core/VERSION`, `copilot_core/rootfs/usr/src/app/VERSION` und `VERSION` (root) uebereinstimmen
 - **Releases:** Immer paired mit pilotsuite-styx-ha (gleiche Versionsnummer)
 
 ---
@@ -139,6 +139,18 @@ Token-Quellen (Prioritaet): `X-Auth-Token` Header > `Authorization: Bearer` > `C
 
 Single-Page-App mit 9 Tabs: Overview, Zonen, Musikwolke, Vorschlaege, **Automation**, KI/LLM, Module, Neuronen, Chat. Keyboard Shortcuts 1-9. Auto-Refresh alle 30s. API calls via `fetchJSON()` / `postJSON()`.
 
+**Zone-Detail-Modal** (erweitertes Modal bei Klick auf Zonen-Karte):
+- Entity-Stats nach Domain + Rolle mit Tags
+- Mood-Ringe (conic-gradient, 0-100%)
+- Szenen: 8 Presets + gespeicherte Szenen + Save-Button
+- Medien: Now-Playing, Sonos Favorites Dropdown
+- Quick-Actions, Chat-Link
+
+**Brain-Visualization** (Canvas mit Signal-Partikeln):
+- 3-Layer Neural-Viz (Context, State, Mood)
+- Firing-Animationen bei hochaktiven Neuronen
+- 6 Echtzeit-Statistik-Chips
+
 ---
 
 ## Docker Build + Runtime
@@ -155,7 +167,7 @@ Single-Page-App mit 9 Tabs: Overview, Zonen, Musikwolke, Vorschlaege, **Automati
 
 ## Tests
 
-152+ Testdateien in `copilot_core/rootfs/usr/src/app/tests/` mit 3720+ Tests. `conftest.py` stellt autouse-Fixtures bereit:
+152+ Testdateien in `copilot_core/rootfs/usr/src/app/tests/` mit 3569+ Tests. `conftest.py` stellt autouse-Fixtures bereit:
 
 - **`reset_auth_token_cache`**: Setzt `_token_cache` in `security.py` vor/nach jedem Test zurueck (60s TTL wuerde sonst State-Leaking verursachen)
 - **`reset_circuit_breakers`**: Setzt `ha_supervisor_breaker`, `ollama_breaker`, `cloud_api_breaker` zurueck (offene Breaker wuerden Folgetests beeinflussen)
