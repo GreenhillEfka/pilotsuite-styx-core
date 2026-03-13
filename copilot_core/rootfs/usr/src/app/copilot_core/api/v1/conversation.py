@@ -628,6 +628,94 @@ def _get_user_context() -> str:
     except Exception:
         logger.debug("RAG retrieval failed (non-critical)", exc_info=True)
 
+    # RAG: Hybrid Search (BM25 + Semantic + RRF) for knowledge retrieval (v3.6.0)
+    try:
+        _current_msg = getattr(_get_user_context, "_current_query", "")
+        _qclass = getattr(_get_user_context, "_query_classification", None)
+        # Skip local RAG for pure web queries (weather, news etc.)
+        _skip_local_rag = (
+            _qclass and _qclass.query_type.value == "web" and _qclass.confidence >= 0.7
+        )
+        # Add web search hint for web/hybrid queries
+        if _qclass and _qclass.use_web_search:
+            context_parts.append(
+                "Hinweis: Diese Frage koennte aktuelle Web-Informationen erfordern "
+                f"(Typ: {_qclass.query_type.value}, Schluesselwoerter: {', '.join(_qclass.web_keywords_found[:3])})"
+            )
+        if _current_msg and len(_current_msg) >= 3 and not _skip_local_rag:
+            from copilot_core.rag.bm25 import BM25SqliteIndex, BM25Hit
+            from copilot_core.rag.semantic_backend import rag_semantic_search
+            from copilot_core.rag.hybrid_search import (
+                RankedHit, reciprocal_rank_fusion,
+            )
+
+            # BM25 lexical search
+            bm25_hits: list = []
+            try:
+                _bm25 = BM25SqliteIndex()  # uses default /data/ path
+                bm25_hits = _bm25.search(
+                    namespace="ha_docs",
+                    query=_current_msg,
+                    top_k=5,
+                    include_text=True,
+                )
+            except Exception:
+                logger.debug("RAG BM25 search failed", exc_info=True)
+
+            # Semantic search
+            sem_hits: list = []
+            try:
+                sem_hits = rag_semantic_search(
+                    namespace="ha_docs",
+                    query=_current_msg,
+                    top_k=5,
+                )
+            except Exception:
+                logger.debug("RAG semantic search failed", exc_info=True)
+
+            # Fuse via RRF if we have results from either source
+            if bm25_hits or sem_hits:
+                lexical_ranked = [
+                    RankedHit(doc_id=h.doc_id, score=h.score, rank=h.rank)
+                    for h in bm25_hits
+                ]
+                semantic_ranked = [
+                    RankedHit(
+                        doc_id=h.get("id", ""),
+                        score=h.get("score", 0.0),
+                        rank=idx + 1,
+                    )
+                    for idx, h in enumerate(sem_hits)
+                ]
+                fused = reciprocal_rank_fusion(
+                    lexical_hits=lexical_ranked,
+                    semantic_hits=semantic_ranked,
+                    top_k=5,
+                )
+
+                if fused:
+                    # Build snippet lookup from both sources
+                    snippets: dict = {}
+                    for h in bm25_hits:
+                        if h.text:
+                            snippets[h.doc_id] = h.text[:200]
+                    for h in sem_hits:
+                        did = h.get("id", "")
+                        if did and did not in snippets:
+                            snippets[did] = h.get("text", "")[:200]
+
+                    rag_lines = []
+                    for fh in fused:
+                        snippet = snippets.get(fh.doc_id, "")
+                        if snippet:
+                            rag_lines.append(f"[{fh.doc_id}] {snippet}")
+                    if rag_lines:
+                        context_parts.append(
+                            "Relevantes Wissen (RAG):\n  " + "\n  ".join(rag_lines)
+                        )
+    except Exception:
+        logger.debug("RAG hybrid search failed (non-critical)", exc_info=True)
+
     if not context_parts:
         return ""
 
@@ -1182,6 +1270,20 @@ def _process_conversation(messages: list, model_override: str = None,
             last_user_msg = msg.get("content", "")
             break
     _get_user_context._current_query = last_user_msg
+
+    # Query Router: classify query for search strategy (v3.6.0)
+    try:
+        from copilot_core.rag.query_router import classify_query
+        qclass = classify_query(last_user_msg) if last_user_msg else None
+        _get_user_context._query_classification = qclass
+        if qclass:
+            logger.debug(
+                "Query classified: type=%s confidence=%.2f web=%s",
+                qclass.query_type.value, qclass.confidence, qclass.use_web_search,
+            )
+    except Exception:
+        _get_user_context._query_classification = None
+        logger.debug("Query router failed (non-critical)", exc_info=True)
 
     # Build system prompt with user context injection
     system_prompt = character["system_prompt"]

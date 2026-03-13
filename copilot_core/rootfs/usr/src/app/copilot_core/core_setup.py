@@ -259,6 +259,8 @@ async def init_services(hass=None, config: dict = None):
         "hub_praesenz": None,
         # Weather service (for energy forecast engines)
         "weather_service": None,
+        # Wecker (Smart Alarm) service
+        "wecker": None,
     }
 
     # Initialize system health service (requires hass)
@@ -922,6 +924,22 @@ def register_blueprints(app: Flask, services: dict) -> None:
     from copilot_core.api.v1.musikwolke import musikwolke_bp, init_musikwolke_api
     init_musikwolke_api(services.get("musikwolke_bridge"))
     app.register_blueprint(musikwolke_bp)
+
+    # Initialize Wecker (Smart Alarm) service
+    try:
+        from copilot_core.hub.wecker import WeckerService
+        services["wecker"] = WeckerService(
+            sonos_client=services.get("sonos_client"),
+            config=config,
+        )
+        _LOGGER.info("WeckerService initialized (sonos=%s)", services.get("sonos_client") is not None)
+    except Exception:
+        _LOGGER.exception("Failed to init WeckerService")
+
+    # Register Wecker API
+    from copilot_core.api.v1.wecker import bp as wecker_bp, init_wecker_bp
+    init_wecker_bp(services.get("wecker"))
+    app.register_blueprint(wecker_bp)
 
     # Register Zone Dashboard API (zonenzentriertes Dashboard mit voller Modulintegration)
     from copilot_core.api.v1.zone_dashboard import zone_dashboard_bp, init_zone_dashboard_api
