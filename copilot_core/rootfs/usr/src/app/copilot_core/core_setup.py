@@ -53,11 +53,14 @@ def _wire_bus_events(services: dict) -> None:
     if not bus:
         return
 
-    # 1) Anomaly Detection ← state.changed
+    # 1) Anomaly Detection ← state.changed (with periodic detect + bus publish)
     hub_anomaly = services.get("hub_anomaly")
     if hub_anomaly and hasattr(hub_anomaly, "ingest"):
         try:
-            def _anomaly_from_event(event, _svc=hub_anomaly):
+            _anomaly_ingest_count = [0]  # mutable counter for closure
+            _ANOMALY_DETECT_EVERY = 20   # run detect() every N ingestions
+
+            def _anomaly_from_event(event, _svc=hub_anomaly, _bus=bus):
                 data = event.data if hasattr(event, "data") else {}
                 entity_id = data.get("entity_id", "")
                 value = data.get("value")
@@ -65,10 +68,32 @@ def _wire_bus_events(services: dict) -> None:
                     try:
                         _svc.ingest(entity_id, float(value))
                     except (ValueError, TypeError):
-                        pass
+                        return
+
+                    _anomaly_ingest_count[0] += 1
+                    if _anomaly_ingest_count[0] >= _ANOMALY_DETECT_EVERY:
+                        _anomaly_ingest_count[0] = 0
+                        try:
+                            _svc.learn_patterns()
+                            new_anomalies = _svc.detect()
+                            for anomaly in new_anomalies:
+                                _bus.publish("anomaly.detected", {
+                                    "anomaly_id": anomaly.anomaly_id,
+                                    "entity_id": anomaly.entity_id,
+                                    "anomaly_type": anomaly.anomaly_type,
+                                    "severity": anomaly.severity,
+                                    "score": anomaly.score,
+                                    "detected_at": anomaly.detected_at.isoformat(),
+                                    "value": anomaly.value,
+                                    "expected_value": anomaly.expected_value,
+                                    "deviation_pct": anomaly.deviation_pct,
+                                    "description": anomaly.description_de,
+                                })
+                        except Exception:
+                            _LOGGER.debug("AnomalyDetection detect cycle failed", exc_info=True)
 
             bus.subscribe("state.changed", _anomaly_from_event)
-            _LOGGER.info("AnomalyDetection wired to state.changed events")
+            _LOGGER.info("AnomalyDetection wired to state.changed events (detect every %d ingestions)", _ANOMALY_DETECT_EVERY)
         except Exception:
             _LOGGER.exception("Failed to wire AnomalyDetection")
 
@@ -143,6 +168,83 @@ def _wire_bus_events(services: dict) -> None:
             _LOGGER.info("NotificationIntelligence wired to anomaly.detected events")
         except Exception:
             _LOGGER.exception("Failed to wire NotificationIntelligence")
+
+    # 5) Anomaly Detection → Webhook Push to HA
+    pusher = services.get("webhook_pusher")
+    if pusher and hub_anomaly:
+        try:
+            def _push_anomaly_to_ha(event, _pusher=pusher):
+                data = event.data if hasattr(event, "data") else {}
+                severity = data.get("severity", "info")
+                if severity in ("warning", "critical"):
+                    try:
+                        _pusher.push_anomaly_detected(data)
+                    except Exception:
+                        _LOGGER.debug("Webhook push for anomaly failed", exc_info=True)
+
+            bus.subscribe("anomaly.detected", _push_anomaly_to_ha)
+            _LOGGER.info("WebhookPusher wired to anomaly.detected events")
+        except Exception:
+            _LOGGER.exception("Failed to wire anomaly → webhook push")
+
+    # 6) Anomaly Detection → Proactive Engine (suggestions context)
+    proactive = services.get("proactive_engine")
+    if proactive and hasattr(proactive, "add_context"):
+        try:
+            def _anomaly_to_proactive(event, _svc=proactive):
+                data = event.data if hasattr(event, "data") else {}
+                try:
+                    _svc.add_context("anomaly", {
+                        "entity_id": data.get("entity_id"),
+                        "severity": data.get("severity"),
+                        "type": data.get("anomaly_type"),
+                    })
+                except Exception:
+                    _LOGGER.debug("ProactiveEngine add_context failed", exc_info=True)
+
+            bus.subscribe("anomaly.detected", _anomaly_to_proactive)
+            _LOGGER.info("ProactiveEngine wired to anomaly.detected events")
+        except Exception:
+            _LOGGER.exception("Failed to wire anomaly → proactive engine")
+
+    # 7) Pattern Discovery → RAG Embedding (Vector Store)
+    vs = services.get("vector_store")
+    ee = services.get("embedding_engine")
+    if vs and ee:
+        try:
+            def _embed_pattern(event, _vs=vs, _ee=ee):
+                data = event.data if hasattr(event, "data") else {}
+                rule_key = data.get("rule_key", "")
+                a_entity = data.get("a_entity", "")
+                b_entity = data.get("b_entity", "")
+                confidence = data.get("confidence", 0.0)
+                lift = data.get("lift", 0.0)
+                if not rule_key or not a_entity:
+                    return
+                try:
+                    text = f"{a_entity} → {b_entity} (confidence={confidence:.2f}, lift={lift:.1f})"
+                    if hasattr(_ee, "embed_text_sync"):
+                        vector = _ee.embed_text_sync(text)
+                        _vs.upsert_sync(
+                            entry_id=f"pattern:{rule_key}",
+                            vector=vector,
+                            entry_type="pattern",
+                            metadata={
+                                "a_entity": a_entity,
+                                "b_entity": b_entity,
+                                "confidence": confidence,
+                                "lift": lift,
+                                "support": data.get("support", 0),
+                                "zone_id": data.get("zone_id", ""),
+                            },
+                        )
+                except Exception:
+                    _LOGGER.debug("RAG embedding for pattern failed", exc_info=True)
+
+            bus.subscribe("pattern.discovered", _embed_pattern)
+            _LOGGER.info("RAG embedding wired to pattern.discovered events")
+        except Exception:
+            _LOGGER.exception("Failed to wire pattern → RAG embedding")
 
 
 def _safe_int(value, default: int, minimum: int = 1, maximum: int = 100000) -> int:
@@ -746,7 +848,7 @@ async def init_services(hass=None, config: dict = None):
         ("hub_plugin_manager",  "copilot_core.hub.plugin_manager",           "PluginManager"),
         ("hub_multi_home",      "copilot_core.hub.multi_home",               "MultiHomeManager"),
         ("hub_maintenance",     "copilot_core.hub.predictive_maintenance",   "PredictiveMaintenanceEngine"),
-        ("hub_anomaly",         "copilot_core.hub.anomaly_detection",        "AnomalyDetector"),
+        ("hub_anomaly",         "copilot_core.hub.anomaly_detection",        "AnomalyDetectionEngine"),
         ("hub_zones",           "copilot_core.hub.habitus_zones",            "HabitusZoneEngine"),
         ("hub_light",           "copilot_core.hub.light_intelligence",       "LightIntelligenceEngine"),
         ("hub_modes",           "copilot_core.hub.zone_modes",               "ZoneModeEngine"),

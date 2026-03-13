@@ -17,15 +17,21 @@ _LOGGER = logging.getLogger(__name__)
 
 class HabitusMinerService:
     """Main service for discovering behavioral patterns in Smart Home events."""
-    
+
     def __init__(
         self,
         storage_dir: Path,
-        config: MiningConfig | None = None
+        config: MiningConfig | None = None,
+        vector_store: Any = None,
+        embedding_engine: Any = None,
+        integration_bus: Any = None,
     ):
         self.storage_dir = Path(storage_dir)
         self.config = config or MiningConfig()
         self.store = HabitusMinerStore(self.storage_dir)
+        self._vector_store = vector_store
+        self._embedding_engine = embedding_engine
+        self._integration_bus = integration_bus
     
     def normalize_ha_event(self, ha_event: dict[str, Any]) -> NormEvent | None:
         """Convert Home Assistant event to normalized event.
@@ -177,8 +183,70 @@ class HabitusMinerService:
         self.store.cache_events(events)
         self.store.save_rules(rules)
         self.store.update_mining_timestamp(int(time.time() * 1000))
-        
+
+        # Embed new rules in RAG vector store and publish discovery events
+        if rules:
+            self._embed_rules_in_rag(rules)
+            self._publish_pattern_events(rules)
+
         return rules
+
+    def _embed_rules_in_rag(self, rules: RulesType) -> None:
+        """Embed discovered rules in vector store for semantic search."""
+        vs = self._vector_store
+        ee = self._embedding_engine
+        if not vs or not ee or not hasattr(ee, "embed_text_sync"):
+            return
+
+        embedded = 0
+        for rule in rules:
+            try:
+                a_entity = rule.A.rsplit(":", 1)[0] if ":" in rule.A else rule.A
+                b_entity = rule.B.rsplit(":", 1)[0] if ":" in rule.B else rule.B
+                text = f"{a_entity} → {b_entity} (confidence={rule.confidence:.2f}, lift={rule.lift:.1f})"
+                vector = ee.embed_text_sync(text)
+                rule_key = f"{rule.A}_{rule.B}_{rule.dt_sec}"
+                vs.upsert_sync(
+                    entry_id=f"pattern:{rule_key}",
+                    vector=vector,
+                    entry_type="pattern",
+                    metadata={
+                        "a_entity": a_entity,
+                        "b_entity": b_entity,
+                        "confidence": rule.confidence,
+                        "lift": rule.lift,
+                        "support": rule.nAB,
+                        "zone_id": getattr(rule, "zone_id", "") or "",
+                    },
+                )
+                embedded += 1
+            except Exception:
+                _LOGGER.debug("Failed to embed rule %s → %s in RAG", rule.A, rule.B, exc_info=True)
+
+        if embedded:
+            _LOGGER.info("Embedded %d/%d rules in RAG vector store", embedded, len(rules))
+
+    def _publish_pattern_events(self, rules: RulesType) -> None:
+        """Publish pattern.discovered events on the integration bus."""
+        bus = self._integration_bus
+        if not bus or not hasattr(bus, "publish"):
+            return
+
+        for rule in rules:
+            try:
+                a_entity = rule.A.rsplit(":", 1)[0] if ":" in rule.A else rule.A
+                b_entity = rule.B.rsplit(":", 1)[0] if ":" in rule.B else rule.B
+                bus.publish("pattern.discovered", {
+                    "rule_key": f"{rule.A}_{rule.B}_{rule.dt_sec}",
+                    "a_entity": a_entity,
+                    "b_entity": b_entity,
+                    "confidence": rule.confidence,
+                    "lift": rule.lift,
+                    "support": rule.nAB,
+                    "zone_id": getattr(rule, "zone_id", "") or "",
+                })
+            except Exception:
+                _LOGGER.debug("Failed to publish pattern.discovered event", exc_info=True)
     
     def get_rules(
         self, 

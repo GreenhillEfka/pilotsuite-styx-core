@@ -32,9 +32,14 @@ def _get_service() -> HabitusMinerService:
         # Create default config (can be overridden via API)
         mining_config = MiningConfig()
         
+        # Pass RAG and bus services for pattern embedding + event publishing
+        copilot_services = current_app.config.get("COPILOT_SERVICES", {})
         current_app._habitus_service = HabitusMinerService(
             storage_dir=storage_dir,
-            config=mining_config
+            config=mining_config,
+            vector_store=copilot_services.get("vector_store") if isinstance(copilot_services, dict) else None,
+            embedding_engine=copilot_services.get("embedding_engine") if isinstance(copilot_services, dict) else None,
+            integration_bus=copilot_services.get("integration_bus") if isinstance(copilot_services, dict) else None,
         )
     
     return current_app._habitus_service
