@@ -1,4 +1,0 @@
-input_boolean:
-  deckenlicht_steuerung:
-    name: Deckenlicht schalten
-    icon: mdi:light-switch

@@ -34,3 +34,20 @@ credentials.json
 # Large backups
 backups/
 *.bundle
+
+# Node
+node_modules/
+
+# Test artifacts
+test-results/
+coverage.json
+coverage.xml
+
+# Logs
+*.log
+
+# Dev artifacts
+.last-dev-check
+
+# Virtual environments
+qg_venv/
