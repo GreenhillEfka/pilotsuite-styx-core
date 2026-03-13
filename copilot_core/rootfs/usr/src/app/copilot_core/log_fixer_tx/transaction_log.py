@@ -43,8 +43,13 @@ class TransactionLog:
         
     def _acquire_lock(self):
         """Acquire exclusive lock on log file (single-writer)."""
-        self._lock_fd = open(self.lock_path, 'w')
-        fcntl.flock(self._lock_fd.fileno(), fcntl.LOCK_EX)
+        fd = open(self.lock_path, 'w')
+        try:
+            fcntl.flock(fd.fileno(), fcntl.LOCK_EX)
+        except Exception:
+            fd.close()
+            raise
+        self._lock_fd = fd
         
     def _release_lock(self):
         """Release lock on log file."""

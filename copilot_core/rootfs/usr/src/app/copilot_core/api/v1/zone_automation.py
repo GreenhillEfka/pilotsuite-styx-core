@@ -107,6 +107,38 @@ def toggle_override(zone_id: str):
     return jsonify({"ok": True, "config": config.to_dict()})
 
 
+@zone_automation_bp.route("/zones/<zone_id>/mode", methods=["GET"])
+@require_token
+def get_automation_mode(zone_id: str):
+    """Get automation mode for a zone."""
+    if _controller is None:
+        return jsonify({"ok": False, "error": "Controller not initialized"}), 503
+    return jsonify({"ok": True, "zone_id": zone_id,
+                    "automation_mode": _controller.get_automation_mode(zone_id)})
+
+
+@zone_automation_bp.route("/zones/<zone_id>/mode", methods=["POST"])
+@require_token
+def set_automation_mode(zone_id: str):
+    """Set automation mode for a zone.
+
+    Body: {"mode": "off" | "learning" | "autonomy"}
+    """
+    if _controller is None:
+        return jsonify({"ok": False, "error": "Controller not initialized"}), 503
+
+    data = request.get_json(silent=True) or {}
+    mode = data.get("mode", "").strip().lower()
+    if not mode:
+        return jsonify({"ok": False, "error": "Missing 'mode'"}), 400
+
+    success = _controller.set_automation_mode(zone_id, mode)
+    if not success:
+        return jsonify({"ok": False, "error": f"Invalid mode '{mode}'. Valid: off, learning, autonomy"}), 400
+
+    return jsonify({"ok": True, "zone_id": zone_id, "automation_mode": mode})
+
+
 # ── Presence & brightness events ─────────────────────────────────────────────
 
 

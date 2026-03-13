@@ -421,14 +421,16 @@ def _get_icon_for_zone(zone_type: ZoneType) -> str:
 
 
 def _get_zone_metrics(zone_type: ZoneType) -> Dict[str, Any]:
+    """Get current metrics for a zone from the ZoneAutomationController.
+
+    Queries the live zone automation state to derive entity count,
+    light/occupancy status, and energy metrics.
     """
-    Get current metrics for a zone.
-    
-    In a real implementation, this would query Home Assistant for
-    actual entity states and compute aggregates.
-    """
-    # Placeholder metrics - would be populated from HA in production
-    return {
+    from copilot_core.api.v1.zone_dashboard import _svc
+    _zone_automation = _svc.get("zone_automation")
+
+    zone_id = f"zone:{zone_type.value}" if hasattr(zone_type, "value") else f"zone:{zone_type}"
+    metrics: Dict[str, Any] = {
         "entity_count": 0,
         "active_lights": 0,
         "avg_temperature": None,
@@ -437,3 +439,19 @@ def _get_zone_metrics(zone_type: ZoneType) -> Dict[str, Any]:
         "last_activity": None,
         "energy_consumption_kwh": 0.0,
     }
+
+    if _zone_automation is None:
+        return metrics
+
+    try:
+        entities = _zone_automation.get_zone_entities(zone_id)
+        state = _zone_automation.get_zone_state(zone_id)
+        zone_state = state.get("state", {})
+
+        metrics["entity_count"] = len(entities)
+        metrics["occupancy"] = zone_state.get("occupied", False)
+        metrics["active_lights"] = 1 if zone_state.get("lights_on", False) else 0
+    except Exception:
+        pass
+
+    return metrics

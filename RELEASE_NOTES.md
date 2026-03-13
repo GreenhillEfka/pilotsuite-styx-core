@@ -1,123 +1,118 @@
-# Release Notes v13.0.4 -- Module Registry, 100% Coverage & 3D Vision
+# Release v13.9.0 — Offizielles Release mit allen Beitraegen
 
-**Datum:** 2026-03-03
+**Datum:** 2026-03-13
 **Branch:** main
-**Tag:** `v13.0.4`
-**HA hassfest:** ✓ compliant
+**Tag:** `v13.9.0`
+**HA hassfest:** compliant
+**Paired Release:** Core v13.9.0 <-> HA v13.9.0
 
 ---
 
 ## Ueberblick
 
-PilotSuite v13.0.4 ist ein **Feature Release**, das folgende Highlights bringt:
-
-- **Module Registry API**: Vollstaendige REST-API mit 100% Test-Coverage
-- **Test Coverage 61%** (Kern-Module: 75-93%)
-- **HA Integration 13.0.4**: Volle Sync mit Home Assistant Add-on Manifest
-- **3D Vision Features**: Neue `vision3d.js` Komponente fuer erweiterte Visualisierung
+PilotSuite v13.9.0 ist das konsolidierte offizielle Release, das **alle Entwicklungen seit v13.5.8** zusammenfasst. Es umfasst 6 Major-Feature-Bereiche, umfangreiche Code-Qualitaet-Verbesserungen und kritische Bugfixes.
 
 ---
 
 ## Highlights
 
-### Module Registry API (100% Coverage)
+### 1. RAG Hybrid Search & Wetter-Integration
+- **Reciprocal Rank Fusion (RRF)**: BM25 + Semantic Search kombiniert fuer praezisere Chat-Antworten
+- **Open-Meteo Wetter**: Echtzeit-Wetterdaten direkt im Chat abrufbar
+- **Wecker-Modul**: Neues Hub-Modul fuer Alarm- und Weckfunktionalitaet
 
-Vollstaendige REST-API fuer das zentrale Modul-Registry-System:
+### 2. Zone Dashboard v3 (11 Hub-Engines)
+- Zonenzentriertes Dashboard mit vollstaendiger Modulintegration
+- Controls, Musik, Playlists, Notifications, Birthdays, Todos pro Zone
+- Refactored fuer Effizienz und Failsafety
+- Styx Dashboard SPA mit 9 Tabs und Keyboard Shortcuts
 
-**Endpoints**
-- `GET /api/v1/modules` -- Alle Module auflisten
-- `GET /api/v1/modules/<id>` -- Einzelnes Modul abrufen
-- `POST /api/v1/modules` -- Neues Modul registrieren
-- `PUT /api/v1/modules/<id>` -- Modul aktualisieren
-- `DELETE /api/v1/modules/<id>` -- Modul entfernen
-- `GET /api/v1/modules/status` -- Modul-Status abfragen
+### 3. 5 PilotSuite Smart Home Module
+| Modul | Beschreibung |
+|-------|-------------|
+| `licht_module.py` | Lichtsteuerung mit Szenen und Dimming |
+| `helligkeit_module.py` | Helligkeitssensor-Auswertung und Lux-Management |
+| `heiz_module.py` | Heizungssteuerung mit Zieltemperatur und Zeitplaenen |
+| `bewegung_module.py` | Bewegungsmelder-Aggregation und Raumaktivitaet |
+| `praesenz_module.py` | Praesenz-Tracking und Aufenthaltsanalyse |
 
-**Test Coverage**
-- 100% Coverage fuer alle Registry-Funktionen
-- Error-Path-Tests: fehlende Module, Invalid Data, etc.
-- Fallback-to-Singleton Tests
-- Alias-Unterstuetzung: `/api/v1/modules` <-> `/api/v1/moduls`
+### 4. Musikwolke Bridge — End-to-End Sonos-Integration
+- MusikwolkeBridge verbindet ZoneAutomationController mit SonosCloudClient
+- Zone-Speaker-Mapping (automatisch und manuell)
+- Follow-Mode: Musik folgt dem Nutzer zwischen Raeumen
+- 8 REST-Endpoints unter `/api/v1/musikwolke/`
+- Sonos jishi API Integration (Port 5005)
 
-### Test Coverage 61% (Kern-Module: 75-93%)
+### 5. Zone Automation Controller
+- Praesenzabhaengige Licht- und Musiksteuerung
+- 3-Stufen-Modus pro Zone (off/learning/autonomy)
+- Entity-Management mit Auto-Rollenerkennung (11 Rollen, 13 Tags)
+- 16 API-Endpoints unter `/api/v1/zone-automation/`
+- Hysterese/Daempfung gegen Flackern bei Wolkendurchzug
 
-**Coverage nach Modul**
-| Modul | Coverage |
-|-------|----------|
-| cache | 93% |
-| monitoring | 87% |
-| security | 75% |
-| **Gesamt (Kern-Module)** | **61%** |
-
-**Test-Infrastruktur**
-- 177 Test-Dateien
-- 186 Python-Test-Module
-- pytest-aiohttp Fixtures fuer async Tests
-- .coveragerc mit korrekter Source-Konfiguration
-
-### HA Integration 13.0.4
-
-**Manifest-Sync**
-- `manifest.json` synchronisiert mit `config.json` (v13.0.4)
-- `config.yaml` auf v13.0.4 aktualisiert
-- `VERSION` File auf v13.0.4
-- `build.yaml` konform mit HA Add-on Standard
-
-**Backend Health Check**
-- `/api/styx/health/backend` -- Backend-Services Health Status
-- Core Add-on Validierung
-- Health- und Metrics-Tests
-
-### 3D Vision Features
-
-**vision3d.js**
-- Neue JavaScript-Komponente fuer 3D-Visualisierung
-- Integration mit bestehendem Dashboard
-- Coverage-Konfiguration in pytest
+### 6. Code-Qualitaet & Hardening
+- Thread-Safety Verbesserungen (Double-Checked Locking)
+- Resource Leaks geschlossen
+- Silent `except: pass` Bloecke durch Debug-Logging ersetzt
+- App Factory verbessert mit Shared Brightness Filter
+- Automation Hardening mit From-State Guards
 
 ---
 
-## Security
+## API-Endpunkte (neu seit v13.5.8)
 
-- Backend-Services Health Check mit Auth-Validation
-- Admin-Token Enforced fuer sensitive Operations
-- Rate Limiting fuer RAG API
+| API Pfad | Beschreibung |
+|----------|-------------|
+| `POST /api/v1/musikwolke/create` | Musikwolke-Gruppe erstellen |
+| `POST /api/v1/musikwolke/dissolve` | Musikwolke-Gruppe aufloesen |
+| `POST /api/v1/musikwolke/volume/<zone_id>` | Lautstaerke setzen |
+| `POST /api/v1/media/zones/<id>/play` | Wiedergabe starten |
+| `POST /api/v1/media/zones/<id>/pause` | Wiedergabe pausieren |
+| `POST /api/v1/media/musikwolke/start` | Follow-Session starten |
+| `POST /api/v1/media/musikwolke/<id>/stop` | Follow-Session beenden |
+| `GET/POST /api/v1/zone-automation/zones/<id>/mode` | Automation-Modus |
+| `GET/POST /api/v1/zone-automation/zones/<id>/config` | Zone Config |
+| `GET/POST/DELETE /api/v1/zone-automation/zones/<id>/entities` | Entity CRUD |
+| `POST /api/v1/zone-automation/zones/<id>/presence` | Praesenz-Event |
+| `POST /api/v1/zone-automation/zones/<id>/brightness` | Helligkeit-Update |
+| `GET /api/v1/zone-automation/dashboard` | Automation Dashboard |
+| `POST /api/v1/tag-system/tags/sync` | Tag-Synchronisierung |
+| `GET /api/v1/suggestions` | KI-Vorschlaege |
+| `GET /api/v1/modules/dashboard` | Aggregiertes Modul-Dashboard |
 
 ---
 
-## Weitere Aenderungen
+## Kritische Bug Fixes
 
-- **Connection Pooling**: Wiederverwendbare aiohttp.ClientSession (100% Reuse-Rate)
-- **RAG Search API**: Hybrid Search mit SearXNG Integration
-- **Startup Profiling**: Bottleneck-Identifikation beim Start
-- **TTL-based Caching**: RAG Search Results mit konfigurierbarer TTL
+- `async init_services()` ohne `await` aufgerufen
+- Voice zone aliases Bug
+- Deprecated asyncio event loop patterns in 11 Dateien
+- Illumination ratio negative Werte
+- Fehlende Engine-Referenzen und async init
+- Musikwolke Pipeline Error handling
 
 ---
 
 ## Upgrade-Hinweise
 
-### Kompatibilitaet
 - **Breaking Changes:** Keine
-- **Neue Dependencies:** aiohttp (bereits in requirements.txt)
-- **Konfiguration:** Bestehende Configs bleiben kompatibel
-
-### Migration
-```bash
-# Standard-Upgrade (Docker Pull)
-ha addons update pilotsuite_core
-
-# Manuell (fuer Entwickler)
-git pull origin main
-docker build -t pilotsuite-core .
-```
+- **Migration:** `ha addons update pilotsuite_core`
+- **Neue Dependencies:** Keine
+- **Mindestversion Core:** v13.9.0
 
 ---
 
-## Naechste Phase: Phase 7 (Production Readiness)
+## Statistiken
 
-- Advanced ML (On-Device Inference, Anomaly Detection)
-- OpenAPI-Spec-Erweiterung
-- Performance Monitoring & Optimization
+| Metrik | Wert |
+|--------|------|
+| Commits seit v13.5.8 | 30+ |
+| Neue Dateien | 25+ |
+| Tests | 3720+ passed, 0 failed |
+| API-Endpoints (gesamt) | 130+ |
+| Hub-Engines | 17+ |
+| Smart Home Module | 5 |
 
 ---
 
-**PilotSuite v13.0.4** -- Local-first, Privacy-first, Governance-first.
+**PilotSuite v13.9.0** — Local-first, Privacy-first, Governance-first.

@@ -528,7 +528,7 @@ class AsyncExecutor:
     
     async def submit(self, func: Callable, *args, **kwargs) -> Any:
         """Submit async task for execution."""
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         executor = self._ensure_executor()
         
         with self._lock:
@@ -570,7 +570,7 @@ class AsyncExecutor:
         
         results = []
         executor = self._ensure_executor()
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         
         for batch in batches:
             with self._lock:

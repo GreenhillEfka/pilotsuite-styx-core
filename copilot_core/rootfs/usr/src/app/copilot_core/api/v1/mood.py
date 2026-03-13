@@ -69,12 +69,42 @@ def score():
 
 @bp.get("/state")
 def state():
-    """Get current mood state from stored events."""
+    """Get current mood state with presence and weather context."""
     try:
         store = _event_store_if_available()
         events = store.list(limit=200) if store else []
         score = _scorer().score_from_events(events)
-        return jsonify({"ok": True, "mood": score.to_dict()})
+        result = {"ok": True, "mood": score.to_dict()}
+
+        # Enrich with cross-service context
+        services = current_app.config.get("COPILOT_SERVICES", {})
+        context = {}
+
+        # Presence context
+        presence = services.get("hub_presence")
+        if presence and hasattr(presence, "get_summary"):
+            try:
+                context["presence"] = presence.get_summary()
+            except Exception:
+                pass
+
+        # Weather context
+        weather = services.get("weather_service")
+        if weather and hasattr(weather, "_cache") and weather._cache:
+            try:
+                w = weather._cache
+                context["weather"] = {
+                    "condition": w.get("condition"),
+                    "temperature_c": w.get("temperature_c"),
+                    "cloud_cover_percent": w.get("cloud_cover_percent"),
+                }
+            except Exception:
+                pass
+
+        if context:
+            result["context"] = context
+
+        return jsonify(result)
     except Exception as e:
         _LOGGER = current_app.logger
         _LOGGER.exception("Mood state failed")
@@ -84,12 +114,15 @@ def state():
 @bp.post("/zones/<zone_name>/orchestrate")
 def orchestrate_zone(zone_name):
     """Orchestrate mood inference and actions for a zone.
-    
+
     Body:
     - sensor_data: Optional dict of sensor states
     - dry_run: bool (default False)
     - force_actions: bool (default False)
     """
+    import re
+    if not re.match(r'^[\w-]+$', zone_name) or len(zone_name) > 64:
+        return jsonify({"ok": False, "error": "Invalid zone name"}), 400
     try:
         from copilot_core.mood.orchestrator import MoodOrchestrator, create_default_config
         
@@ -162,7 +195,16 @@ def force_mood(zone_name):
         
         payload = request.get_json(silent=True) or {}
         mood_state = payload.get("mood")
+        if not mood_state or not isinstance(mood_state, str):
+            return jsonify({"ok": False, "error": "Missing or invalid 'mood' field"}), 400
         duration_minutes = payload.get("duration_minutes")
+        if duration_minutes is not None:
+            try:
+                duration_minutes = int(duration_minutes)
+                if duration_minutes < 1 or duration_minutes > 1440:
+                    return jsonify({"ok": False, "error": "duration_minutes must be 1..1440"}), 400
+            except (TypeError, ValueError):
+                return jsonify({"ok": False, "error": "duration_minutes must be an integer"}), 400
         
         config = create_default_config()
         

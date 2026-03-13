@@ -44,15 +44,15 @@ class ChatRequest:
     query: str
     user_id: str
     use_web: bool = False
-    model: str = "qwen3.5:397b-cloud"
-    
+    model: str = "qwen3:0.6b"
+
     @classmethod
     def from_json(cls, data: Dict[str, Any]) -> "ChatRequest":
         return cls(
             query=str(data.get("query", "")).strip(),
             user_id=str(data.get("user_id", "anonymous")),
             use_web=bool(data.get("use_web", False)),
-            model=str(data.get("model", "qwen3.5:397b-cloud")),
+            model=str(data.get("model", "qwen3:0.6b")),
         )
 
 
@@ -63,7 +63,7 @@ _chat_handler: Optional[ChatHandler] = None
 
 
 def _get_chat_handler() -> ChatHandler:
-    """Liefert ChatHandler aus COPILOT_SERVICES oder erstellt Fallback-Singleton."""
+    """Liefert singleton ChatHandler mit ConversationMemory-Integration."""
     global _chat_handler
     
     # Try to get from Flask app config first (initialized in core_setup.py)
@@ -77,7 +77,15 @@ def _get_chat_handler() -> ChatHandler:
     
     # Fallback: create singleton
     if _chat_handler is None:
-        _chat_handler = ChatHandler()
+        # Try to get ConversationMemory from services
+        conversation_memory = None
+        try:
+            from flask import current_app
+            services = current_app.config.get("COPILOT_SERVICES", {})
+            conversation_memory = services.get("conversation_memory")
+        except RuntimeError:
+            pass  # Outside app context
+        _chat_handler = ChatHandler(conversation_memory=conversation_memory)
     return _chat_handler
 
 
@@ -107,6 +115,7 @@ def styx_chat(body: ChatRequestSchema) -> Any:
             user_id=body.user_id,
             use_web=body.use_web,
             model=body.model,
+            conversation_id=getattr(body, "conversation_id", ""),
         )
 
         logger.info(
@@ -300,3 +309,78 @@ def styx_health_backend() -> Any:
     }
     
     return jsonify(response), 200 if overall_ok else 503
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# ENDPOINT: GET /api/styx/memory
+# ══════════════════════════════════════════════════════════════════════════
+
+@bp.route("/memory", methods=["GET"])
+def styx_memory_stats() -> Any:
+    """Get ConversationMemory statistics and learned preferences.
+
+    Returns memory store stats (total messages, preferences, span)
+    and the current set of learned user preferences.
+    """
+    from flask import current_app
+
+    services = current_app.config.get("COPILOT_SERVICES", {})
+    conv_memory = services.get("conversation_memory")
+
+    if not conv_memory:
+        return jsonify({"ok": False, "error": "ConversationMemory not initialized"}), 503
+
+    try:
+        stats = conv_memory.get_stats()
+        prefs = conv_memory.get_user_preferences()
+        pref_list = [
+            {"key": p.key, "value": p.value, "confidence": p.confidence,
+             "source": p.source, "mention_count": p.mention_count}
+            for p in prefs
+        ]
+
+        return jsonify({
+            "ok": True,
+            "stats": stats,
+            "preferences": pref_list,
+            "preference_count": len(pref_list),
+        })
+    except Exception as exc:
+        logger.exception("Memory stats failed: %s", exc)
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# ENDPOINT: GET /api/styx/memory/history
+# ══════════════════════════════════════════════════════════════════════════
+
+@bp.route("/memory/history", methods=["GET"])
+def styx_memory_history() -> Any:
+    """Get conversation history for a specific conversation thread.
+
+    Query params:
+        conversation_id: Thread ID
+        limit: Max messages (default 20)
+    """
+    from flask import current_app
+
+    services = current_app.config.get("COPILOT_SERVICES", {})
+    conv_memory = services.get("conversation_memory")
+
+    if not conv_memory:
+        return jsonify({"ok": False, "error": "ConversationMemory not initialized"}), 503
+
+    conversation_id = request.args.get("conversation_id", "")
+    limit = min(100, max(1, int(request.args.get("limit", 20))))
+
+    try:
+        history = conv_memory.get_conversation_history(conversation_id, limit=limit)
+        return jsonify({
+            "ok": True,
+            "conversation_id": conversation_id,
+            "messages": history,
+            "count": len(history),
+        })
+    except Exception as exc:
+        logger.exception("Memory history failed: %s", exc)
+        return jsonify({"ok": False, "error": str(exc)}), 500

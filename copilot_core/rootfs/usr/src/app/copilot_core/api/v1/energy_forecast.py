@@ -33,10 +33,18 @@ energy_forecast_bp = Blueprint("energy_forecast", __name__, url_prefix="/api/v1/
 
 
 def _get_weather_service():
-    """Hole Weather Service aus App Config."""
+    """Hole Weather Service aus App Config oder Modul-Instanz."""
     try:
         services = current_app.config.get("COPILOT_SERVICES", {})
-        return services.get("weather_service")
+        svc = services.get("weather_service")
+        if svc:
+            return svc
+    except Exception:
+        pass
+    # Fallback: module-level weather service instance
+    try:
+        from copilot_core.api.v1.weather import get_weather_service
+        return get_weather_service()
     except Exception:
         return None
 
@@ -51,18 +59,64 @@ def _get_energy_service():
 
 
 def _fetch_weather_forecast(hours: int = 48) -> list[dict]:
-    """Hole Wetterdaten von Weather Service."""
+    """Hole Wetterdaten von Weather Service oder generiere Defaults.
+
+    Returns a list of hourly dicts with keys the energy engines expect:
+    temperature_c, cloud_cover_pct, precipitation_mm, weather_code, timestamp.
+    """
     weather_service = _get_weather_service()
-    if not weather_service:
-        return []
-    
-    try:
-        # Annahme: Weather Service hat get_forecast Methode
-        forecast = weather_service.get_forecast(hours=hours)
-        return forecast if isinstance(forecast, list) else []
-    except Exception as e:
-        _LOGGER.warning("Weather forecast fetch error: %s", e)
-        return []
+
+    # Try services dict first (sync call with hourly data)
+    if weather_service and hasattr(weather_service, "get_forecast"):
+        try:
+            import asyncio
+            forecast_raw = asyncio.run(weather_service.get_forecast(days=max(1, hours // 24)))
+            daily = forecast_raw.get("forecast", []) if isinstance(forecast_raw, dict) else []
+            # Expand daily → hourly (interpolate for each day)
+            hourly: list[dict] = []
+            for day in daily:
+                cloud = day.get("cloud_cover_percent", 50)
+                temp_high = day.get("temperature_high_c", 15.0)
+                temp_low = day.get("temperature_low_c", 5.0)
+                precip_prob = day.get("precipitation_probability", 0)
+                ts_base = day.get("timestamp", "")
+                for h in range(24):
+                    # Simple diurnal temperature curve
+                    t_frac = 0.5 * (1 + __import__("math").sin((h - 6) / 24 * 2 * 3.14159 - 1.5708))
+                    temp = temp_low + (temp_high - temp_low) * t_frac
+                    hourly.append({
+                        "timestamp": ts_base,
+                        "temperature_c": round(temp, 1),
+                        "cloud_cover_pct": cloud,
+                        "precipitation_mm": round(precip_prob * 0.05, 1),
+                        "weather_code": 0 if cloud < 30 else 1 if cloud < 60 else 3,
+                    })
+                    if len(hourly) >= hours:
+                        break
+                if len(hourly) >= hours:
+                    break
+            return hourly[:hours]
+        except Exception as e:
+            _LOGGER.warning("Weather forecast fetch error: %s", e)
+
+    # Fallback: generate default weather based on time of day
+    from datetime import datetime, timedelta
+    now = datetime.now()
+    result = []
+    for i in range(hours):
+        dt = now + timedelta(hours=i)
+        h = dt.hour
+        # Simple diurnal pattern
+        temp = 5.0 + 10.0 * max(0, __import__("math").sin((h - 6) / 24 * 2 * 3.14159 - 1.5708))
+        cloud = 40  # moderate default
+        result.append({
+            "timestamp": dt.isoformat(),
+            "temperature_c": round(temp, 1),
+            "cloud_cover_pct": cloud,
+            "precipitation_mm": 0.0,
+            "weather_code": 1,
+        })
+    return result
 
 
 def _fetch_price_forecast(hours: int = 48) -> list[dict]:

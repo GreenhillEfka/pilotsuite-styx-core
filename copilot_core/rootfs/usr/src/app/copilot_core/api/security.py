@@ -5,6 +5,7 @@ import hmac
 import json
 import logging
 import os
+import threading
 import time
 from functools import wraps
 from typing import Any, Callable
@@ -15,8 +16,9 @@ _LOGGER = logging.getLogger(__name__)
 
 OPTIONS_PATH = "/data/options.json"
 
-# Token cache: (token_value, timestamp)
+# Token cache: (token_value, timestamp) — protected by _token_lock
 _token_cache: tuple[str, float] = ("", 0.0)
+_token_lock = threading.Lock()
 _TOKEN_CACHE_TTL = 60.0  # seconds
 
 
@@ -24,25 +26,34 @@ def get_auth_token(options_path: str = OPTIONS_PATH) -> str:
     """Return the configured shared token, if any.
 
     Uses a 60-second TTL cache to avoid disk reads on every request.
+    Thread-safe via double-checked locking.
     """
     global _token_cache
 
+    # Fast path (no lock): check if cache is still valid
     now = time.monotonic()
     cached_token, cached_at = _token_cache
     if cached_token and (now - cached_at) < _TOKEN_CACHE_TTL:
         return cached_token
 
-    token = os.environ.get("COPILOT_AUTH_TOKEN", "").strip()
-    if not token:
-        try:
-            with open(options_path, "r", encoding="utf-8") as fh:
-                opts: Any = json.load(fh) or {}
-            token = str(opts.get("auth_token", "")).strip()
-        except Exception:
-            token = ""
+    # Slow path: acquire lock, re-check, then refresh
+    with _token_lock:
+        now = time.monotonic()
+        cached_token, cached_at = _token_cache
+        if cached_token and (now - cached_at) < _TOKEN_CACHE_TTL:
+            return cached_token
 
-    _token_cache = (token, now)
-    return token
+        token = os.environ.get("COPILOT_AUTH_TOKEN", "").strip()
+        if not token:
+            try:
+                with open(options_path, "r", encoding="utf-8") as fh:
+                    opts: Any = json.load(fh) or {}
+                token = str(opts.get("auth_token", "")).strip()
+            except Exception:
+                token = ""
+
+        _token_cache = (token, now)
+        return token
 
 
 def is_auth_required(options_path: str = OPTIONS_PATH) -> bool:

@@ -815,6 +815,16 @@ class AnomalyDetectionEngine:
         """Rank severity for comparison."""
         return {"ok": 0, "info": 1, "warning": 2, "critical": 3}.get(severity, 0)
 
+    def health_check(self) -> dict[str, Any]:
+        """Return health status for backend health endpoint."""
+        return {
+            "status": "ok",
+            "entities_tracked": len(self._history),
+            "profiles_learned": len(self._profiles),
+            "active_anomalies": len(self._anomalies),
+            "correlations": len(self._correlations),
+        }
+
     @staticmethod
     def _correlation_strength(corr: float) -> str:
         """Classify correlation strength."""

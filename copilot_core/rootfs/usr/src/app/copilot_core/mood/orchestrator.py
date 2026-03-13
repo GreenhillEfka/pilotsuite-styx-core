@@ -107,12 +107,12 @@ class MoodOrchestrator:
             sensor_data = self.get_sensor_data(required_entities)
         except Exception as e:
             _LOGGER.error("Failed to get sensor data for zone %s: %s", zone_name, e)
-            # Return error result
-            dummy_features = self.mood_engine.compute_zone_features(zone_name, {})
-            dummy_mood = self.mood_engine.infer_mood(zone_name, dummy_features)
+            # Compute fallback mood using empty sensor data
+            fallback_features = self.mood_engine.compute_zone_features(zone_name, {})
+            fallback_mood = self.mood_engine.infer_mood(zone_name, fallback_features)
             return MoodOrchestrationResult(
                 zone_name=zone_name,
-                mood_result=dummy_mood,
+                mood_result=fallback_mood,
                 skipped_reason=f"Sensor data unavailable: {e}"
             )
         
@@ -202,12 +202,12 @@ class MoodOrchestrator:
                 results.append(result)
             except Exception as e:
                 _LOGGER.error("Orchestration failed for zone %s: %s", zone_name, e)
-                # Create error result
-                dummy_features = self.mood_engine.compute_zone_features(zone_name, {})
-                dummy_mood = self.mood_engine.infer_mood(zone_name, dummy_features)
+                # Compute fallback mood using empty sensor data
+                fallback_features = self.mood_engine.compute_zone_features(zone_name, {})
+                fallback_mood = self.mood_engine.infer_mood(zone_name, fallback_features)
                 results.append(MoodOrchestrationResult(
                     zone_name=zone_name,
-                    mood_result=dummy_mood,
+                    mood_result=fallback_mood,
                     skipped_reason=f"Orchestration error: {e}"
                 ))
         

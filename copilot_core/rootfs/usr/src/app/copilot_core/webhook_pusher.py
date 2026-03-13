@@ -211,6 +211,29 @@ class WebhookPusher:
         """Kurzform fuer get_stats()."""
         return self.get_stats()
 
+    def push_module_data(self, modules: Dict[str, Any]) -> None:
+        """Sendet ein module_data-Ereignis mit allen 5 Modul-Summaries an HA.
+
+        Wird nach jeder Modul-Evaluation aufgerufen, damit die HA-Integration
+        Echtzeit-Updates erhaelt (statt nur 120s Polling).
+
+        Args:
+            modules: Dict mit Modul-Summaries {licht: {...}, heiz: {...}, ...}
+        """
+        self._send_envelope("module_data", {"modules": modules})
+
+    def push_zone_update(self, zone_id: str, zone_data: Dict[str, Any]) -> None:
+        """Sendet ein zone_update-Ereignis fuer eine einzelne Zone.
+
+        Args:
+            zone_id: Zone identifier
+            zone_data: Per-zone data from all modules
+        """
+        self._send_envelope("zone_update", {
+            "zone_id": zone_id,
+            **zone_data,
+        })
+
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------

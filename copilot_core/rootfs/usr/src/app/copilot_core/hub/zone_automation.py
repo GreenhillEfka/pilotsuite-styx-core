@@ -59,12 +59,16 @@ class ZoneMusicConfig:
     fade_duration_s: int = 3  # Cross-fade duration when following
 
 
+AUTOMATION_MODES = ("off", "learning", "autonomy")
+
+
 @dataclass
 class ZoneAutomationConfig:
     """Complete automation configuration for a zone."""
 
     zone_id: str
     zone_name: str = ""
+    automation_mode: str = "learning"  # off | learning | autonomy
     light: ZoneLightConfig = field(default_factory=ZoneLightConfig)
     music: ZoneMusicConfig = field(default_factory=ZoneMusicConfig)
 
@@ -72,6 +76,7 @@ class ZoneAutomationConfig:
         return {
             "zone_id": self.zone_id,
             "zone_name": self.zone_name,
+            "automation_mode": self.automation_mode,
             "light": asdict(self.light),
             "music": asdict(self.music),
         }
@@ -80,9 +85,13 @@ class ZoneAutomationConfig:
     def from_dict(cls, data: dict[str, Any]) -> "ZoneAutomationConfig":
         light_data = data.get("light", {})
         music_data = data.get("music", {})
+        mode = data.get("automation_mode", "learning")
+        if mode not in AUTOMATION_MODES:
+            mode = "learning"
         return cls(
             zone_id=data.get("zone_id", ""),
             zone_name=data.get("zone_name", ""),
+            automation_mode=mode,
             light=ZoneLightConfig(**{k: v for k, v in light_data.items() if k in ZoneLightConfig.__dataclass_fields__}),
             music=ZoneMusicConfig(**{k: v for k, v in music_data.items() if k in ZoneMusicConfig.__dataclass_fields__}),
         )
@@ -129,19 +138,27 @@ ENTITY_ROLES = [
 ]
 
 TAG_DEFINITIONS: dict[str, dict[str, str]] = {
-    "licht": {"name_de": "Licht", "color": "#fbbf24", "icon": "mdi:lightbulb", "role": "lights"},
-    "praesenz": {"name_de": "Praesenz", "color": "#a78bfa", "icon": "mdi:motion-sensor", "role": "motion"},
-    "bewegung": {"name_de": "Bewegung", "color": "#c084fc", "icon": "mdi:run", "role": "motion"},
-    "medien": {"name_de": "Medien", "color": "#60a5fa", "icon": "mdi:speaker", "role": "media"},
-    "klima": {"name_de": "Klima", "color": "#34d399", "icon": "mdi:thermometer", "role": "climate"},
-    "sensor": {"name_de": "Sensor", "color": "#f472b6", "icon": "mdi:chip", "role": "sensors"},
-    "rollladen": {"name_de": "Rollladen", "color": "#fb923c", "icon": "mdi:blinds", "role": "cover"},
-    "schloss": {"name_de": "Schloss", "color": "#f87171", "icon": "mdi:lock", "role": "lock"},
-    "tuer": {"name_de": "Tuer", "color": "#fbbf24", "icon": "mdi:door", "role": "door"},
-    "fenster": {"name_de": "Fenster", "color": "#22d3ee", "icon": "mdi:window-open", "role": "window"},
-    "energie": {"name_de": "Energie", "color": "#4ade80", "icon": "mdi:flash", "role": "energy"},
-    "sicherheit": {"name_de": "Sicherheit", "color": "#ef4444", "icon": "mdi:shield", "role": "other"},
-    "styx": {"name_de": "Styx", "color": "#8b5cf6", "icon": "mdi:robot", "role": "other"},
+    "licht": {"name_de": "Licht", "color": "#fbbf24", "icon": "mdi:lightbulb", "role": "lights", "canonical": "aicp.role.licht"},
+    "praesenz": {"name_de": "Praesenz", "color": "#a78bfa", "icon": "mdi:motion-sensor", "role": "motion", "canonical": "aicp.role.praesenz"},
+    "bewegung": {"name_de": "Bewegung", "color": "#c084fc", "icon": "mdi:run", "role": "motion", "canonical": "aicp.role.bewegung"},
+    "medien": {"name_de": "Medien", "color": "#60a5fa", "icon": "mdi:speaker", "role": "media", "canonical": "aicp.role.medien"},
+    "klima": {"name_de": "Klima", "color": "#34d399", "icon": "mdi:thermometer", "role": "climate", "canonical": "aicp.role.klima"},
+    "sensor": {"name_de": "Sensor", "color": "#f472b6", "icon": "mdi:chip", "role": "sensors", "canonical": "aicp.role.sensor"},
+    "rollladen": {"name_de": "Rollladen", "color": "#fb923c", "icon": "mdi:blinds", "role": "cover", "canonical": "aicp.role.rollladen"},
+    "schloss": {"name_de": "Schloss", "color": "#f87171", "icon": "mdi:lock", "role": "lock", "canonical": "aicp.role.schloss"},
+    "tuer": {"name_de": "Tuer", "color": "#fbbf24", "icon": "mdi:door", "role": "door", "canonical": "aicp.role.tuer"},
+    "fenster": {"name_de": "Fenster", "color": "#22d3ee", "icon": "mdi:window-open", "role": "window", "canonical": "aicp.role.fenster"},
+    "energie": {"name_de": "Energie", "color": "#4ade80", "icon": "mdi:flash", "role": "energy", "canonical": "aicp.role.energie"},
+    "sicherheit": {"name_de": "Sicherheit", "color": "#ef4444", "icon": "mdi:shield", "role": "other", "canonical": "aicp.role.sicherheit"},
+    "styx": {"name_de": "Styx", "color": "#8b5cf6", "icon": "mdi:robot", "role": "other", "canonical": "aicp.role.styx"},
+}
+
+# Mapping from canonical tag IDs (tags.yaml) to short tag names (zone_automation)
+CANONICAL_TO_SHORT: dict[str, str] = {
+    info["canonical"]: short for short, info in TAG_DEFINITIONS.items()
+}
+SHORT_TO_CANONICAL: dict[str, str] = {
+    short: info["canonical"] for short, info in TAG_DEFINITIONS.items()
 }
 
 # Auto-detect role from entity_id domain
@@ -240,6 +257,13 @@ class ZoneAutomationController:
         # Entity assignments per zone: zone_id -> list[ZoneEntityAssignment]
         self._entity_assignments: dict[str, list[ZoneEntityAssignment]] = {}
 
+        # Optional MusikwolkeBridge for executing music actions
+        self._music_bridge: Any | None = None
+
+    def set_music_bridge(self, bridge: Any) -> None:
+        """Attach a MusikwolkeBridge to auto-execute music actions."""
+        self._music_bridge = bridge
+
     # ── Configuration ────────────────────────────────────────────────────
 
     def get_zone_config(self, zone_id: str) -> ZoneAutomationConfig:
@@ -254,6 +278,11 @@ class ZoneAutomationController:
 
         if "zone_name" in config_data:
             current.zone_name = config_data["zone_name"]
+
+        if "automation_mode" in config_data:
+            mode = config_data["automation_mode"]
+            if mode in AUTOMATION_MODES:
+                current.automation_mode = mode
 
         # Update light config
         if "light" in config_data:
@@ -282,10 +311,24 @@ class ZoneAutomationController:
             self._states[zone_id] = ZonePresenceState()
         return self._states[zone_id]
 
+    def set_automation_mode(self, zone_id: str, mode: str) -> bool:
+        """Set automation mode for a zone (off/learning/autonomy)."""
+        if mode not in AUTOMATION_MODES:
+            return False
+        config = self.get_zone_config(zone_id)
+        config.automation_mode = mode
+        logger.info("Zone '%s' automation mode → %s", zone_id, mode)
+        return True
+
+    def get_automation_mode(self, zone_id: str) -> str:
+        """Get current automation mode for a zone."""
+        return self.get_zone_config(zone_id).automation_mode
+
     def on_presence_detected(self, zone_id: str) -> dict[str, Any]:
         """Handle presence detection in a zone.
 
         Returns dict of actions to take (light_on, music_start, etc.)
+        Respects automation_mode: off=no actions, learning=record only, autonomy=full.
         """
         config = self.get_zone_config(zone_id)
         state = self._get_state(zone_id)
@@ -297,6 +340,12 @@ class ZoneAutomationController:
             state.last_detected_ts = now
         state.absence_confirmed = False
 
+        actions["automation_mode"] = config.automation_mode
+
+        # Mode: off — just record state, no actions
+        if config.automation_mode == "off":
+            return actions
+
         # Check if presence delay has passed
         elapsed = now - state.last_detected_ts
         presence_delay = config.light.presence_delay_s
@@ -304,6 +353,12 @@ class ZoneAutomationController:
         if elapsed >= presence_delay:
             state.presence_confirmed = True
 
+            # Mode: learning — record confirmed presence but don't trigger
+            if config.automation_mode == "learning":
+                actions["learning_event"] = "presence_confirmed"
+                return actions
+
+            # Mode: autonomy — full automation
             # Light automation
             if config.light.enabled and not state.lights_on:
                 target = self._compute_target_brightness(zone_id, config)
@@ -325,6 +380,13 @@ class ZoneAutomationController:
                     state.music_playing = True
                     state.music_triggered_at = now
 
+        # Auto-execute music actions via MusikwolkeBridge if wired
+        if self._music_bridge and (actions.get("music_start") or actions.get("music_follow")):
+            try:
+                self._music_bridge.execute_actions(actions)
+            except Exception:
+                logger.exception("MusikwolkeBridge.execute_actions failed for zone '%s'", zone_id)
+
         return actions
 
     def on_presence_cleared(self, zone_id: str) -> dict[str, Any]:
@@ -342,7 +404,15 @@ class ZoneAutomationController:
             state.last_cleared_ts = now
         state.presence_confirmed = False
 
-        # Check absence delay
+        actions["automation_mode"] = config.automation_mode
+
+        # Mode: off or learning — record state only, no automation actions
+        if config.automation_mode in ("off", "learning"):
+            if config.automation_mode == "learning":
+                actions["learning_event"] = "presence_cleared"
+            return actions
+
+        # Mode: autonomy — check absence delay and trigger actions
         elapsed = now - state.last_cleared_ts
 
         # Light off after absence delay
@@ -359,6 +429,13 @@ class ZoneAutomationController:
                 actions["music_pause"] = True
                 actions["music_fade_s"] = config.music.fade_duration_s
                 state.music_playing = False
+
+        # Auto-execute music pause via MusikwolkeBridge if wired
+        if self._music_bridge and actions.get("music_pause"):
+            try:
+                self._music_bridge.execute_actions(actions)
+            except Exception:
+                logger.exception("MusikwolkeBridge.execute_actions (pause) failed for zone '%s'", zone_id)
 
         return actions
 
@@ -431,6 +508,7 @@ class ZoneAutomationController:
             "state": {
                 "occupied": state.occupied,
                 "presence_confirmed": state.presence_confirmed,
+                "automation_mode": config.automation_mode,
                 "lights_on": state.lights_on,
                 "current_brightness_pct": state.current_brightness_pct,
                 "dampened_brightness_pct": state.dampened_brightness_pct,
@@ -583,3 +661,52 @@ class ZoneAutomationController:
                     d["zone_id"] = zone_id
                     results.append(d)
         return results
+
+    # ── Periodic evaluation ──────────────────────────────────────────────
+
+    def evaluate_all_zones(self) -> dict[str, Any]:
+        """Evaluate all zones and return actions + state snapshot.
+
+        Called periodically (e.g., every 30-60s) to:
+        - Check absence timeouts (auto-off lights/music after presence clears)
+        - Produce a snapshot for webhook push to HA
+        """
+        now = time.monotonic()
+        results: list[dict[str, Any]] = []
+
+        for zone_id in list(self._configs.keys()):
+            config = self._configs[zone_id]
+            state = self._get_state(zone_id)
+
+            zone_result: dict[str, Any] = {"zone_id": zone_id, "actions": []}
+
+            # Check absence timeout: lights
+            if (state.lights_on and not state.occupied
+                    and state.absence_confirmed
+                    and config.light.enabled
+                    and config.automation_mode == "autonomy"):
+                # Already handled by on_presence_cleared; this is a safety net
+                zone_result["state"] = "absence_confirmed"
+
+            # Check absence timeout: music
+            if (state.music_playing and not state.occupied
+                    and state.absence_confirmed
+                    and config.music.enabled
+                    and config.automation_mode == "autonomy"):
+                zone_result["state"] = "absence_confirmed"
+
+            zone_result["snapshot"] = {
+                "occupied": state.occupied,
+                "lights_on": state.lights_on,
+                "brightness_pct": state.current_brightness_pct,
+                "music_playing": state.music_playing,
+                "automation_mode": config.automation_mode,
+            }
+            results.append(zone_result)
+
+        dashboard = self.get_dashboard()
+        return {
+            "zones": results,
+            "summary": dashboard["summary"],
+            "evaluated_at": time.time(),
+        }

@@ -17,6 +17,7 @@ POST /api/v1/energy/load-shifting/devices
 from __future__ import annotations
 
 import logging
+from dataclasses import asdict
 from datetime import datetime
 from typing import Optional
 
@@ -625,7 +626,3 @@ def get_energy_summary():
             "ok": False,
             "error": str(e),
         }), 500
-
-
-# Import für asdict
-from dataclasses import asdict

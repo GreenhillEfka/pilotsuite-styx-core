@@ -38,21 +38,29 @@ class ChatHandler:
 
     LLM inference uses LLMProvider for Ollama+Cloud fallback chain.
     Falls back to direct Ollama /api/generate if LLMProvider unavailable.
+
+    ConversationMemory integration:
+    - Stores each user query and assistant response
+    - Injects relevant conversation history + user preferences into prompts
+    - Enables lifelong learning across chat sessions
     """
 
     def __init__(
         self,
         rag_api_url: Optional[str] = None,
         ollama_url: Optional[str] = None,
+        conversation_memory=None,
     ):
         self.ollama_url = (ollama_url or OLLAMA_URL).rstrip("/")
         self._bm25_index = None
         self._searxng_client = None
         self._llm_provider = None
+        self._conversation_memory = conversation_memory
         self._initialized = False
         logger.info(
-            "ChatHandler initialized (ollama_url=%s, internal_rag=True)",
+            "ChatHandler initialized (ollama_url=%s, internal_rag=True, memory=%s)",
             self.ollama_url,
+            conversation_memory is not None,
         )
 
     def _ensure_initialized(self) -> None:
@@ -92,21 +100,28 @@ class ChatHandler:
 
     # ── Public API ────────────────────────────────────────────────────
 
+    def set_conversation_memory(self, memory) -> None:
+        """Set ConversationMemory instance (for late wiring)."""
+        self._conversation_memory = memory
+        logger.info("ConversationMemory wired into ChatHandler")
+
     def handle_query(
         self,
         query: str,
         user_id: str,
         use_web: bool = False,
         model: str = "",
+        conversation_id: str = "",
     ) -> Dict[str, Any]:
         """
-        Process a chat query with RAG context.
+        Process a chat query with RAG context and conversation memory.
 
         Args:
             query: User question
             user_id: User identifier for history
             use_web: Enable web search via SearXNG
             model: Ollama model for inference
+            conversation_id: Optional conversation thread ID for history
 
         Returns:
             Dict with response, sources, query_type, context_used
@@ -119,22 +134,46 @@ class ChatHandler:
             user_id, use_web, model, query[:120],
         )
 
+        # 0. Store user message in ConversationMemory
+        if self._conversation_memory:
+            try:
+                self._conversation_memory.store_message(
+                    role="user", content=query,
+                    conversation_id=conversation_id or None,
+                )
+            except Exception as exc:
+                logger.warning("Failed to store user message in memory: %s", exc)
+
         # 1. Classify query
         query_type = self._classify_query(query, use_web)
 
         # 2. RAG search (internal)
         rag_results = self._search_internal(query, use_web, query_type)
 
-        # 3. Build prompt with context
-        prompt = self._build_prompt(query, rag_results)
+        # 3. Get conversation memory context
+        memory_context = self._get_memory_context(query, conversation_id)
 
-        # 4. LLM inference (Ollama → Cloud fallback)
+        # 4. Build prompt with RAG context + memory
+        prompt = self._build_prompt(query, rag_results, memory_context)
+
+        # 5. LLM inference (Ollama → Cloud fallback)
         response = self._call_llm(prompt, model)
+
+        # 6. Store assistant response in ConversationMemory
+        if self._conversation_memory:
+            try:
+                self._conversation_memory.store_message(
+                    role="assistant", content=response,
+                    conversation_id=conversation_id or None,
+                )
+            except Exception as exc:
+                logger.warning("Failed to store assistant response in memory: %s", exc)
 
         elapsed_ms = (time.perf_counter() - start) * 1000
         logger.info(
-            "Chat complete in %.0fms (sources=%d, type=%s)",
+            "Chat complete in %.0fms (sources=%d, type=%s, memory=%s)",
             elapsed_ms, len(rag_results.get("sources", [])), query_type,
+            bool(memory_context),
         )
 
         return {
@@ -143,6 +182,7 @@ class ChatHandler:
             "query_type": query_type,
             "context_used": rag_results.get("results", []),
             "elapsed_ms": round(elapsed_ms, 1),
+            "memory_used": bool(memory_context),
         }
 
     # ── Internal RAG search ───────────────────────────────────────────
@@ -232,9 +272,8 @@ class ChatHandler:
             except Exception as exc:
                 logger.warning("Web search failed: %s", exc)
 
-        # Sort by score descending, take top 10
-        results.sort(key=lambda r: r.get("score", 0), reverse=True)
-        results = results[:10]
+        # Reciprocal Rank Fusion (RRF) for hybrid search results
+        results = self._rrf_merge(results)
         sources = sources[:10]
 
         return {
@@ -243,37 +282,125 @@ class ChatHandler:
             "query_type": query_type,
         }
 
+    @staticmethod
+    def _rrf_merge(results: List[Dict[str, Any]], k: int = 60, top_n: int = 10) -> List[Dict[str, Any]]:
+        """Reciprocal Rank Fusion: merge BM25 + Semantic results by rank.
+
+        RRF score = sum(1 / (k + rank_i)) across each search type's ranked list.
+        This avoids score normalization issues between different search backends.
+        """
+        # Group results by search type
+        by_type: Dict[str, List[Dict[str, Any]]] = {}
+        for r in results:
+            st = r.get("search_type", "unknown")
+            by_type.setdefault(st, []).append(r)
+
+        # Sort each type's list by score descending
+        for st in by_type:
+            by_type[st].sort(key=lambda x: x.get("score", 0), reverse=True)
+
+        # Compute RRF scores keyed by doc_id
+        rrf_scores: Dict[str, float] = {}
+        doc_map: Dict[str, Dict[str, Any]] = {}
+        for st, docs in by_type.items():
+            for rank, doc in enumerate(docs, start=1):
+                doc_id = doc.get("doc_id", f"unknown_{rank}")
+                rrf_scores[doc_id] = rrf_scores.get(doc_id, 0.0) + 1.0 / (k + rank)
+                if doc_id not in doc_map:
+                    doc_map[doc_id] = doc
+
+        # Sort by RRF score descending
+        ranked = sorted(rrf_scores.items(), key=lambda x: -x[1])
+        merged = []
+        for doc_id, rrf_score in ranked[:top_n]:
+            doc = doc_map[doc_id].copy()
+            doc["rrf_score"] = round(rrf_score, 6)
+            merged.append(doc)
+
+        return merged
+
+    # ── Conversation Memory ──────────────────────────────────────────
+
+    def _get_memory_context(self, query: str, conversation_id: str = "") -> str:
+        """Get relevant context from ConversationMemory.
+
+        Combines:
+        - Relevant past conversations (topic-matched)
+        - User preferences (learned over time)
+        - Recent conversation history (if conversation_id given)
+        """
+        if not self._conversation_memory:
+            return ""
+
+        parts = []
+        try:
+            # Get relevant past conversations + preferences
+            relevant = self._conversation_memory.get_relevant_context(query, limit=3)
+            if relevant:
+                parts.append(relevant)
+
+            # Get user preferences for prompt injection
+            prefs = self._conversation_memory.get_preferences_for_prompt()
+            if prefs:
+                parts.append(prefs)
+
+            # Get recent conversation history for this thread
+            if conversation_id:
+                history = self._conversation_memory.get_conversation_history(
+                    conversation_id, limit=6
+                )
+                if history:
+                    hist_lines = []
+                    for msg in history[-6:]:
+                        role_label = "Nutzer" if msg["role"] == "user" else "Assistent"
+                        hist_lines.append(f"  {role_label}: {msg['content'][:150]}")
+                    parts.append("\nGespraechsverlauf:\n" + "\n".join(hist_lines))
+
+        except Exception as exc:
+            logger.warning("Failed to get memory context: %s", exc)
+
+        return "\n".join(parts)
+
     # ── Prompt building ───────────────────────────────────────────────
 
-    def _build_prompt(self, query: str, rag_results: Dict[str, Any]) -> str:
-        """Build LLM prompt with RAG context."""
+    def _build_prompt(self, query: str, rag_results: Dict[str, Any],
+                      memory_context: str = "") -> str:
+        """Build LLM prompt with RAG context and conversation memory."""
         results = rag_results.get("results", [])
 
-        if not results:
-            return (
-                "Beantworte die folgende Frage hilfreich und praezise.\n"
-                "Wenn du unsicher bist, sage es offen.\n\n"
-                f"Frage: {query}"
-            )
+        prompt_parts = []
 
-        context_parts = []
-        for i, result in enumerate(results[:8], start=1):
-            content = result.get("content", "")
-            source = result.get("source", "unknown")
-            score = result.get("score", 0)
-            if content:
-                context_parts.append(
-                    f"[Quelle {i}] (Score: {score:.3f}, Quelle: {source})\n{content}"
+        # System instruction
+        prompt_parts.append(
+            "Du bist PilotSuite Styx, ein intelligenter Smart-Home-Assistent.\n"
+            "Beantworte Fragen praezise und hilfreich auf Deutsch.\n"
+            "Wenn du unsicher bist, sage es offen."
+        )
+
+        # Memory context (preferences + history)
+        if memory_context:
+            prompt_parts.append(memory_context)
+
+        # RAG context
+        if results:
+            context_parts = []
+            for i, result in enumerate(results[:8], start=1):
+                content = result.get("content", "")
+                source = result.get("source", "unknown")
+                score = result.get("score", 0)
+                if content:
+                    context_parts.append(
+                        f"[Quelle {i}] (Score: {score:.3f}, Quelle: {source})\n{content}"
+                    )
+            if context_parts:
+                prompt_parts.append(
+                    "Relevanter Kontext:\n\n" + "\n\n".join(context_parts)
                 )
 
-        context = "\n\n".join(context_parts)
-        return (
-            f"Basierend auf dem folgenden Kontext:\n\n{context}\n\n"
-            "Beantworte die Frage praezise und hilfreich.\n"
-            "- Nutze die Informationen aus dem Kontext\n"
-            "- Wenn der Kontext nicht ausreicht, sage es offen\n\n"
-            f"Frage: {query}"
-        )
+        # User question
+        prompt_parts.append(f"Frage: {query}")
+
+        return "\n\n".join(prompt_parts)
 
     # ── LLM inference with fallback ─────────────────────────────────
 

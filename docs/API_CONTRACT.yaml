@@ -1,0 +1,627 @@
+# =============================================================================
+# PilotSuite Styx — API Contract (styx-core ↔ styx-ha)
+# =============================================================================
+#
+# Definiert alle Endpoints die von styx-ha (Client) aufgerufen werden.
+# Aenderungen an diesen Endpoints MUESSEN in beiden Repos synchronisiert werden.
+#
+# Konvention:
+#   - Neue Endpoints: Hier eintragen BEVOR der PR gemerged wird
+#   - Breaking Changes: Deprecation-Header + Sunset-Datum setzen
+#   - Version Sync: Beide Repos muessen gleiche VERSION haben
+#
+# Format: OpenAPI 3.0.3 (Subset — nur die Endpoints die styx-ha nutzt)
+# =============================================================================
+
+openapi: 3.0.3
+info:
+  title: PilotSuite Styx API Contract
+  description: |
+    Shared API contract between styx-core (server) and styx-ha (client).
+    Only endpoints actively used by styx-ha are listed here.
+
+    Breaking changes require:
+    1. Deprecation header in styx-core response
+    2. Sunset date (min. 2 releases ahead)
+    3. Backward-compatible fallback in styx-ha
+  version: "1.0.0"
+
+servers:
+  - url: http://homeassistant.local:8909
+    description: PilotSuite Core Add-on
+
+security:
+  - authToken: []
+  - bearerAuth: []
+
+components:
+  securitySchemes:
+    authToken:
+      type: apiKey
+      in: header
+      name: X-Auth-Token
+    bearerAuth:
+      type: http
+      scheme: bearer
+
+  schemas:
+    ApiResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        error:
+          type: string
+
+# =============================================================================
+# Endpoints used by styx-ha
+# =============================================================================
+
+paths:
+  # ── System ─────────────────────────────────────────────────────────
+
+  /health:
+    get:
+      tags: [System]
+      summary: Liveness probe
+      security: []
+      responses:
+        "200":
+          description: Process alive
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  time: { type: string, format: date-time }
+
+  /api/v1/status:
+    get:
+      tags: [System]
+      summary: API status (used by config flow discovery)
+      security: []
+      responses:
+        "200":
+          description: API online
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  version: { type: string }
+
+  # ── Neurons & Mood ──────────────────────────────────────────────────
+
+  /api/v1/neurons/mood:
+    get:
+      tags: [Neurons]
+      summary: Current mood state
+      responses:
+        "200":
+          description: Mood data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  mood: { type: string }
+                  confidence: { type: number }
+
+  /api/v1/neurons:
+    get:
+      tags: [Neurons]
+      summary: All neuron states
+      responses:
+        "200":
+          description: Neuron data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      neurons: { type: object }
+
+  /api/v1/neurons/evaluate:
+    post:
+      tags: [Neurons]
+      summary: Trigger neuron evaluation with context
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Evaluation result
+
+  # ── Zone Automation ────────────────────────────────────────────────
+
+  /api/v1/zone-automation/dashboard:
+    get:
+      tags: [ZoneAutomation]
+      summary: Zone automation dashboard
+      responses:
+        "200":
+          description: Zone data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  zones: { type: array }
+                  summary: { type: object }
+
+  /api/v1/zone-automation/zones/{zone_id}/mode:
+    get:
+      tags: [ZoneAutomation]
+      summary: Get zone mode
+      parameters:
+        - name: zone_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Current zone mode
+    post:
+      tags: [ZoneAutomation]
+      summary: Set zone mode
+      parameters:
+        - name: zone_id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                mode: { type: string }
+      responses:
+        "200":
+          description: Mode updated
+
+  # ── Sonos ──────────────────────────────────────────────────────────
+
+  /api/v1/sonos/summary:
+    get:
+      tags: [Sonos]
+      summary: Sonos system summary
+      responses:
+        "200":
+          description: Sonos state
+
+  /api/v1/sonos/favorites:
+    get:
+      tags: [Sonos]
+      summary: Sonos favorites
+      responses:
+        "200":
+          description: Favorites list
+
+  /api/v1/sonos/{action}:
+    post:
+      tags: [Sonos]
+      summary: Execute Sonos action (play, pause, next, etc.)
+      parameters:
+        - name: action
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "200":
+          description: Action result
+
+  # ── Musikwolke (Media Follow) ──────────────────────────────────────
+
+  /api/v1/musikwolke/status:
+    get:
+      tags: [Musikwolke]
+      summary: Musikwolke status
+      responses:
+        "200":
+          description: Current status
+
+  /api/v1/musikwolke/zone-map:
+    get:
+      tags: [Musikwolke]
+      summary: Zone-to-speaker mapping
+      responses:
+        "200":
+          description: Zone map
+
+  /api/v1/musikwolke/create:
+    post:
+      tags: [Musikwolke]
+      summary: Create Musikwolke session
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                zone_ids: { type: array, items: { type: string } }
+      responses:
+        "200":
+          description: Session created
+
+  /api/v1/musikwolke/dissolve:
+    post:
+      tags: [Musikwolke]
+      summary: Dissolve Musikwolke session
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                zone_ids: { type: array, items: { type: string } }
+      responses:
+        "200":
+          description: Session dissolved
+
+  /api/v1/musikwolke/volume/{zone_id}:
+    post:
+      tags: [Musikwolke]
+      summary: Set zone volume
+      parameters:
+        - name: zone_id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                volume_pct: { type: integer, minimum: 0, maximum: 100 }
+      responses:
+        "200":
+          description: Volume set
+
+  /api/v1/media/zones/{zone_id}/play:
+    post:
+      tags: [Musikwolke]
+      summary: Start playback in zone
+      parameters:
+        - name: zone_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Playback started
+
+  /api/v1/media/zones/{zone_id}/pause:
+    post:
+      tags: [Musikwolke]
+      summary: Pause playback in zone
+      parameters:
+        - name: zone_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Playback paused
+
+  /api/v1/media/musikwolke/start:
+    post:
+      tags: [Musikwolke]
+      summary: Start media follow session
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "200":
+          description: Session started
+
+  /api/v1/media/musikwolke/{session_id}/stop:
+    post:
+      tags: [Musikwolke]
+      summary: Stop media follow session
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Session stopped
+
+  /api/v1/media/musikwolke:
+    get:
+      tags: [Musikwolke]
+      summary: List active media follow sessions
+      responses:
+        "200":
+          description: Active sessions
+
+  # ── Tags ───────────────────────────────────────────────────────────
+
+  /api/v1/tags:
+    get:
+      tags: [Tags]
+      summary: List all tags
+      responses:
+        "200":
+          description: Tag list
+
+  /api/v1/tags/sync:
+    post:
+      tags: [Tags]
+      summary: Sync tags from HA
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                source: { type: string }
+                tags: { type: array }
+      responses:
+        "200":
+          description: Sync result
+
+  # ── Modules ────────────────────────────────────────────────────────
+
+  /api/v1/modules/dashboard:
+    get:
+      tags: [Modules]
+      summary: Module dashboard (all modules)
+      responses:
+        "200":
+          description: Module states
+
+  /api/v1/modules/zones/{zone_id}:
+    get:
+      tags: [Modules]
+      summary: Module data for specific zone
+      parameters:
+        - name: zone_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Zone module data
+
+  # ── Hub Intelligence ───────────────────────────────────────────────
+
+  /api/v1/hub/presence:
+    get:
+      tags: [Hub]
+      summary: Presence intelligence data
+      responses:
+        "200":
+          description: Presence data
+
+  /api/v1/hub/light:
+    get:
+      tags: [Hub]
+      summary: Light intelligence data
+      responses:
+        "200":
+          description: Light intelligence data
+
+  # ── Graph ──────────────────────────────────────────────────────────
+
+  /api/v1/graph/state:
+    get:
+      tags: [Graph]
+      summary: Brain graph state
+      parameters:
+        - name: limitNodes
+          in: query
+          schema: { type: integer, default: 120 }
+        - name: limitEdges
+          in: query
+          schema: { type: integer, default: 240 }
+      responses:
+        "200":
+          description: Graph nodes and edges
+
+  /api/v1/graph/stats:
+    get:
+      tags: [Graph]
+      summary: Brain graph statistics
+      responses:
+        "200":
+          description: Graph stats
+
+  # ── Events ─────────────────────────────────────────────────────────
+
+  /api/v1/events:
+    get:
+      tags: [Events]
+      summary: List events
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, default: 20 }
+      responses:
+        "200":
+          description: Event list
+
+  # ── Candidates ─────────────────────────────────────────────────────
+
+  /api/v1/candidates/graph_candidates:
+    get:
+      tags: [Candidates]
+      summary: Get graph-based candidates
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, default: 10 }
+      responses:
+        "200":
+          description: Candidate list
+
+  # ── Styx (Voice/Chat) ─────────────────────────────────────────────
+
+  /api/v1/styx/stt:
+    post:
+      tags: [Styx]
+      summary: Speech-to-text
+      parameters:
+        - name: language
+          in: query
+          schema: { type: string, default: "de" }
+      requestBody:
+        content:
+          audio/wav:
+            schema: { type: string, format: binary }
+      responses:
+        "200":
+          description: Transcription result
+
+  /api/v1/styx/tts:
+    post:
+      tags: [Styx]
+      summary: Text-to-speech
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                text: { type: string }
+                language: { type: string }
+      responses:
+        "200":
+          description: Audio response
+          content:
+            audio/wav:
+              schema: { type: string, format: binary }
+
+  /api/v1/styx/voice/status:
+    get:
+      tags: [Styx]
+      summary: Voice pipeline status
+      responses:
+        "200":
+          description: Voice status
+
+  /api/styx/memory:
+    get:
+      tags: [Styx]
+      summary: Conversation memory stats
+      responses:
+        "200":
+          description: Memory stats
+
+  /api/styx/memory/history:
+    get:
+      tags: [Styx]
+      summary: Conversation history
+      parameters:
+        - name: conversation_id
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 20 }
+      responses:
+        "200":
+          description: History entries
+
+  # ── Dev Logs ───────────────────────────────────────────────────────
+
+  /api/v1/dev/logs:
+    get:
+      tags: [Dev]
+      summary: Get dev logs
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, default: 50 }
+      responses:
+        "200":
+          description: Dev log entries
+    post:
+      tags: [Dev]
+      summary: Ingest dev log
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        "200":
+          description: Log stored
+
+  # ── Energy ─────────────────────────────────────────────────────────
+
+  /api/v1/energy:
+    get:
+      tags: [Energy]
+      summary: Energy overview
+      responses:
+        "200":
+          description: Energy data
+
+  /api/v1/energy/anomalies:
+    get:
+      tags: [Energy]
+      summary: Energy anomalies
+      responses:
+        "200":
+          description: Anomaly list
+
+  /api/v1/energy/shifting:
+    get:
+      tags: [Energy]
+      summary: Load shifting recommendations
+      responses:
+        "200":
+          description: Shifting data
+
+  /api/v1/energy/explain/{suggestion_id}:
+    get:
+      tags: [Energy]
+      summary: Explain energy suggestion
+      parameters:
+        - name: suggestion_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Explanation
+
+  # ── Agent ──────────────────────────────────────────────────────────
+
+  /api/v1/agent/verify:
+    post:
+      tags: [Agent]
+      summary: Verify agent connection
+      responses:
+        "200":
+          description: Connection verified
+
+  /api/v1/agent/status:
+    get:
+      tags: [Agent]
+      summary: Agent status
+      responses:
+        "200":
+          description: Agent status
+
+  /api/v1/agent/self-heal:
+    post:
+      tags: [Agent]
+      summary: Trigger agent self-heal
+      responses:
+        "200":
+          description: Self-heal initiated

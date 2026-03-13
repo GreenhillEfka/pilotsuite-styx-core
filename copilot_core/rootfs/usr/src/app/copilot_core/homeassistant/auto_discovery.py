@@ -111,7 +111,7 @@ class AutoDiscovery:
         for hostname in self.DEFAULT_HOSTNAMES:
             try:
                 # Try to resolve hostname
-                ip = await asyncio.get_event_loop().run_in_executor(
+                ip = await asyncio.get_running_loop().run_in_executor(
                     None,
                     self._resolve_host,
                     hostname

@@ -1,4 +1,11 @@
-"""Light Intelligence — Sun Position, Brightness, Threshold Control, Mood Scenes (v6.5.0).
+"""Light Intelligence — Sun Position, Brightness, Threshold Control, Mood Scenes (v6.6.0).
+
+Architektur-Hinweis:
+    Dies ist der **Intelligence-Layer** fuer Lichtsteuerung.
+    ``helligkeit_module.py`` ist der darunter liegende **Sensor-Layer**
+    fuer reine Lux-Datenerfassung.
+    Beide nutzen ``CloudResilientFilter`` aus ``brightness_filter.py``
+    fuer die cloud-resistente Aussenbeleuchtung.
 
 Features:
 - Sun position tracking (elevation, azimuth, phase)
@@ -17,6 +24,8 @@ from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
+
+from copilot_core.hub.brightness_filter import CloudResilientFilter
 
 logger = logging.getLogger(__name__)
 
@@ -171,8 +180,10 @@ class LightIntelligenceEngine:
         self._active_scene: str | None = None
         self._zone_scenes: dict[str, str] = {}  # zone_id -> scene_id
 
-        # Cloud filter state
-        self._last_outdoor_avg: float = 0.0
+        # Cloud filter (shared CloudResilientFilter with 15% hysteresis)
+        self._outdoor_filter = CloudResilientFilter(
+            window_size=_CLOUD_FILTER_WINDOW, hysteresis_pct=_CLOUD_HYSTERESIS_PCT,
+        )
         self._light_state_stable: bool = True
 
     # ── Sun position ────────────────────────────────────────────────────
@@ -245,8 +256,13 @@ class LightIntelligenceEngine:
     # ── Brightness calculations ─────────────────────────────────────────
 
     def get_outdoor_brightness(self) -> float:
-        """Get filtered outdoor brightness (cloud-resilient moving average)."""
-        all_values = []
+        """Get filtered outdoor brightness (cloud-resilient via CloudResilientFilter).
+
+        Collects all outdoor sensor readings into the shared filter,
+        then returns the hysteresis-smoothed value.
+        """
+        # Feed all outdoor sensor readings into the filter
+        all_values: list[float] = []
         for sensor_buffer in self._outdoor_sensors.values():
             if sensor_buffer:
                 all_values.extend(sensor_buffer)
@@ -254,19 +270,12 @@ class LightIntelligenceEngine:
         if not all_values:
             return 0.0
 
+        # Use the average of all current readings as a single input
         avg = sum(all_values) / len(all_values)
-
-        # Cloud resilience: if change from last stable value < hysteresis, keep stable
-        if self._last_outdoor_avg > 0:
-            change_pct = abs(avg - self._last_outdoor_avg) / self._last_outdoor_avg * 100
-            if change_pct < _CLOUD_HYSTERESIS_PCT:
-                self._light_state_stable = True
-                return self._last_outdoor_avg
-            else:
-                self._light_state_stable = False
-
-        self._last_outdoor_avg = avg
-        return avg
+        self._outdoor_filter.add_reading(avg)
+        result = self._outdoor_filter.get_filtered()
+        self._light_state_stable = (result == self._outdoor_filter.last_stable)
+        return result
 
     def get_zone_brightness(self, zone_id: str) -> ZoneBrightness:
         """Get brightness analysis for a zone."""
@@ -288,7 +297,7 @@ class LightIntelligenceEngine:
         # Normalized illumination ratio
         illumination_ratio = 0.0
         if avg_outdoor > 0:
-            illumination_ratio = min(1.0, avg_indoor / max(avg_outdoor, 1.0))
+            illumination_ratio = max(0.0, min(1.0, avg_indoor / max(avg_outdoor, 1.0)))
 
         illumination_pct = illumination_ratio * 100
 

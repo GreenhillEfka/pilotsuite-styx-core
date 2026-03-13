@@ -13,8 +13,9 @@ Usage:
 
 from __future__ import annotations
 
-import logging
 import asyncio
+import logging
+import time
 from typing import Any, Dict
 
 from flask import Blueprint, Response, jsonify, request
@@ -26,6 +27,26 @@ logger = logging.getLogger(__name__)
 
 # Create blueprint with relative prefix (will be nested under /api/v1)
 metrics_bp = Blueprint("metrics", __name__)
+
+
+def _run_async(coro, timeout: int = 10):
+    """Run async coroutine from sync Flask context.
+
+    Re-uses the current event loop if one is running (e.g. inside
+    an existing async application), otherwise creates a temporary one.
+    """
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+
+    if loop and loop.is_running():
+        import concurrent.futures
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            future = pool.submit(asyncio.run, asyncio.wait_for(coro, timeout=timeout))
+            return future.result(timeout=timeout + 2)
+
+    return asyncio.run(asyncio.wait_for(coro, timeout=timeout))
 
 
 @metrics_bp.route("/metrics", methods=["GET"])
@@ -75,29 +96,13 @@ def health_check():
     try:
         full_check = request.args.get("full", "false").lower() == "true"
         timeout = int(request.args.get("timeout", "10"))
-        
+
         checker = get_health_checker()
-        
+
         if full_check:
-            # Run async health check
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                health = loop.run_until_complete(
-                    asyncio.wait_for(checker.full_health_check(), timeout=timeout)
-                )
-            finally:
-                loop.close()
+            health = _run_async(checker.full_health_check(), timeout=timeout)
         else:
-            # Quick health check
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                health = loop.run_until_complete(
-                    asyncio.wait_for(checker.get_quick_health(), timeout=timeout)
-                )
-            finally:
-                loop.close()
+            health = _run_async(checker.get_quick_health(), timeout=timeout)
         
         status_code = 200
         if health.get("status") == "unhealthy":
@@ -137,15 +142,7 @@ def readiness_probe():
     """
     try:
         checker = get_health_checker()
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        try:
-            # Quick check of critical dependencies only
-            health = loop.run_until_complete(
-                asyncio.wait_for(checker.get_dependency_health(), timeout=5)
-            )
-        finally:
-            loop.close()
+        health = _run_async(checker.get_dependency_health(), timeout=5)
         
         if health.get("status") == "healthy":
             return jsonify({
@@ -263,7 +260,3 @@ def metrics_summary():
             "error": "summary_generation_failed",
             "message": str(e),
         }), 500
-
-
-# Import time for liveness probe
-import time

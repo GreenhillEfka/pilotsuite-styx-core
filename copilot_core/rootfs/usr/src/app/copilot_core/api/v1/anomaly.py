@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
 from typing import Any, Dict, List, Optional
 from datetime import datetime, timezone
 import numpy as np
@@ -42,37 +43,38 @@ logger = logging.getLogger(__name__)
 # Create blueprint
 anomaly_bp = Blueprint("anomaly", __name__)
 
-# Global detector instance (initialized on first use)
+# Global detector instance (initialized on first use, double-checked locking)
 _detector: Optional[AnomalyDetector] = None
+_detector_lock = threading.Lock()
 _model_store: Optional[ModelStore] = None
+_model_store_lock = threading.Lock()
 
 
 def get_detector() -> AnomalyDetector:
-    """Get or create the global anomaly detector instance."""
+    """Get or create the global anomaly detector instance (thread-safe)."""
     global _detector
-    
+
     if _detector is None:
-        # Try to get model directory from config
-        model_dir = os.environ.get("PILOTSUITE_MODEL_DIR", "/data/ml_models")
-        
-        _detector = create_anomaly_detector(
-            n_estimators=100,
-            contamination=0.05,
-            model_dir=model_dir,
-        )
-    
+        with _detector_lock:
+            if _detector is None:
+                model_dir = os.environ.get("PILOTSUITE_MODEL_DIR", "/data/ml_models")
+                _detector = create_anomaly_detector(
+                    n_estimators=100,
+                    contamination=0.05,
+                    model_dir=model_dir,
+                )
     return _detector
 
 
 def get_model_store() -> ModelStore:
-    """Get or create the global model store instance."""
+    """Get or create the global model store instance (thread-safe)."""
     global _model_store
-    
+
     if _model_store is None:
-        store_path = os.environ.get("PILOTSUITE_MODEL_DIR", "/data/ml_models")
-        
-        _model_store = ModelStore(store_path)
-    
+        with _model_store_lock:
+            if _model_store is None:
+                store_path = os.environ.get("PILOTSUITE_MODEL_DIR", "/data/ml_models")
+                _model_store = ModelStore(store_path)
     return _model_store
 
 

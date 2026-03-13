@@ -113,21 +113,19 @@ async def _ensure_connection(access_token: str, base_url: str = "ws://homeassist
 
 def _on_websocket_message(message: dict[str, Any]) -> None:
     """Process WebSocket message from HA.
-    
+
     Args:
         message: Raw WebSocket message dict
     """
-    if _event_handler:
-        # Schedule event handling in event loop
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            asyncio.create_task(_event_handler.handle_event(message))
-        else:
-            # If no running loop, create new one
-            new_loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(new_loop)
-            new_loop.run_until_complete(_event_handler.handle_event(message))
-            new_loop.close()
+    if not _event_handler:
+        return
+
+    try:
+        loop = asyncio.get_running_loop()
+        loop.create_task(_event_handler.handle_event(message))
+    except RuntimeError:
+        # No running event loop — run synchronously in a temporary loop
+        asyncio.run(_event_handler.handle_event(message))
 
 
 @ha_events_bp.route("/api/v1/ha/events/subscribe", methods=["GET"])

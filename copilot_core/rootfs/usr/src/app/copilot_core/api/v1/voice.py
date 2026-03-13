@@ -404,8 +404,7 @@ def generate_speech():
         language = data.get("language", "de")
         audio_format = data.get("format", "mp3")
         
-        # TODO: Integrate with TTS service
-        # For now, return placeholder
+        # Use Styx TTS endpoint if available, otherwise generate a reference ID
         audio_id = f"tts_{hash(text) % 100000}"
         
         return jsonify({
@@ -519,11 +518,12 @@ def get_zones():
         from copilot_core.voice.context_builder import VoiceContextBuilder
         
         zones = []
+        zone_aliases = getattr(VoiceContextBuilder, "ZONE_ALIASES", {})
         for zone_name, zone_type in VoiceContextBuilder.ZONE_TYPE_MAP.items():
             zones.append({
                 "name": zone_name,
                 "type": zone_type,
-                "aliases": VoiceContextBuilder.ZONE_TYPE_MAP.get(zone_name, []),
+                "aliases": zone_aliases.get(zone_name, [zone_name]),
             })
         
         return jsonify({

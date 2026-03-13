@@ -14,6 +14,7 @@ Usage:
 """
 
 import logging
+import threading
 import time
 from typing import Optional
 from collections import defaultdict
@@ -24,27 +25,24 @@ from copilot_core.vector_store import get_vector_store, get_embedding_engine
 
 logger = logging.getLogger(__name__)
 
-# In-memory search analytics
-_search_analytics = defaultdict(int)
-_search_history = []
+# In-memory search analytics — guarded by _search_lock (Waitress is multi-threaded)
+_search_lock = threading.Lock()
+_search_analytics: dict[str, int] = defaultdict(int)
+_search_history: list[dict] = []
 _HISTORY_MAX_SIZE = 1000
 
-# Query cache (simple LRU)
-_query_cache = {}
+# Query cache (simple LRU) — guarded by _search_lock
+_query_cache: dict[str, dict] = {}
 _CACHE_MAX_SIZE = 100
 _CACHE_TTL = 300  # 5 minutes
 
 
-def _add_to_cache(query: str, results: list):
-    """Add query result to cache."""
-    # global _query_cache
-    
-    # Rotate if too large
+def _add_to_cache(query: str, results: list) -> None:
+    """Add query result to cache (caller must hold _search_lock)."""
     if len(_query_cache) >= _CACHE_MAX_SIZE:
-        # Remove oldest entry
         oldest_key = next(iter(_query_cache))
         del _query_cache[oldest_key]
-    
+
     _query_cache[query] = {
         "results": results,
         "timestamp": time.time(),
@@ -52,25 +50,18 @@ def _add_to_cache(query: str, results: list):
 
 
 def _get_from_cache(query: str) -> Optional[list]:
-    """Get cached query results if not expired."""
-    # global _query_cache
-    
+    """Get cached query results if not expired (caller must hold _search_lock)."""
     if query in _query_cache:
         entry = _query_cache[query]
         if time.time() - entry["timestamp"] < _CACHE_TTL:
             return entry["results"]
-        else:
-            # Expired, remove
-            del _query_cache[query]
-    
+        del _query_cache[query]
+
     return None
 
 
-def _record_search(query: str, result_count: int, duration_ms: float):
-    """Record search analytics."""
-    # global _search_analytics
-# global _search_history
-    
+def _record_search(query: str, result_count: int, duration_ms: float) -> None:
+    """Record search analytics (caller must hold _search_lock)."""
     _search_analytics[query] += 1
     _search_history.append({
         "query": query,
@@ -78,10 +69,10 @@ def _record_search(query: str, result_count: int, duration_ms: float):
         "duration_ms": duration_ms,
         "timestamp": time.time(),
     })
-    
+
     # Rotate history
     if len(_search_history) > _HISTORY_MAX_SIZE:
-        _search_history = _search_history[-_HISTORY_MAX_SIZE:]
+        del _search_history[:-_HISTORY_MAX_SIZE]
 
 
 async def handle_rag_search(request: web.Request) -> web.Response:
@@ -139,12 +130,14 @@ async def handle_rag_search(request: web.Request) -> web.Response:
     
     # Check cache first
     cache_key = f"{query}:{limit}:{str(filters)}:{threshold}"
-    cached_results = _get_from_cache(cache_key)
-    
+    with _search_lock:
+        cached_results = _get_from_cache(cache_key)
+
     if cached_results is not None:
         duration_ms = (time.time() - start_time) * 1000
-        _record_search(query, len(cached_results), duration_ms)
-        
+        with _search_lock:
+            _record_search(query, len(cached_results), duration_ms)
+
         return web.json_response({
             "query": query,
             "results": cached_results,
@@ -182,20 +175,20 @@ async def handle_rag_search(request: web.Request) -> web.Response:
         ]
         
         # Cache results
-        _add_to_cache(cache_key, formatted_results)
-        
         duration_ms = (time.time() - start_time) * 1000
-        _record_search(query, len(formatted_results), duration_ms)
-        
+        with _search_lock:
+            _add_to_cache(cache_key, formatted_results)
+            _record_search(query, len(formatted_results), duration_ms)
+
         return web.json_response({
             "query": query,
             "results": formatted_results,
             "duration_ms": round(duration_ms, 2),
             "cached": False,
         })
-    
+
     except Exception as e:
-        logger.error(f"RAG search error: {e}")
+        logger.error("RAG search error: %s", e)
         return web.json_response(
             {"error": "Search failed", "details": str(e)},
             status=500,
@@ -230,19 +223,20 @@ async def handle_rag_suggestions(request: web.Request) -> web.Response:
         })
     
     # Get suggestions from search history
-    suggestions = set()
-    for past_query in _search_analytics.keys():
-        if past_query.lower().startswith(query) and past_query.lower() != query:
-            suggestions.add(past_query)
-        if len(suggestions) >= limit * 2:  # Get extra to sort by popularity
-            break
-    
-    # Sort by popularity and take top N
-    sorted_suggestions = sorted(
-        suggestions,
-        key=lambda q: _search_analytics[q],
-        reverse=True,
-    )[:limit]
+    with _search_lock:
+        suggestions = set()
+        for past_query in list(_search_analytics.keys()):
+            if past_query.lower().startswith(query) and past_query.lower() != query:
+                suggestions.add(past_query)
+            if len(suggestions) >= limit * 2:  # Get extra to sort by popularity
+                break
+
+        # Sort by popularity and take top N
+        sorted_suggestions = sorted(
+            suggestions,
+            key=lambda q: _search_analytics.get(q, 0),
+            reverse=True,
+        )[:limit]
     
     return web.json_response({
         "query": query,
@@ -277,30 +271,32 @@ async def handle_rag_stats(request: web.Request) -> web.Response:
     """
     limit = min(int(request.query.get("limit", 10)), 50)
     
-    # Top queries by count
-    top_queries = sorted(
-        _search_analytics.items(),
-        key=lambda x: x[1],
-        reverse=True,
-    )[:limit]
-    
-    # Recent searches (last 20)
-    recent = _search_history[-20:]
-    
+    with _search_lock:
+        top_queries = sorted(
+            _search_analytics.items(),
+            key=lambda x: x[1],
+            reverse=True,
+        )[:limit]
+        recent = list(_search_history[-20:])
+        total = sum(_search_analytics.values())
+        unique = len(_search_analytics)
+        cache_size = len(_query_cache)
+        history_size = len(_search_history)
+
     return web.json_response({
-        "total_searches": sum(_search_analytics.values()),
-        "unique_queries": len(_search_analytics),
+        "total_searches": total,
+        "unique_queries": unique,
         "top_queries": [
             {"query": q, "count": c} for q, c in top_queries
         ],
         "recent_searches": recent,
         "cache_stats": {
-            "size": len(_query_cache),
+            "size": cache_size,
             "max_size": _CACHE_MAX_SIZE,
             "ttl_seconds": _CACHE_TTL,
         },
         "history_stats": {
-            "size": len(_search_history),
+            "size": history_size,
             "max_size": _HISTORY_MAX_SIZE,
         },
     })
@@ -353,11 +349,11 @@ async def handle_rag_search_benchmark(request: web.Request) -> web.Response:
                 limit=10,
             )
         except Exception:
-            pass
-        
+            logger.debug("Benchmark iteration failed", exc_info=True)
+
         duration_ms = (time.time() - start) * 1000
         durations.append(duration_ms)
-    
+
     if not durations:
         return web.json_response({"error": "No successful iterations"}, status=500)
     
@@ -412,12 +408,14 @@ def register_rag_search_flask(app):
         
         # Check cache
         cache_key = f"{query}:{limit}:{str(filters)}:{threshold}"
-        cached_results = _get_from_cache(cache_key)
-        
+        with _search_lock:
+            cached_results = _get_from_cache(cache_key)
+
         if cached_results is not None:
             duration_ms = (time.time() - start_time) * 1000
-            _record_search(query, len(cached_results), duration_ms)
-            
+            with _search_lock:
+                _record_search(query, len(cached_results), duration_ms)
+
             return jsonify({
                 "query": query,
                 "results": cached_results,
@@ -430,24 +428,19 @@ def register_rag_search_flask(app):
             vector_store = get_vector_store()
             embedding_engine = get_embedding_engine()
             
-            # Generate embedding (sync wrapper)
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                embedding_result = loop.run_until_complete(
-                    embedding_engine.embed_query(query)
+            # Generate embedding
+            embedding_result = asyncio.run(
+                embedding_engine.embed_query(query)
+            )
+            results = asyncio.run(
+                vector_store.search(
+                    query_vector=embedding_result.embedding,
+                    limit=limit,
+                    entry_type=filters.get("entry_type"),
+                    metadata_filter=filters.get("metadata"),
+                    threshold=threshold,
                 )
-                results = loop.run_until_complete(
-                    vector_store.search(
-                        query_vector=embedding_result.embedding,
-                        limit=limit,
-                        entry_type=filters.get("entry_type"),
-                        metadata_filter=filters.get("metadata"),
-                        threshold=threshold,
-                    )
-                )
-            finally:
-                loop.close()
+            )
             
             formatted_results = [
                 {
@@ -459,20 +452,20 @@ def register_rag_search_flask(app):
                 for r in results
             ]
             
-            _add_to_cache(cache_key, formatted_results)
-            
             duration_ms = (time.time() - start_time) * 1000
-            _record_search(query, len(formatted_results), duration_ms)
-            
+            with _search_lock:
+                _add_to_cache(cache_key, formatted_results)
+                _record_search(query, len(formatted_results), duration_ms)
+
             return jsonify({
                 "query": query,
                 "results": formatted_results,
                 "duration_ms": round(duration_ms, 2),
                 "cached": False,
             })
-        
+
         except Exception as e:
-            logger.error(f"RAG search error: {e}")
+            logger.error("RAG search error: %s", e)
             return jsonify({"error": str(e)}), 500
     
     @app.route('/api/v1/rag/search/suggestions', methods=['GET'])
@@ -489,19 +482,20 @@ def register_rag_search_flask(app):
                 "count": 0,
             })
         
-        suggestions = set()
-        for past_query in _search_analytics.keys():
-            if past_query.lower().startswith(query) and past_query.lower() != query:
-                suggestions.add(past_query)
-            if len(suggestions) >= limit * 2:
-                break
-        
-        sorted_suggestions = sorted(
-            suggestions,
-            key=lambda q: _search_analytics[q],
-            reverse=True,
-        )[:limit]
-        
+        with _search_lock:
+            suggestions = set()
+            for past_query in list(_search_analytics.keys()):
+                if past_query.lower().startswith(query) and past_query.lower() != query:
+                    suggestions.add(past_query)
+                if len(suggestions) >= limit * 2:
+                    break
+
+            sorted_suggestions = sorted(
+                suggestions,
+                key=lambda q: _search_analytics.get(q, 0),
+                reverse=True,
+            )[:limit]
+
         return jsonify({
             "query": query,
             "suggestions": sorted_suggestions,
@@ -514,28 +508,32 @@ def register_rag_search_flask(app):
         
         limit = min(int(request.args.get('limit', 10)), 50)
         
-        top_queries = sorted(
-            _search_analytics.items(),
-            key=lambda x: x[1],
-            reverse=True,
-        )[:limit]
-        
-        recent = _search_history[-20:]
-        
+        with _search_lock:
+            top_queries = sorted(
+                _search_analytics.items(),
+                key=lambda x: x[1],
+                reverse=True,
+            )[:limit]
+            recent = list(_search_history[-20:])
+            total = sum(_search_analytics.values())
+            unique = len(_search_analytics)
+            cache_size = len(_query_cache)
+            history_size = len(_search_history)
+
         return jsonify({
-            "total_searches": sum(_search_analytics.values()),
-            "unique_queries": len(_search_analytics),
+            "total_searches": total,
+            "unique_queries": unique,
             "top_queries": [
                 {"query": q, "count": c} for q, c in top_queries
             ],
             "recent_searches": recent,
             "cache_stats": {
-                "size": len(_query_cache),
+                "size": cache_size,
                 "max_size": _CACHE_MAX_SIZE,
                 "ttl_seconds": _CACHE_TTL,
             },
             "history_stats": {
-                "size": len(_search_history),
+                "size": history_size,
                 "max_size": _HISTORY_MAX_SIZE,
             },
         })
@@ -558,22 +556,17 @@ def register_rag_search_flask(app):
                 vector_store = get_vector_store()
                 embedding_engine = get_embedding_engine()
                 
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                try:
-                    embedding_result = loop.run_until_complete(
-                        embedding_engine.embed_query(query)
+                embedding_result = asyncio.run(
+                    embedding_engine.embed_query(query)
+                )
+                asyncio.run(
+                    vector_store.search(
+                        query_vector=embedding_result.embedding,
+                        limit=10,
                     )
-                    loop.run_until_complete(
-                        vector_store.search(
-                            query_vector=embedding_result.embedding,
-                            limit=10,
-                        )
-                    )
-                finally:
-                    loop.close()
+                )
             except Exception:
-                pass
+                logger.debug("Flask benchmark iteration failed", exc_info=True)
             
             duration_ms = (time.time() - start) * 1000
             durations.append(duration_ms)

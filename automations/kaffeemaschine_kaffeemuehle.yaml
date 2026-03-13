@@ -1,16 +1,25 @@
 - id: kaffeemaschine_kaffeemuehle_sync
-  alias: "Kaffeemaschine & Kaffeemühle synchronisieren"
-  description: "Schaltet die Kaffeemühle immer同步 mit der Kaffeemaschine ein/aus und sendet TTS-Nachrichten"
+  alias: "Kaffeemaschine & Kaffemuehle synchronisieren"
+  description: "Schaltet die Kaffemuehle synchron mit der Kaffeemaschine ein/aus und sendet TTS-Nachrichten"
+  mode: single
   trigger:
     - platform: state
       entity_id: switch.kaffeemaschine
       to:
         - "on"
         - "off"
+      from:
+        - "on"
+        - "off"
+  condition:
+    - condition: template
+      value_template: "{{ trigger.from_state.state != trigger.to_state.state }}"
   action:
     - service: switch.turn_{{ trigger.to_state.state }}
       target:
         entity_id: switch.kaffeemuhle
+    - delay:
+        milliseconds: 500
     - service: tts.speak
       target:
         entity_id: tts.home_assistant_cloud
@@ -18,7 +27,31 @@
         media_player_entity_id: media_player.gangbereich
         message: >
           {% if trigger.to_state.state == 'on' %}
-            Ich habe die Kaffeemaschine eingeschaltet. Der Kaffee kommt – halte dich bereit!
+            Kaffeemaschine eingeschaltet. Der Kaffee kommt!
           {% else %}
-            Die Kaffeemaschine ist aus – der Kaffee-Modus ist vorerst beendet.
+            Kaffeemaschine ist aus. Kaffee-Modus beendet.
           {% endif %}
+
+- id: kaffeemaschine_auto_off_timer
+  alias: "Kaffeemaschine Auto-Aus nach 30 Minuten"
+  description: "Schaltet die Kaffeemaschine automatisch nach 30 Min aus (Energiesparen, Sicherheit)"
+  mode: restart
+  trigger:
+    - platform: state
+      entity_id: switch.kaffeemaschine
+      to: "on"
+      from: "off"
+      for:
+        minutes: 30
+  action:
+    - service: switch.turn_off
+      target:
+        entity_id:
+          - switch.kaffeemaschine
+          - switch.kaffeemuhle
+    - service: tts.speak
+      target:
+        entity_id: tts.home_assistant_cloud
+      data:
+        media_player_entity_id: media_player.gangbereich
+        message: "Kaffeemaschine wurde nach 30 Minuten automatisch ausgeschaltet."

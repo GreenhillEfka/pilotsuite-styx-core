@@ -122,7 +122,7 @@ class ProactiveContextEngine:
                 media_state = self._media_mgr.get_zone_media_state(zone_id)
                 ctx["media_state"] = media_state
             except Exception:
-                pass
+                _LOGGER.debug("Failed to get media state for zone %s", zone_id, exc_info=True)
 
         # Get mood for zone
         if self._mood_svc:
@@ -130,7 +130,7 @@ class ProactiveContextEngine:
                 mood = self._mood_svc.get_zone_mood(zone_id)
                 ctx["mood"] = mood
             except Exception:
-                pass
+                _LOGGER.debug("Failed to get mood for zone %s", zone_id, exc_info=True)
 
         # Get household context
         if self._household:
@@ -138,7 +138,7 @@ class ProactiveContextEngine:
                 ctx["household"] = self._household.to_dict()
                 ctx["children_home"] = self._household.is_any_child_home()
             except Exception:
-                pass
+                _LOGGER.debug("Failed to get household context", exc_info=True)
 
         # Generate suggestions
         suggestions = []
@@ -498,7 +498,7 @@ class ProactiveContextEngine:
                 if member:
                     name = member.name
             except Exception:
-                pass
+                _LOGGER.debug("Failed to resolve member name for %s", person_id, exc_info=True)
 
         # Gather contextual nuggets
         context_parts: List[str] = []
@@ -512,7 +512,7 @@ class ProactiveContextEngine:
                     types_str = ", ".join(today_waste)
                     context_parts.append(f"Heute ist Muellabfuhr ({types_str}).")
             except Exception:
-                pass
+                _LOGGER.debug("Failed to get waste status for greeting", exc_info=True)
 
         # Birthday today?
         if self._birthday_svc:
@@ -523,7 +523,7 @@ class ProactiveContextEngine:
                     bday_name = bday.get("name", "jemand")
                     context_parts.append(f"{bday_name} hat heute Geburtstag!")
             except Exception:
-                pass
+                _LOGGER.debug("Failed to get birthday status for greeting", exc_info=True)
 
         # Time-of-day flavour
         if 6 <= local_hour <= 10:

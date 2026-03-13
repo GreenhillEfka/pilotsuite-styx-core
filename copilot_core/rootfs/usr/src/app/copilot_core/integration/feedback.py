@@ -111,7 +111,7 @@ class FeedbackLoop:
             try:
                 self._bg.rollback_batch()
             except Exception:
-                pass
+                _LOGGER.debug("BrainGraph rollback also failed", exc_info=True)
 
     def get_stats(self) -> Dict[str, Any]:
         """Return feedback loop metrics."""

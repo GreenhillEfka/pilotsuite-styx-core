@@ -265,13 +265,16 @@ def _load_semantic_backend() -> Optional[_SemanticBackend]:
         if _semantic_backend is not None:
             return _semantic_backend
 
-        if not _SEMANTIC_BACKEND_MODULE:
-            return None
+        # Priority 1: External backend from env var
+        backend_module = _SEMANTIC_BACKEND_MODULE
+        # Priority 2: Built-in VectorStore-based backend
+        if not backend_module:
+            backend_module = "copilot_core.rag.semantic_backend"
 
         try:
-            mod = importlib.import_module(_SEMANTIC_BACKEND_MODULE)
+            mod = importlib.import_module(backend_module)
         except Exception:
-            logger.exception("Failed to import semantic backend: %s", _SEMANTIC_BACKEND_MODULE)
+            logger.exception("Failed to import semantic backend: %s", backend_module)
             return None
 
         index_fn = getattr(mod, "rag_semantic_index", None) or getattr(mod, "semantic_index", None)
@@ -281,9 +284,9 @@ def _load_semantic_backend() -> Optional[_SemanticBackend]:
             _semantic_backend = _SemanticBackend(
                 index_fn=index_fn,
                 search_fn=search_fn,
-                module_path=_SEMANTIC_BACKEND_MODULE,
+                module_path=backend_module,
             )
-            logger.info("Semantic backend loaded: %s", _SEMANTIC_BACKEND_MODULE)
+            logger.info("Semantic backend loaded: %s", backend_module)
             return _semantic_backend
 
     return None
@@ -329,16 +332,6 @@ async def _searxng_search(
     client = _get_searxng_client()
     
     try:
-        # Note: This is async, but Flask is sync. We'll use asyncio.run() or
-        # the client should handle this internally. For now, assume sync wrapper.
-        import asyncio
-        
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-        
         results = await client.search(query=query, categories=categories, top_k=top_k)
         return results
     
@@ -507,6 +500,26 @@ def rag_search() -> Tuple[Any, int] | Any:
             return jsonify({"error": "query required"}), 400
 
         top_k = _clamp_top_k(data.get("top_k", 10))
+
+        # Auto-classify query if no explicit use_lexical/use_semantic flags
+        auto_classify = data.get("auto_classify", False)
+        if auto_classify:
+            try:
+                from copilot_core.rag.query_router import classify_query
+                classification = classify_query(query)
+                # Map classification to search mode
+                qt = classification.query_type.value if hasattr(classification.query_type, 'value') else str(classification.query_type)
+                if qt in ("factual", "entity_lookup"):
+                    data.setdefault("use_lexical", True)
+                    data.setdefault("use_semantic", False)
+                elif qt in ("conceptual", "how_to"):
+                    data.setdefault("use_lexical", True)
+                    data.setdefault("use_semantic", True)
+                    data.setdefault("semantic_weight", 1.5)
+                warnings.append(f"auto_classified: {qt} (confidence={classification.confidence:.2f})")
+            except Exception as exc:
+                logger.debug("Query auto-classification failed: %s", exc)
+
         use_lexical = bool(data.get("use_lexical", True))
         use_semantic = bool(data.get("use_semantic", True))
         rrf_k = max(1, int(data.get("rrf_k", 60)))
@@ -1005,6 +1018,15 @@ def rag_index() -> Tuple[Any, int] | Any:
                 namespace=namespace, documents=documents_data, warnings=warnings,
             )
 
+        # Auto-invalidate cache for the indexed namespace
+        try:
+            cache = _get_rag_cache()
+            if cache and bm25_indexed > 0:
+                cache.invalidate_pattern(f"rag:*:{namespace}:*")
+                logger.debug("RAG cache invalidated for namespace '%s'", namespace)
+        except Exception:
+            logger.debug("RAG cache invalidation failed (non-critical)")
+
         ok = True
         took_ms = (time.monotonic() - started) * 1000.0
         return jsonify({
@@ -1014,6 +1036,7 @@ def rag_index() -> Tuple[Any, int] | Any:
             "errors": bm25_errors,
             "warnings": warnings,
             "took_ms": round(took_ms, 3),
+            "cache_invalidated": bm25_indexed > 0,
         })
 
     except ValueError as exc:
@@ -1059,13 +1082,16 @@ def rag_cache_clear() -> Tuple[Any, int] | Any:
         
         cache = _get_rag_cache()
         
-        # Clear all or specific keys
-        if namespace or pattern:
-            # Get all keys and filter
-            # Note: This requires Redis SCAN or iteration over local cache
-            # For now, clear all as a simple implementation
-            asyncio.run(cache.clear())
-            cleared = "all (namespace/pattern filter not yet implemented)"
+        # Clear all or filter by namespace/pattern
+        if namespace:
+            # Clear only keys matching the namespace prefix
+            prefix = f"rag:{namespace}:"
+            count = asyncio.run(cache.clear_by_prefix(prefix))
+            cleared = f"namespace '{namespace}' ({count} entries)"
+        elif pattern:
+            # Clear keys matching a glob pattern
+            count = asyncio.run(cache.clear_by_pattern(f"*{pattern}*"))
+            cleared = f"pattern '{pattern}' ({count} entries)"
         else:
             asyncio.run(cache.clear())
             cleared = "all"
@@ -1385,33 +1411,28 @@ def _searxng_search_sync(
     warnings: Optional[List[str]] = None,
 ) -> List[SearXNGResult]:
     """Synchronous wrapper for SearXNG search.
-    
+
     Flask is synchronous, but our SearXNG client is async.
     This wrapper handles the async call properly.
     """
-    import asyncio
-    
     client = _get_searxng_client()
-    
+
     try:
-        # Try to get existing event loop
+        coro = client.search(query=query, categories=categories, top_k=top_k)
+
         try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                # We're in an async context (unlikely in Flask, but handle it)
-                # Return empty results to avoid blocking
-                logger.warning("Event loop running, skipping SearXNG search")
-                return []
+            loop = asyncio.get_running_loop()
         except RuntimeError:
-            # No event loop exists, create one
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-        
-        results = loop.run_until_complete(
-            client.search(query=query, categories=categories, top_k=top_k)
-        )
-        return results
-    
+            loop = None
+
+        if loop and loop.is_running():
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                future = pool.submit(asyncio.run, asyncio.wait_for(coro, timeout=10))
+                return future.result(timeout=12)
+
+        return asyncio.run(asyncio.wait_for(coro, timeout=10))
+
     except Exception as exc:
         logger.warning("SearXNG sync search failed for query '%s': %s", query, exc)
         if warnings is not None:

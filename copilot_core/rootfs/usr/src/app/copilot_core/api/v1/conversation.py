@@ -494,7 +494,7 @@ def _get_user_context() -> str:
                 if summary:
                     context_parts.append(f"Regionale Warnungen: {summary}")
             except Exception:
-                pass
+                logger.debug("LLM context: regional warnings failed", exc_info=True)
 
         # Active Musikwolke sessions (v3.1.0)
         media_mgr = services.get("media_zone_manager")
@@ -506,7 +506,7 @@ def _get_user_context() -> str:
                         f"Musikwolke aktiv: {len(sessions)} Session(s)"
                     )
             except Exception:
-                pass
+                logger.debug("LLM context: musikwolke sessions failed", exc_info=True)
 
         # Waste collection context (v3.2.0)
         waste_svc = services.get("waste_service")
@@ -516,7 +516,7 @@ def _get_user_context() -> str:
                 if waste_ctx:
                     context_parts.append(waste_ctx)
             except Exception:
-                pass
+                logger.debug("LLM context: waste service failed", exc_info=True)
 
         # Birthday context (v3.2.0)
         birthday_svc = services.get("birthday_service")
@@ -526,7 +526,7 @@ def _get_user_context() -> str:
                 if bday_ctx:
                     context_parts.append(bday_ctx)
             except Exception:
-                pass
+                logger.debug("LLM context: birthday service failed", exc_info=True)
 
         # Entity tags context (v3.2.3)
         tag_registry = services.get("tag_registry")
@@ -536,7 +536,7 @@ def _get_user_context() -> str:
                 if tags_ctx:
                     context_parts.append(tags_ctx)
             except Exception:
-                pass
+                logger.debug("LLM context: tag registry failed", exc_info=True)
 
         # Presence context (v3.3.0)
         try:
@@ -545,7 +545,7 @@ def _get_user_context() -> str:
             if presence_ctx:
                 context_parts.append(presence_ctx)
         except Exception:
-            pass
+            logger.debug("LLM context: presence failed", exc_info=True)
 
         # Scene context (v3.4.0)
         try:
@@ -554,7 +554,7 @@ def _get_user_context() -> str:
             if scene_ctx:
                 context_parts.append(scene_ctx)
         except Exception:
-            pass
+            logger.debug("LLM context: scenes failed", exc_info=True)
 
         # HomeKit context (v3.4.0)
         try:
@@ -563,7 +563,7 @@ def _get_user_context() -> str:
             if homekit_ctx:
                 context_parts.append(homekit_ctx)
         except Exception:
-            pass
+            logger.debug("LLM context: homekit failed", exc_info=True)
 
         # Calendar context (v3.5.0)
         try:
@@ -572,7 +572,7 @@ def _get_user_context() -> str:
             if cal_ctx:
                 context_parts.append(cal_ctx)
         except Exception:
-            pass
+            logger.debug("LLM context: calendar failed", exc_info=True)
 
         # Shopping list context (v3.5.0)
         try:
@@ -581,7 +581,7 @@ def _get_user_context() -> str:
             if shop_ctx:
                 context_parts.append(shop_ctx)
         except Exception:
-            pass
+            logger.debug("LLM context: shopping failed", exc_info=True)
 
         # Reminders context (v3.5.0)
         try:
@@ -590,7 +590,7 @@ def _get_user_context() -> str:
             if rem_ctx:
                 context_parts.append(rem_ctx)
         except Exception:
-            pass
+            logger.debug("LLM context: reminders failed", exc_info=True)
 
     except Exception as exc:
         logger.debug("Could not load user context: %s", exc)
@@ -627,6 +627,94 @@ def _get_user_context() -> str:
                     )
     except Exception:
         logger.debug("RAG retrieval failed (non-critical)", exc_info=True)
+
+    # RAG: Hybrid Search (BM25 + Semantic + RRF) for knowledge retrieval (v3.6.0)
+    try:
+        _current_msg = getattr(_get_user_context, "_current_query", "")
+        _qclass = getattr(_get_user_context, "_query_classification", None)
+        # Skip local RAG for pure web queries (weather, news etc.)
+        _skip_local_rag = (
+            _qclass and _qclass.query_type.value == "web" and _qclass.confidence >= 0.7
+        )
+        # Add web search hint for web/hybrid queries
+        if _qclass and _qclass.use_web_search:
+            context_parts.append(
+                "Hinweis: Diese Frage koennte aktuelle Web-Informationen erfordern "
+                f"(Typ: {_qclass.query_type.value}, Schluesselwoerter: {', '.join(_qclass.web_keywords_found[:3])})"
+            )
+        if _current_msg and len(_current_msg) >= 3 and not _skip_local_rag:
+            from copilot_core.rag.bm25 import BM25SqliteIndex, BM25Hit
+            from copilot_core.rag.semantic_backend import rag_semantic_search
+            from copilot_core.rag.hybrid_search import (
+                RankedHit, reciprocal_rank_fusion,
+            )
+
+            # BM25 lexical search
+            bm25_hits: list = []
+            try:
+                _bm25 = BM25SqliteIndex()  # uses default /data/ path
+                bm25_hits = _bm25.search(
+                    namespace="ha_docs",
+                    query=_current_msg,
+                    top_k=5,
+                    include_text=True,
+                )
+            except Exception:
+                logger.debug("RAG BM25 search failed", exc_info=True)
+
+            # Semantic search
+            sem_hits: list = []
+            try:
+                sem_hits = rag_semantic_search(
+                    namespace="ha_docs",
+                    query=_current_msg,
+                    top_k=5,
+                )
+            except Exception:
+                logger.debug("RAG semantic search failed", exc_info=True)
+
+            # Fuse via RRF if we have results from either source
+            if bm25_hits or sem_hits:
+                lexical_ranked = [
+                    RankedHit(doc_id=h.doc_id, score=h.score, rank=h.rank)
+                    for h in bm25_hits
+                ]
+                semantic_ranked = [
+                    RankedHit(
+                        doc_id=h.get("id", ""),
+                        score=h.get("score", 0.0),
+                        rank=idx + 1,
+                    )
+                    for idx, h in enumerate(sem_hits)
+                ]
+                fused = reciprocal_rank_fusion(
+                    lexical_hits=lexical_ranked,
+                    semantic_hits=semantic_ranked,
+                    top_k=5,
+                )
+
+                if fused:
+                    # Build snippet lookup from both sources
+                    snippets: dict = {}
+                    for h in bm25_hits:
+                        if h.text:
+                            snippets[h.doc_id] = h.text[:200]
+                    for h in sem_hits:
+                        did = h.get("id", "")
+                        if did and did not in snippets:
+                            snippets[did] = h.get("text", "")[:200]
+
+                    rag_lines = []
+                    for fh in fused:
+                        snippet = snippets.get(fh.doc_id, "")
+                        if snippet:
+                            rag_lines.append(f"[{fh.doc_id}] {snippet}")
+                    if rag_lines:
+                        context_parts.append(
+                            "Relevantes Wissen (RAG):\n  " + "\n  ".join(rag_lines)
+                        )
+    except Exception:
+        logger.debug("RAG hybrid search failed (non-critical)", exc_info=True)
 
     if not context_parts:
         return ""
@@ -736,6 +824,7 @@ def _handle_chat_completions():
         temperature = data.get('temperature')
         max_tokens = data.get('max_tokens') or data.get('max_completion_tokens')
         tools = data.get('tools')  # Client-specified tools (e.g. from extended_openai_conversation)
+        conversation_id = data.get('conversation_id', '')
 
         # Extract last user message for logging
         user_message = ""
@@ -750,7 +839,7 @@ def _handle_chat_completions():
         logger.info("Chat request: %s...", user_message[:80] if user_message else "(system-only)")
 
         # Store user message in conversation memory (lifelong learning)
-        _store_in_memory(user_message, role="user")
+        _store_in_memory(user_message, role="user", conversation_id=conversation_id)
 
         response = _process_conversation(messages, model_override=model_override,
                                          temperature=temperature, max_tokens=max_tokens,
@@ -761,7 +850,8 @@ def _handle_chat_completions():
         if choice.get("finish_reason") != "tool_calls":
             assistant_content = choice.get("message", {}).get("content", "")
             if assistant_content:
-                _store_in_memory(assistant_content, role="assistant")
+                _store_in_memory(assistant_content, role="assistant",
+                                 conversation_id=conversation_id)
 
         # If tool_calls response, return directly (no streaming)
         if choice.get("finish_reason") == "tool_calls":
@@ -1076,9 +1166,7 @@ def memory_stats():
         if vector_store:
             import asyncio
             try:
-                loop = asyncio.new_event_loop()
-                vs_stats = loop.run_until_complete(vector_store.stats())
-                loop.close()
+                vs_stats = asyncio.run(vector_store.stats())
                 result["vector_store"] = vs_stats
                 result["rag_active"] = True
             except Exception:
@@ -1113,7 +1201,7 @@ def memory_preferences():
         return jsonify({"error": str(exc)}), 500
 
 
-def _store_in_memory(content: str, role: str = "user"):
+def _store_in_memory(content: str, role: str = "user", conversation_id: str = ""):
     """Store a message in conversation memory + vector store (fire-and-forget)."""
     try:
         from flask import current_app
@@ -1121,7 +1209,10 @@ def _store_in_memory(content: str, role: str = "user"):
         conv_memory = services.get("conversation_memory")
         if conv_memory and content:
             character = os.environ.get("CONVERSATION_CHARACTER", DEFAULT_CHARACTER)
-            msg_id = conv_memory.store_message(role=role, content=content, character=character)
+            msg_id = conv_memory.store_message(
+                role=role, content=content, character=character,
+                conversation_id=conversation_id or None,
+            )
 
             # RAG: also embed the message in VectorStore for semantic retrieval
             vector_store = services.get("vector_store")
@@ -1179,6 +1270,20 @@ def _process_conversation(messages: list, model_override: str = None,
             last_user_msg = msg.get("content", "")
             break
     _get_user_context._current_query = last_user_msg
+
+    # Query Router: classify query for search strategy (v3.6.0)
+    try:
+        from copilot_core.rag.query_router import classify_query
+        qclass = classify_query(last_user_msg) if last_user_msg else None
+        _get_user_context._query_classification = qclass
+        if qclass:
+            logger.debug(
+                "Query classified: type=%s confidence=%.2f web=%s",
+                qclass.query_type.value, qclass.confidence, qclass.use_web_search,
+            )
+    except Exception:
+        _get_user_context._query_classification = None
+        logger.debug("Query router failed (non-critical)", exc_info=True)
 
     # Build system prompt with user context injection
     system_prompt = character["system_prompt"]

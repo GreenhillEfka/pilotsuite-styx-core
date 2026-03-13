@@ -169,6 +169,7 @@ def _get_llm_provider_instance():
         from copilot_core.llm_provider import LLMProvider
         provider = LLMProvider()
     except Exception:
+        _LOGGER.debug("Failed to get LLM provider", exc_info=True)
         return None
     return provider
 

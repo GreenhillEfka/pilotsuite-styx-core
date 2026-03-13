@@ -19,6 +19,22 @@ from typing import Any, Dict
 
 from flask import Blueprint, Response, jsonify, request
 
+
+def _run_async(coro, timeout: int = 10):
+    """Run async coroutine from sync Flask context."""
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+
+    if loop and loop.is_running():
+        import concurrent.futures
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            future = pool.submit(asyncio.run, asyncio.wait_for(coro, timeout=timeout))
+            return future.result(timeout=timeout + 2)
+
+    return asyncio.run(asyncio.wait_for(coro, timeout=timeout))
+
 from copilot_core.monitoring.metrics import get_prometheus_metrics, get_metrics_collector
 from copilot_core.monitoring.health import get_health_checker
 
@@ -79,25 +95,9 @@ def health_check():
         checker = get_health_checker()
         
         if full_check:
-            # Run async health check
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                health = loop.run_until_complete(
-                    asyncio.wait_for(checker.full_health_check(), timeout=timeout)
-                )
-            finally:
-                loop.close()
+            health = _run_async(checker.full_health_check(), timeout=timeout)
         else:
-            # Quick health check
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                health = loop.run_until_complete(
-                    asyncio.wait_for(checker.get_quick_health(), timeout=timeout)
-                )
-            finally:
-                loop.close()
+            health = _run_async(checker.get_quick_health(), timeout=timeout)
         
         status_code = 200
         if health.get("status") == "unhealthy":
@@ -137,15 +137,7 @@ def readiness_probe():
     """
     try:
         checker = get_health_checker()
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        try:
-            # Quick check of critical dependencies only
-            health = loop.run_until_complete(
-                asyncio.wait_for(checker.get_dependency_health(), timeout=5)
-            )
-        finally:
-            loop.close()
+        health = _run_async(checker.get_dependency_health(), timeout=5)
         
         if health.get("status") == "healthy":
             return jsonify({
