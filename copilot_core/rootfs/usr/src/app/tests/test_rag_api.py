@@ -8,6 +8,7 @@ import pytest
 import tempfile
 from typing import Any, Dict, List
 
+fastapi = pytest.importorskip("fastapi", reason="fastapi not installed")
 from fastapi.testclient import TestClient
 
 from copilot_core.rag.bm25 import (

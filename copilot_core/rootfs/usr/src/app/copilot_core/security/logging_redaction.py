@@ -36,9 +36,9 @@ _SENSITIVE_KEYWORDS = (
 
 # Regex for common textual auth/token artifacts.
 _AUTH_TEXT_PATTERNS = (
-    re.compile(r"(?i)(authorization\s*[:=]\s*)(?:Bearer\s+)?([\w-_.~+/]+=*)"),
-    re.compile(r"(?i)(x[-_]?api[-_]?key\s*[:=]\s*)([\w-_.~+/]+=*)"),
-    re.compile(r"(?i)(x[-_]?auth[-_]?token\s*[:=]\s*)([\w-_.~+/]+=*)"),
+    re.compile(r"(?i)(authorization\s*[:=]\s*)(?:Bearer\s+)?([\w_.~+/=-]+=*)"),
+    re.compile(r"(?i)(x[-_]?api[-_]?key\s*[:=]\s*)([\w_.~+/=-]+=*)"),
+    re.compile(r"(?i)(x[-_]?auth[-_]?token\s*[:=]\s*)([\w_.~+/=-]+=*)"),
 )
 
 

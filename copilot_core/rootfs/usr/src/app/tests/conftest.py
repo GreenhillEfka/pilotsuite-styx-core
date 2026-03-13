@@ -34,6 +34,17 @@ def reset_all_before_test():
 
 
 @pytest.fixture(autouse=True)
+def disable_auth_for_tests(monkeypatch):
+    """Disable authentication in test environment.
+
+    Tests run without /data/options.json, so auth_required defaults to True
+    and get_auth_token returns empty — causing all requests to get 401.
+    Setting COPILOT_AUTH_REQUIRED=false allows tests to run without auth.
+    """
+    monkeypatch.setenv("COPILOT_AUTH_REQUIRED", "false")
+
+
+@pytest.fixture(autouse=True)
 def reset_auth_token_cache():
     """Reset the auth token cache before each test.
 
