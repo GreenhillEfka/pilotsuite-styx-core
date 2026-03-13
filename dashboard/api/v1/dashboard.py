@@ -141,7 +141,7 @@ def get_dashboard_config():
     Enthält alle Habituszonen mit Metadaten
     """
     config = {
-        'version': '13.0.3',
+        'version': '13.9.0',
         'zones': DEFAULT_ZONES_CONFIG,
         'theme_support': ['light', 'dark'],
         'features': {

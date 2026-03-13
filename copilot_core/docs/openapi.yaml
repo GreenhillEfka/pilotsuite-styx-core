@@ -23,7 +23,7 @@ info:
     \  \"status\": \"error\",\n  \"error\": {\n    \"code\": \"ERROR_CODE\",\n   \
     \ \"message\": \"Human-readable error message\",\n    \"details\": { ... }\n \
     \ }\n}\n```\n"
-  version: 13.5.0
+  version: 13.9.0
   contact:
     name: PilotSuite
     url: https://github.com/GreenhillEfka/pilotsuite-styx-core
