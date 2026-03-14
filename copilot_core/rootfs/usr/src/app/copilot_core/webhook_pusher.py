@@ -35,6 +35,7 @@ EVENT_TYPE_STATUS = "status"
 EVENT_TYPE_MOOD = "mood"
 EVENT_TYPE_NEURON = "neuron"
 EVENT_TYPE_SUGGESTION = "suggestion"
+EVENT_TYPE_ANOMALY = "anomaly"
 
 
 class WebhookPusher:
@@ -221,6 +222,30 @@ class WebhookPusher:
             modules: Dict mit Modul-Summaries {licht: {...}, heiz: {...}, ...}
         """
         self._send_envelope("module_data", {"modules": modules})
+
+    def push_anomaly_detected(self, anomaly_data: Dict[str, Any]) -> bool:
+        """Sendet ein anomaly-Ereignis an die HACS-Integration.
+
+        Args:
+            anomaly_data: Anomaly detection result with entity_id, severity, score, etc.
+
+        Returns:
+            True if the envelope was accepted, False if validation failed.
+        """
+        required = ("entity_id", "anomaly_type", "severity")
+        if not all(k in anomaly_data for k in required):
+            _LOGGER.warning(
+                "Anomaly push skipped: missing required fields %s",
+                [k for k in required if k not in anomaly_data],
+            )
+            return False
+        # Trim description if oversized (keep well below payload limit)
+        for desc_key in ("description", "description_de", "description_en"):
+            desc = anomaly_data.get(desc_key, "")
+            if isinstance(desc, str) and len(desc) > 500:
+                anomaly_data[desc_key] = desc[:497] + "..."
+        self._send_envelope(EVENT_TYPE_ANOMALY, anomaly_data)
+        return True
 
     def push_zone_update(self, zone_id: str, zone_data: Dict[str, Any]) -> None:
         """Sendet ein zone_update-Ereignis fuer eine einzelne Zone.

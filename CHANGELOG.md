@@ -2,6 +2,51 @@
 
 Alle wesentlichen Aenderungen am PilotSuite Styx Core werden in dieser Datei dokumentiert.
 
+## [v14.2.0] - 2026-03-14
+
+### Autonomie-Execution + Sammelentitaeten + Zone Health
+
+#### Neue Module
+- **AutonomyExecutor**: Mood-getriebene Auto-Execution — Bus-Event → Governance-Check → HA-Service-Call → RAG-Log
+- **MoodActionMapper**: Stimmung-zu-Aktion-Tabellen (Licht-Szenen, Musik-Favoriten, Wetter-Overlay)
+- **HABridge**: Direkte HA Service Calls aus Core (light.turn_on, scene.turn_on etc.)
+- **BehavioralLog**: RAG-indexierte Autonomie-Aktionshistorie (BM25, 30 Tage Retention)
+- **DeviceClassAggregator**: Geraeteklassen-basierte Entitaets-Aggregation (11 Kategorien)
+- **ZoneHealthChecker**: Per-Zone Gesundheitsmonitoring (Score 0-100, Entity-Verfuegbarkeit, Staleness)
+
+#### Neue APIs
+- `POST /api/v1/autonomy/zones/<zone_id>/module` — Per-Zone Modul-State setzen
+- `GET /api/v1/autonomy/dashboard` — Autonomie-Dashboard (Stats, Zone-Modi)
+- `GET /api/v1/autonomy/mood-actions` — Mood-Action-Mapping-Tabelle
+- `GET /api/v1/zone/aggregates/<zone_id>` — Sammelentitaeten per Zone
+- `POST /api/v1/zone/aggregates/<zone_id>/scene/capture` — Zone-Szene erfassen
+- `POST /api/v1/zone/aggregates/<zone_id>/scene/apply` — Zone-Szene anwenden
+- `GET /api/v1/zone/health` — Zonen-Gesundheitsuebersicht
+- `GET /api/v1/zone/health/<zone_id>` — Detaillierte Zone-Gesundheit
+
+#### Erweiterungen
+- **ModuleRegistry**: Per-Zone Modul-States (zone_module_states SQLite-Tabelle, Fallback auf globalen State)
+- **IntegrationBus**: 18 Event-Typen (neu: state.changed, device.metric, anomaly.detected)
+- **Double-Safety Governance**: Zone automation_mode + Source/Target Modul-State + Rate-Limiting (30s)
+- **Zone Scene Persistence**: SQLite-basiert mit WAL-Modus (statt In-Memory Cache)
+- **10 Zone-Presets**: Morgen, Tag, Abend, Nacht, Film, Party, Konzentration, Abwesend, Romantisch, Gaeste
+- **NeuronManager**: get_last_result() fuer Weather-Context Integration
+
+#### Bugfixes
+- AutonomyExecutor Bus-Wiring: Executor wurde nach Bus-Subscription erstellt → Dead Wiring
+- AggregateEntity.attributes nie befuellt → Summarize-Funktionen bekamen leere Dicts
+- zone_health zone_id_norm war No-Op → Zone-IDs nicht normalisiert
+- SQLite Connections ohne try/finally → Resource-Leaks bei Fehlern
+- BehavioralLog _time_of_day nutzte UTC statt Europe/Berlin
+- Health-Score Double-Deduction fuer fehlende Rollen
+- @require_token fehlte auf Autonomie-API-Endpoints
+
+#### Tests
+- 4293 Tests bestanden, 0 fehlgeschlagen, 118 uebersprungen
+- 67 neue Tests (9 neue Testdateien)
+
+---
+
 ## [v13.10.0] - 2026-03-13
 
 ### Quality Release — Alle Tests gruen, Code-Bugs behoben

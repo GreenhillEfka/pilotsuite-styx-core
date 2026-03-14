@@ -10,12 +10,14 @@ Advanced anomaly detection with:
 
 from __future__ import annotations
 
+import json
 import logging
 import math
 import statistics
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -120,11 +122,13 @@ _FREQUENCY_CHANGE_THRESHOLD = 0.5  # 50% change in reporting frequency
 class AnomalyDetectionEngine:
     """Multi-dimensional anomaly detection engine."""
 
-    def __init__(self, max_history: int = 2016) -> None:
+    def __init__(self, max_history: int = 2016,
+                 persistence_dir: str | Path | None = None) -> None:
         """Initialize engine.
 
         Args:
             max_history: Maximum data points per entity (default 2016 = 12 weeks hourly).
+            persistence_dir: Directory for anomaly history persistence (optional).
         """
         self._max_history = max_history
         self._history: dict[str, list[DataPoint]] = defaultdict(list)
@@ -132,6 +136,12 @@ class AnomalyDetectionEngine:
         self._anomalies: list[Anomaly] = []
         self._correlations: dict[str, CorrelationPair] = {}
         self._anomaly_counter = 0
+        self._persistence_path: Path | None = None
+        if persistence_dir:
+            p = Path(persistence_dir)
+            p.mkdir(parents=True, exist_ok=True)
+            self._persistence_path = p / "anomaly_history.jsonl"
+            self._load_persisted_anomalies()
 
     # ── Data ingestion ──────────────────────────────────────────────────
 
@@ -263,14 +273,17 @@ class AnomalyDetectionEngine:
         entities = [entity_id] if entity_id else list(self._history.keys())
         new_anomalies: list[Anomaly] = []
 
+        # Batch-learn all missing profiles at once (instead of per-entity)
+        missing = [eid for eid in entities
+                   if eid not in self._profiles
+                   and len(self._history.get(eid, [])) >= _MIN_POINTS_BASIC]
+        if missing:
+            self.learn_patterns()  # learn all entities in one pass
+
         for eid in entities:
             history = self._history.get(eid, [])
             if len(history) < _MIN_POINTS_BASIC:
                 continue
-
-            # Ensure profile is up to date
-            if eid not in self._profiles:
-                self.learn_patterns(eid)
 
             profile = self._profiles.get(eid)
             if not profile:
@@ -291,6 +304,9 @@ class AnomalyDetectionEngine:
         # Keep only recent anomalies (last 500)
         if len(self._anomalies) > 500:
             self._anomalies = self._anomalies[-500:]
+
+        # Persist new anomalies to disk
+        self._persist_anomalies(new_anomalies)
 
         return new_anomalies
 
@@ -655,6 +671,72 @@ class AnomalyDetectionEngine:
             count = len(self._anomalies)
             self._anomalies.clear()
             return count
+
+    # ── Persistence ──────────────────────────────────────────────────────
+
+    def _persist_anomalies(self, new_anomalies: list[Anomaly]) -> None:
+        """Append new anomalies to the JSONL persistence file."""
+        if not self._persistence_path or not new_anomalies:
+            return
+        try:
+            with open(self._persistence_path, "a", encoding="utf-8") as f:
+                for a in new_anomalies:
+                    record = {
+                        "anomaly_id": a.anomaly_id,
+                        "entity_id": a.entity_id,
+                        "anomaly_type": a.anomaly_type,
+                        "severity": a.severity,
+                        "score": a.score,
+                        "detected_at": a.detected_at.isoformat(),
+                        "value": a.value,
+                        "expected_value": a.expected_value,
+                        "deviation_pct": a.deviation_pct,
+                        "description_de": a.description_de,
+                    }
+                    f.write(json.dumps(record, default=str) + "\n")
+        except Exception:
+            logger.debug("Failed to persist anomalies", exc_info=True)
+
+    def _load_persisted_anomalies(self) -> None:
+        """Load anomaly history from JSONL file on startup."""
+        if not self._persistence_path or not self._persistence_path.exists():
+            return
+        try:
+            loaded = 0
+            with open(self._persistence_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    if not line.strip():
+                        continue
+                    r = json.loads(line)
+                    a = Anomaly(
+                        anomaly_id=r["anomaly_id"],
+                        entity_id=r["entity_id"],
+                        anomaly_type=r["anomaly_type"],
+                        severity=r["severity"],
+                        score=r["score"],
+                        detected_at=datetime.fromisoformat(r["detected_at"]),
+                        value=r["value"],
+                        expected_value=r["expected_value"],
+                        deviation_pct=r["deviation_pct"],
+                        description_de=r.get("description_de", ""),
+                        description_en="",
+                    )
+                    self._anomalies.append(a)
+                    loaded += 1
+            # Keep bounded
+            if len(self._anomalies) > 500:
+                self._anomalies = self._anomalies[-500:]
+            # Update counter to avoid ID collisions
+            if self._anomalies:
+                max_id = max(
+                    int(a.anomaly_id.split("_")[1])
+                    for a in self._anomalies
+                    if "_" in a.anomaly_id and a.anomaly_id.split("_")[1].isdigit()
+                )
+                self._anomaly_counter = max_id
+            logger.info("Loaded %d persisted anomalies", loaded)
+        except Exception:
+            logger.warning("Failed to load persisted anomalies", exc_info=True)
 
     # ── Helpers ─────────────────────────────────────────────────────────
 

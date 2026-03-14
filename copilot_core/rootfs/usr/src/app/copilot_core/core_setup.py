@@ -15,6 +15,7 @@ Features:
 import importlib
 import logging
 import os
+import threading
 import time
 from typing import Dict, Any, Optional
 from flask import Flask
@@ -53,11 +54,19 @@ def _wire_bus_events(services: dict) -> None:
     if not bus:
         return
 
-    # 1) Anomaly Detection ← state.changed
+    # 1) Anomaly Detection ← state.changed (with periodic detect + bus publish)
     hub_anomaly = services.get("hub_anomaly")
     if hub_anomaly and hasattr(hub_anomaly, "ingest"):
         try:
-            def _anomaly_from_event(event, _svc=hub_anomaly):
+            _anomaly_lock = threading.Lock()
+            _anomaly_ingest_count = [0]
+            _ANOMALY_DETECT_EVERY = 20   # run detect() every N ingestions
+            # Deduplication: track recently published (entity_id, anomaly_type) to
+            # avoid flooding the bus with the same anomaly every detect() cycle.
+            _anomaly_recent: dict[str, float] = {}  # key → timestamp
+            _ANOMALY_DEDUP_WINDOW = 600  # suppress duplicates for 10 minutes
+
+            def _anomaly_from_event(event, _svc=hub_anomaly, _bus=bus):
                 data = event.data if hasattr(event, "data") else {}
                 entity_id = data.get("entity_id", "")
                 value = data.get("value")
@@ -65,10 +74,51 @@ def _wire_bus_events(services: dict) -> None:
                     try:
                         _svc.ingest(entity_id, float(value))
                     except (ValueError, TypeError):
-                        pass
+                        return
+
+                    should_detect = False
+                    with _anomaly_lock:
+                        _anomaly_ingest_count[0] += 1
+                        if _anomaly_ingest_count[0] >= _ANOMALY_DETECT_EVERY:
+                            _anomaly_ingest_count[0] = 0
+                            should_detect = True
+
+                    if should_detect:
+                        try:
+                            _svc.learn_patterns()
+                            new_anomalies = _svc.detect()
+                            now = time.time()
+                            for anomaly in new_anomalies:
+                                # Deduplicate: skip if same entity+type was published recently
+                                dedup_key = f"{anomaly.entity_id}|{anomaly.anomaly_type}"
+                                with _anomaly_lock:
+                                    last_pub = _anomaly_recent.get(dedup_key, 0)
+                                    if now - last_pub < _ANOMALY_DEDUP_WINDOW:
+                                        continue
+                                    _anomaly_recent[dedup_key] = now
+                                    # Evict stale entries (keep dict bounded)
+                                    if len(_anomaly_recent) > 200:
+                                        cutoff = now - _ANOMALY_DEDUP_WINDOW
+                                        _anomaly_recent.clear()
+                                        # No need to rebuild — next cycle will repopulate
+
+                                _bus.publish("anomaly.detected", {
+                                    "anomaly_id": anomaly.anomaly_id,
+                                    "entity_id": anomaly.entity_id,
+                                    "anomaly_type": anomaly.anomaly_type,
+                                    "severity": anomaly.severity,
+                                    "score": anomaly.score,
+                                    "detected_at": anomaly.detected_at.isoformat(),
+                                    "value": anomaly.value,
+                                    "expected_value": anomaly.expected_value,
+                                    "deviation_pct": anomaly.deviation_pct,
+                                    "description": anomaly.description_de,
+                                })
+                        except Exception:
+                            _LOGGER.debug("AnomalyDetection detect cycle failed", exc_info=True)
 
             bus.subscribe("state.changed", _anomaly_from_event)
-            _LOGGER.info("AnomalyDetection wired to state.changed events")
+            _LOGGER.info("AnomalyDetection wired to state.changed events (detect every %d ingestions)", _ANOMALY_DETECT_EVERY)
         except Exception:
             _LOGGER.exception("Failed to wire AnomalyDetection")
 
@@ -143,6 +193,157 @@ def _wire_bus_events(services: dict) -> None:
             _LOGGER.info("NotificationIntelligence wired to anomaly.detected events")
         except Exception:
             _LOGGER.exception("Failed to wire NotificationIntelligence")
+
+    # 5) Anomaly Detection → Webhook Push to HA
+    pusher = services.get("webhook_pusher")
+    if pusher and hub_anomaly:
+        try:
+            def _push_anomaly_to_ha(event, _pusher=pusher):
+                data = event.data if hasattr(event, "data") else {}
+                severity = data.get("severity", "info")
+                if severity in ("warning", "critical"):
+                    try:
+                        _pusher.push_anomaly_detected(data)
+                    except Exception:
+                        _LOGGER.debug("Webhook push for anomaly failed", exc_info=True)
+
+            bus.subscribe("anomaly.detected", _push_anomaly_to_ha)
+            _LOGGER.info("WebhookPusher wired to anomaly.detected events")
+        except Exception:
+            _LOGGER.exception("Failed to wire anomaly → webhook push")
+
+    # 6) Anomaly Detection → Proactive Engine (suggestions context)
+    #    Only forward warning/critical — info-level anomalies are too noisy
+    #    for user-facing suggestions.
+    proactive = services.get("proactive_engine")
+    if proactive and hasattr(proactive, "add_context"):
+        try:
+            def _anomaly_to_proactive(event, _svc=proactive):
+                data = event.data if hasattr(event, "data") else {}
+                severity = data.get("severity", "info")
+                if severity not in ("warning", "critical"):
+                    return
+                try:
+                    _svc.add_context("anomaly", {
+                        "entity_id": data.get("entity_id"),
+                        "severity": severity,
+                        "type": data.get("anomaly_type"),
+                        "score": data.get("score", 0),
+                        "description": data.get("description", ""),
+                    })
+                except Exception:
+                    _LOGGER.debug("ProactiveEngine add_context failed", exc_info=True)
+
+            bus.subscribe("anomaly.detected", _anomaly_to_proactive)
+            _LOGGER.info("ProactiveEngine wired to anomaly.detected events (warning/critical only)")
+        except Exception:
+            _LOGGER.exception("Failed to wire anomaly → proactive engine")
+
+    # 7) Pattern Discovery → RAG Embedding
+    # NOTE: Removed bus-based embedding here to avoid double-embedding.
+    # HabitusMinerService._embed_rules_in_rag() handles embedding directly
+    # after mining (with richer context like dt_sec).  It only embeds when
+    # the embedding engine uses Ollama (semantic); hash-only is skipped.
+
+    # 8) AutonomyExecutor ← mood.changed + presence.changed
+    executor = services.get("autonomy_executor")
+    if executor:
+        try:
+            bus.subscribe("mood.changed", executor.on_mood_changed)
+            bus.subscribe("presence.changed", executor.on_presence_changed)
+            _LOGGER.info("AutonomyExecutor wired to mood.changed + presence.changed")
+        except Exception:
+            _LOGGER.exception("Failed to wire AutonomyExecutor bus events")
+
+
+def _wire_habitus_auto_mining(services: dict) -> None:
+    """Hook into the event ingest pipeline to auto-trigger habitus mining.
+
+    Buffers incoming HA events and triggers mining every
+    ``_HABITUS_MINE_EVERY`` events.  This closes the gap where habitus
+    mining was previously only available via manual API call.
+    """
+    _HABITUS_MINE_EVERY = 500  # mine after N ingested events
+    _habitus_buffer: list[dict] = []
+    _habitus_lock = threading.Lock()
+
+    try:
+        from copilot_core.api.v1.events_ingest import set_post_ingest_callback
+        from copilot_core.habitus_miner.service import HabitusMinerService
+        from pathlib import Path
+
+        # Resolve storage dir (same as lazy-init in api/v1/habitus.py)
+        data_dir = services.get("config", {}).get("data_dir", "/data")
+        storage_dir = Path(data_dir) / "habitus_miner"
+
+        _miner_ref: list = [None]  # lazy-init holder
+
+        def _get_or_create_miner() -> HabitusMinerService:
+            if _miner_ref[0] is None:
+                _miner_ref[0] = HabitusMinerService(
+                    storage_dir=storage_dir,
+                    vector_store=services.get("vector_store"),
+                    embedding_engine=services.get("embedding_engine"),
+                    integration_bus=services.get("integration_bus"),
+                )
+            return _miner_ref[0]
+
+        def _on_events_ingested(accepted_events: list) -> None:
+            """Post-ingest callback — buffer events for periodic mining."""
+            if not accepted_events:
+                return
+            # Convert accepted events to HA-like format for the miner
+            ha_events = []
+            for evt in accepted_events:
+                # accepted_events are normalized dicts from EventStore
+                if not isinstance(evt, dict):
+                    continue
+                entity_id = evt.get("entity_id", "")
+                attrs = evt.get("attributes", {})
+                old_state = attrs.get("old_state", "")
+                new_state = attrs.get("new_state", "")
+                if not entity_id or not new_state:
+                    continue
+                ha_events.append({
+                    "event_type": "state_changed",
+                    "time_fired": evt.get("timestamp", ""),
+                    "data": {
+                        "entity_id": entity_id,
+                        "old_state": {"state": old_state} if old_state else None,
+                        "new_state": {"state": new_state},
+                    },
+                })
+
+            if not ha_events:
+                return
+
+            should_mine = False
+            with _habitus_lock:
+                _habitus_buffer.extend(ha_events)
+                if len(_habitus_buffer) >= _HABITUS_MINE_EVERY:
+                    should_mine = True
+
+            if should_mine:
+                with _habitus_lock:
+                    batch = list(_habitus_buffer)
+                    _habitus_buffer.clear()
+                try:
+                    miner = _get_or_create_miner()
+                    rules = miner.mine_from_ha_events(batch)
+                    _LOGGER.info(
+                        "Auto-mining completed: %d events → %d rules",
+                        len(batch), len(rules),
+                    )
+                except Exception:
+                    _LOGGER.debug("Auto-mining failed", exc_info=True)
+
+        set_post_ingest_callback(_on_events_ingested)
+        _LOGGER.info(
+            "Habitus auto-mining wired to event ingest (every %d events)",
+            _HABITUS_MINE_EVERY,
+        )
+    except Exception:
+        _LOGGER.exception("Failed to wire habitus auto-mining")
 
 
 def _safe_int(value, default: int, minimum: int = 1, maximum: int = 100000) -> int:
@@ -746,7 +947,7 @@ async def init_services(hass=None, config: dict = None):
         ("hub_plugin_manager",  "copilot_core.hub.plugin_manager",           "PluginManager"),
         ("hub_multi_home",      "copilot_core.hub.multi_home",               "MultiHomeManager"),
         ("hub_maintenance",     "copilot_core.hub.predictive_maintenance",   "PredictiveMaintenanceEngine"),
-        ("hub_anomaly",         "copilot_core.hub.anomaly_detection",        "AnomalyDetector"),
+        ("hub_anomaly",         "copilot_core.hub.anomaly_detection",        "AnomalyDetectionEngine"),
         ("hub_zones",           "copilot_core.hub.habitus_zones",            "HabitusZoneEngine"),
         ("hub_light",           "copilot_core.hub.light_intelligence",       "LightIntelligenceEngine"),
         ("hub_modes",           "copilot_core.hub.zone_modes",               "ZoneModeEngine"),
@@ -832,8 +1033,36 @@ async def init_services(hass=None, config: dict = None):
     except Exception:
         _LOGGER.exception("Failed to wire WebhookPusher module_data push")
 
+    # Initialize AutonomyExecutor early (before bus wiring, v14.2.0 fix)
+    try:
+        from copilot_core.autonomy.executor import AutonomyExecutor
+        from copilot_core.autonomy.ha_bridge import HABridge
+        from copilot_core.autonomy.behavioral_log import BehavioralLog
+
+        ha_bridge = HABridge()
+        behavioral_log = BehavioralLog()
+
+        autonomy_executor = AutonomyExecutor(
+            zone_automation=services.get("zone_automation"),
+            module_registry=services.get("module_registry"),
+            ha_bridge=ha_bridge,
+            behavioral_log=behavioral_log,
+            light_intelligence=services.get("hub_light"),
+            musikwolke_bridge=services.get("musikwolke_bridge"),
+            neuron_manager=services.get("neuron_manager"),
+            bus=services.get("integration_bus"),
+        )
+        services["autonomy_executor"] = autonomy_executor
+        services["behavioral_log"] = behavioral_log
+        _LOGGER.info("AutonomyExecutor initialized (pre-bus-wiring)")
+    except Exception:
+        _LOGGER.exception("Failed to init AutonomyExecutor (pre-bus-wiring)")
+
     # Wire services to IntegrationBus events
     _wire_bus_events(services)
+
+    # Wire habitus auto-mining to event ingest pipeline
+    _wire_habitus_auto_mining(services)
 
     # Calculate startup time
     services["startup_time_ms"] = (time.perf_counter() - start_time) * 1000
@@ -1004,6 +1233,25 @@ def register_blueprints(app: Flask, services: dict) -> None:
     init_musikwolke_api(services.get("musikwolke_bridge"))
     app.register_blueprint(musikwolke_bp)
 
+    # Re-wire AutonomyExecutor with late-bound services (zone_automation, musikwolke_bridge)
+    try:
+        executor = services.get("autonomy_executor")
+        if executor is not None:
+            executor._zone_automation = services.get("zone_automation")
+            executor._musikwolke_bridge = services.get("musikwolke_bridge")
+            executor._light_intelligence = services.get("hub_light")
+            _LOGGER.info("AutonomyExecutor re-wired with late-bound services")
+    except Exception:
+        _LOGGER.exception("Failed to re-wire AutonomyExecutor")
+
+    # Register Autonomy API (zone-aware auto-execution dashboard)
+    try:
+        from copilot_core.api.v1.autonomy import autonomy_bp, init_autonomy_api
+        init_autonomy_api(services.get("autonomy_executor"), services.get("module_registry"))
+        app.register_blueprint(autonomy_bp)
+    except Exception:
+        _LOGGER.exception("Failed to register autonomy_bp")
+
     # Initialize Wecker (Smart Alarm) service
     try:
         from copilot_core.hub.wecker import WeckerService
@@ -1019,6 +1267,34 @@ def register_blueprints(app: Flask, services: dict) -> None:
     from copilot_core.api.v1.wecker import bp as wecker_bp, init_wecker_bp
     init_wecker_bp(services.get("wecker"))
     app.register_blueprint(wecker_bp)
+
+    # Register Zone Aggregates API (device-class-aware Sammelentitaeten + Zone Scenes)
+    try:
+        from copilot_core.homeassistant.device_class_aggregator import ZoneAggregator
+        from copilot_core.api.v1.zone_aggregates import zone_aggregates_bp, init_zone_aggregates_api
+        zone_aggregator = ZoneAggregator()
+        services["zone_aggregator"] = zone_aggregator
+        init_zone_aggregates_api(
+            aggregator=zone_aggregator,
+            zone_automation=services.get("zone_automation"),
+            bus=services.get("integration_bus"),
+        )
+        app.register_blueprint(zone_aggregates_bp)
+        _LOGGER.info("Zone Aggregates API registered")
+    except Exception:
+        _LOGGER.exception("Failed to register zone_aggregates_bp")
+
+    # Register Zone Health API (per-zone health monitoring)
+    try:
+        from copilot_core.api.v1.zone_health import zone_health_bp, init_zone_health_api
+        init_zone_health_api(
+            zone_automation=services.get("zone_automation"),
+            module_registry=services.get("module_registry"),
+        )
+        app.register_blueprint(zone_health_bp)
+        _LOGGER.info("Zone Health API registered")
+    except Exception:
+        _LOGGER.exception("Failed to register zone_health_bp")
 
     # Register Zone Dashboard API (zonenzentriertes Dashboard mit voller Modulintegration)
     from copilot_core.api.v1.zone_dashboard import zone_dashboard_bp, init_zone_dashboard_api
