@@ -764,10 +764,11 @@
 
 <script>
 const BASE = location.origin;
-// Token: URL param > localStorage > empty
+// Token: server-injected > URL param > localStorage > empty
+const _serverToken = "{{ auth_token|default('', true) }}";
 const _urlToken = new URLSearchParams(location.search).get("token") || "";
-let TOKEN = _urlToken || localStorage.getItem("styx_auth_token") || "";
-if (_urlToken) localStorage.setItem("styx_auth_token", _urlToken);
+let TOKEN = _serverToken || _urlToken || localStorage.getItem("styx_auth_token") || "";
+if (TOKEN) localStorage.setItem("styx_auth_token", TOKEN);
 let HEADERS = TOKEN ? {"X-Auth-Token": TOKEN} : {};
 
 function setAuthToken(token) {

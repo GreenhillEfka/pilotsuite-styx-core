@@ -113,12 +113,15 @@ register_blueprints(app, services)          # Blueprints auf Flask-App
 
 **Error Boundary:** Jeder Service ist in try/except gewrappt. Fehlgeschlagene Services werden `None` gesetzt — Blueprint-Code muss damit umgehen.
 
-### Blueprint-Registration
+### Blueprint-Registration (WICHTIG — Fehlerquelle!)
 
-- **Nested** (`api/v1/blueprint.py`): Relative Prefixes unter `/api/v1` (22 Blueprints)
-- **Standalone** (`core_setup.register_blueprints()`): Absolute Prefixes direkt auf App (40+ via data-driven `_SIMPLE_BLUEPRINTS` Loop + individuell)
+- **Nested** (`api/v1/blueprint.py`): 27 Sub-Blueprints mit relativen Prefixes unter `api_v1` (/api/v1)
+- **Standalone** (`core_setup.register_blueprints()`): 40+ Blueprints via data-driven `_BLUEPRINTS`/`_EXTRA_BLUEPRINTS` Listen + individuelle Registrierungen
 - `conversation_bp` existiert an `/api/v1/chat/*` UND `/chat/*` (Legacy-Kompatibilitaet)
 - **Neue Blueprints:** Standalone in `register_blueprints()` registrieren, es sei denn rein unter `/api/v1`
+- **NIEMALS denselben Blueprint sowohl nested (blueprint.py) als auch standalone (_BLUEPRINTS) registrieren** — verursacht doppelte Routes und potentielle Hook-Konflikte
+- **Blueprint-Name muss global eindeutig sein** — zwei `Blueprint("same_name", ...)` in verschiedenen Dateien crasht Flask
+- **init_*_api() Funktionen NICHT mit `app` Parameter aufrufen** wenn sie intern `register_blueprint()` machen (Double-Registration Bug)
 
 ### Token-Validierung (`api/security.py`)
 
@@ -155,7 +158,8 @@ Single-Page-App mit 9 Tabs: Overview, Zonen, Musikwolke, Vorschlaege, **Automati
 
 ## Docker Build + Runtime
 
-- **Dockerfile:** `copilot_core/Dockerfile` — HA Add-on Base Image, Python 3.11+, Alpine
+- **Dockerfile:** `copilot_core/Dockerfile` — HA Add-on Base Image, **Python 3.12** (Alpine), lokal Python 3.14
+- **Zwei Template-Verzeichnisse:** `templates/` (main.py, dashboard.html) + `copilot_core/templates/` (styx_dashboard.html) — Flask findet nur das erste automatisch!
 - **Dependencies:** Alle in Dockerfile definiert (keine requirements.txt). Hauptpakete: Flask 3.0.2, Waitress 3.0.0, Pydantic 2.12.5, neo4j, numpy, websockets
 - **Ollama:** Bundled im Container (Alpine edge Package oder Binary-Download)
 - **Ollama Models:** `/share/pilotsuite/ollama/models` — NICHT `/data/` (verhindert Backup-Bloat)

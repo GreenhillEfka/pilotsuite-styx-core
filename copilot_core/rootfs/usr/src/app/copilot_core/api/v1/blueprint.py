@@ -38,12 +38,6 @@ from copilot_core.homeassistant.api import ha_discovery_bp
 # Metrics API (Flask)
 from copilot_core.api.v1.metrics import metrics_bp
 
-# Habitus Zones API (standalone blueprint with absolute prefix)
-from copilot_core.api.v1.habitus_zones import bp as habitus_zones_bp
-
-# MCP REST API (standalone blueprint with absolute prefix)
-from copilot_core.api.v1.mcp import bp as mcp_bp
-
 api_v1 = Blueprint("api_v1", __name__, url_prefix="/api/v1")
 
 # Register sub-blueprints with relative url_prefix (e.g. /neurons, /kg)
@@ -88,8 +82,7 @@ api_v1.register_blueprint(ha_discovery_bp)
 # Register Metrics API (Flask)
 api_v1.register_blueprint(metrics_bp)
 
-# Note: Standalone blueprints with absolute prefixes (/api/v1/...)
-# are registered directly on the app via core_setup.register_blueprints():
-# - energy_bp, unifi_bp, system_health_bp, tags_bp,
-#   brain_graph_bp, habitus_bp, candidates_bp, mood_bp, dev_surface_bp, mcp_bp
-# They must NOT be nested under api_v1 to avoid double /api/v1/api/v1/ prefixes.
+# Note: Additional standalone blueprints (habitus_zones, mcp, rag, styx_chat,
+# sonos, zone_automation, etc.) are registered directly on the Flask app via
+# core_setup.register_blueprints(). They must NOT be nested here to avoid
+# double /api/v1/api/v1/ prefixes.

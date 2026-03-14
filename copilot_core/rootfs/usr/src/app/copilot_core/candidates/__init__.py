@@ -11,12 +11,9 @@ Privacy-first: All data stored locally, no external transmission.
 """
 
 from .store import Candidate, CandidateStore, CandidateState
-from .api import candidates_bp, init_candidates_api
 
 __all__ = [
-    "Candidate", 
-    "CandidateStore", 
+    "Candidate",
+    "CandidateStore",
     "CandidateState",
-    "candidates_bp", 
-    "init_candidates_api"
 ]
