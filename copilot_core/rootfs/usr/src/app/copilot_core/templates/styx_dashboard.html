@@ -425,6 +425,10 @@
     <button class="refresh-btn" onclick="loadAll()">&#x21BB; Aktualisieren</button>
     <div class="status" id="status">Laden...</div>
     <span class="refresh-countdown" id="refresh-countdown"></span>
+    <div style="display:flex;align-items:center;gap:4px;margin-left:auto">
+      <input type="password" id="header-token" placeholder="API Token" value="" style="width:120px;padding:4px 8px;font-size:0.72rem;border:1px solid var(--surface2);border-radius:4px;background:var(--surface);color:var(--text)" onchange="setAuthToken(this.value);loadAll()"/>
+      <span id="token-status" style="font-size:0.7rem"></span>
+    </div>
   </header>
 
   <!-- Tab Navigation -->
@@ -760,17 +764,36 @@
 
 <script>
 const BASE = location.origin;
-const TOKEN = new URLSearchParams(location.search).get("token") || "";
-const HEADERS = TOKEN ? {"X-Auth-Token": TOKEN} : {};
+// Token: URL param > localStorage > empty
+const _urlToken = new URLSearchParams(location.search).get("token") || "";
+let TOKEN = _urlToken || localStorage.getItem("styx_auth_token") || "";
+if (_urlToken) localStorage.setItem("styx_auth_token", _urlToken);
+let HEADERS = TOKEN ? {"X-Auth-Token": TOKEN} : {};
+
+function setAuthToken(token) {
+  TOKEN = (token || "").trim();
+  if (TOKEN) {
+    localStorage.setItem("styx_auth_token", TOKEN);
+    HEADERS = {"X-Auth-Token": TOKEN};
+  } else {
+    localStorage.removeItem("styx_auth_token");
+    HEADERS = {};
+  }
+}
 
 // ═══════════════════════════════════════════════════════════════
 // Utilities
 // ═══════════════════════════════════════════════════════════════
 
 async function fetchJSON(path) {
-  const r = await fetch(BASE + path, {headers: HEADERS});
-  if (!r.ok) return null;
-  return r.json();
+  try {
+    const r = await fetch(BASE + path, {headers: HEADERS});
+    if (!r.ok) return null;
+    return r.json();
+  } catch (e) {
+    console.error("fetchJSON error:", path, e);
+    return null;
+  }
 }
 
 async function postJSON(path, body) {
@@ -1110,9 +1133,29 @@ async function updateRouting() {
 
 const MODULE_STATES = ["active", "learning", "off"];
 let moduleStates = {};
+let knownModules = [];
 
-function renderModules(modules) {
-  if (!modules || Object.keys(modules).length === 0) return "Keine Module konfiguriert";
+function renderModules(modules, known) {
+  // Merge known modules (from /config) with actual states (from /dashboard)
+  if (known && known.length > 0) {
+    knownModules = known;
+    moduleStates = {};
+    let html = "";
+    for (const mod of known) {
+      const state = (modules && modules[mod.id]) || mod.state || "active";
+      moduleStates[mod.id] = state;
+      const stateLabel = state === "active" ? "Aktiv" : state === "learning" ? "Lernend" : "Aus";
+      const icon = mod.icon ? `<span style="font-size:0.85rem;margin-right:2px">${mod.icon.replace("mdi:","")}</span>` : "";
+      html += `<div class="module-chip ${state}" onclick="cycleModule('${mod.id}')" title="${mod.description || mod.id}">
+        <span class="dot"></span>
+        <span class="module-name">${mod.label || mod.id}</span>
+        <span class="module-state">${stateLabel}</span>
+      </div>`;
+    }
+    return html;
+  }
+  // Fallback: use raw modules dict
+  if (!modules || Object.keys(modules).length === 0) return '<span style="color:var(--muted)">Lade Module...</span>';
   moduleStates = modules;
   let html = "";
   for (const [id, state] of Object.entries(modules)) {
@@ -1132,10 +1175,12 @@ async function cycleModule(moduleId) {
   const idx = MODULE_STATES.indexOf(current);
   const next = MODULE_STATES[(idx + 1) % MODULE_STATES.length];
   const result = await postJSON(`/api/v1/modules/${moduleId}/configure`, {state: next});
-  if (result.ok) {
+  if (result && result.ok) {
     moduleStates[moduleId] = next;
-    document.getElementById("modules-content").innerHTML = renderModules(moduleStates);
+    document.getElementById("modules-content").innerHTML = renderModules(moduleStates, knownModules);
     showToast(`${moduleId}: ${next}`);
+  } else {
+    showToast("Fehler beim Umschalten", 3000);
   }
 }
 
@@ -2842,12 +2887,19 @@ async function loadDashboard() {
     fetchJSON("/api/v1/styx/dashboard"),
     fetchJSON("/api/v1/styx/config"),
   ]);
+  // Token status indicator
+  const tokenEl = document.getElementById("header-token");
+  const tokenStatusEl = document.getElementById("token-status");
+  if (tokenEl && !tokenEl.value && TOKEN) tokenEl.value = TOKEN;
+  if (tokenStatusEl) tokenStatusEl.textContent = TOKEN ? "\u2705" : "\u26A0\uFE0F";
+
   if (dash && dash.ok) {
     document.getElementById("mood-content").innerHTML = renderMood(dash.mood);
     document.getElementById("neuron-content").innerHTML = renderNeurons(dash.neurons);
     document.getElementById("graph-content").innerHTML = renderGraph(dash.graph);
     document.getElementById("bus-content").innerHTML = renderBus(dash.bus);
-    document.getElementById("modules-content").innerHTML = renderModules(dash.modules);
+    const knownMods = (conf && conf.ok) ? conf.modules : [];
+    document.getElementById("modules-content").innerHTML = renderModules(dash.modules, knownMods);
     document.getElementById("learning-content").innerHTML = renderLearning(dash.learning);
     document.getElementById("candidates-content").innerHTML = renderCandidates(dash.candidates);
     document.getElementById("status").textContent = `${dash.render_ms}ms · ${new Date(dash.timestamp).toLocaleTimeString("de-DE")}`;
@@ -2862,7 +2914,11 @@ async function loadDashboard() {
     // Summary strip
     renderSummaryStrip(dash);
   } else {
-    document.getElementById("status").textContent = "Fehler beim Laden";
+    const errMsg = !dash ? "API nicht erreichbar" + (!TOKEN ? " (kein Token gesetzt!)" : "") : "API-Fehler: " + (dash.error || "unbekannt");
+    document.getElementById("status").innerHTML = `<span style="color:var(--red)">${errMsg}</span>`;
+    if (!TOKEN) {
+      document.getElementById("modules-content").innerHTML = '<span style="color:var(--orange)">Bitte API-Token oben rechts eingeben und Enter druecken.</span>';
+    }
   }
   if (conf && conf.ok) renderZones(conf.habitus_zones);
 }

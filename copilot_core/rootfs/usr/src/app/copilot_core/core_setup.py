@@ -1308,7 +1308,6 @@ def register_blueprints(app: Flask, services: dict) -> None:
 
     # Register Zone Aggregates API (device-class-aware Sammelentitaeten + Zone Scenes)
     try:
-        import importlib
         _dca = importlib.import_module("copilot_core.homeassistant.device_class_aggregator")
         ZoneAggregator = _dca.ZoneAggregator
         from copilot_core.api.v1.zone_aggregates import zone_aggregates_bp, init_zone_aggregates_api
@@ -1475,7 +1474,7 @@ def register_blueprints(app: Flask, services: dict) -> None:
     # Cache Control API
     try:
         from copilot_core.api.v1.cache_control import cache_control_bp, init_cache_control_api
-        init_cache_control_api(app)
+        init_cache_control_api()
         app.register_blueprint(cache_control_bp, url_prefix="/api/v1/cache")
     except Exception:
         _LOGGER.exception("Failed to register cache_control_bp")
