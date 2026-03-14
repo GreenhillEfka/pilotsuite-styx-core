@@ -23,7 +23,7 @@ sonos_bp = Blueprint("sonos", __name__, url_prefix="/api/v1/sonos")
 
 def _get_sonos():
     """Hole SonosCloudClient aus Services."""
-    services = current_app.config.get("services", {})
+    services = current_app.config.get("COPILOT_SERVICES", {})
     client = services.get("sonos_client")
     if client is None:
         return None, (jsonify({"ok": False, "error": "Sonos client not initialized"}), 503)

@@ -8,6 +8,7 @@ checks pass (zone mode + module state double-safety).
 from __future__ import annotations
 
 import logging
+import threading
 import time
 from dataclasses import asdict, dataclass, field
 from typing import Any, Callable, Dict, List, Optional
@@ -69,7 +70,8 @@ class AutonomyExecutor:
         # Rate limiting: (zone_id, module_id) → last_execution_timestamp
         self._rate_limits: Dict[str, float] = {}
 
-        # Stats
+        # Stats (guarded by _stats_lock for thread safety)
+        self._stats_lock = threading.Lock()
         self._stats = {
             "total_events": 0,
             "executed": 0,
@@ -131,7 +133,8 @@ class AutonomyExecutor:
             ExecutionResult with decision and details.
         """
         context = context or {}
-        self._stats["total_events"] += 1
+        with self._stats_lock:
+            self._stats["total_events"] += 1
 
         # 1. Zone automation mode check
         zone_mode = "off"
@@ -139,14 +142,16 @@ class AutonomyExecutor:
             zone_mode = self._zone_automation.get_automation_mode(zone_id)
 
         if zone_mode == "off":
-            self._stats["skipped"] += 1
+            with self._stats_lock:
+                self._stats["skipped"] += 1
             return ExecutionResult(
                 zone_id=zone_id, module_id=module_id,
                 decision="skipped", reason=f"Zone mode is 'off'",
             )
 
         if zone_mode == "learning":
-            self._stats["suggested"] += 1
+            with self._stats_lock:
+                self._stats["suggested"] += 1
             self._log_action(
                 zone_id, module_id, actions, reason, context,
                 result="would_have_executed", source_module=source_module,
@@ -165,7 +170,8 @@ class AutonomyExecutor:
             source_state = self._module_registry.get_zone_state(zone_id, source_module)
 
         if target_state == "off" or source_state == "off":
-            self._stats["skipped"] += 1
+            with self._stats_lock:
+                self._stats["skipped"] += 1
             return ExecutionResult(
                 zone_id=zone_id, module_id=module_id,
                 decision="skipped",
@@ -173,7 +179,8 @@ class AutonomyExecutor:
             )
 
         if target_state == "learning" or source_state == "learning":
-            self._stats["suggested"] += 1
+            with self._stats_lock:
+                self._stats["suggested"] += 1
             self._log_action(
                 zone_id, module_id, actions, reason, context,
                 result="would_have_executed", source_module=source_module,
@@ -188,7 +195,8 @@ class AutonomyExecutor:
         # 3. Double-safety via module registry
         if self._module_registry:
             if not self._module_registry.should_auto_apply_zone(zone_id, source_module, module_id):
-                self._stats["suggested"] += 1
+                with self._stats_lock:
+                    self._stats["suggested"] += 1
                 return ExecutionResult(
                     zone_id=zone_id, module_id=module_id,
                     decision="suggested",
@@ -198,7 +206,8 @@ class AutonomyExecutor:
 
         # 4. Rate limiting
         if self._is_rate_limited(zone_id, module_id):
-            self._stats["skipped"] += 1
+            with self._stats_lock:
+                self._stats["skipped"] += 1
             return ExecutionResult(
                 zone_id=zone_id, module_id=module_id,
                 decision="skipped", reason="Rate limited (30s cooldown)",
@@ -229,27 +238,40 @@ class AutonomyExecutor:
                     else:
                         executed_actions.append(action)
 
-                elif action_type == "music.play_favorite" and self._musikwolke_bridge:
-                    room = action.get("room", "")
-                    favorite = action.get("favorite", "")
-                    volume = action.get("volume_pct")
-                    if room and favorite:
-                        # Use sonos client directly for favorites
-                        sonos = getattr(self._musikwolke_bridge, "_sonos", None)
-                        if sonos and hasattr(sonos, "play_favorite"):
-                            sonos.play_favorite(room, favorite)
-                            if volume is not None:
-                                self._musikwolke_bridge.set_zone_volume(zone_id, volume)
-                            executed_actions.append(action)
+                elif action_type == "music.play_favorite":
+                    if not self._musikwolke_bridge:
+                        errors.append("music.play_favorite: musikwolke_bridge unavailable")
+                    else:
+                        room = action.get("room", "")
+                        favorite = action.get("favorite", "")
+                        volume = action.get("volume_pct")
+                        if room and favorite:
+                            # Use sonos client directly for favorites
+                            sonos = getattr(self._musikwolke_bridge, "_sonos", None)
+                            if sonos and hasattr(sonos, "play_favorite"):
+                                sonos.play_favorite(room, favorite)
+                                if volume is not None:
+                                    self._musikwolke_bridge.set_zone_volume(zone_id, volume)
+                                executed_actions.append(action)
+                            else:
+                                errors.append("music.play_favorite: sonos client unavailable or missing play_favorite")
+                        else:
+                            errors.append(f"music.play_favorite: missing room={room!r} or favorite={favorite!r}")
 
-                elif action_type == "music.play" and self._musikwolke_bridge:
-                    volume = action.get("volume_pct")
-                    self._musikwolke_bridge.play_in_zone(zone_id, volume_pct=volume)
-                    executed_actions.append(action)
+                elif action_type == "music.play":
+                    if not self._musikwolke_bridge:
+                        errors.append("music.play: musikwolke_bridge unavailable")
+                    else:
+                        volume = action.get("volume_pct")
+                        self._musikwolke_bridge.play_in_zone(zone_id, volume_pct=volume)
+                        executed_actions.append(action)
 
-                elif action_type == "music.pause" and self._musikwolke_bridge:
-                    self._musikwolke_bridge.pause_in_zone(zone_id)
-                    executed_actions.append(action)
+                elif action_type == "music.pause":
+                    if not self._musikwolke_bridge:
+                        errors.append("music.pause: musikwolke_bridge unavailable")
+                    else:
+                        self._musikwolke_bridge.pause_in_zone(zone_id)
+                        executed_actions.append(action)
 
                 else:
                     _LOGGER.debug("Unknown action type: %s", action_type)
@@ -261,13 +283,15 @@ class AutonomyExecutor:
         self._record_execution(zone_id, module_id)
 
         if errors:
-            self._stats["errors"] += 1
+            with self._stats_lock:
+                self._stats["errors"] += 1
             error_str = "; ".join(errors)
         else:
             error_str = ""
 
         if executed_actions:
-            self._stats["executed"] += 1
+            with self._stats_lock:
+                self._stats["executed"] += 1
             self._log_action(
                 zone_id, module_id, executed_actions, reason, context,
                 result="ok" if not errors else "partial",
@@ -293,7 +317,8 @@ class AutonomyExecutor:
                 actions=executed_actions, error=error_str,
             )
 
-        self._stats["skipped"] += 1
+        with self._stats_lock:
+            self._stats["skipped"] += 1
         return ExecutionResult(
             zone_id=zone_id, module_id=module_id,
             decision="skipped", reason="No actions executed",
@@ -535,12 +560,19 @@ class AutonomyExecutor:
         try:
             from copilot_core.autonomy.behavioral_log import ActionLogEntry
 
-            # Flatten actions into details
-            details = {}
+            # Flatten actions into details (preserve all entity_ids)
+            details = {"action_count": len(actions)}
+            entity_ids = []
             for action in actions:
                 for k, v in action.items():
-                    if k != "type":
-                        details[k] = v
+                    if k == "type":
+                        continue
+                    if k == "entity_id":
+                        entity_ids.append(v)
+                    else:
+                        details[k] = v  # Last value wins for non-entity fields (brightness etc.)
+            if entity_ids:
+                details["entity_ids"] = entity_ids
 
             entry = ActionLogEntry(
                 zone_id=zone_id,
@@ -561,21 +593,24 @@ class AutonomyExecutor:
 
     def get_dashboard(self) -> Dict[str, Any]:
         """Return autonomy execution dashboard data."""
-        zones = []
+        zones: Dict[str, Any] = {}
         if self._zone_automation:
             try:
                 all_states = self._zone_automation.get_all_states()
                 for zone_state in all_states:
                     zone_id = zone_state.get("zone_id", "")
+                    if not zone_id:
+                        continue
+                    state = zone_state.get("state", {})
                     zone_info = {
                         "zone_id": zone_id,
-                        "automation_mode": zone_state.get("automation_mode", "off"),
-                        "occupied": zone_state.get("occupied", False),
+                        "mode": state.get("automation_mode", "off"),
+                        "occupied": state.get("occupied", False),
                     }
                     # Add per-zone module states
                     if self._module_registry:
                         zone_info["module_states"] = self._module_registry.get_zone_states(zone_id)
-                    zones.append(zone_info)
+                    zones[zone_id] = zone_info
             except Exception:
                 _LOGGER.debug("Failed to build dashboard", exc_info=True)
 
@@ -586,9 +621,12 @@ class AutonomyExecutor:
             except Exception:
                 pass
 
+        with self._stats_lock:
+            stats_snapshot = dict(self._stats)
+
         return {
             "zones": zones,
-            "stats": dict(self._stats),
+            "stats": stats_snapshot,
             "log": log_stats,
             "rate_limit_seconds": _RATE_LIMIT_SECONDS,
         }

@@ -25,15 +25,26 @@ Usage:
     mappings = mapper.map_entities(states)
 """
 
-from .client import (
-    HomeAssistantClient,
-    HAConnectionConfig,
-    HAConnectionStatus,
-)
-from .auto_discovery import (
-    AutoDiscovery,
-    DiscoveredInstance,
-)
+try:
+    from .client import (
+        HomeAssistantClient,
+        HAConnectionConfig,
+        HAConnectionStatus,
+    )
+except ImportError:
+    HomeAssistantClient = None  # type: ignore[assignment,misc]
+    HAConnectionConfig = None  # type: ignore[assignment,misc]
+    HAConnectionStatus = None  # type: ignore[assignment,misc]
+
+try:
+    from .auto_discovery import (
+        AutoDiscovery,
+        DiscoveredInstance,
+    )
+except ImportError:
+    AutoDiscovery = None  # type: ignore[assignment,misc]
+    DiscoveredInstance = None  # type: ignore[assignment,misc]
+
 from .entity_mapper import (
     EntityMapper,
     EntityMapping,

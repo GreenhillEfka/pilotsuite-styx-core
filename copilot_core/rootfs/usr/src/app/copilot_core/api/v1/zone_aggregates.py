@@ -409,26 +409,34 @@ def _capture_zone_states(entity_ids: list[str]) -> dict[str, dict[str, Any]]:
         "media_player": ["volume_level", "is_volume_muted", "source", "media_content_type"],
     }
 
+    entity_set = set(entity_ids)
     entity_states = {}
-    for eid in entity_ids:
+    try:
+        resp = http_requests.get(
+            f"{ha_url}/states", headers=headers, timeout=10,
+        )
+        if not resp.ok:
+            logger.debug("Failed to fetch /states: %s", resp.status_code)
+            return {}
+        all_states = resp.json()
+    except Exception:
+        logger.debug("Failed to fetch /states for zone capture")
+        return {}
+
+    for state_data in all_states:
+        eid = state_data.get("entity_id", "")
+        if eid not in entity_set:
+            continue
         domain = eid.split(".", 1)[0] if "." in eid else ""
         if domain not in capturable_domains:
             continue
-        try:
-            resp = http_requests.get(
-                f"{ha_url}/states/{eid}", headers=headers, timeout=5,
-            )
-            if resp.ok:
-                state_data = resp.json()
-                snapshot = {"state": state_data.get("state", "unknown")}
-                attrs = state_data.get("attributes", {})
-                for attr_key in domain_attrs.get(domain, []):
-                    val = attrs.get(attr_key)
-                    if val is not None:
-                        snapshot[attr_key] = val
-                entity_states[eid] = snapshot
-        except Exception:
-            logger.debug("Failed to capture state for %s", eid)
+        snapshot = {"state": state_data.get("state", "unknown")}
+        attrs = state_data.get("attributes", {})
+        for attr_key in domain_attrs.get(domain, []):
+            val = attrs.get(attr_key)
+            if val is not None:
+                snapshot[attr_key] = val
+        entity_states[eid] = snapshot
 
     return entity_states
 
@@ -663,6 +671,5 @@ def apply_zone_scene(zone_id: str):
 @require_token
 def delete_zone_scene(zone_id: str, scene_id: str):
     """Delete a saved zone scene."""
-    if _delete_scene(scene_id):
-        return jsonify({"ok": True, "deleted": scene_id})
-    return jsonify({"ok": False, "error": f"Szene '{scene_id}' nicht gefunden"}), 404
+    _delete_scene(scene_id)
+    return jsonify({"ok": True, "deleted": scene_id})

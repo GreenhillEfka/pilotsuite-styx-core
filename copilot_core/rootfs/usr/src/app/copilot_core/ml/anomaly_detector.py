@@ -20,8 +20,12 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
 import numpy as np
-from sklearn.ensemble import IsolationForest
-from sklearn.preprocessing import StandardScaler
+try:
+    from sklearn.ensemble import IsolationForest
+    from sklearn.preprocessing import StandardScaler
+except ImportError:
+    IsolationForest = None  # type: ignore[assignment,misc]
+    StandardScaler = None  # type: ignore[assignment,misc]
 import json
 import os
 

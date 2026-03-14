@@ -113,7 +113,8 @@ class TestMoodActions:
         resp = client.get("/api/v1/autonomy/mood-actions")
         assert resp.status_code == 200
         data = resp.get_json()
-        assert "relax" in data
+        assert data["ok"] is True
+        assert "relax" in data["actions"]
 
     def test_set_mood_override(self, client, mock_executor):
         resp = client.post(

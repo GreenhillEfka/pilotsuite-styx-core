@@ -163,9 +163,9 @@ class AutoDiscovery:
                     info = await client.get("/api/config")
                     friendly_name = info.get("name", "")
                     version = info.get("version", "")
-                except Exception:
-                    pass
-                
+                except Exception as exc:
+                    logger.debug("Failed to get HA config from %s: %s", url, exc)
+
                 await client.close()
                 
                 return DiscoveredInstance(
