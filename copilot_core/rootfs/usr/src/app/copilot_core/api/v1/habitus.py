@@ -299,6 +299,37 @@ def update_config():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
+@bp.route("/feedback", methods=["POST"])
+def rule_feedback():
+    """Apply user feedback (accepted/rejected) to a rule.
+
+    Body: {"rule_a": "...", "rule_b": "...", "accepted": true/false}
+    """
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"status": "error", "message": "Missing request body"}), 400
+
+        rule_a = data.get("rule_a", "")
+        rule_b = data.get("rule_b", "")
+        accepted = data.get("accepted")
+
+        if not rule_a or not rule_b or accepted is None:
+            return jsonify({"status": "error", "message": "Missing rule_a, rule_b, or accepted"}), 400
+
+        service = _get_service()
+        updated = service.apply_feedback(rule_a, rule_b, bool(accepted))
+
+        if not updated:
+            return jsonify({"status": "error", "message": "Rule not found"}), 404
+
+        return jsonify({"status": "ok", "message": "Feedback applied"})
+
+    except Exception as e:
+        _LOGGER.error("Failed to apply feedback: %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
 @bp.route("/reset", methods=["POST"])
 def reset_cache():
     """Reset all cached data and discovered rules."""

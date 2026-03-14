@@ -41,6 +41,16 @@ KNOWN_EVENT_TYPES = frozenset({
     "suggestion.rejected",
     "graph.updated",
     "module.state_changed",
+    "autonomy.executed",
+    "autonomy.failed",
+    "module.zone_state_changed",
+    "presence.changed",
+    "scene.captured",
+    "scene.applied",
+    "zone.health_changed",
+    "state.changed",
+    "device.metric",
+    "anomaly.detected",
 })
 
 

@@ -92,9 +92,9 @@ class HabitusMinerService:
             # Extract domain
             domain = entity_id.split('.', 1)[0] if '.' in entity_id else ""
             
-            # Create normalized transition
-            transition = f":{new_val}"  # e.g., ":on", ":off", ":heat"
-            
+            # Create normalized transition (without colon prefix)
+            transition = new_val  # e.g., "on", "off", "heat"
+
             # Extract context (privacy-aware)
             context = {}
             ha_context = ha_event.get("context", {})
@@ -123,7 +123,7 @@ class HabitusMinerService:
             
             return NormEvent(
                 ts=ts_ms,
-                key=f"{entity_id}{transition}",  # e.g., "light.kitchen:on"
+                key=f"{entity_id}:{transition}",  # e.g., "light.kitchen:on"
                 entity_id=entity_id,
                 domain=domain,
                 transition=transition,
@@ -192,10 +192,20 @@ class HabitusMinerService:
         return rules
 
     def _embed_rules_in_rag(self, rules: RulesType) -> None:
-        """Embed discovered rules in vector store for semantic search."""
+        """Embed discovered rules in vector store for semantic search.
+
+        Only embeds when the embedding engine uses Ollama (semantic
+        embeddings).  Hash-based local embeddings (bag-of-words) produce
+        vectors without real semantic meaning, so skipping them avoids
+        polluting the vector store with useless data.
+        """
         vs = self._vector_store
         ee = self._embedding_engine
         if not vs or not ee or not hasattr(ee, "embed_text_sync"):
+            return
+        # Skip if embedding engine is hash-only (no semantic value)
+        if hasattr(ee, "config") and not getattr(ee.config, "use_ollama", False):
+            _LOGGER.debug("Skipping RAG embedding — hash-only engine has no semantic value")
             return
 
         embedded = 0
@@ -203,7 +213,15 @@ class HabitusMinerService:
             try:
                 a_entity = rule.A.rsplit(":", 1)[0] if ":" in rule.A else rule.A
                 b_entity = rule.B.rsplit(":", 1)[0] if ":" in rule.B else rule.B
-                text = f"{a_entity} → {b_entity} (confidence={rule.confidence:.2f}, lift={rule.lift:.1f})"
+                zone_id = getattr(rule, "zone_id", "") or ""
+                text = (
+                    f"Wenn {a_entity} sich aendert, "
+                    f"folgt {b_entity} innerhalb von {rule.dt_sec} Sekunden "
+                    f"mit {rule.confidence:.0%} Wahrscheinlichkeit"
+                    f" ({rule.lift:.1f}x haeufiger als Zufall, {rule.nAB} Beobachtungen)"
+                )
+                if zone_id:
+                    text += f" in Zone {zone_id}"
                 vector = ee.embed_text_sync(text)
                 rule_key = f"{rule.A}_{rule.B}_{rule.dt_sec}"
                 vs.upsert_sync(
@@ -390,6 +408,46 @@ class HabitusMinerService:
                 setattr(self.config, key, value)
                 _LOGGER.info("Updated config %s = %s", key, value)
     
+    def apply_feedback(self, rule_a: str, rule_b: str, accepted: bool) -> bool:
+        """Apply user feedback to a rule's confidence.
+
+        When a suggestion based on a rule is accepted, the rule's nAB count
+        is incremented (raising confidence).  When rejected, nA is
+        incremented without nAB (lowering confidence).  The rule is then
+        re-scored and persisted.
+
+        Returns True if the rule was found and updated.
+        """
+        rules = self.store.rules
+        target = None
+        for rule in rules:
+            if rule.A == rule_a and rule.B == rule_b:
+                target = rule
+                break
+
+        if target is None:
+            _LOGGER.warning("Feedback for unknown rule %s → %s", rule_a, rule_b)
+            return False
+
+        if accepted:
+            target.nA += 1
+            target.nAB += 1
+        else:
+            target.nA += 1
+            # nAB stays the same → confidence drops
+
+        # Recalculate confidence
+        target.confidence = target.nAB / target.nA if target.nA > 0 else 0.0
+        from .mining import _wilson_lower_bound
+        target.confidence_lb = _wilson_lower_bound(target.nAB, target.nA)
+
+        self.store.save_rules(rules)
+        _LOGGER.info(
+            "Feedback applied to %s → %s: accepted=%s, new confidence=%.3f",
+            rule_a, rule_b, accepted, target.confidence,
+        )
+        return True
+
     def reset_cache(self) -> None:
         """Reset all cached data."""
         self.store.clear_cache()

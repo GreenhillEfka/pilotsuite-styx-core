@@ -50,6 +50,9 @@ class ProactiveContextEngine:
     that can be delivered via TTS, persistent notification, or chat.
     """
 
+    # Context entries expire after this many seconds
+    CONTEXT_TTL_SECONDS = 1800  # 30 min
+
     def __init__(self, media_zone_manager=None, mood_service=None,
                  household_profile=None, conversation_memory=None,
                  waste_service=None, birthday_service=None,
@@ -68,7 +71,47 @@ class ProactiveContextEngine:
         self._dismissed: Dict[str, set] = {}
         # Cooldown for presence triggers per person (prevent rapid-fire)
         self._presence_cooldowns: Dict[str, float] = {}
+        # Contextual signals from other subsystems (anomaly, pattern, etc.)
+        self._context_store: Dict[str, List[Dict[str, Any]]] = {}
         _LOGGER.info("ProactiveContextEngine initialized")
+
+    # ------------------------------------------------------------------
+    # Context ingestion (v14.1.0)
+    # ------------------------------------------------------------------
+
+    def add_context(self, context_type: str, data: Dict[str, Any]) -> None:
+        """Ingest a contextual signal from another subsystem.
+
+        Signals are stored with a timestamp and expire after
+        ``CONTEXT_TTL_SECONDS``.  They are consumed by suggestion
+        generators to produce more relevant recommendations.
+
+        Parameters
+        ----------
+        context_type : str
+            Category of context, e.g. ``"anomaly"``, ``"pattern"``.
+        data : dict
+            Arbitrary payload describing the signal.
+        """
+        now = time.time()
+        entry = {"ts": now, **data}
+        with self._lock:
+            bucket = self._context_store.setdefault(context_type, [])
+            bucket.append(entry)
+            # Evict expired entries
+            cutoff = now - self.CONTEXT_TTL_SECONDS
+            self._context_store[context_type] = [
+                e for e in bucket if e["ts"] >= cutoff
+            ]
+        _LOGGER.debug("Context added: %s (%s)", context_type, data.get("entity_id", "?"))
+
+    def get_active_context(self, context_type: str) -> List[Dict[str, Any]]:
+        """Return non-expired context entries of the given type."""
+        now = time.time()
+        cutoff = now - self.CONTEXT_TTL_SECONDS
+        with self._lock:
+            bucket = self._context_store.get(context_type, [])
+            return [e for e in bucket if e["ts"] >= cutoff]
 
     # ------------------------------------------------------------------
     # Main entry point
@@ -145,6 +188,7 @@ class ProactiveContextEngine:
         suggestions.extend(self._media_suggestions(ctx))
         suggestions.extend(self._comfort_suggestions(ctx))
         suggestions.extend(self._routine_suggestions(ctx))
+        suggestions.extend(self._anomaly_suggestions(ctx))
 
         # Filter dismissed types
         person_dismissed = self._dismissed.get(person_id, set())
@@ -318,6 +362,57 @@ class ProactiveContextEngine:
                 "message": "Guten Morgen! Soll ich die Morgenroutine starten?",
                 "action": {"scene": "scene.morning_routine"},
                 "zone_id": zone,
+                "dismissible": True,
+            })
+
+        return suggestions
+
+    # ------------------------------------------------------------------
+    # Anomaly-based suggestions  (v14.1.0)
+    # ------------------------------------------------------------------
+
+    def _anomaly_suggestions(self, ctx: dict) -> List[Dict[str, Any]]:
+        """Generate suggestions based on recent anomaly context."""
+        suggestions: List[Dict[str, Any]] = []
+        anomalies = self.get_active_context("anomaly")
+        if not anomalies:
+            return suggestions
+
+        zone = ctx.get("zone_id", "")
+
+        # Group by severity
+        warnings = [a for a in anomalies if a.get("severity") == "warning"]
+        criticals = [a for a in anomalies if a.get("severity") == "critical"]
+
+        if criticals:
+            entities = ", ".join(
+                a.get("entity_id", "?").split(".")[-1] for a in criticals[:3]
+            )
+            suggestions.append({
+                "type": "anomaly_alert",
+                "priority": "high",
+                "message": (
+                    f"Kritische Anomalien erkannt bei: {entities}. "
+                    f"Soll ich die betroffenen Geraete pruefen?"
+                ),
+                "zone_id": zone,
+                "anomaly_count": len(criticals),
+                "dismissible": True,
+            })
+
+        if warnings and not criticals:
+            entities = ", ".join(
+                a.get("entity_id", "?").split(".")[-1] for a in warnings[:3]
+            )
+            suggestions.append({
+                "type": "anomaly_notice",
+                "priority": "low",
+                "message": (
+                    f"Ungewoehnliches Verhalten bei: {entities}. "
+                    f"Moechtest du Details sehen?"
+                ),
+                "zone_id": zone,
+                "anomaly_count": len(warnings),
                 "dismissible": True,
             })
 

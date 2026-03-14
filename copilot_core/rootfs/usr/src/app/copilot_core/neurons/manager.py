@@ -896,6 +896,10 @@ class NeuronManager:
     # API Helpers
     # -------------------------------------------------------------------------
     
+    def get_last_result(self) -> Optional[NeuralPipelineResult]:
+        """Return the last pipeline evaluation result, or None if never evaluated."""
+        return self._last_result
+
     def get_mood_summary(self) -> Dict[str, Any]:
         """Get a summary of current mood state for API."""
         if not self._last_result:
