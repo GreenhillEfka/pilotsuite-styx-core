@@ -511,7 +511,7 @@ def _make_test_app():
 
     app = Flask(__name__)
     app.config["TESTING"] = True
-    app.config["services"] = {
+    app.config["COPILOT_SERVICES"] = {
         "sonos_client": mock_client,
         "sonos_intel": mock_intel,
     }
@@ -673,7 +673,7 @@ class TestSonosAPINoServices:
         from copilot_core.api.v1.sonos import sonos_bp
         app = Flask(__name__)
         app.config["TESTING"] = True
-        app.config["services"] = {}
+        app.config["COPILOT_SERVICES"] = {}
         app.register_blueprint(sonos_bp)
         with app.test_client() as c:
             resp = c.get("/api/v1/sonos/health")
@@ -683,7 +683,7 @@ class TestSonosAPINoServices:
         from copilot_core.api.v1.sonos import sonos_bp
         app = Flask(__name__)
         app.config["TESTING"] = True
-        app.config["services"] = {}
+        app.config["COPILOT_SERVICES"] = {}
         app.register_blueprint(sonos_bp)
         with app.test_client() as c:
             # Without sonos_client, any endpoint returns 503

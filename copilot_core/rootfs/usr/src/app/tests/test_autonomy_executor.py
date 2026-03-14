@@ -387,4 +387,184 @@ class TestDashboard:
     def test_dashboard_without_deps(self):
         executor = AutonomyExecutor()
         dashboard = executor.get_dashboard()
-        assert dashboard["zones"] == []
+        assert dashboard["zones"] == {}
+
+
+# ── Action Execution Tests ─────────────────────────────────────────────
+
+class TestExecuteActions:
+    """Tests for specific action execution paths (music, light errors)."""
+
+    def test_music_play_favorite_success(self):
+        """music.play_favorite with working musikwolke_bridge + sonos."""
+        mock_sonos = MagicMock()
+        mock_sonos.play_favorite = MagicMock()
+
+        mock_mw = MagicMock()
+        mock_mw._sonos = mock_sonos
+
+        executor = AutonomyExecutor(
+            zone_automation=FakeZoneAutomation(mode="autonomy"),
+            module_registry=FakeModuleRegistry(),
+            ha_bridge=FakeHABridge(),
+            behavioral_log=MagicMock(),
+            musikwolke_bridge=mock_mw,
+            bus=FakeBus(),
+        )
+
+        result = executor.execute_if_allowed(
+            "wohnbereich", "musik",
+            [{"type": "music.play_favorite", "room": "Wohnzimmer", "favorite": "Chill Mix", "volume_pct": 30}],
+            "test mood",
+        )
+        assert result.decision == "executed"
+        mock_sonos.play_favorite.assert_called_once_with("Wohnzimmer", "Chill Mix")
+        mock_mw.set_zone_volume.assert_called_once_with("wohnbereich", 30)
+
+    def test_music_play_favorite_no_sonos(self):
+        """music.play_favorite when _sonos is None records error."""
+        mock_mw = MagicMock()
+        mock_mw._sonos = None
+
+        executor = AutonomyExecutor(
+            zone_automation=FakeZoneAutomation(mode="autonomy"),
+            module_registry=FakeModuleRegistry(),
+            ha_bridge=FakeHABridge(),
+            behavioral_log=MagicMock(),
+            musikwolke_bridge=mock_mw,
+            bus=FakeBus(),
+        )
+
+        result = executor.execute_if_allowed(
+            "wohnbereich", "musik",
+            [{"type": "music.play_favorite", "room": "Wohnzimmer", "favorite": "Chill Mix"}],
+            "test",
+        )
+        # No executed actions because sonos is None
+        assert result.decision == "skipped"
+        assert "sonos client unavailable" in result.error
+
+    def test_music_play(self):
+        """music.play action calls play_in_zone."""
+        mock_mw = MagicMock()
+        mock_mw.play_in_zone.return_value = True
+
+        executor = AutonomyExecutor(
+            zone_automation=FakeZoneAutomation(mode="autonomy"),
+            module_registry=FakeModuleRegistry(),
+            behavioral_log=MagicMock(),
+            musikwolke_bridge=mock_mw,
+            bus=FakeBus(),
+        )
+
+        result = executor.execute_if_allowed(
+            "wohnbereich", "musik",
+            [{"type": "music.play", "volume_pct": 40}],
+            "test",
+        )
+        assert result.decision == "executed"
+        mock_mw.play_in_zone.assert_called_once_with("wohnbereich", volume_pct=40)
+
+    def test_music_pause(self):
+        """music.pause action calls pause_in_zone."""
+        mock_mw = MagicMock()
+
+        executor = AutonomyExecutor(
+            zone_automation=FakeZoneAutomation(mode="autonomy"),
+            module_registry=FakeModuleRegistry(),
+            behavioral_log=MagicMock(),
+            musikwolke_bridge=mock_mw,
+            bus=FakeBus(),
+        )
+
+        result = executor.execute_if_allowed(
+            "wohnbereich", "musik",
+            [{"type": "music.pause"}],
+            "test",
+        )
+        assert result.decision == "executed"
+        mock_mw.pause_in_zone.assert_called_once_with("wohnbereich")
+
+    def test_light_turn_on_ha_error(self):
+        """light.turn_on when ha_bridge returns ok=False records error."""
+        ha_bridge = MagicMock()
+        ha_bridge.turn_on_light.return_value = ServiceCallResult(
+            ok=False, domain="light", service="turn_on", error="entity not found",
+        )
+
+        executor = AutonomyExecutor(
+            zone_automation=FakeZoneAutomation(mode="autonomy"),
+            module_registry=FakeModuleRegistry(),
+            ha_bridge=ha_bridge,
+            behavioral_log=MagicMock(),
+            bus=FakeBus(),
+        )
+
+        result = executor.execute_if_allowed(
+            "wohnbereich", "licht",
+            [{"type": "light.turn_on", "entity_id": "light.nope", "brightness_pct": 50}],
+            "test",
+        )
+        assert result.decision == "skipped"
+        assert "light error" in result.error
+
+
+# ── Music Error Handling ───────────────────────────────────────────────
+
+class TestMusicErrorHandling:
+    """Verify music actions record errors when bridge is unavailable."""
+
+    def test_play_favorite_no_bridge(self):
+        """music.play_favorite without musikwolke_bridge records error."""
+        executor = AutonomyExecutor(
+            zone_automation=FakeZoneAutomation(mode="autonomy"),
+            module_registry=FakeModuleRegistry(),
+            ha_bridge=FakeHABridge(),
+            behavioral_log=MagicMock(),
+            musikwolke_bridge=None,
+            bus=FakeBus(),
+        )
+
+        result = executor.execute_if_allowed(
+            "wohnbereich", "musik",
+            [{"type": "music.play_favorite", "room": "Wohnzimmer", "favorite": "Mix"}],
+            "test",
+        )
+        assert result.decision == "skipped"
+        assert "musikwolke_bridge unavailable" in result.error
+
+    def test_play_no_bridge(self):
+        """music.play without musikwolke_bridge records error."""
+        executor = AutonomyExecutor(
+            zone_automation=FakeZoneAutomation(mode="autonomy"),
+            module_registry=FakeModuleRegistry(),
+            behavioral_log=MagicMock(),
+            musikwolke_bridge=None,
+            bus=FakeBus(),
+        )
+
+        result = executor.execute_if_allowed(
+            "wohnbereich", "musik",
+            [{"type": "music.play", "volume_pct": 30}],
+            "test",
+        )
+        assert result.decision == "skipped"
+        assert "musikwolke_bridge unavailable" in result.error
+
+    def test_pause_no_bridge(self):
+        """music.pause without musikwolke_bridge records error."""
+        executor = AutonomyExecutor(
+            zone_automation=FakeZoneAutomation(mode="autonomy"),
+            module_registry=FakeModuleRegistry(),
+            behavioral_log=MagicMock(),
+            musikwolke_bridge=None,
+            bus=FakeBus(),
+        )
+
+        result = executor.execute_if_allowed(
+            "wohnbereich", "musik",
+            [{"type": "music.pause"}],
+            "test",
+        )
+        assert result.decision == "skipped"
+        assert "musikwolke_bridge unavailable" in result.error

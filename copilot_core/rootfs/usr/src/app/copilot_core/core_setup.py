@@ -952,14 +952,14 @@ async def init_services(hass=None, config: dict = None):
         ("hub_light",           "copilot_core.hub.light_intelligence",       "LightIntelligenceEngine"),
         ("hub_modes",           "copilot_core.hub.zone_modes",               "ZoneModeEngine"),
         ("hub_media",           "copilot_core.hub.media_follow",             "MediaFollowEngine"),
-        ("hub_energy",          "copilot_core.hub.energy_advisor",           "EnergyAdvisor"),
+        ("hub_energy",          "copilot_core.hub.energy_advisor",           "EnergyAdvisorEngine"),
         ("hub_templates",       "copilot_core.hub.automation_templates",     "AutomationTemplateEngine"),
         ("hub_scenes",          "copilot_core.hub.scene_intelligence",       "SceneIntelligenceEngine"),
         ("hub_presence",        "copilot_core.hub.presence_intelligence",    "PresenceIntelligenceEngine"),
         ("hub_notifications",   "copilot_core.hub.notification_intelligence","NotificationIntelligenceEngine"),
         ("hub_integration",     "copilot_core.hub.system_integration",       "SystemIntegrationHub"),
         ("hub_brain_arch",      "copilot_core.hub.brain_architecture",       "BrainArchitectureEngine"),
-        ("hub_brain_activity",  "copilot_core.hub.brain_activity",           "BrainActivityTracker"),
+        ("hub_brain_activity",  "copilot_core.hub.brain_activity",           "BrainActivityEngine"),
     ]
     _init_engine_group(services, _HUB_ENGINES, "Hub engines")
 
@@ -1063,6 +1063,32 @@ async def init_services(hass=None, config: dict = None):
 
     # Wire habitus auto-mining to event ingest pipeline
     _wire_habitus_auto_mining(services)
+
+    # Initialize LLM Provider
+    try:
+        from copilot_core.llm_provider import LLMProvider
+        services["llm_provider"] = LLMProvider()
+        _LOGGER.info("LLMProvider initialized")
+    except Exception:
+        _LOGGER.exception("Failed to init LLMProvider")
+
+    # Initialize Alarm Engine
+    try:
+        from copilot_core.alarm.engine import AlarmEngine
+        services["alarm_engine"] = AlarmEngine(
+            sonos_client=services.get("sonos_client"),
+        )
+        _LOGGER.info("AlarmEngine initialized")
+    except Exception:
+        _LOGGER.exception("Failed to init AlarmEngine")
+
+    # Initialize Suggestion Engine
+    try:
+        from copilot_core.automations.suggestion_engine import AutomationSuggestionEngine
+        services["suggestion_engine"] = AutomationSuggestionEngine()
+        _LOGGER.info("AutomationSuggestionEngine initialized")
+    except Exception:
+        _LOGGER.exception("Failed to init AutomationSuggestionEngine")
 
     # Calculate startup time
     services["startup_time_ms"] = (time.perf_counter() - start_time) * 1000
@@ -1181,21 +1207,33 @@ def register_blueprints(app: Flask, services: dict) -> None:
         _LOGGER.exception("Failed to register PilotSuite Module endpoints")
 
     # Register Integration Bus API
-    from copilot_core.integration.api import integration_bp
-    app.register_blueprint(integration_bp)
+    try:
+        from copilot_core.integration.api import integration_bp
+        app.register_blueprint(integration_bp)
+    except Exception:
+        _LOGGER.exception("Failed to register integration_bp")
 
     # Register Neuron Layers Visualization API
-    from copilot_core.api.v1.neuron_layers import neuron_layers_bp
-    app.register_blueprint(neuron_layers_bp)
+    try:
+        from copilot_core.api.v1.neuron_layers import neuron_layers_bp
+        app.register_blueprint(neuron_layers_bp)
+    except Exception:
+        _LOGGER.exception("Failed to register neuron_layers_bp")
 
     # Register Module Health Dashboard API
-    from copilot_core.api.v1.module_health import module_health_bp
-    app.register_blueprint(module_health_bp)
+    try:
+        from copilot_core.api.v1.module_health import module_health_bp
+        app.register_blueprint(module_health_bp)
+    except Exception:
+        _LOGGER.exception("Failed to register module_health_bp")
 
     # Register Suggestions API
-    from copilot_core.api.v1.suggestions import suggestions_bp, init_suggestions_api
-    init_suggestions_api(services.get("suggestion_engine"))
-    app.register_blueprint(suggestions_bp)
+    try:
+        from copilot_core.api.v1.suggestions import suggestions_bp, init_suggestions_api
+        init_suggestions_api(services.get("suggestion_engine"))
+        app.register_blueprint(suggestions_bp)
+    except Exception:
+        _LOGGER.exception("Failed to register suggestions_bp")
 
     # Register Zone Automation API (presence-based light + music + entity management)
     from copilot_core.api.v1.zone_automation import zone_automation_bp, init_zone_automation_api
@@ -1257,7 +1295,7 @@ def register_blueprints(app: Flask, services: dict) -> None:
         from copilot_core.hub.wecker import WeckerService
         services["wecker"] = WeckerService(
             sonos_client=services.get("sonos_client"),
-            config=config,
+            config=services.get("config"),
         )
         _LOGGER.info("WeckerService initialized (sonos=%s)", services.get("sonos_client") is not None)
     except Exception:
@@ -1270,7 +1308,9 @@ def register_blueprints(app: Flask, services: dict) -> None:
 
     # Register Zone Aggregates API (device-class-aware Sammelentitaeten + Zone Scenes)
     try:
-        from copilot_core.homeassistant.device_class_aggregator import ZoneAggregator
+        import importlib
+        _dca = importlib.import_module("copilot_core.homeassistant.device_class_aggregator")
+        ZoneAggregator = _dca.ZoneAggregator
         from copilot_core.api.v1.zone_aggregates import zone_aggregates_bp, init_zone_aggregates_api
         zone_aggregator = ZoneAggregator()
         services["zone_aggregator"] = zone_aggregator
@@ -1327,38 +1367,55 @@ def register_blueprints(app: Flask, services: dict) -> None:
     app.register_blueprint(styx_dashboard_bp)
 
     # Register Styx Voice API (STT + TTS)
-    from copilot_core.api.v1.styx_voice import styx_voice_bp
-    app.register_blueprint(styx_voice_bp)
+    try:
+        from copilot_core.api.v1.styx_voice import styx_voice_bp
+        app.register_blueprint(styx_voice_bp)
+    except Exception:
+        _LOGGER.exception("Failed to register styx_voice_bp")
 
     # Serve Styx Dashboard SPA at /styx
     @app.route("/styx")
     def _serve_styx_dashboard():
         from flask import render_template
         return render_template("styx_dashboard.html")
-    
+
     # Register Sonos API (native Sonos control via node-sonos-http-api)
-    from copilot_core.api.v1.sonos import sonos_bp, init_sonos_api
-    init_sonos_api(services.get("sonos_client"), services.get("sonos_intelligence"))
-    app.register_blueprint(sonos_bp)           # prefix: /api/v1/sonos
+    try:
+        from copilot_core.api.v1.sonos import sonos_bp
+        app.register_blueprint(sonos_bp)           # prefix: /api/v1/sonos
+    except Exception:
+        _LOGGER.exception("Failed to register sonos_bp")
 
     # Register Alarm API (Lichtwecker mit Sunrise/Sunset)
-    from copilot_core.api.v1.alarm import alarm_bp, init_alarm_api
-    init_alarm_api(services.get("alarm_engine"))
-    app.register_blueprint(alarm_bp)           # prefix: /api/v1/alarm
+    try:
+        from copilot_core.api.v1.alarm import alarm_bp, init_alarm_api
+        init_alarm_api(services.get("alarm_engine"))
+        app.register_blueprint(alarm_bp)           # prefix: /api/v1/alarm
+    except Exception:
+        _LOGGER.exception("Failed to register alarm_bp")
 
     # Register Conversation History API
-    from copilot_core.api.v1.conversation_history import conversation_history_bp, init_conversation_history_api
-    init_conversation_history_api(services.get("conversation_memory"))
-    app.register_blueprint(conversation_history_bp)  # prefix: /api/v1/conversation
+    try:
+        from copilot_core.api.v1.conversation_history import conversation_history_bp, init_conversation_history_api
+        init_conversation_history_api(services.get("conversation_memory"))
+        app.register_blueprint(conversation_history_bp)  # prefix: /api/v1/conversation
+    except Exception:
+        _LOGGER.exception("Failed to register conversation_history_bp")
 
     # Register Error Digest API
-    from copilot_core.api.v1.error_digest import error_digest_bp, init_error_digest_api
-    init_error_digest_api(llm_provider=services.get("llm_provider"))
-    app.register_blueprint(error_digest_bp)    # prefix: /api/v1/errors
+    try:
+        from copilot_core.api.v1.error_digest import error_digest_bp, init_error_digest_api
+        init_error_digest_api(llm_provider=services.get("llm_provider"))
+        app.register_blueprint(error_digest_bp)    # prefix: /api/v1/errors
+    except Exception:
+        _LOGGER.exception("Failed to register error_digest_bp")
 
     # Register PilotSuite Hub API (standalone, absolute prefix /api/v1/hub)
-    from copilot_core.hub.api import hub_bp
-    app.register_blueprint(hub_bp)
+    try:
+        from copilot_core.hub.api import hub_bp
+        app.register_blueprint(hub_bp)
+    except Exception:
+        _LOGGER.exception("Failed to register hub_bp")
 
     # NOTE: sharing_bp and federated_bp are already nested in api_v1
     # (via blueprint.py lines 79-80). No standalone registration needed.
@@ -1398,6 +1455,22 @@ def register_blueprints(app: Flask, services: dict) -> None:
         app.register_blueprint(automation_bp, url_prefix="/api/v1")
     except Exception:
         _LOGGER.exception("Failed to register automation_bp")
+
+    # Automations Suggestion API (/api/v1/automations/*)
+    try:
+        from copilot_core.automations.api import automations_bp, init_automations_api
+        init_automations_api(services.get("suggestion_engine"))
+        app.register_blueprint(automations_bp)
+    except Exception:
+        _LOGGER.exception("Failed to register automations_bp")
+
+    # Onboarding API (/api/v1/onboarding/*)
+    try:
+        from copilot_core.onboarding import onboarding_bp, init_onboarding
+        init_onboarding(services.get("config"))
+        app.register_blueprint(onboarding_bp)
+    except Exception:
+        _LOGGER.exception("Failed to register onboarding_bp")
 
     # Cache Control API
     try:

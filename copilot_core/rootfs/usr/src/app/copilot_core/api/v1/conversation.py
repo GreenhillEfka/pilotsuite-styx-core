@@ -981,6 +981,8 @@ def llm_routing_set():
         secondary_provider=body.get("secondary_provider"),
         offline_model=body.get("offline_model"),
         cloud_model=body.get("cloud_model"),
+        cloud_api_url=body.get("cloud_api_url"),
+        cloud_api_key=body.get("cloud_api_key"),
         persist=persist,
     )
     return jsonify({

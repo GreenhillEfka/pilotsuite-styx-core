@@ -162,8 +162,8 @@ class ScheduleSuggester:
                         )
                         if resp.ok:
                             events.extend(resp.json())
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        logger.debug("Failed to fetch calendar %s: %s", cal_id, exc)
         except Exception as exc:
             logger.warning("Failed to fetch events: %s", exc)
         

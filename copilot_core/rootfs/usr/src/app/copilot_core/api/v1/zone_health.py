@@ -123,8 +123,14 @@ class ZoneHealthChecker:
         self._api = os.environ.get("SUPERVISOR_API", "http://supervisor/core/api")
         self._token = os.environ.get("SUPERVISOR_TOKEN", "")
 
-    def check_zone(self, zone: dict[str, Any]) -> ZoneHealthResult:
-        """Check health status for a single zone."""
+    def check_zone(self, zone: dict[str, Any], *, prefetched_states: dict[str, dict[str, Any]] | None = None) -> ZoneHealthResult:
+        """Check health status for a single zone.
+
+        Args:
+            zone: Zone config dict with zone_id, entity_ids, entities.
+            prefetched_states: Optional pre-fetched states dict keyed by entity_id.
+                If provided, avoids a separate /states API call.
+        """
         zone_id = zone.get("zone_id", "")
         zone_name = zone.get("name_de", zone.get("name", zone_id))
         entity_ids = zone.get("entity_ids", [])
@@ -146,8 +152,12 @@ class ZoneHealthChecker:
             result.issues.append("Keine Entitaeten zugewiesen")
             return result
 
-        # Fetch entity states
-        entity_states = self._fetch_entity_states(entity_ids)
+        # Use prefetched states if available, otherwise fetch per-zone
+        if prefetched_states is not None:
+            entity_set = set(entity_ids)
+            entity_states = {eid: s for eid, s in prefetched_states.items() if eid in entity_set}
+        else:
+            entity_states = self._fetch_entity_states(entity_ids)
 
         # Check each entity
         for eid in entity_ids:
@@ -240,9 +250,10 @@ class ZoneHealthChecker:
         return result
 
     def check_all_zones(self) -> list[ZoneHealthResult]:
-        """Check health for all configured zones."""
+        """Check health for all configured zones (single /states fetch)."""
         zones = self._get_zones()
-        return [self.check_zone(zone) for zone in zones]
+        all_states = self._fetch_all_states()
+        return [self.check_zone(zone, prefetched_states=all_states) for zone in zones]
 
     def _compute_score(self, result: ZoneHealthResult) -> int:
         """Compute health score (0-100) from zone health data."""
@@ -277,6 +288,30 @@ class ZoneHealthChecker:
         elif score > 0:
             return "critical"
         return "unknown"
+
+    def _fetch_all_states(self) -> dict[str, dict[str, Any]]:
+        """Fetch all entity states from HA Supervisor API, keyed by entity_id."""
+        if not self._token:
+            return {}
+        headers = {
+            "Authorization": f"Bearer {self._token}",
+            "Content-Type": "application/json",
+        }
+        try:
+            resp = http_requests.get(
+                f"{self._api}/states",
+                headers=headers,
+                timeout=10,
+            )
+            if resp.ok:
+                return {
+                    s["entity_id"]: s
+                    for s in resp.json()
+                    if "entity_id" in s
+                }
+        except Exception:
+            logger.debug("Failed to fetch all entity states for health check")
+        return {}
 
     def _fetch_entity_states(self, entity_ids: list[str]) -> dict[str, dict[str, Any]]:
         """Fetch entity states from HA Supervisor API."""

@@ -1,10 +1,16 @@
 """Tests for BehavioralLog — RAG-indexed autonomy history."""
 
+import time
+from unittest.mock import MagicMock, patch
+
 import pytest
 
 from copilot_core.autonomy.behavioral_log import (
     ActionLogEntry,
     BehavioralLog,
+    MAX_DOCUMENTS,
+    NAMESPACE,
+    RETENTION_DAYS,
     _format_log_text,
     _time_of_day,
 )
@@ -145,3 +151,78 @@ class TestBehavioralLogWithIndex:
         stats = log_with_index.get_stats()
         assert stats["available"] is True
         assert stats["doc_count"] >= 1
+
+
+class TestPrune:
+    """Tests for _prune() retention and cap logic."""
+
+    def test_prune_deletes_old_documents(self, tmp_path):
+        """Verify _prune removes documents older than RETENTION_DAYS."""
+        from copilot_core.rag.bm25 import BM25Config, BM25Document, BM25SqliteIndex
+
+        config = BM25Config(db_path=str(tmp_path / "prune_test.sqlite3"))
+        index = BM25SqliteIndex(config)
+        log = BehavioralLog(bm25_index=index)
+
+        # Insert a document with old timestamp via direct SQL
+        old_ts = time.time() - (RETENTION_DAYS + 1) * 86400  # Older than retention
+        doc = BM25Document(doc_id="old_doc", text="alte Aktion Wohnbereich", metadata={})
+        index.upsert_documents(namespace=NAMESPACE, documents=[doc])
+
+        # Backdate the created_at to be older than retention
+        conn = index._get_conn()
+        conn.execute(
+            "UPDATE bm25_docs SET created_at = ? WHERE doc_id = ? AND namespace = ?",
+            (old_ts, "old_doc", NAMESPACE),
+        )
+        conn.commit()
+
+        # Insert a recent document
+        recent_doc = BM25Document(doc_id="new_doc", text="neue Aktion", metadata={})
+        index.upsert_documents(namespace=NAMESPACE, documents=[recent_doc])
+
+        # Verify both exist
+        row = conn.execute(
+            "SELECT COUNT(*) AS cnt FROM bm25_docs WHERE namespace = ?",
+            (NAMESPACE,),
+        ).fetchone()
+        assert row["cnt"] == 2
+
+        # Run prune
+        log._prune()
+
+        # Old doc should be gone, new doc should remain
+        row = conn.execute(
+            "SELECT COUNT(*) AS cnt FROM bm25_docs WHERE namespace = ?",
+            (NAMESPACE,),
+        ).fetchone()
+        assert row["cnt"] == 1
+
+        remaining = conn.execute(
+            "SELECT doc_id FROM bm25_docs WHERE namespace = ?",
+            (NAMESPACE,),
+        ).fetchone()
+        assert remaining["doc_id"] == "new_doc"
+
+    def test_prune_called_on_log_action(self, tmp_path):
+        """Verify _prune is called after each log_action."""
+        from copilot_core.rag.bm25 import BM25Config, BM25SqliteIndex
+
+        config = BM25Config(db_path=str(tmp_path / "prune_call.sqlite3"))
+        index = BM25SqliteIndex(config)
+        log = BehavioralLog(bm25_index=index)
+
+        with patch.object(log, "_prune", wraps=log._prune) as mock_prune:
+            entry = ActionLogEntry(
+                zone_id="test", module_id="licht",
+                action="light.turn_on", mood="relax",
+            )
+            assert log.log_action(entry) is True
+            mock_prune.assert_called_once()
+
+    def test_prune_no_index(self):
+        """_prune with no index does nothing (no crash)."""
+        log = BehavioralLog(bm25_index=None)
+        log._init_done = True
+        # Should not raise
+        log._prune()

@@ -465,6 +465,10 @@
         <div id="bus-content">&ndash;</div>
       </div>
       <div class="card">
+        <h2><span class="icon" style="background:#1a2a2a">&#x1F3E5;</span> System Health</h2>
+        <div id="system-health-content">&ndash;</div>
+      </div>
+      <div class="card">
         <h2><span class="icon" style="background:#2a3a1a">&#x1F3E0;</span> Habitus-Zonen</h2>
         <ul class="zone-list" id="zones-content"></ul>
       </div>
@@ -581,6 +585,31 @@
     <!-- Cloud Models -->
     <div class="section-title">&#x2601;&#xFE0F; Cloud-Modelle</div>
     <div class="model-grid" id="cloud-models"></div>
+
+    <!-- Cloud API Configuration -->
+    <div class="section-title" style="margin-top:20px">&#x1F511; Cloud-API Konfiguration</div>
+    <div class="card" style="max-width:600px">
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div>
+          <label style="font-size:0.82rem;font-weight:600;display:block;margin-bottom:4px">API-URL</label>
+          <input type="text" id="cloud-api-url" placeholder="https://api.openai.com/v1" style="width:100%;padding:8px 10px;border:1px solid var(--surface2);border-radius:6px;background:var(--bg);color:var(--text);font-size:0.85rem"/>
+          <span style="font-size:0.7rem;color:var(--muted)">OpenAI-kompatible API URL (z.B. OpenAI, DeepSeek, lokaler Proxy)</span>
+        </div>
+        <div>
+          <label style="font-size:0.82rem;font-weight:600;display:block;margin-bottom:4px">API-Key</label>
+          <div style="display:flex;gap:6px">
+            <input type="password" id="cloud-api-key" placeholder="sk-..." style="flex:1;padding:8px 10px;border:1px solid var(--surface2);border-radius:6px;background:var(--bg);color:var(--text);font-size:0.85rem"/>
+            <button class="btn-sm btn-secondary" onclick="toggleApiKeyVisibility()" title="Anzeigen/Verbergen" style="padding:8px 10px">&#x1F441;</button>
+          </div>
+          <span style="font-size:0.7rem;color:var(--muted)">Wird sicher in /data/llm_runtime_settings.json gespeichert</span>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:4px">
+          <button class="btn-sm btn-primary" onclick="saveCloudConfig()">Speichern</button>
+          <button class="btn-sm btn-secondary" onclick="testCloudConnection()">Verbindung testen</button>
+          <span id="cloud-config-status" style="font-size:0.78rem;align-self:center"></span>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- ═══════════════ TAB: Modules ═══════════════ -->
@@ -648,10 +677,18 @@
 
   <!-- ═══════════════ TAB: Automation ═══════════════ -->
   <div class="tab-content" id="tab-automation">
+    <!-- Autonomy Execution Stats -->
+    <div class="card wide" id="autonomy-stats-card" style="margin-bottom:16px">
+      <h2><span class="icon" style="background:#1a3a2a">&#x1F916;</span> Autonomie-System</h2>
+      <div id="autonomy-stats" style="display:flex;gap:12px;flex-wrap:wrap;margin-top:8px">
+        <span style="color:var(--muted);font-size:0.82rem">Lade Statistiken...</span>
+      </div>
+      <div id="autonomy-recent" style="margin-top:12px"></div>
+    </div>
     <div class="card wide">
       <h2><span class="icon" style="background:#1a2a3a">&#x2699;&#xFE0F;</span> Zone Automation</h2>
       <p style="color:var(--muted);font-size:0.82rem;margin-bottom:12px">
-        Praesenzabhaengige Licht- und Musiksteuerung pro Zone. Slider fuer Verzoegerung, Helligkeit, Daempfung.
+        Praesenzabhaengige Licht- und Musiksteuerung pro Zone. Autonomie-Modus bestimmt ob Aktionen automatisch ausgefuehrt werden.
       </p>
       <div id="automation-zones" class="auto-zone-grid"></div>
     </div>
@@ -737,12 +774,17 @@ async function fetchJSON(path) {
 }
 
 async function postJSON(path, body) {
-  const r = await fetch(BASE + path, {
-    method: "POST",
-    headers: {...HEADERS, "Content-Type": "application/json"},
-    body: JSON.stringify(body),
-  });
-  return r.json();
+  try {
+    const r = await fetch(BASE + path, {
+      method: "POST",
+      headers: {...HEADERS, "Content-Type": "application/json"},
+      body: JSON.stringify(body),
+    });
+    return await r.json();
+  } catch (e) {
+    console.error("postJSON error:", path, e);
+    return null;
+  }
 }
 
 function showToast(msg, ms) {
@@ -865,6 +907,80 @@ function renderLLMStatusMini(status) {
     <div class="stat"><span class="label">Ollama</span><span class="value">${status.ollama_available ? "\u2705" : "\u274C"}</span></div>
     <div class="stat"><span class="label">Cloud</span><span class="value">${status.cloud_configured ? "\u2705" : "Nicht konfiguriert"}</span></div>
     <div class="stat"><span class="label">Fallback</span><span class="value">${status.secondary_provider || "—"}</span></div>`;
+}
+
+function renderSystemHealth(health) {
+  if (!health) return "Keine Health-Daten";
+  let html = '';
+  const statusColor = health.status === 'healthy' ? 'var(--green)' : health.status === 'degraded' ? 'var(--orange)' : 'var(--red)';
+  const statusLabel = health.status === 'healthy' ? 'Gesund' : health.status === 'degraded' ? 'Eingeschraenkt' : 'Fehlerhaft';
+  html += `<div class="stat"><span class="label"><span class="status-dot ${health.status === 'healthy' ? 'ok' : health.status === 'degraded' ? 'warn' : 'err'}"></span>Status</span><span class="value" style="color:${statusColor}">${statusLabel}</span></div>`;
+  if (health.uptime) html += `<div class="stat"><span class="label">Uptime</span><span class="value">${health.uptime}</span></div>`;
+  if (health.cpu_percent != null) {
+    const cpuColor = health.cpu_percent > 80 ? 'var(--red)' : health.cpu_percent > 50 ? 'var(--orange)' : 'var(--green)';
+    html += `<div class="stat"><span class="label">CPU</span><span class="value" style="color:${cpuColor}">${health.cpu_percent}%</span></div>`;
+  }
+  if (health.memory_mb != null) {
+    const memColor = health.memory_percent > 80 ? 'var(--red)' : health.memory_percent > 60 ? 'var(--orange)' : 'inherit';
+    html += `<div class="stat"><span class="label">RAM</span><span class="value" style="color:${memColor}">${health.memory_mb} MB (${health.memory_percent}%)</span></div>`;
+  }
+  if (health.disk_used_pct != null) html += `<div class="stat"><span class="label">Disk</span><span class="value">${health.disk_used_pct}% (${health.disk_free_gb} GB frei)</span></div>`;
+  if (health.services_up != null) {
+    const svcColor = health.services_up === health.services_total ? 'var(--green)' : 'var(--orange)';
+    html += `<div class="stat"><span class="label">Services</span><span class="value" style="color:${svcColor}">${health.services_up} / ${health.services_total}</span></div>`;
+    if (health.services) {
+      const down = Object.entries(health.services).filter(([,v]) => !v.up);
+      if (down.length > 0) {
+        html += '<div style="margin-top:6px;font-size:0.75rem;color:var(--red)">';
+        for (const [, svc] of down) html += `<div>\u274C ${svc.label}</div>`;
+        html += '</div>';
+      }
+    }
+  }
+  if (health.python_version) html += `<div class="stat"><span class="label">Python</span><span class="value">${health.python_version}</span></div>`;
+  return html;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Cloud Config
+// ═══════════════════════════════════════════════════════════════
+
+function toggleApiKeyVisibility() {
+  const input = document.getElementById('cloud-api-key');
+  input.type = input.type === 'password' ? 'text' : 'password';
+}
+
+async function saveCloudConfig() {
+  const url = document.getElementById('cloud-api-url').value.trim();
+  const key = document.getElementById('cloud-api-key').value.trim();
+  const statusEl = document.getElementById('cloud-config-status');
+  if (!url && !key) { statusEl.textContent = 'Bitte URL oder Key eingeben'; statusEl.style.color = 'var(--red)'; return; }
+  const body = {};
+  if (url) body.cloud_api_url = url;
+  if (key) body.cloud_api_key = key;
+  const result = await postJSON('/chat/routing', body);
+  if (result && result.ok) {
+    statusEl.textContent = '\u2705 Gespeichert';
+    statusEl.style.color = 'var(--green)';
+    await loadLLM();
+  } else {
+    statusEl.textContent = '\u274C Fehler: ' + (result ? result.error : 'Unbekannt');
+    statusEl.style.color = 'var(--red)';
+  }
+}
+
+async function testCloudConnection() {
+  const statusEl = document.getElementById('cloud-config-status');
+  statusEl.textContent = 'Teste...';
+  statusEl.style.color = 'var(--muted)';
+  const result = await fetchJSON('/chat/status');
+  if (result && result.cloud_configured) {
+    statusEl.textContent = '\u2705 Cloud-API erreichbar';
+    statusEl.style.color = 'var(--green)';
+  } else {
+    statusEl.textContent = '\u274C Cloud nicht konfiguriert oder nicht erreichbar';
+    statusEl.style.color = 'var(--red)';
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1048,7 +1164,7 @@ function renderCandidates(candidates) {
 let neuronConfigs = {};
 
 async function loadNeuronConfigs() {
-  const data = await fetchJSON("/neurons");
+  const data = await fetchJSON("/api/v1/neurons");
   if (!data || !data.success) return;
   neuronConfigs = {};
   for (const layer of ["context", "state", "mood"]) {
@@ -1109,7 +1225,7 @@ function renderNeuronConfig(dashData) {
 }
 
 async function updateNeuronCfg(nid, key, value) {
-  const result = await fetch(BASE + `/neurons/${nid}/config`, {
+  const result = await fetch(BASE + `/api/v1/neurons/${nid}/config`, {
     method: "PATCH",
     headers: {...HEADERS, "Content-Type": "application/json"},
     body: JSON.stringify({[key]: value}),
@@ -1123,7 +1239,7 @@ async function updateNeuronCfg(nid, key, value) {
 
 async function toggleNeuron(nid, enable) {
   const endpoint = enable ? "enable" : "disable";
-  const result = await postJSON(`/neurons/${nid}/${endpoint}`, {});
+  const result = await postJSON(`/api/v1/neurons/${nid}/${endpoint}`, {});
   if (result.success) {
     showToast(`${nid}: ${enable ? "Aktiviert" : "Deaktiviert"}`);
     loadDashboard();
@@ -1138,7 +1254,7 @@ async function toggleNeuron(nid, enable) {
 
 async function loadSynapses() {
   const data = await fetchJSON("/api/v1/neurons/layers/synapses");
-  if (!data || !data.success) return;
+  if (!data || !data.success || !data.data) return;
   const el = document.getElementById("synapse-list");
   if (!el) return;
   el.innerHTML = data.data.map(s => {
@@ -1943,7 +2059,7 @@ async function sonosResumeAll() {
 
 async function sonosApplyPreset(presetId) {
   const r = await postJSON(`/api/v1/sonos/presets/${presetId}/apply`, {});
-  showToast(r.ok ? `Preset ${presetId} angewendet` : "Fehler beim Anwenden");
+  showToast(r && r.ok ? `Preset ${presetId} angewendet` : "Fehler beim Anwenden");
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -2020,41 +2136,41 @@ function renderMediaZones(media) {
 
 async function mediaGroupZone(zoneId) {
   const result = await postJSON("/api/v1/zones/group", {zone_id: zoneId});
-  if (result.ok) showToast(`Zone ${zoneId} gruppiert.`);
-  else showToast(`Fehler: ${result.error || 'Unbekannt'}`, 4000);
+  if (result && result.ok) showToast(`Zone ${zoneId} gruppiert.`);
+  else showToast(`Fehler: ${(result && result.error) || 'Unbekannt'}`, 4000);
 }
 
 async function mediaUngroupZone(zoneId) {
   const result = await postJSON("/api/v1/zones/ungroup", {zone_id: zoneId});
-  if (result.ok) showToast(`Zone ${zoneId} getrennt.`);
-  else showToast(`Fehler: ${result.error || 'Unbekannt'}`, 4000);
+  if (result && result.ok) showToast(`Zone ${zoneId} getrennt.`);
+  else showToast(`Fehler: ${(result && result.error) || 'Unbekannt'}`, 4000);
 }
 
 async function musikwolkeGroupAll() {
   const result = await postJSON("/api/v1/zones/group-all", {});
-  if (result.ok) showToast("Alle Zonen gruppiert (Musikwolke).");
-  else showToast(`Fehler: ${result.error || 'Unbekannt'}`, 4000);
+  if (result && result.ok) showToast("Alle Zonen gruppiert (Musikwolke).");
+  else showToast(`Fehler: ${(result && result.error) || 'Unbekannt'}`, 4000);
 }
 
 async function musikwolkeUngroupAll() {
   const result = await postJSON("/api/v1/zones/ungroup-all", {});
-  if (result.ok) showToast("Alle Zonen getrennt.");
-  else showToast(`Fehler: ${result.error || 'Unbekannt'}`, 4000);
+  if (result && result.ok) showToast("Alle Zonen getrennt.");
+  else showToast(`Fehler: ${(result && result.error) || 'Unbekannt'}`, 4000);
 }
 
 async function mediaPlayZone(zoneId) {
   const result = await postJSON(`/api/v1/zones/${zoneId}/play`, {});
-  if (result.ok) showToast(`${zoneId}: Play`);
+  if (result && result.ok) showToast(`${zoneId}: Play`);
 }
 
 async function mediaPauseZone(zoneId) {
   const result = await postJSON(`/api/v1/zones/${zoneId}/pause`, {});
-  if (result.ok) showToast(`${zoneId}: Pause`);
+  if (result && result.ok) showToast(`${zoneId}: Pause`);
 }
 
 async function mediaSetVolume(zoneId, volume) {
   const result = await postJSON(`/api/v1/zones/${zoneId}/volume`, {volume});
-  if (result.ok) showToast(`${zoneId}: ${Math.round(volume*100)}%`);
+  if (result && result.ok) showToast(`${zoneId}: ${Math.round(volume*100)}%`);
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -2164,8 +2280,17 @@ function renderSummaryStrip(dash) {
   const sugCount = (dash.suggestions || []).length;
   const neuronCount = dash.neurons?.total_count || 0;
   const mediaSessions = dash.media?.active_sessions || 0;
+  const health = dash.system_health || {};
+  const healthColor = health.status === 'healthy' ? 'var(--green)' : health.status === 'degraded' ? 'var(--orange)' : 'var(--red)';
+  const healthLabel = health.status === 'healthy' ? 'Gesund' : health.status === 'degraded' ? 'Eingeschr.' : 'Fehler';
+  const svcInfo = health.services_up != null ? `${health.services_up}/${health.services_total} Services` : '';
 
   el.innerHTML = `
+    <div class="summary-chip">
+      <div class="sc-label">System</div>
+      <div class="sc-value" style="color:${healthColor}">${healthLabel}</div>
+      <div class="sc-sub">${svcInfo}</div>
+    </div>
     <div class="summary-chip">
       <div class="sc-label">Stimmung</div>
       <div class="sc-value"><span class="mood-badge ${moodClass(mood)}" style="font-size:0.9rem;padding:2px 8px">${mood}</span></div>
@@ -2200,11 +2325,38 @@ function renderSummaryStrip(dash) {
 let automationData = null;
 
 async function loadAutomation() {
-  const data = await fetchJSON("/api/v1/zone-automation/dashboard");
+  const [data, autoData] = await Promise.all([
+    fetchJSON("/api/v1/zone-automation/dashboard"),
+    fetchJSON("/api/v1/autonomy/dashboard").catch(() => null),
+  ]);
   if (!data || !data.ok) return;
   automationData = data;
   renderAutomationZones(data.zones || []);
   renderEntityManagement(data.zones || []);
+  renderAutonomyStats(autoData);
+}
+
+function renderAutonomyStats(data) {
+  const el = document.getElementById("autonomy-stats");
+  const recent = document.getElementById("autonomy-recent");
+  if (!el) return;
+  if (!data || !data.ok) {
+    el.innerHTML = '<span style="color:var(--muted);font-size:0.82rem">Autonomie-System nicht verfuegbar</span>';
+    if (recent) recent.innerHTML = '';
+    return;
+  }
+  const s = data.stats || {};
+  const chips = [
+    {l:'Ausgefuehrt',v:s.executed||0,c:'var(--green)'},
+    {l:'Vorgeschlagen',v:s.suggested||0,c:'var(--orange)'},
+    {l:'Uebersprungen',v:s.skipped||0,c:'var(--muted)'},
+    {l:'Fehler',v:s.errors||0,c:s.errors?'var(--red)':'var(--muted)'},
+  ];
+  el.innerHTML = chips.map(c => `<div style="background:var(--surface);border:1px solid var(--surface2);border-radius:8px;padding:8px 14px;text-align:center;min-width:80px"><div style="font-size:1.1rem;font-weight:700;color:${c.c}">${c.v}</div><div style="font-size:0.7rem;color:var(--muted)">${c.l}</div></div>`).join('');
+  if (recent && data.recent_actions && data.recent_actions.length) {
+    recent.innerHTML = '<div style="font-size:0.78rem;font-weight:600;margin-bottom:4px;color:var(--muted)">Letzte Aktionen</div>' +
+      data.recent_actions.slice(0,5).map(a => `<div style="font-size:0.75rem;color:var(--text);padding:3px 0;border-bottom:1px solid var(--surface2)">${a.zone_id||'?'}: ${a.action||a.module_id||'?'} <span style="color:var(--muted)">${a.mood||''} ${a.timestamp?new Date(a.timestamp).toLocaleTimeString('de'):''}</span></div>`).join('');
+  } else if (recent) { recent.innerHTML = ''; }
 }
 
 function renderAutomationZones(zones) {
@@ -2217,8 +2369,19 @@ function renderAutomationZones(zones) {
     const mc = c.music || {};
     const st = z.state || {};
     const zid = z.zone_id;
+    const curMode = c.automation_mode || 'learning';
+    const modeColors = {off:'var(--muted)',learning:'var(--orange)',autonomy:'var(--green)'};
+    const modeLabels = {off:'Aus',learning:'Lernend',autonomy:'Autonom'};
     return `<div class="auto-zone-card" id="auto-zone-${zid}">
       <h3>${c.zone_name || zid} ${st.occupied ? '<span style="color:var(--green)">&#x25CF; Besetzt</span>' : '<span style="color:var(--muted)">&#x25CB;</span>'}</h3>
+      <div class="auto-section" style="margin-bottom:8px">
+        <div class="auto-section-title">&#x1F916; Autonomie-Modus
+          <span style="color:${modeColors[curMode]};font-size:0.78rem;font-weight:600;margin-left:8px">${modeLabels[curMode]||curMode}</span>
+        </div>
+        <div style="display:flex;gap:4px;margin-top:6px">
+          ${['off','learning','autonomy'].map(m => `<button onclick="setZoneAutonomyMode('${zid}','${m}')" style="flex:1;padding:5px 8px;font-size:0.75rem;border:1px solid ${curMode===m?modeColors[m]:'var(--surface2)'};background:${curMode===m?modeColors[m]+'22':'var(--surface)'};color:${curMode===m?modeColors[m]:'var(--muted)'};border-radius:6px;cursor:pointer;font-weight:${curMode===m?'600':'400'}">${modeLabels[m]}</button>`).join('')}
+        </div>
+      </div>
       <div class="auto-section">
         <div class="auto-section-title">&#x1F4A1; Lichtautomatisierung
           <label class="toggle-switch"><input type="checkbox" ${lc.enabled ? 'checked' : ''} onchange="toggleAutoLight('${zid}',this.checked)"><span class="slider"></span></label>
@@ -2301,6 +2464,12 @@ async function updateLightConfig(zoneId, key, value) {
 
 async function updateMusicConfig(zoneId, key, value) {
   await postJSON(`/api/v1/zone-automation/zones/${zoneId}/config`, {music: {[key]: value}});
+}
+
+async function setZoneAutonomyMode(zoneId, mode) {
+  await postJSON(`/api/v1/zone-automation/zones/${zoneId}/mode`, {mode});
+  showToast(`Autonomie-Modus: ${mode}`);
+  loadAutomation();
 }
 
 async function toggleAutoLight(zoneId, enabled) {
@@ -2684,6 +2853,8 @@ async function loadDashboard() {
     document.getElementById("status").textContent = `${dash.render_ms}ms · ${new Date(dash.timestamp).toLocaleTimeString("de-DE")}`;
     updateBrainViz(dash);
     renderNeuronConfig(dash);
+    // System Health
+    document.getElementById("system-health-content").innerHTML = renderSystemHealth(dash.system_health);
     // New tabs
     renderZoneCards(dash.zones || []);
     renderMediaZones(dash.media || {});

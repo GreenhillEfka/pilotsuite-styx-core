@@ -53,6 +53,86 @@ def _safe_call(fn, default=None):
         return default
 
 
+def _build_system_health() -> Dict[str, Any]:
+    """Collect system health metrics for dashboard display."""
+    import os
+    import sys
+
+    health: Dict[str, Any] = {
+        "python_version": sys.version.split()[0],
+        "pid": os.getpid(),
+    }
+
+    # CPU / Memory / Disk via psutil (optional)
+    try:
+        import psutil
+        proc = psutil.Process()
+        mem_info = proc.memory_info()
+        health["cpu_percent"] = psutil.cpu_percent(interval=0)
+        health["memory_mb"] = round(mem_info.rss / (1024 * 1024), 1)
+        health["memory_percent"] = round(proc.memory_percent(), 1)
+        disk = psutil.disk_usage("/data") if os.path.exists("/data") else psutil.disk_usage("/")
+        health["disk_used_pct"] = round(disk.percent, 1)
+        health["disk_free_gb"] = round(disk.free / (1024**3), 1)
+
+        import datetime as _dt
+        boot_time = _dt.datetime.fromtimestamp(proc.create_time(), tz=_dt.timezone.utc)
+        uptime_s = (datetime.now(timezone.utc) - boot_time).total_seconds()
+        hours, remainder = divmod(int(uptime_s), 3600)
+        minutes = remainder // 60
+        health["uptime"] = f"{hours}h {minutes}m"
+        health["uptime_seconds"] = int(uptime_s)
+    except ImportError:
+        health["cpu_percent"] = None
+        health["memory_mb"] = None
+    except Exception:
+        pass
+
+    # Service availability
+    service_status = {}
+    critical_services = [
+        ("neuron_manager", "Neuronen"),
+        ("brain_graph_service", "Brain Graph"),
+        ("integration_bus", "Event Bus"),
+        ("module_registry", "Module"),
+        ("habitus_service", "Habitus"),
+    ]
+    optional_services = [
+        ("zone_automation", "Zone Automation"),
+        ("musikwolke_bridge", "Musikwolke"),
+        ("hub_light", "Licht-Intelligence"),
+        ("hub_presence", "Praesenz-Intelligence"),
+        ("suggestion_engine", "Vorschlaege"),
+        ("llm_provider", "LLM Provider"),
+        ("sonos_client", "Sonos"),
+        ("autonomy_executor", "Autonomie"),
+    ]
+    healthy_count = 0
+    total_count = 0
+    for key, label in critical_services + optional_services:
+        svc = _services.get(key)
+        is_up = svc is not None
+        service_status[key] = {"label": label, "up": is_up}
+        total_count += 1
+        if is_up:
+            healthy_count += 1
+
+    health["services"] = service_status
+    health["services_up"] = healthy_count
+    health["services_total"] = total_count
+    health["status"] = "healthy" if healthy_count >= len(critical_services) else "degraded"
+
+    # Ollama status
+    try:
+        import os as _os
+        ollama_url = _os.environ.get("OLLAMA_URL", "http://localhost:11434")
+        health["ollama_url"] = ollama_url
+    except Exception:
+        pass
+
+    return health
+
+
 # ═══════════════════════════════════════════════════════════════════════
 # GET /api/v1/styx/dashboard — Full dashboard payload
 # ═══════════════════════════════════════════════════════════════════════
@@ -152,6 +232,9 @@ def full_dashboard():
         except Exception:
             pass
 
+    # ── System Health ──
+    system_health = _build_system_health()
+
     elapsed_ms = round((time.monotonic() - t0) * 1000, 1)
 
     return jsonify({
@@ -176,6 +259,7 @@ def full_dashboard():
         "zones": zones_data,
         "media": media_data,
         "suggestions": suggestions,
+        "system_health": system_health,
     })
 
 

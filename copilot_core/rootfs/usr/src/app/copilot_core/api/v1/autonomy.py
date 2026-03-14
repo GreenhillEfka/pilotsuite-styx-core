@@ -32,8 +32,9 @@ def init_autonomy_api(executor=None, module_registry=None) -> None:
 def get_dashboard():
     """GET /api/v1/autonomy/dashboard — Status aller Zonen + Module + Stats."""
     if not _executor:
-        return jsonify({"error": "AutonomyExecutor not available"}), 503
-    return jsonify(_executor.get_dashboard())
+        return jsonify({"ok": False, "error": "AutonomyExecutor not available"}), 503
+    dashboard = _executor.get_dashboard()
+    return jsonify({"ok": True, **dashboard})
 
 
 # ── Zone Status ─────────────────────────────────────────────────────────
@@ -42,7 +43,7 @@ def get_dashboard():
 @require_token
 def get_zone_status(zone_id: str):
     """GET /api/v1/autonomy/zones/<zone_id> — Zone mode + per-module states."""
-    result = {"zone_id": zone_id}
+    result = {"ok": True, "zone_id": zone_id}
     if _executor and _executor._zone_automation:
         result["automation_mode"] = _executor._zone_automation.get_automation_mode(zone_id)
     if _module_registry:
@@ -86,11 +87,11 @@ def set_zone_module_state(zone_id: str):
 def get_zone_history(zone_id: str):
     """GET /api/v1/autonomy/zones/<zone_id>/history — Behavioral log for zone."""
     if not _executor or not _executor._behavioral_log:
-        return jsonify({"error": "BehavioralLog not available"}), 503
+        return jsonify({"ok": False, "error": "BehavioralLog not available"}), 503
 
     top_k = request.args.get("limit", 20, type=int)
     history = _executor._behavioral_log.get_zone_history(zone_id, top_k=top_k)
-    return jsonify({"zone_id": zone_id, "history": history})
+    return jsonify({"ok": True, "zone_id": zone_id, "history": history})
 
 
 # ── Mood Actions ────────────────────────────────────────────────────────
@@ -100,10 +101,10 @@ def get_zone_history(zone_id: str):
 def get_mood_actions():
     """GET /api/v1/autonomy/mood-actions — Aktuelle Mood-Action-Tabelle."""
     if not _executor:
-        return jsonify({"error": "AutonomyExecutor not available"}), 503
+        return jsonify({"ok": False, "error": "AutonomyExecutor not available"}), 503
 
     mapper = _executor._get_mood_mapper()
-    return jsonify(mapper.get_all_actions())
+    return jsonify({"ok": True, "actions": mapper.get_all_actions()})
 
 
 @autonomy_bp.route("/mood-actions/<mood>/override", methods=["POST"])
@@ -129,9 +130,9 @@ def set_mood_override(mood: str):
 def get_stats():
     """GET /api/v1/autonomy/stats — Execution statistics."""
     if not _executor:
-        return jsonify({"error": "AutonomyExecutor not available"}), 503
+        return jsonify({"ok": False, "error": "AutonomyExecutor not available"}), 503
 
     stats = dict(_executor._stats)
     if _executor._behavioral_log:
         stats["log"] = _executor._behavioral_log.get_stats()
-    return jsonify(stats)
+    return jsonify({"ok": True, **stats})

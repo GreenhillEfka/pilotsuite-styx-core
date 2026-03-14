@@ -92,6 +92,13 @@ class LLMProvider:
         self.ollama_model_overridden = False
 
         runtime = self._load_runtime_overrides()
+        # Apply cloud config from runtime overrides (dashboard-editable)
+        runtime_cloud_url = str(runtime.get("cloud_api_url", "") or "").strip()
+        runtime_cloud_key = str(runtime.get("cloud_api_key", "") or "").strip()
+        if runtime_cloud_url:
+            self.cloud_api_url = runtime_cloud_url
+        if runtime_cloud_key:
+            self.cloud_api_key = runtime_cloud_key
         runtime_offline_model = str(runtime.get("offline_model", "") or "").strip()
         runtime_cloud_model = str(runtime.get("cloud_model", "") or "").strip()
 
@@ -167,6 +174,8 @@ class LLMProvider:
         secondary_provider: str | None = None,
         offline_model: str | None = None,
         cloud_model: str | None = None,
+        cloud_api_url: str | None = None,
+        cloud_api_key: str | None = None,
         persist: bool = True,
     ) -> dict:
         """Update routing/model config at runtime, optionally persisted on disk."""
@@ -190,6 +199,24 @@ class LLMProvider:
                 runtime["cloud_model"] = value
             else:
                 runtime.pop("cloud_model", None)
+
+        if cloud_api_url is not None:
+            value = str(cloud_api_url or "").strip()
+            if value:
+                runtime["cloud_api_url"] = value
+                os.environ["CLOUD_API_URL"] = value
+            else:
+                runtime.pop("cloud_api_url", None)
+                os.environ.pop("CLOUD_API_URL", None)
+
+        if cloud_api_key is not None:
+            value = str(cloud_api_key or "").strip()
+            if value:
+                runtime["cloud_api_key"] = value
+                os.environ["CLOUD_API_KEY"] = value
+            else:
+                runtime.pop("cloud_api_key", None)
+                os.environ.pop("CLOUD_API_KEY", None)
 
         os.environ["PREFER_LOCAL"] = "true" if runtime.get("primary_provider", self.primary_provider) == _PROVIDER_OFFLINE else "false"
         if "offline_model" in runtime:

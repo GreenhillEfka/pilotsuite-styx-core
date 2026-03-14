@@ -350,8 +350,8 @@ class MoodAwareScheduler:
                         )
                         if resp.ok:
                             events.extend(resp.json())
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        logger.debug("Failed to fetch calendar events: %s", exc)
         except Exception as exc:
             logger.warning("Failed to fetch events: %s", exc)
         
