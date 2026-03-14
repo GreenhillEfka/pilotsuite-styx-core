@@ -774,12 +774,17 @@ async function fetchJSON(path) {
 }
 
 async function postJSON(path, body) {
-  const r = await fetch(BASE + path, {
-    method: "POST",
-    headers: {...HEADERS, "Content-Type": "application/json"},
-    body: JSON.stringify(body),
-  });
-  return r.json();
+  try {
+    const r = await fetch(BASE + path, {
+      method: "POST",
+      headers: {...HEADERS, "Content-Type": "application/json"},
+      body: JSON.stringify(body),
+    });
+    return await r.json();
+  } catch (e) {
+    console.error("postJSON error:", path, e);
+    return null;
+  }
 }
 
 function showToast(msg, ms) {
@@ -1249,7 +1254,7 @@ async function toggleNeuron(nid, enable) {
 
 async function loadSynapses() {
   const data = await fetchJSON("/api/v1/neurons/layers/synapses");
-  if (!data || !data.success) return;
+  if (!data || !data.success || !data.data) return;
   const el = document.getElementById("synapse-list");
   if (!el) return;
   el.innerHTML = data.data.map(s => {
@@ -2054,7 +2059,7 @@ async function sonosResumeAll() {
 
 async function sonosApplyPreset(presetId) {
   const r = await postJSON(`/api/v1/sonos/presets/${presetId}/apply`, {});
-  showToast(r.ok ? `Preset ${presetId} angewendet` : "Fehler beim Anwenden");
+  showToast(r && r.ok ? `Preset ${presetId} angewendet` : "Fehler beim Anwenden");
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -2131,41 +2136,41 @@ function renderMediaZones(media) {
 
 async function mediaGroupZone(zoneId) {
   const result = await postJSON("/api/v1/zones/group", {zone_id: zoneId});
-  if (result.ok) showToast(`Zone ${zoneId} gruppiert.`);
-  else showToast(`Fehler: ${result.error || 'Unbekannt'}`, 4000);
+  if (result && result.ok) showToast(`Zone ${zoneId} gruppiert.`);
+  else showToast(`Fehler: ${(result && result.error) || 'Unbekannt'}`, 4000);
 }
 
 async function mediaUngroupZone(zoneId) {
   const result = await postJSON("/api/v1/zones/ungroup", {zone_id: zoneId});
-  if (result.ok) showToast(`Zone ${zoneId} getrennt.`);
-  else showToast(`Fehler: ${result.error || 'Unbekannt'}`, 4000);
+  if (result && result.ok) showToast(`Zone ${zoneId} getrennt.`);
+  else showToast(`Fehler: ${(result && result.error) || 'Unbekannt'}`, 4000);
 }
 
 async function musikwolkeGroupAll() {
   const result = await postJSON("/api/v1/zones/group-all", {});
-  if (result.ok) showToast("Alle Zonen gruppiert (Musikwolke).");
-  else showToast(`Fehler: ${result.error || 'Unbekannt'}`, 4000);
+  if (result && result.ok) showToast("Alle Zonen gruppiert (Musikwolke).");
+  else showToast(`Fehler: ${(result && result.error) || 'Unbekannt'}`, 4000);
 }
 
 async function musikwolkeUngroupAll() {
   const result = await postJSON("/api/v1/zones/ungroup-all", {});
-  if (result.ok) showToast("Alle Zonen getrennt.");
-  else showToast(`Fehler: ${result.error || 'Unbekannt'}`, 4000);
+  if (result && result.ok) showToast("Alle Zonen getrennt.");
+  else showToast(`Fehler: ${(result && result.error) || 'Unbekannt'}`, 4000);
 }
 
 async function mediaPlayZone(zoneId) {
   const result = await postJSON(`/api/v1/zones/${zoneId}/play`, {});
-  if (result.ok) showToast(`${zoneId}: Play`);
+  if (result && result.ok) showToast(`${zoneId}: Play`);
 }
 
 async function mediaPauseZone(zoneId) {
   const result = await postJSON(`/api/v1/zones/${zoneId}/pause`, {});
-  if (result.ok) showToast(`${zoneId}: Pause`);
+  if (result && result.ok) showToast(`${zoneId}: Pause`);
 }
 
 async function mediaSetVolume(zoneId, volume) {
   const result = await postJSON(`/api/v1/zones/${zoneId}/volume`, {volume});
-  if (result.ok) showToast(`${zoneId}: ${Math.round(volume*100)}%`);
+  if (result && result.ok) showToast(`${zoneId}: ${Math.round(volume*100)}%`);
 }
 
 // ═══════════════════════════════════════════════════════════════

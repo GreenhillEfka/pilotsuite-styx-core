@@ -1456,6 +1456,22 @@ def register_blueprints(app: Flask, services: dict) -> None:
     except Exception:
         _LOGGER.exception("Failed to register automation_bp")
 
+    # Automations Suggestion API (/api/v1/automations/*)
+    try:
+        from copilot_core.automations.api import automations_bp, init_automations_api
+        init_automations_api(services.get("suggestion_engine"))
+        app.register_blueprint(automations_bp)
+    except Exception:
+        _LOGGER.exception("Failed to register automations_bp")
+
+    # Onboarding API (/api/v1/onboarding/*)
+    try:
+        from copilot_core.onboarding import onboarding_bp, init_onboarding
+        init_onboarding(services.get("config"))
+        app.register_blueprint(onboarding_bp)
+    except Exception:
+        _LOGGER.exception("Failed to register onboarding_bp")
+
     # Cache Control API
     try:
         from copilot_core.api.v1.cache_control import cache_control_bp, init_cache_control_api

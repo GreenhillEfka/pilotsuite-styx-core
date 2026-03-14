@@ -388,6 +388,7 @@ class AutonomyExecutor:
             try:
                 entities_by_role = self._zone_automation.get_zone_entities_by_role(zone_id)
             except Exception:
+                _LOGGER.debug("Failed to get entities for zone %s", zone_id, exc_info=True)
                 continue
 
             # Light actions
@@ -479,7 +480,7 @@ class AutonomyExecutor:
                     context["mood"] = last_result.dominant_mood
                     context["confidence"] = last_result.mood_confidence
             except Exception:
-                pass
+                _LOGGER.debug("Failed to get mood context for presence event", exc_info=True)
 
         if detected:
             # Presence detected → use mood-based lighting if available
@@ -619,7 +620,7 @@ class AutonomyExecutor:
             try:
                 log_stats = self._behavioral_log.get_stats()
             except Exception:
-                pass
+                _LOGGER.debug("Failed to get behavioral log stats", exc_info=True)
 
         with self._stats_lock:
             stats_snapshot = dict(self._stats)

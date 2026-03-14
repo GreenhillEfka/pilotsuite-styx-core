@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import logging
 import asyncio
+import time
 from typing import Any, Dict
 
 from flask import Blueprint, Response, jsonify, request
@@ -256,6 +257,3 @@ def metrics_summary():
             "message": str(e),
         }), 500
 
-
-# Import time for liveness probe
-import time
