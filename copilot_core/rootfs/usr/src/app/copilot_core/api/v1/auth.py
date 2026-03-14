@@ -1,7 +1,7 @@
 """Authentication setup endpoints.
 
 Provides a setup-token endpoint for the HA integration to auto-fetch
-the 1-Key-Flow token during Zero Config setup.
+the active auth token during Zero Config / Quick Start setup.
 """
 from __future__ import annotations
 
@@ -18,33 +18,33 @@ auth_bp = Blueprint("auth", __name__, url_prefix="/api/v1/auth")
 
 @auth_bp.get("/setup-token")
 def setup_token():
-    """Return the auto-generated token for initial HA integration setup.
+    """Return the active auth token for HA integration setup (1-Key-Flow).
 
-    Only exposes the token if it was auto-generated (1-Key-Flow).
-    Manually configured tokens (env/options) are never exposed — the user
-    already knows them.
+    Exposes the token regardless of source (auto, options, env).
+    This endpoint is intentionally unauthenticated — it is only reachable
+    on the local network and enables seamless Zero Config integration.
     """
     source = get_token_source()
 
-    if source == "auto":
-        token = get_auth_token()
-        _LOGGER.info(
-            "Setup token requested — returning auto-generated token (%s...%s)",
-            token[:8], token[-4:],
-        )
-        return jsonify({"ok": True, "token": token, "source": "auto"})
+    if source == "none":
+        return jsonify({
+            "ok": False,
+            "token": None,
+            "source": "none",
+            "message": "No token configured",
+        })
 
-    if source in ("env", "options"):
+    token = get_auth_token()
+    if not token:
         return jsonify({
             "ok": False,
             "token": None,
             "source": source,
-            "message": "Token is manually configured — retrieve it from your configuration",
+            "message": "Token could not be resolved",
         })
 
-    return jsonify({
-        "ok": False,
-        "token": None,
-        "source": "none",
-        "message": "No token available",
-    })
+    _LOGGER.info(
+        "Setup token requested — returning %s token (%s...%s)",
+        source, token[:8], token[-4:],
+    )
+    return jsonify({"ok": True, "token": token, "source": source})

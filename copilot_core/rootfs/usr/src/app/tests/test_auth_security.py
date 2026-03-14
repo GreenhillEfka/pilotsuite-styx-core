@@ -902,7 +902,7 @@ class TestSetupTokenEndpoint(unittest.TestCase):
         self.assertEqual(body["token"], "auto-gen-token")
         self.assertEqual(body["source"], "auto")
 
-    def test_setup_token_hides_manual_token(self):
+    def test_setup_token_exposes_manual_token(self):
         if not _FLASK_AVAILABLE:
             self.skipTest("Flask not installed")
         from flask import Flask
@@ -912,13 +912,14 @@ class TestSetupTokenEndpoint(unittest.TestCase):
         app.register_blueprint(auth_bp)
         client = app.test_client()
 
-        with patch("copilot_core.api.v1.auth.get_token_source", return_value="env"):
+        with patch("copilot_core.api.v1.auth.get_token_source", return_value="env"), \
+             patch("copilot_core.api.v1.auth.get_auth_token", return_value="env-token-123"):
             r = client.get("/api/v1/auth/setup-token")
 
         self.assertEqual(r.status_code, 200)
         body = r.get_json()
-        self.assertFalse(body["ok"])
-        self.assertIsNone(body["token"])
+        self.assertTrue(body["ok"])
+        self.assertEqual(body["token"], "env-token-123")
         self.assertEqual(body["source"], "env")
 
     def test_setup_token_no_token_available(self):
