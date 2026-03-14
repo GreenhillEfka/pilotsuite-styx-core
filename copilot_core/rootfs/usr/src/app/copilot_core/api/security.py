@@ -5,6 +5,7 @@ import hmac
 import json
 import logging
 import os
+import secrets
 import threading
 import time
 from functools import wraps
@@ -15,6 +16,7 @@ from flask import g, request as flask_request, jsonify
 _LOGGER = logging.getLogger(__name__)
 
 OPTIONS_PATH = "/data/options.json"
+AUTO_TOKEN_PATH = "/data/.pilotsuite_token"
 
 # Token cache: (token_value, timestamp) — protected by _token_lock
 _token_cache: tuple[str, float] = ("", 0.0)
@@ -22,9 +24,36 @@ _token_lock = threading.Lock()
 _TOKEN_CACHE_TTL = 60.0  # seconds
 
 
-def get_auth_token(options_path: str = OPTIONS_PATH) -> str:
-    """Return the configured shared token, if any.
+def _ensure_auto_token() -> str:
+    """Generate and persist an auto-token if none exists (1-Key-Flow).
 
+    On first startup with no configured auth_token, a random token is
+    generated and saved to AUTO_TOKEN_PATH. Subsequent starts reuse it.
+    """
+    try:
+        with open(AUTO_TOKEN_PATH, "r", encoding="utf-8") as fh:
+            token = fh.read().strip()
+        if token:
+            return token
+    except FileNotFoundError:
+        pass
+    except Exception:
+        _LOGGER.debug("Could not read auto-token file, generating new one")
+
+    token = secrets.token_urlsafe(32)
+    try:
+        with open(AUTO_TOKEN_PATH, "w", encoding="utf-8") as fh:
+            fh.write(token)
+        _LOGGER.info("Auto-generated API token (1-Key-Flow): %s...%s", token[:8], token[-4:])
+    except Exception:
+        _LOGGER.warning("Could not persist auto-token to %s", AUTO_TOKEN_PATH)
+    return token
+
+
+def get_auth_token(options_path: str = OPTIONS_PATH) -> str:
+    """Return the active auth token.
+
+    Priority: env var > options.json > auto-generated (1-Key-Flow).
     Uses a 60-second TTL cache to avoid disk reads on every request.
     Thread-safe via double-checked locking.
     """
@@ -51,6 +80,10 @@ def get_auth_token(options_path: str = OPTIONS_PATH) -> str:
                 token = str(opts.get("auth_token", "")).strip()
             except Exception:
                 token = ""
+
+        # 1-Key-Flow: auto-generate token if nothing is configured
+        if not token:
+            token = _ensure_auto_token()
 
         _token_cache = (token, now)
         return token
@@ -96,17 +129,8 @@ def validate_token(request) -> bool:
         # Auth disabled - allow all requests
         return True
 
-    # Auth required - validate token
+    # Auth required - validate token (always has a token via 1-Key-Flow)
     token = get_auth_token()
-    if not token:
-        # Fail closed when auth is required but no token is configured
-        _LOGGER.error(
-            "Authentication required but no auth token is configured; rejecting request "
-            "(path=%s, method=%s)",
-            request.path or "unknown",
-            request.method or "unknown",
-        )
-        return False
 
     header_token = (request.headers.get("X-Auth-Token") or "").strip()
     if header_token and hmac.compare_digest(header_token, token):
@@ -158,20 +182,41 @@ def optional_token(f: Callable) -> Callable:
 require_api_key = require_token
 
 
+def get_token_source(options_path: str = OPTIONS_PATH) -> str:
+    """Return the source of the active auth token.
+
+    Returns one of: "env", "options", "auto", "none".
+    """
+    if os.environ.get("COPILOT_AUTH_TOKEN", "").strip():
+        return "env"
+    try:
+        with open(options_path, "r", encoding="utf-8") as fh:
+            opts: Any = json.load(fh) or {}
+        if str(opts.get("auth_token", "")).strip():
+            return "options"
+    except Exception:
+        pass
+    try:
+        with open(AUTO_TOKEN_PATH, "r", encoding="utf-8") as fh:
+            if fh.read().strip():
+                return "auto"
+    except Exception:
+        pass
+    return "none"
+
+
 def validate_websocket_token(request) -> bool:
     """Validate token for WebSocket connections.
 
     Checks (in order):
-    1. ``auth`` dict (SocketIO native auth: ``{'token': ...}``)
-    2. Query parameter ``?token=xxx``
-    3. ``X-Auth-Token`` header
+    1. Query parameter ``?token=xxx``
+    2. ``X-Auth-Token`` header
 
     Returns True when the token is valid.
-    Returns False when auth is required but the token is missing/invalid.
+    Returns False when no token is configured or token doesn't match.
     """
     token = get_auth_token()
     if not token:
-        # No token configured – cannot validate
         return False
 
     # 1. Query parameter

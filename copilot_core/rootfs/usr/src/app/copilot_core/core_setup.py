@@ -524,31 +524,21 @@ async def init_services(hass=None, config: dict = None):
         brain_graph_service.start_scheduled_pruning()
         services["brain_graph_service"] = brain_graph_service
         services["graph_renderer"] = GraphRenderer()
-        init_brain_graph_api(brain_graph_service, services["graph_renderer"])
     except Exception:
         _LOGGER.exception("Failed to init BrainGraphService")
 
-    # Initialize dev surface
-    try:
-        if services["brain_graph_service"]:
-            init_dev_surface_api(services["brain_graph_service"])
-    except Exception:
-        _LOGGER.exception("Failed to init DevSurface")
-
-    # Initialize candidates API and store
+    # Initialize candidates store
     try:
         candidate_store = CandidateStore()
         services["candidate_store"] = candidate_store
-        init_candidates_api(candidate_store)
     except Exception:
         _LOGGER.exception("Failed to init CandidateStore")
 
-    # Initialize habitus service and API
+    # Initialize habitus service
     try:
         if services["brain_graph_service"] and services["candidate_store"]:
             habitus_service = HabitusService(services["brain_graph_service"], services["candidate_store"])
             services["habitus_service"] = habitus_service
-            init_habitus_api(habitus_service)
     except Exception:
         _LOGGER.exception("Failed to init HabitusService")
 
@@ -561,11 +551,10 @@ async def init_services(hass=None, config: dict = None):
     except Exception:
         _LOGGER.exception("Failed to init ChatHandler")
 
-    # Initialize mood service and API
+    # Initialize mood service
     try:
         mood_service = MoodService()
         services["mood_service"] = mood_service
-        init_mood_api(mood_service)
     except Exception:
         _LOGGER.exception("Failed to init MoodService")
 
@@ -1123,7 +1112,9 @@ def register_blueprints(app: Flask, services: dict) -> None:
     # Each entry: (module_path, blueprint_attr, url_prefix_or_None)
     # url_prefix=None means the blueprint defines its own prefix internally.
     _BLUEPRINTS = [
-        # Standalone blueprints under /api/v1
+        # Auth setup (unauthenticated — allows HA to fetch 1-Key-Flow token)
+        ("copilot_core.api.v1.auth",             "auth_bp",              None),
+        # Standalone blueprints under /api/v1 (NOT nested in api_v1/blueprint.py)
         ("copilot_core.api.v1.log_fixer_tx",    "bp",                   "/api/v1"),
         ("copilot_core.api.v1.events_ingest",    "bp",                   "/api/v1"),
         ("copilot_core.api.v1.sensors",          "bp",                   "/api/v1"),
@@ -1131,16 +1122,12 @@ def register_blueprints(app: Flask, services: dict) -> None:
         ("copilot_core.api.v1.anomaly",          "anomaly_bp",           "/api/v1"),
         ("copilot_core.api.v1.calendar",         "calendar_bp",          "/api/v1"),
         ("copilot_core.api.v1.energy_forecast",  "energy_forecast_bp",   "/api/v1"),
-        ("copilot_core.api.v1.habitus",          "bp",                   "/api/v1"),
-        ("copilot_core.api.v1.mood",             "bp",                   "/api/v1"),
         ("copilot_core.api.v1.tag_system",       "bp",                   "/api/v1"),
-        ("copilot_core.api.v1.notifications",    "bp",                   "/api/v1"),
         ("copilot_core.api.v1.multihome",        "bp",                   "/api/v1"),
-        ("copilot_core.api.v1.user_preferences", "bp",                   "/api/v1"),
         ("copilot_core.api.v1.voice",            "bp",                   "/api/v1"),
-        ("copilot_core.api.v1.vector",           "bp",                   "/api/v1"),
-        ("copilot_core.api.v1.swagger_ui",       "bp",                   "/api/v1"),
-        ("copilot_core.api.v1.weather",          "bp",                   "/api/v1"),
+        # NOTE: habitus, mood, notifications, user_preferences, vector,
+        # swagger_ui, weather are already nested in api_v1 (blueprint.py).
+        # Do NOT register them standalone — causes duplicate routes.
         # Blueprints with built-in absolute prefix (register without url_prefix)
         ("copilot_core.api.v1.habitus_zones",    "bp",                   None),
         # NOTE: sonos_bp is registered individually below (after init_sonos_api wiring)
@@ -1148,7 +1135,7 @@ def register_blueprints(app: Flask, services: dict) -> None:
         ("copilot_core.api.v1.rag",              "bp",                   None),
         ("copilot_core.api.v1.styx_chat",        "bp",                   None),
         ("copilot_core.api.v1.mcp",              "bp",                   None),
-        # Nested blueprint registry (api/v1/blueprint.py)
+        # Nested blueprint registry (api/v1/blueprint.py) — contains 27 sub-blueprints
         ("copilot_core.api.v1.blueprint",        "api_v1",               "/api/v1"),
     ]
 
@@ -1372,11 +1359,12 @@ def register_blueprints(app: Flask, services: dict) -> None:
     except Exception:
         _LOGGER.exception("Failed to register styx_voice_bp")
 
-    # Serve Styx Dashboard SPA at /styx
+    # Serve Styx Dashboard SPA at /styx (injects auth token for 1-Key-Flow)
     @app.route("/styx")
     def _serve_styx_dashboard():
         from flask import render_template
-        return render_template("styx_dashboard.html")
+        from copilot_core.api.security import get_auth_token
+        return render_template("styx_dashboard.html", auth_token=get_auth_token())
 
     # Register Sonos API (native Sonos control via node-sonos-http-api)
     try:
@@ -1538,7 +1526,6 @@ async def cleanup_services(services: dict) -> None:
 from copilot_core.api.v1 import log_fixer_tx
 from copilot_core.api.v1 import events_ingest
 from copilot_core.api.v1.events_ingest import set_post_ingest_callback
-from copilot_core.brain_graph.api import brain_graph_bp, init_brain_graph_api
 from copilot_core.brain_graph.service import BrainGraphService
 from copilot_core.brain_graph.store import BrainGraphStore
 
@@ -1546,19 +1533,12 @@ from copilot_core.brain_graph.store import BrainGraphStore
 GraphStore = BrainGraphStore
 from copilot_core.brain_graph.render import GraphRenderer
 from copilot_core.ingest.event_processor import EventProcessor
-from copilot_core.dev_surface.api import dev_surface_bp, init_dev_surface_api
-from copilot_core.candidates.api import candidates_bp, init_candidates_api
 from copilot_core.candidates.store import CandidateStore
-from copilot_core.habitus.api import habitus_bp, init_habitus_api
 from copilot_core.habitus.service import HabitusService
-from copilot_core.mood.api import mood_bp, init_mood_api
 from copilot_core.mood.service import MoodService
-from copilot_core.system_health.api import system_health_bp
 from copilot_core.system_health.service import SystemHealthService
-from copilot_core.unifi.api import unifi_bp, set_unifi_service
 from copilot_core.unifi.service import UniFiService
 from copilot_core.tags import TagRegistry, create_tag_service
-from copilot_core.tags.api import init_tags_api as setup_tag_api
 from copilot_core.webhook_pusher import WebhookPusher
 from copilot_core.household import HouseholdProfile
 from copilot_core.neurons.manager import NeuronManager

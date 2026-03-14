@@ -78,16 +78,17 @@ class TestSecurityModule(unittest.TestCase):
                  patch("copilot_core.api.security.is_auth_required", return_value=True):
                 self.assertFalse(validate_token(request))
 
-    def test_validate_token_rejects_when_no_token_configured(self):
-        """When auth is required, missing token config fails closed."""
+    def test_validate_token_accepts_auto_generated_token(self):
+        """1-Key-Flow: auto-generated token authenticates correctly."""
         if not _FLASK_AVAILABLE:
             self.skipTest("Flask not installed")
         app = create_app()
-        with app.test_request_context():
+        auto_token = "auto-generated-test-token"
+        with app.test_request_context(headers={"X-Auth-Token": auto_token}):
             from flask import request
-            with patch("copilot_core.api.security.get_auth_token", return_value=""), \
+            with patch("copilot_core.api.security.get_auth_token", return_value=auto_token), \
                  patch("copilot_core.api.security.is_auth_required", return_value=True):
-                self.assertFalse(validate_token(request))
+                self.assertTrue(validate_token(request))
 
     def test_validate_token_allows_when_auth_disabled(self):
         """Auth disabled = allow all requests."""
@@ -833,6 +834,110 @@ class TestNeuronStateOverrideSecurity(unittest.TestCase):
                 content_type="application/json"
             )
             self.assertEqual(r.status_code, 403)
+
+
+class TestGetTokenSource(unittest.TestCase):
+    """Test get_token_source() returns correct source identifier."""
+
+    def test_source_env(self):
+        if not _FLASK_AVAILABLE:
+            self.skipTest("Flask not installed")
+        from copilot_core.api.security import get_token_source
+        with patch.dict(os.environ, {"COPILOT_AUTH_TOKEN": "env-token"}):
+            self.assertEqual(get_token_source(), "env")
+
+    def test_source_options(self):
+        if not _FLASK_AVAILABLE:
+            self.skipTest("Flask not installed")
+        from copilot_core.api.security import get_token_source
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+            json.dump({"auth_token": "opt-token"}, f)
+            f.flush()
+            with patch.dict(os.environ, {}, clear=False):
+                os.environ.pop("COPILOT_AUTH_TOKEN", None)
+                self.assertEqual(get_token_source(f.name), "options")
+            os.unlink(f.name)
+
+    def test_source_auto(self):
+        if not _FLASK_AVAILABLE:
+            self.skipTest("Flask not installed")
+        from copilot_core.api.security import get_token_source, AUTO_TOKEN_PATH
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("COPILOT_AUTH_TOKEN", None)
+            with patch("builtins.open", side_effect=[
+                FileNotFoundError,  # options.json
+                unittest.mock.mock_open(read_data="auto-tok")(),  # auto token file
+            ]):
+                self.assertEqual(get_token_source("/nonexistent/options.json"), "auto")
+
+    def test_source_none(self):
+        if not _FLASK_AVAILABLE:
+            self.skipTest("Flask not installed")
+        from copilot_core.api.security import get_token_source
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("COPILOT_AUTH_TOKEN", None)
+            self.assertEqual(get_token_source("/nonexistent/options.json"), "none")
+
+
+class TestSetupTokenEndpoint(unittest.TestCase):
+    """Test the /api/v1/auth/setup-token endpoint."""
+
+    def test_setup_token_returns_auto_token(self):
+        if not _FLASK_AVAILABLE:
+            self.skipTest("Flask not installed")
+        from flask import Flask
+        from copilot_core.api.v1.auth import auth_bp
+
+        app = Flask("test")
+        app.register_blueprint(auth_bp)
+        client = app.test_client()
+
+        with patch("copilot_core.api.v1.auth.get_token_source", return_value="auto"), \
+             patch("copilot_core.api.v1.auth.get_auth_token", return_value="auto-gen-token"):
+            r = client.get("/api/v1/auth/setup-token")
+
+        self.assertEqual(r.status_code, 200)
+        body = r.get_json()
+        self.assertTrue(body["ok"])
+        self.assertEqual(body["token"], "auto-gen-token")
+        self.assertEqual(body["source"], "auto")
+
+    def test_setup_token_hides_manual_token(self):
+        if not _FLASK_AVAILABLE:
+            self.skipTest("Flask not installed")
+        from flask import Flask
+        from copilot_core.api.v1.auth import auth_bp
+
+        app = Flask("test")
+        app.register_blueprint(auth_bp)
+        client = app.test_client()
+
+        with patch("copilot_core.api.v1.auth.get_token_source", return_value="env"):
+            r = client.get("/api/v1/auth/setup-token")
+
+        self.assertEqual(r.status_code, 200)
+        body = r.get_json()
+        self.assertFalse(body["ok"])
+        self.assertIsNone(body["token"])
+        self.assertEqual(body["source"], "env")
+
+    def test_setup_token_no_token_available(self):
+        if not _FLASK_AVAILABLE:
+            self.skipTest("Flask not installed")
+        from flask import Flask
+        from copilot_core.api.v1.auth import auth_bp
+
+        app = Flask("test")
+        app.register_blueprint(auth_bp)
+        client = app.test_client()
+
+        with patch("copilot_core.api.v1.auth.get_token_source", return_value="none"):
+            r = client.get("/api/v1/auth/setup-token")
+
+        self.assertEqual(r.status_code, 200)
+        body = r.get_json()
+        self.assertFalse(body["ok"])
+        self.assertIsNone(body["token"])
 
 
 if __name__ == "__main__":
