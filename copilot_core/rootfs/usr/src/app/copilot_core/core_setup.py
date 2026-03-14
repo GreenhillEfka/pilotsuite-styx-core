@@ -1115,16 +1115,16 @@ def register_blueprints(app: Flask, services: dict) -> None:
         # Auth setup (unauthenticated — allows HA to fetch 1-Key-Flow token)
         ("copilot_core.api.v1.auth",             "auth_bp",              None),
         # Standalone blueprints under /api/v1 (NOT nested in api_v1/blueprint.py)
-        ("copilot_core.api.v1.log_fixer_tx",    "bp",                   "/api/v1"),
+        ("copilot_core.api.v1.log_fixer_tx",    "bp",                   None),
         ("copilot_core.api.v1.events_ingest",    "bp",                   "/api/v1"),
-        ("copilot_core.api.v1.sensors",          "bp",                   "/api/v1"),
-        ("copilot_core.api.v1.homekit",          "homekit_bp",           "/api/v1"),
+        ("copilot_core.api.v1.sensors",          "bp",                   None),
+        ("copilot_core.api.v1.homekit",          "homekit_bp",           None),
         ("copilot_core.api.v1.anomaly",          "anomaly_bp",           "/api/v1"),
-        ("copilot_core.api.v1.calendar",         "calendar_bp",          "/api/v1"),
-        ("copilot_core.api.v1.energy_forecast",  "energy_forecast_bp",   "/api/v1"),
-        ("copilot_core.api.v1.tag_system",       "bp",                   "/api/v1"),
-        ("copilot_core.api.v1.multihome",        "bp",                   "/api/v1"),
-        ("copilot_core.api.v1.voice",            "bp",                   "/api/v1"),
+        ("copilot_core.api.v1.calendar",         "calendar_bp",          None),
+        ("copilot_core.api.v1.energy_forecast",  "energy_forecast_bp",   None),
+        ("copilot_core.api.v1.tag_system",       "bp",                   None),
+        ("copilot_core.api.v1.multihome",        "bp",                   None),
+        ("copilot_core.api.v1.voice",            "bp",                   None),
         # NOTE: habitus, mood, notifications, user_preferences, vector,
         # swagger_ui, weather are already nested in api_v1 (blueprint.py).
         # Do NOT register them standalone — causes duplicate routes.
