@@ -4,9 +4,12 @@ Stores mood evaluation results as snapshots so historical trend analysis
 and pattern discovery become possible. Without this, mood evaluations are
 computed on-the-fly and lost after the API response.
 
+Uses table ``neuron_mood_history`` (NOT ``neuron_mood_history`` which belongs to
+MoodService in mood/service.py with a completely different schema).
+
 Schema:
-    mood_snapshots(id INTEGER PRIMARY KEY, ts TEXT, mood TEXT,
-                   confidence REAL, mood_values TEXT, zone_context TEXT)
+    neuron_mood_history(id INTEGER PRIMARY KEY, ts TEXT, mood TEXT,
+                        confidence REAL, mood_values TEXT, zone_context TEXT)
 
 Usage:
     store = get_mood_history_store()
@@ -92,7 +95,7 @@ class MoodHistoryStore:
             conn.execute("PRAGMA synchronous=NORMAL")
             conn.execute("PRAGMA busy_timeout=5000")
             conn.executescript("""
-                CREATE TABLE IF NOT EXISTS mood_snapshots (
+                CREATE TABLE IF NOT EXISTS neuron_mood_history (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     ts TEXT NOT NULL,
                     mood TEXT NOT NULL,
@@ -100,10 +103,10 @@ class MoodHistoryStore:
                     mood_values TEXT NOT NULL,
                     zone_context TEXT
                 );
-                CREATE INDEX IF NOT EXISTS idx_mood_snapshots_ts
-                    ON mood_snapshots (ts);
-                CREATE INDEX IF NOT EXISTS idx_mood_snapshots_mood
-                    ON mood_snapshots (mood);
+                CREATE INDEX IF NOT EXISTS idx_neuron_mood_history_ts
+                    ON neuron_mood_history (ts);
+                CREATE INDEX IF NOT EXISTS idx_neuron_mood_history_mood
+                    ON neuron_mood_history (mood);
             """)
         _LOGGER.info("MoodHistoryStore initialized at %s", self.db_path)
 
@@ -142,7 +145,7 @@ class MoodHistoryStore:
         try:
             with self._write_lock, self._connect() as conn:
                 conn.execute(
-                    """INSERT INTO mood_snapshots (ts, mood, confidence, mood_values, zone_context)
+                    """INSERT INTO neuron_mood_history (ts, mood, confidence, mood_values, zone_context)
                        VALUES (?, ?, ?, ?, ?)""",
                     (
                         ts,
@@ -172,7 +175,7 @@ class MoodHistoryStore:
         try:
             with self._connect() as conn:
                 rows = conn.execute(
-                    "SELECT * FROM mood_snapshots WHERE ts >= ? ORDER BY ts ASC",
+                    "SELECT * FROM neuron_mood_history WHERE ts >= ? ORDER BY ts ASC",
                     (cutoff,),
                 ).fetchall()
                 return [self._row_to_dict(r) for r in rows]
@@ -200,13 +203,13 @@ class MoodHistoryStore:
                 # Distribution
                 dist_rows = conn.execute(
                     """SELECT mood, COUNT(*) as cnt, AVG(confidence) as avg_conf
-                       FROM mood_snapshots WHERE ts >= ?
+                       FROM neuron_mood_history WHERE ts >= ?
                        GROUP BY mood ORDER BY cnt DESC""",
                     (cutoff,),
                 ).fetchall()
 
                 total_row = conn.execute(
-                    "SELECT COUNT(*), AVG(confidence) FROM mood_snapshots WHERE ts >= ?",
+                    "SELECT COUNT(*), AVG(confidence) FROM neuron_mood_history WHERE ts >= ?",
                     (cutoff,),
                 ).fetchone()
 
@@ -244,7 +247,7 @@ class MoodHistoryStore:
         try:
             with self._write_lock, self._connect() as conn:
                 cursor = conn.execute(
-                    "DELETE FROM mood_snapshots WHERE ts < ?", (cutoff,)
+                    "DELETE FROM neuron_mood_history WHERE ts < ?", (cutoff,)
                 )
                 deleted = cursor.rowcount
                 if deleted:
@@ -259,7 +262,7 @@ class MoodHistoryStore:
         try:
             with self._connect() as conn:
                 row = conn.execute(
-                    "SELECT COUNT(*), MIN(ts), MAX(ts) FROM mood_snapshots"
+                    "SELECT COUNT(*), MIN(ts), MAX(ts) FROM neuron_mood_history"
                 ).fetchone()
             return {
                 "total_snapshots": row[0] or 0,

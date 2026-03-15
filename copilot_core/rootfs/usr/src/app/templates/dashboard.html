@@ -159,6 +159,7 @@ a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
 .zone-entities{display:flex;flex-wrap:wrap;gap:4px;margin-top:8px}
 .zone-entities .ze{font-size:10px;background:var(--surface);border:1px solid var(--border);padding:3px 8px;border-radius:6px;color:var(--dim)}
 .btn-scene{background:var(--surface);border:1px solid var(--border);color:var(--accent2);font-size:11px;padding:5px 12px;border-radius:6px;cursor:pointer;transition:all .2s}.btn-scene:hover{background:var(--accent);color:#fff;border-color:var(--accent)}
+.btn-tab{background:var(--surface);border:1px solid var(--border);color:var(--dim);font-size:11px;padding:5px 14px;border-radius:6px;cursor:pointer;transition:all .2s}.btn-tab:hover{border-color:var(--accent);color:var(--accent)}.btn-tab.active{background:var(--accent);color:#fff;border-color:var(--accent)}
 .scene-item{display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--surface);border:1px solid var(--border);border-radius:8px;margin-bottom:6px;transition:border-color .2s}.scene-item:hover{border-color:var(--accent)}
 .scene-item .scene-name{flex:1;font-size:12px;font-weight:600}.scene-item .scene-meta{font-size:10px;color:var(--dim)}
 .scene-item .scene-actions{display:flex;gap:4px}
@@ -371,6 +372,16 @@ a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
   </div>
 </div>
 <div class="card" style="margin-top:14px">
+  <h2><span class="ic">&#x26a1;</span> Habitus Mining</h2>
+  <div class="grid g3" id="mining-stats" style="margin-bottom:10px"></div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+    <button onclick="triggerHabitusMine()" id="btn-mine" style="background:var(--accent);color:#fff;border:none;border-radius:6px;padding:8px 16px;cursor:pointer;font-size:12px;font-weight:600">&#x26a1; Mining jetzt starten</button>
+    <button onclick="loadHabitusConfig()" style="background:var(--surface);border:1px solid var(--border);color:var(--dim);border-radius:6px;padding:8px 16px;cursor:pointer;font-size:12px;font-weight:600">&#x21bb; Config laden</button>
+  </div>
+  <div id="mining-config" style="display:none;padding:10px;background:var(--surface);border-radius:6px;border:1px solid var(--border)"></div>
+  <div id="mining-result"></div>
+</div>
+<div class="card" style="margin-top:14px">
   <h2><span class="ic">&#x1f4a1;</span> Entitäts-Zuordnungsvorschläge</h2>
   <p style="font-size:11px;color:var(--dim);margin-bottom:10px">Erkannte Entitätsgruppen — mögliche Habituszonen. Klicke auf eine Gruppe um Details zu sehen.</p>
   <div id="hab-entity-suggestions"><div class="loading"><div class="spinner"></div>Analysiere...</div></div>
@@ -387,6 +398,17 @@ a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
 <div class="card" style="margin-top:14px">
   <h2><span class="ic">&#x1f4ca;</span> Mood Trend</h2>
   <div class="trend-chart" id="mood-trend"><canvas id="mood-trend-canvas"></canvas></div>
+</div>
+<div class="card" style="margin-top:14px">
+  <h2><span class="ic">&#x1f9e0;</span> Neuron Mood History</h2>
+  <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+    <button onclick="loadMoodHistory(1)" class="btn-tab" data-mood-range="1">1h</button>
+    <button onclick="loadMoodHistory(6)" class="btn-tab" data-mood-range="6">6h</button>
+    <button onclick="loadMoodHistory(24)" class="btn-tab active" data-mood-range="24">24h</button>
+    <button onclick="loadMoodHistory(168)" class="btn-tab" data-mood-range="168">7d</button>
+  </div>
+  <div id="mood-history-stats" style="margin-bottom:10px"></div>
+  <div id="mood-history-table"><div class="loading"><div class="spinner"></div>Lade Mood History...</div></div>
 </div>
 </div>
 
@@ -2266,6 +2288,118 @@ function gaugeHTML(label,val,color){
 }
 
 // ==================================================
+// MOOD HISTORY (Neuron-based)
+// ==================================================
+let _moodHistoryHours=24;
+async function loadMoodHistory(hours){
+  hours=hours||_moodHistoryHours;
+  _moodHistoryHours=hours;
+  document.querySelectorAll('[data-mood-range]').forEach(b=>{
+    b.classList.toggle('active',parseInt(b.dataset.moodRange)===hours);
+  });
+  const tbl=$('mood-history-table');
+  const stats=$('mood-history-stats');
+  if(!tbl)return;
+  tbl.innerHTML='<div class="loading"><div class="spinner"></div>Lade...</div>';
+  try{
+    const [hist,trend]=await Promise.all([
+      api('/api/v1/neurons/mood/history?hours='+hours),
+      api('/api/v1/neurons/mood/trend?hours='+hours),
+    ]);
+    // Trend stats
+    if(trend&&!trend.error){
+      const dist=trend.distribution||{};
+      const entries=Object.entries(dist).sort((a,b)=>b[1]-a[1]);
+      stats.innerHTML=
+        `<span class="b b-g">Dominant: ${escapeHtml(trend.dominant_mood||'?')}</span> `+
+        `<span class="b b-b">${trend.count||0} Snapshots</span> `+
+        `<span class="b b-y">Confidence: ${((trend.avg_confidence||0)*100).toFixed(0)}%</span> `+
+        entries.map(([m,c])=>`<span class="b" style="background:var(--surface);border:1px solid var(--border)">${escapeHtml(m)}: ${c}</span>`).join(' ');
+    }else if(trend&&trend.error){
+      stats.innerHTML=`<span class="b b-r">API-Fehler: ${escapeHtml(trend.error)}</span>`;
+    }else{
+      stats.innerHTML='';
+    }
+    // History table
+    const snapshots=(hist&&!hist.error)?(hist.snapshots||hist.data||hist||[]):[];
+    if(Array.isArray(snapshots)&&snapshots.length){
+      let rows=snapshots.slice(-100).reverse().map(s=>{
+        const ts=s.ts||s.timestamp||'?';
+        const d=new Date(ts);
+        const tFmt=isNaN(d)?ts:d.toLocaleString('de-DE',{hour:'2-digit',minute:'2-digit',second:'2-digit',day:'2-digit',month:'2-digit'});
+        return `<tr><td>${tFmt}</td><td>${escapeHtml(s.mood||'?')}</td><td>${((s.confidence||0)*100).toFixed(0)}%</td></tr>`;
+      }).join('');
+      tbl.innerHTML=`<table class="tbl"><thead><tr><th>Zeit</th><th>Mood</th><th>Conf</th></tr></thead><tbody>${rows}</tbody></table>`;
+    }else if(hist&&hist.error){
+      tbl.innerHTML=`<div class="empty" style="color:var(--red)">API-Fehler: ${escapeHtml(hist.error)}</div>`;
+    }else{
+      tbl.innerHTML='<div class="empty">Noch keine Neuron-Mood-Snapshots. Die Mood-Engine zeichnet automatisch alle 5 Minuten auf.</div>';
+    }
+  }catch(e){
+    tbl.innerHTML=`<div class="empty" style="color:var(--red)">Fehler: ${e.message||'unbekannt'}</div>`;
+    stats.innerHTML='';
+  }
+}
+
+// ==================================================
+// HABITUS MINING
+// ==================================================
+async function triggerHabitusMine(){
+  const btn=$('btn-mine');
+  const res=$('mining-result');
+  if(btn)btn.disabled=true;
+  if(btn)btn.textContent='Mining laeuft...';
+  if(res)res.innerHTML='<div class="loading"><div class="spinner"></div>Mining...</div>';
+  try{
+    const r=await fetch(API+'/api/v1/habitus/mine',withAuth({method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}));
+    const data=await r.json();
+    if(res){
+      if(data.status==='ok'||data.rules_found!==undefined){
+        res.innerHTML=`<div class="b b-g" style="margin-top:8px">Mining abgeschlossen: ${data.rules_found||0} Regeln gefunden, ${data.events_processed||0} Events verarbeitet</div>`;
+        loadHabitus();
+      }else{
+        res.innerHTML=`<div class="b b-y" style="margin-top:8px">${escapeHtml(JSON.stringify(data))}</div>`;
+      }
+    }
+  }catch(e){
+    if(res)res.innerHTML=`<div class="b b-r" style="margin-top:8px">Fehler: ${e.message||'unbekannt'}</div>`;
+  }finally{
+    if(btn){btn.disabled=false;btn.textContent='\u26a1 Mining jetzt starten';}
+  }
+}
+
+async function loadHabitusConfig(){
+  const cfg=$('mining-config');
+  if(!cfg)return;
+  try{
+    const data=await api('/api/v1/habitus/config');
+    const config=data?.config||data||{};
+    cfg.style.display='block';
+    const entries=Object.entries(config).filter(([k])=>k!=='status');
+    cfg.innerHTML='<div style="font-size:11px;color:var(--dim);margin-bottom:6px">Mining-Konfiguration (read-only)</div>'+
+      entries.map(([k,v])=>`<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid var(--border);font-size:11px"><span>${escapeHtml(k)}</span><span style="color:var(--cyan)">${escapeHtml(JSON.stringify(v))}</span></div>`).join('');
+  }catch(e){
+    cfg.style.display='block';
+    cfg.innerHTML=`<div style="color:var(--red);font-size:11px">Config laden fehlgeschlagen: ${e.message||'?'}</div>`;
+  }
+}
+
+async function loadMiningStats(){
+  const c=$('mining-stats');
+  if(!c)return;
+  try{
+    const data=await api('/api/v1/habitus/status');
+    const stats=data?.statistics||{};
+    c.innerHTML=
+      `<div class="card stat"><div class="v">${stats.total_rules||0}</div><div class="l">Regeln</div></div>`+
+      `<div class="card stat"><div class="v">${stats.total_events_processed||0}</div><div class="l">Events</div></div>`+
+      `<div class="card stat"><div class="v">${stats.last_mining_ts?new Date(stats.last_mining_ts).toLocaleString('de-DE',{hour:'2-digit',minute:'2-digit',day:'2-digit',month:'2-digit'}):'nie'}</div><div class="l">Letztes Mining</div></div>`;
+  }catch(e){
+    c.innerHTML='';
+  }
+}
+
+// ==================================================
 // MODULES
 // ==================================================
 function initModuleConfigSelect(){
@@ -2942,7 +3076,7 @@ async function toggleHomeKit(zoneId,zoneName,entityIds){
 // ==================================================
 // PAGE LOADER — Resilient wrapper
 // ==================================================
-const _loaders={styx:loadStyx,habitus:async()=>{await loadHabitus();loadEntitySuggestions('hab-entity-suggestions');loadScenes();},mood:loadMood,modules:async()=>{await loadModules();loadAutomations();loadMediaZones();loadNewsWarnings();loadWastePanel();loadBirthdayPanel()},haushalt:loadHaushalt,settings:loadSettings};
+const _loaders={styx:loadStyx,habitus:async()=>{await loadHabitus();loadEntitySuggestions('hab-entity-suggestions');loadScenes();loadMiningStats();},mood:async()=>{await loadMood();loadMoodHistory();},modules:async()=>{await loadModules();loadAutomations();loadMediaZones();loadNewsWarnings();loadWastePanel();loadBirthdayPanel()},haushalt:loadHaushalt,settings:loadSettings};
 function loadPage(p){
   const fn=_loaders[p];
   if(!fn)return;

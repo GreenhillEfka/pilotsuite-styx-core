@@ -181,7 +181,7 @@ class TestMoodHistoryStore(unittest.TestCase):
         old_ts = (datetime.now(timezone.utc) - timedelta(days=10)).isoformat()
         with sqlite3.connect(self._tmp.name) as conn:
             conn.execute(
-                """INSERT INTO mood_snapshots (ts, mood, confidence, mood_values)
+                """INSERT INTO neuron_mood_history (ts, mood, confidence, mood_values)
                    VALUES (?, ?, ?, ?)""",
                 (old_ts, "relax", 0.5, '{"relax": 0.5}'),
             )
@@ -193,7 +193,7 @@ class TestMoodHistoryStore(unittest.TestCase):
         all_snaps = self.store.get_recent(hours=24 * 365)
         # The old one is beyond default 168h lookback, count via SQL
         with sqlite3.connect(self._tmp.name) as conn:
-            count = conn.execute("SELECT COUNT(*) FROM mood_snapshots").fetchone()[0]
+            count = conn.execute("SELECT COUNT(*) FROM neuron_mood_history").fetchone()[0]
         self.assertEqual(count, 2)
 
         # Run cleanup (retention = 7 days, old snapshot is 10 days old)
@@ -202,7 +202,7 @@ class TestMoodHistoryStore(unittest.TestCase):
 
         # After cleanup: 1 snapshot
         with sqlite3.connect(self._tmp.name) as conn:
-            count = conn.execute("SELECT COUNT(*) FROM mood_snapshots").fetchone()[0]
+            count = conn.execute("SELECT COUNT(*) FROM neuron_mood_history").fetchone()[0]
         self.assertEqual(count, 1)
 
     def test_cleanup_keeps_recent(self):
