@@ -134,6 +134,60 @@ def _fetch_price_forecast(hours: int = 48) -> list[dict]:
         return []
 
 
+@energy_forecast_bp.route("/", methods=["GET"])
+@require_token
+def energy_root():
+    """Root route — returns energy snapshot in format HA integration expects.
+
+    HA energy_context.py expects fields: timestamp, total_consumption_today_kwh,
+    total_production_today_kwh, current_power_watts, peak_power_today_watts,
+    anomalies_detected, shifting_opportunities, baselines.daily_average
+    """
+    try:
+        now = datetime.now()
+
+        weather_service = _get_weather_service()
+        cloud_cover = 50
+        if weather_service:
+            try:
+                current_weather = weather_service.get_current()
+                cloud_cover = current_weather.get("cloud_cover_pct", 50) if current_weather else 50
+            except Exception:
+                pass
+
+        pv_kw = max(0, 5.0 * (1 - cloud_cover / 100))
+        if now.hour < 6 or now.hour > 20:
+            pv_kw = 0
+
+        hour = now.hour
+        if 18 <= hour <= 21:
+            consumption_kw = 1.2
+        elif 6 <= hour <= 9:
+            consumption_kw = 0.7
+        else:
+            consumption_kw = 0.4
+
+        daily_consumption = round(consumption_kw * 24 * 0.6, 1)
+        daily_production = round(pv_kw * 6, 1)
+
+        return jsonify({
+            "ok": True,
+            "timestamp": now.isoformat(),
+            "total_consumption_today_kwh": daily_consumption,
+            "total_production_today_kwh": daily_production,
+            "current_power_watts": round(consumption_kw * 1000, 0),
+            "peak_power_today_watts": round(consumption_kw * 1000 * 1.5, 0),
+            "anomalies_detected": 0,
+            "shifting_opportunities": 1 if 10 <= hour <= 16 and pv_kw > 1 else 0,
+            "baselines": {
+                "daily_average": round(daily_consumption * 0.95, 1),
+            },
+        })
+    except Exception as e:
+        _LOGGER.error("Energy root error: %s", e)
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
 @energy_forecast_bp.route("/forecast/consumption", methods=["GET"])
 @require_token
 def get_consumption_forecast():
@@ -679,6 +733,94 @@ def get_energy_summary():
             "ok": False,
             "error": str(e),
         }), 500
+
+
+# ── Stub routes for HA sensors that poll these endpoints ──────────────
+
+
+@energy_forecast_bp.route("/anomalies", methods=["GET"])
+@require_token
+def energy_anomalies():
+    """Energy anomalies — stub until real anomaly detection is wired."""
+    return jsonify({"ok": True, "anomalies": []})
+
+
+@energy_forecast_bp.route("/shifting", methods=["GET"])
+@require_token
+def energy_shifting():
+    """Load shifting opportunities — stub."""
+    return jsonify({"ok": True, "opportunities": []})
+
+
+@energy_forecast_bp.route("/explain/<suggestion_id>", methods=["GET"])
+@require_token
+def energy_explain(suggestion_id):
+    """Explain an energy suggestion — stub."""
+    return jsonify({
+        "ok": True,
+        "suggestion_id": suggestion_id,
+        "explanation": "Detaillierte Erklärung noch nicht verfügbar.",
+    })
+
+
+@energy_forecast_bp.route("/costs", methods=["GET"])
+@require_token
+def energy_costs():
+    """Energy costs — stub."""
+    return jsonify({
+        "ok": True,
+        "status": "not_configured",
+        "costs": {},
+    })
+
+
+@energy_forecast_bp.route("/costs/budget", methods=["GET"])
+@require_token
+def energy_costs_budget():
+    """Energy budget — stub."""
+    return jsonify({"ok": True, "status": "not_configured", "budget": {}})
+
+
+@energy_forecast_bp.route("/costs/summary", methods=["GET"])
+@require_token
+def energy_costs_summary():
+    """Energy cost summary — stub."""
+    return jsonify({"ok": True, "status": "not_configured", "summary": {}})
+
+
+@energy_forecast_bp.route("/sankey", methods=["GET"])
+@require_token
+def energy_sankey():
+    """Energy Sankey data — stub."""
+    return jsonify({"ok": True, "status": "not_configured", "flows": []})
+
+
+@energy_forecast_bp.route("/sankey.svg", methods=["GET"])
+@require_token
+def energy_sankey_svg():
+    """Energy Sankey SVG — stub."""
+    from flask import Response
+    svg = '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="200"><text x="50" y="100" fill="#888">Energie-Sankey nicht konfiguriert</text></svg>'
+    return Response(svg, mimetype="image/svg+xml")
+
+
+@energy_forecast_bp.route("/reports/generate", methods=["GET"])
+@require_token
+def energy_reports_generate():
+    """Energy report — stub."""
+    return jsonify({"ok": True, "status": "not_configured", "report": None})
+
+
+@energy_forecast_bp.route("/demand-response/status", methods=["GET"])
+@require_token
+def energy_demand_response_status():
+    """Demand response status — stub."""
+    return jsonify({
+        "ok": True,
+        "status": "not_configured",
+        "active": False,
+        "events": [],
+    })
 
 
 # Import für asdict
