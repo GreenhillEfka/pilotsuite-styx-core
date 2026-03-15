@@ -35,6 +35,7 @@ DEV_LOG_MAX_CACHE = 200
 SLOW_REQUEST_THRESHOLD = 2.0  # seconds
 
 TEMPLATE_DIR = os.path.join(os.path.dirname(__file__), 'templates')
+COPILOT_TEMPLATE_DIR = os.path.join(os.path.dirname(__file__), 'copilot_core', 'templates')
 STATIC_DIR = os.path.join(os.path.dirname(__file__), 'static')
 
 # Shared mutable state (module-level, thread-safe)
@@ -430,7 +431,14 @@ def create_app(options: dict | None = None) -> Flask:
     Returns:
         Fully configured Flask application with all services and blueprints.
     """
+    from jinja2 import ChoiceLoader, FileSystemLoader
     flask_app = Flask(__name__)
+
+    # Add copilot_core/templates to Jinja2 search path (styx_dashboard.html lives there)
+    flask_app.jinja_loader = ChoiceLoader([
+        flask_app.jinja_loader,
+        FileSystemLoader(COPILOT_TEMPLATE_DIR),
+    ])
 
     # Compression
     _configure_compression(flask_app)
