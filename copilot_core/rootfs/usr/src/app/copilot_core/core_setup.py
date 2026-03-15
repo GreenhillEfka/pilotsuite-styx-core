@@ -1204,7 +1204,7 @@ def register_blueprints(app: Flask, services: dict) -> None:
             media_mgr=services.get("media_zone_manager"),
             proactive_engine=services.get("proactive_engine"),
         )
-        app.register_blueprint(media_zones_bp, url_prefix="/api/v1")
+        app.register_blueprint(media_zones_bp)  # uses own prefix /api/v1/media
     except Exception:
         _LOGGER.exception("Failed to register media_zones blueprint")
 
@@ -1523,6 +1523,20 @@ def register_blueprints(app: Flask, services: dict) -> None:
         app.register_blueprint(reminders_bp)
     except Exception:
         _LOGGER.exception("Failed to register reminders_bp")
+
+    # OpenAI-compatible endpoints (/v1/chat/completions, /v1/models)
+    try:
+        from copilot_core.api.v1.conversation import openai_compat_bp
+        app.register_blueprint(openai_compat_bp)
+    except Exception:
+        _LOGGER.exception("Failed to register openai_compat_bp")
+
+    # MCP Server (JSON-RPC 2.0 at /mcp)
+    try:
+        from copilot_core.mcp_server import mcp_bp
+        app.register_blueprint(mcp_bp)
+    except Exception:
+        _LOGGER.exception("Failed to register mcp_bp")
 
     _LOGGER.info("All API blueprints registered")
 

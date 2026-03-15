@@ -458,6 +458,16 @@ def create_app(options: dict | None = None) -> Flask:
     except Exception:
         _main_logger.exception("CRITICAL: register_blueprints failed")
 
+    # Set COPILOT_CFG for blueprints that use current_app.config["COPILOT_CFG"]
+    # (habitus.py, mood.py etc. need cfg.data_dir at minimum)
+    from copilot_core.app import CopilotConfig
+    copilot_cfg = CopilotConfig()
+    copilot_cfg.data_dir = opts.get("data_dir", "/data")
+    copilot_cfg.version = APP_VERSION
+    copilot_cfg.auth_token = opts.get("auth_token", "")
+    copilot_cfg.log_level = opts.get("log_level", "info")
+    flask_app.config["COPILOT_CFG"] = copilot_cfg
+
     # Store startup metadata
     startup_time = time.time()
     flask_app.config["STARTUP_TIME"] = startup_time
