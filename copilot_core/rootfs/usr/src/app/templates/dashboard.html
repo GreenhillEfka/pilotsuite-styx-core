@@ -850,8 +850,8 @@ function setGlobalDegraded(nextState,reason=''){
 function escapeHtml(s){if(s===null||s===undefined)return'';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')}
 function withAuth(init={}){
   const headers={...(init.headers||{})};
-  if(DASHBOARD_AUTH_TOKEN&&!headers.Authorization&&!headers['X-Auth-Token']){
-    headers.Authorization='Bearer '+DASHBOARD_AUTH_TOKEN;
+  if(DASHBOARD_AUTH_TOKEN&&!headers['X-Auth-Token']){
+    headers['X-Auth-Token']=DASHBOARD_AUTH_TOKEN;
   }
   return {...init,headers};
 }
