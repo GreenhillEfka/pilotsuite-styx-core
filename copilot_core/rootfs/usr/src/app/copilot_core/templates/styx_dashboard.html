@@ -476,6 +476,10 @@
         <h2><span class="icon" style="background:#2a3a1a">&#x1F3E0;</span> Habitus-Zonen</h2>
         <ul class="zone-list" id="zones-content"></ul>
       </div>
+      <div class="card">
+        <h2><span class="icon" style="background:#1a3a2a">&#x1F9EC;</span> Habitus-Lernen</h2>
+        <div id="habitus-overview-content">&ndash;</div>
+      </div>
       <div class="card wide">
         <h2><span class="icon" style="background:#1a2a4a">&#x1F52C;</span> Neuronen-Brain Visualisierung</h2>
         <canvas id="brain-canvas"></canvas>
@@ -631,6 +635,58 @@
         <h2><span class="icon" style="background:#2a2a1a">&#x1F4A1;</span> Letzte Kandidaten</h2>
         <div id="candidates-content">&ndash;</div>
       </div>
+    </div>
+
+    <!-- Habitus Learning Section -->
+    <div class="section-title" style="margin-top:20px">&#x1F9EC; Habitus-Lernen</div>
+    <div class="grid" style="margin-top:8px">
+      <div class="card">
+        <h2><span class="icon" style="background:#1a3a2a">&#x1F4CA;</span> Habitus-Status</h2>
+        <div id="habitus-status-content">&ndash;</div>
+      </div>
+      <div class="card">
+        <h2><span class="icon" style="background:#2a3a2a">&#x1F4D0;</span> Mining-Regeln</h2>
+        <div id="habitus-rules-content">&ndash;</div>
+      </div>
+      <div class="card">
+        <h2><span class="icon" style="background:#3a1a2a">&#x2699;&#xFE0F;</span> Mining-Konfiguration</h2>
+        <div id="habitus-config-content">&ndash;</div>
+      </div>
+    </div>
+
+    <!-- Mood History Section -->
+    <div class="section-title" style="margin-top:20px">&#x1F3AD; Stimmungsverlauf</div>
+    <div class="card wide" style="margin-top:8px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <h2 style="margin:0"><span class="icon" style="background:#2a1a3a">&#x1F4C8;</span> Mood History &mdash; Letzte 24h</h2>
+        <div style="display:flex;gap:6px">
+          <button class="btn-sm btn-secondary" onclick="loadMoodHistory('1h')">1h</button>
+          <button class="btn-sm btn-secondary" onclick="loadMoodHistory('6h')">6h</button>
+          <button class="btn-sm btn-secondary" onclick="loadMoodHistory('24h')">24h</button>
+          <button class="btn-sm btn-secondary" onclick="loadMoodHistory('7d')">7d</button>
+        </div>
+      </div>
+      <div id="mood-history-content" style="max-height:400px;overflow-y:auto">&ndash;</div>
+    </div>
+
+    <!-- Mood Trend -->
+    <div class="grid" style="margin-top:16px">
+      <div class="card wide">
+        <h2><span class="icon" style="background:#1a2a3a">&#x1F4C9;</span> Stimmungstrend</h2>
+        <div id="mood-trend-content">&ndash;</div>
+      </div>
+    </div>
+
+    <!-- Manual Mining Trigger -->
+    <div class="card wide" style="margin-top:16px">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <h2 style="margin:0"><span class="icon" style="background:#4a2a1a">&#x26A1;</span> Manuelles Mining</h2>
+          <p style="font-size:0.8rem;color:var(--muted);margin-top:4px">Habitus-Mining manuell ausloesen (normalerweise auto nach 1000 Events / 3600s)</p>
+        </div>
+        <button class="btn-sm" style="background:var(--accent);color:var(--bg)" onclick="triggerHabitusMine()">Mining starten</button>
+      </div>
+      <div id="habitus-mine-status" style="margin-top:8px;font-size:0.8rem;color:var(--muted)"></div>
     </div>
   </div>
 
@@ -2896,6 +2952,176 @@ function enrichZoneCards(zonesDashData) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// Habitus Learning + Mood History
+// ═══════════════════════════════════════════════════════════════
+
+async function loadHabitusOverview() {
+  const el = document.getElementById("habitus-overview-content");
+  if (!el) return;
+  const data = await fetchJSON("/api/v1/habitus/status");
+  if (!data || data.error) { el.innerHTML = '<span style="color:var(--muted)">Nicht verfuegbar</span>'; return; }
+  let html = '';
+  if (data.total_rules != null) html += `<div class="stat"><span class="label">Regeln</span><span class="value">${data.total_rules}</span></div>`;
+  if (data.total_events != null) html += `<div class="stat"><span class="label">Events</span><span class="value">${data.total_events}</span></div>`;
+  if (data.zones_active != null) html += `<div class="stat"><span class="label">Aktive Zonen</span><span class="value">${data.zones_active}</span></div>`;
+  if (data.last_mine) html += `<div class="stat"><span class="label">Letztes Mining</span><span class="value">${new Date(data.last_mine).toLocaleTimeString("de-DE")}</span></div>`;
+  html += '<div style="margin-top:6px;font-size:0.75rem;color:var(--muted)">Details unter Module-Tab</div>';
+  el.innerHTML = html || '<span style="color:var(--muted)">Warte auf Daten...</span>';
+}
+
+async function loadHabitusData() {
+  const [status, rules, config] = await Promise.all([
+    fetchJSON("/api/v1/habitus/status"),
+    fetchJSON("/api/v1/habitus/rules/summary"),
+    fetchJSON("/api/v1/habitus/config"),
+  ]);
+  renderHabitusStatus(status);
+  renderHabitusRules(rules);
+  renderHabitusConfig(config);
+  await loadMoodHistory("24h");
+  await loadMoodTrend();
+}
+
+function renderHabitusStatus(data) {
+  const el = document.getElementById("habitus-status-content");
+  if (!el) return;
+  if (!data || data.error) { el.innerHTML = '<span style="color:var(--muted)">Habitus nicht verfuegbar</span>'; return; }
+  let html = '';
+  if (data.status) html += `<div class="stat"><span class="label">Status</span><span class="value" style="color:var(--green)">${data.status}</span></div>`;
+  if (data.total_events != null) html += `<div class="stat"><span class="label">Events verarbeitet</span><span class="value">${data.total_events}</span></div>`;
+  if (data.total_rules != null) html += `<div class="stat"><span class="label">Regeln gelernt</span><span class="value">${data.total_rules}</span></div>`;
+  if (data.last_mine) html += `<div class="stat"><span class="label">Letztes Mining</span><span class="value">${new Date(data.last_mine).toLocaleString("de-DE")}</span></div>`;
+  if (data.zones_active != null) html += `<div class="stat"><span class="label">Aktive Zonen</span><span class="value">${data.zones_active}</span></div>`;
+  if (data.events_since_mine != null) html += `<div class="stat"><span class="label">Events seit Mining</span><span class="value">${data.events_since_mine}</span></div>`;
+  el.innerHTML = html || '<span style="color:var(--muted)">Keine Daten</span>';
+}
+
+function renderHabitusRules(data) {
+  const el = document.getElementById("habitus-rules-content");
+  if (!el) return;
+  if (!data || data.error) { el.innerHTML = '<span style="color:var(--muted)">Keine Regeln</span>'; return; }
+  const rules = data.rules || data.summary || [];
+  if (!rules.length && !data.total) { el.innerHTML = '<span style="color:var(--muted)">Noch keine Muster erkannt &mdash; Warte auf mehr Events.</span>'; return; }
+  let html = '';
+  if (data.total != null) html += `<div class="stat"><span class="label">Regeln gesamt</span><span class="value">${data.total}</span></div>`;
+  if (data.high_confidence != null) html += `<div class="stat"><span class="label">Hohe Konfidenz</span><span class="value" style="color:var(--green)">${data.high_confidence}</span></div>`;
+  if (data.by_zone) {
+    html += '<div style="margin-top:8px;font-size:0.8rem">';
+    for (const [zone, count] of Object.entries(data.by_zone)) {
+      html += `<div class="stat"><span class="label" style="padding-left:8px">${zone}</span><span class="value">${count}</span></div>`;
+    }
+    html += '</div>';
+  }
+  if (Array.isArray(rules) && rules.length > 0) {
+    html += '<div style="margin-top:8px;max-height:200px;overflow-y:auto">';
+    for (const r of rules.slice(0, 10)) {
+      const conf = Math.round((r.confidence || 0) * 100);
+      const confColor = conf >= 70 ? 'var(--green)' : conf >= 40 ? 'var(--orange)' : 'var(--red)';
+      html += `<div style="padding:4px 0;border-bottom:1px solid var(--surface2);font-size:0.8rem">
+        <span style="color:${confColor};font-weight:600">${conf}%</span>
+        <span style="margin-left:6px">${r.antecedent || r.pattern || '?'} &rarr; ${r.consequent || r.action || '?'}</span>
+        ${r.zone ? `<span style="color:var(--muted);margin-left:6px">[${r.zone}]</span>` : ''}
+      </div>`;
+    }
+    html += '</div>';
+  }
+  el.innerHTML = html || '<span style="color:var(--muted)">Keine Regeln</span>';
+}
+
+function renderHabitusConfig(data) {
+  const el = document.getElementById("habitus-config-content");
+  if (!el) return;
+  if (!data || data.error) { el.innerHTML = '<span style="color:var(--muted)">Konfig nicht verfuegbar</span>'; return; }
+  const cfg = data.config || data;
+  let html = '';
+  if (cfg.min_support != null) html += `<div class="stat"><span class="label">Min. Support</span><span class="value">${cfg.min_support}</span></div>`;
+  if (cfg.min_confidence != null) html += `<div class="stat"><span class="label">Min. Konfidenz</span><span class="value">${cfg.min_confidence}</span></div>`;
+  if (cfg.max_rules != null) html += `<div class="stat"><span class="label">Max. Regeln</span><span class="value">${cfg.max_rules}</span></div>`;
+  if (cfg.auto_mine_threshold != null) html += `<div class="stat"><span class="label">Auto-Mine Schwelle</span><span class="value">${cfg.auto_mine_threshold} Events</span></div>`;
+  if (cfg.auto_mine_interval_s != null) html += `<div class="stat"><span class="label">Auto-Mine Intervall</span><span class="value">${cfg.auto_mine_interval_s}s</span></div>`;
+  if (cfg.feedback_weights) {
+    html += '<div style="margin-top:6px;font-size:0.8rem;color:var(--muted)">Feedback-Gewichte:</div>';
+    for (const [k, v] of Object.entries(cfg.feedback_weights)) {
+      html += `<div class="stat"><span class="label" style="padding-left:8px">${k}</span><span class="value">${v}x</span></div>`;
+    }
+  }
+  el.innerHTML = html || '<span style="color:var(--muted)">Standard-Konfiguration</span>';
+}
+
+async function loadMoodHistory(range) {
+  const el = document.getElementById("mood-history-content");
+  if (!el) return;
+  el.innerHTML = '<span style="color:var(--muted)">Lade...</span>';
+  let limit = 50;
+  if (range === "1h") limit = 20;
+  if (range === "7d") limit = 200;
+  const data = await fetchJSON(`/api/v1/neurons/mood/history?range=${range}&limit=${limit}`);
+  if (!data || data.error) { el.innerHTML = '<span style="color:var(--muted)">Keine Mood-History verfuegbar</span>'; return; }
+  const entries = data.history || data.entries || data;
+  if (!Array.isArray(entries) || entries.length === 0) {
+    el.innerHTML = '<span style="color:var(--muted)">Noch keine Stimmungsdaten aufgezeichnet &mdash; Neuronbefeuerung aktiv?</span>';
+    return;
+  }
+  let html = '<table style="width:100%;border-collapse:collapse;font-size:0.8rem">';
+  html += '<tr style="color:var(--muted);border-bottom:1px solid var(--surface2)"><th style="text-align:left;padding:4px">Zeit</th><th style="text-align:left;padding:4px">Stimmung</th><th style="text-align:left;padding:4px">Konfidenz</th><th style="text-align:left;padding:4px">Werte</th></tr>';
+  for (const e of entries.slice(0, 50)) {
+    const ts = e.ts || e.timestamp ? new Date(e.ts || e.timestamp).toLocaleString("de-DE", {hour:"2-digit",minute:"2-digit",second:"2-digit"}) : "?";
+    const mood = e.mood || e.dominant_mood || "?";
+    const conf = e.confidence != null ? Math.round(e.confidence * 100) + "%" : "?";
+    const moodBg = moodClass(mood);
+    let vals = "";
+    if (e.mood_values || e.values) {
+      const v = e.mood_values || e.values;
+      vals = Object.entries(v).map(([k, val]) => `${k}: ${Math.round(val * 100)}%`).join(", ");
+    }
+    html += `<tr style="border-bottom:1px solid var(--surface2)"><td style="padding:3px 4px">${ts}</td><td style="padding:3px 4px"><span class="mood-badge ${moodBg}" style="font-size:0.7rem;padding:2px 6px">${mood}</span></td><td style="padding:3px 4px">${conf}</td><td style="padding:3px 4px;color:var(--muted);font-size:0.75rem">${vals}</td></tr>`;
+  }
+  html += '</table>';
+  if (entries.length > 50) html += `<div style="color:var(--muted);font-size:0.75rem;margin-top:4px">&hellip; ${entries.length - 50} weitere Eintraege</div>`;
+  el.innerHTML = html;
+}
+
+async function loadMoodTrend() {
+  const el = document.getElementById("mood-trend-content");
+  if (!el) return;
+  const data = await fetchJSON("/api/v1/neurons/mood/trend");
+  if (!data || data.error) { el.innerHTML = '<span style="color:var(--muted)">Kein Trend verfuegbar</span>'; return; }
+  const trend = data.trend || data;
+  let html = '';
+  if (trend.dominant_mood) html += `<div class="stat"><span class="label">Dominante Stimmung</span><span class="value"><span class="mood-badge ${moodClass(trend.dominant_mood)}">${trend.dominant_mood}</span></span></div>`;
+  if (trend.stability != null) {
+    const stabPct = Math.round(trend.stability * 100);
+    html += `<div class="stat"><span class="label">Stabilitaet</span><span class="value">${stabPct}%</span></div>`;
+    html += barHTML("Stabilitaet", trend.stability, stabPct > 60 ? "#81c784" : "#ffb74d");
+  }
+  if (trend.transitions != null) html += `<div class="stat"><span class="label">Wechsel</span><span class="value">${trend.transitions}</span></div>`;
+  if (trend.mood_distribution) {
+    html += '<div style="margin-top:8px">';
+    const colors = {relax:"#81c784",focus:"#4fc3f7",active:"#ffb74d",sleep:"#ce93d8",alert:"#ef5350",away:"#888",social:"#ff8a65",recovery:"#a5d6a7",energy:"#ffd54f"};
+    for (const [k, v] of Object.entries(trend.mood_distribution)) {
+      html += barHTML(k, v, colors[k] || "#4fc3f7");
+    }
+    html += '</div>';
+  }
+  if (trend.average_confidence != null) html += `<div class="stat" style="margin-top:4px"><span class="label">Durchschn. Konfidenz</span><span class="value">${Math.round(trend.average_confidence * 100)}%</span></div>`;
+  el.innerHTML = html || '<span style="color:var(--muted)">Noch keine Trend-Daten</span>';
+}
+
+async function triggerHabitusMine() {
+  const el = document.getElementById("habitus-mine-status");
+  if (!el) return;
+  el.textContent = "Mining laeuft...";
+  el.style.color = "var(--accent)";
+  const result = await postJSON("/api/v1/habitus/mine", {});
+  if (result && !result.error) {
+    el.innerHTML = `<span style="color:var(--green)">\u2705 Mining abgeschlossen: ${result.rules_found || result.rules || 0} Regeln gefunden</span>`;
+    await loadHabitusData();
+  } else {
+    el.innerHTML = `<span style="color:var(--red)">\u274C Mining fehlgeschlagen: ${result ? result.error : "API nicht erreichbar"}</span>`;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
 // Main Load
 // ═══════════════════════════════════════════════════════════════
 
@@ -2939,10 +3165,11 @@ async function loadDashboard() {
     }
   }
   if (conf && conf.ok) renderZones(conf.habitus_zones);
+  loadHabitusOverview();
 }
 
 async function loadAll() {
-  await Promise.all([loadDashboard(), loadLLM(), loadAutomation(), loadAlarmData(), loadHomeKit(), loadZoneDashboard()]);
+  await Promise.all([loadDashboard(), loadLLM(), loadAutomation(), loadAlarmData(), loadHomeKit(), loadZoneDashboard(), loadHabitusData()]);
 }
 
 // Initialize
