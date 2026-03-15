@@ -136,7 +136,7 @@ class BulkEmbeddingRequest(BaseModel):
 class ChatRequestSchema(BaseModel):
     """POST /api/styx/chat body."""
     query: str = Field(..., min_length=1, max_length=10000)
-    user_id: str = Field(..., min_length=1, max_length=200)
+    user_id: str = Field(default="anonymous", max_length=200)
     use_web: bool = False
     model: str = Field(default="qwen3.5:397b-cloud", max_length=100)
     conversation_id: str = Field(default="", max_length=200)
