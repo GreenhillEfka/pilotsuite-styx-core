@@ -1111,10 +1111,12 @@ def register_blueprints(app: Flask, services: dict) -> None:
     # ── Data-driven blueprint registration ────────────────────────────────
     # Each entry: (module_path, blueprint_attr, url_prefix_or_None)
     # url_prefix=None means the blueprint defines its own prefix internally.
+    # NOTE: ALL blueprints are registered FLAT (not nested) so that a single
+    # import failure does not take down all 40+ API routes.
     _BLUEPRINTS = [
         # Auth setup (unauthenticated — allows HA to fetch 1-Key-Flow token)
         ("copilot_core.api.v1.auth",             "auth_bp",              None),
-        # Standalone blueprints under /api/v1 (NOT nested in api_v1/blueprint.py)
+        # Standalone blueprints with their own absolute prefix
         ("copilot_core.api.v1.log_fixer_tx",    "bp",                   None),
         ("copilot_core.api.v1.events_ingest",    "bp",                   "/api/v1"),
         ("copilot_core.api.v1.sensors",          "bp",                   None),
@@ -1125,18 +1127,42 @@ def register_blueprints(app: Flask, services: dict) -> None:
         ("copilot_core.api.v1.tag_system",       "bp",                   None),
         ("copilot_core.api.v1.multihome",        "bp",                   None),
         ("copilot_core.api.v1.voice",            "bp",                   None),
-        # NOTE: habitus, mood, notifications, user_preferences, vector,
-        # swagger_ui, weather are already nested in api_v1 (blueprint.py).
-        # Do NOT register them standalone — causes duplicate routes.
-        # Blueprints with built-in absolute prefix (register without url_prefix)
         ("copilot_core.api.v1.habitus_zones",    "bp",                   None),
         # NOTE: sonos_bp is registered individually below (after init_sonos_api wiring)
         ("copilot_core.api.v1.module_control",   "module_control_bp",    None),
         ("copilot_core.api.v1.rag",              "bp",                   None),
         ("copilot_core.api.v1.styx_chat",        "bp",                   None),
         ("copilot_core.api.v1.mcp",              "bp",                   None),
-        # Nested blueprint registry (api/v1/blueprint.py) — contains 27 sub-blueprints
-        ("copilot_core.api.v1.blueprint",        "api_v1",               "/api/v1"),
+        # ── Previously nested in api_v1 (blueprint.py) — now flat ──────
+        # Blueprints with relative prefix: override to /api/v1/<prefix>
+        ("copilot_core.api.v1.candidates",              "bp",               "/api/v1/candidates"),
+        ("copilot_core.api.v1.events",                  "bp",               "/api/v1/events"),
+        ("copilot_core.api.v1.mood",                    "bp",               "/api/v1/mood"),
+        ("copilot_core.api.v1.graph",                   "bp",               "/api/v1/graph"),
+        ("copilot_core.api.v1.habitus",                 "bp",               "/api/v1/habitus"),
+        ("copilot_core.api.v1.habitus_dashboard_cards", "bp",               "/api/v1/habitus/dashboard_cards"),
+        ("copilot_core.api.v1.graph_ops",               "bp",               "/api/v1/graph"),
+        ("copilot_core.api.v1.vector",                  "bp",               "/api/v1/vector"),
+        ("copilot_core.api.v1.neurons",                 "bp",               "/api/v1/neurons"),
+        ("copilot_core.api.v1.neurons_visualization",   "bp",               "/api/v1/neurons"),
+        ("copilot_core.api.v1.weather",                 "bp",               "/api/v1/weather"),
+        ("copilot_core.api.v1.voice_context_bp",        "bp",               "/api/v1/voice"),
+        ("copilot_core.api.v1.user_preferences",        "bp",               "/api/v1/user"),
+        ("copilot_core.api.v1.dashboard",               "bp",               "/api/v1/dashboard"),
+        ("copilot_core.knowledge_graph.api",             "bp",               "/api/v1/kg"),
+        ("copilot_core.api.v1.search",                  "bp",               "/api/v1/search"),
+        ("copilot_core.api.v1.notifications",           "bp",               "/api/v1/notifications"),
+        ("copilot_core.api.v1.user_hints",              "bp",               "/api/v1/hints"),
+        ("copilot_core.api.v1.conversation",            "conversation_bp",  "/api/v1/chat"),
+        # Blueprints with None prefix: routes have /api/v1/ baked into paths
+        ("copilot_core.api.v1.dev",                     "bp",               "/api/v1"),
+        ("copilot_core.api.v1.swagger_ui",              "bp",               "/api/v1/docs"),
+        ("copilot_core.api.v1.swagger_ui",              "openapi_bp",       "/api/v1"),
+        ("copilot_core.sharing.api",                    "sharing_bp",       "/api/v1"),
+        ("copilot_core.collective_intelligence.api",    "federated_bp",     "/api/v1"),
+        ("copilot_core.api.v1.rate_limit",              "rate_limit_bp",    "/api/v1"),
+        ("copilot_core.homeassistant.api",              "ha_discovery_bp",  "/api/v1"),
+        ("copilot_core.api.v1.metrics",                 "metrics_bp",       "/api/v1"),
     ]
 
     for module_path, bp_attr, prefix in _BLUEPRINTS:
