@@ -460,12 +460,25 @@ def create_app(options: dict | None = None) -> Flask:
 
     # Set COPILOT_CFG for blueprints that use current_app.config["COPILOT_CFG"]
     # (habitus.py, mood.py etc. need cfg.data_dir at minimum)
-    from copilot_core.app import CopilotConfig
-    copilot_cfg = CopilotConfig()
-    copilot_cfg.data_dir = opts.get("data_dir", "/data")
-    copilot_cfg.version = APP_VERSION
-    copilot_cfg.auth_token = opts.get("auth_token", "")
-    copilot_cfg.log_level = opts.get("log_level", "info")
+    # NOTE: Cannot import from app.py — it triggers api/v1/blueprint.py which
+    # imports all 27 sub-modules and crashes in Docker. Use SimpleNamespace instead.
+    from types import SimpleNamespace
+    copilot_cfg = SimpleNamespace(
+        data_dir=opts.get("data_dir", "/data"),
+        version=APP_VERSION,
+        auth_token=opts.get("auth_token", ""),
+        log_level=opts.get("log_level", "info"),
+        events_persist=opts.get("events_persist", False),
+        events_cache_max=opts.get("events_cache_max", 500),
+        events_idempotency_ttl_seconds=opts.get("events_idempotency_ttl_seconds", 1200),
+        events_idempotency_lru_max=opts.get("events_idempotency_lru_max", 10000),
+        candidates_persist=opts.get("candidates_persist", False),
+        candidates_max=opts.get("candidates_max", 500),
+        mood_window_seconds=opts.get("mood_window_seconds", 3600),
+        brain_graph_persist=opts.get("brain_graph_persist", True),
+        brain_graph_nodes_max=opts.get("brain_graph_nodes_max", 500),
+        brain_graph_edges_max=opts.get("brain_graph_edges_max", 1500),
+    )
     flask_app.config["COPILOT_CFG"] = copilot_cfg
 
     # Store startup metadata
