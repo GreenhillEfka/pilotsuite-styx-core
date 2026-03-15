@@ -27,7 +27,8 @@ RUN apk add --no-cache \
         qrcode==8.0 \
         numpy \
         aiohttp \
-        scikit-learn && \
+        scikit-learn \
+        prometheus_client && \
     # Remove build deps to keep image small
     apk del gcc g++ musl-dev python3-dev linux-headers
 
