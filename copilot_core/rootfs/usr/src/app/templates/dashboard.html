@@ -1722,37 +1722,60 @@ async function loadHabitus(){
     c.appendChild(el('div','pat',
       `<span>${ant}</span><span class="arr">\u2192</span><span>${cons}</span><span class="meta">${conf}% | ${supp}% Supp | Lift ${lift}</span>`));
   });
-  // Zones (Hub Zone API)
-  const zones=await api('/api/v1/hub/zones');
+  // Zones: Try Hub Zones first, fall back to Habitus Zones
+  const [hubZones, habitusZones] = await Promise.all([
+    api('/api/v1/hub/zones'),
+    api('/api/v1/habitus/zones'),
+  ]);
   const zc=$('hab-zones');
-  if(zones&&Array.isArray(zones.zones)){
+  // Merge: Hub zones (dynamic) + Habitus zones (predefined types)
+  const hubList=(hubZones&&Array.isArray(hubZones.zones))?hubZones.zones:[];
+  const habList=(habitusZones&&Array.isArray(habitusZones.zones))?habitusZones.zones:[];
+  // Combine both sources
+  const allZones=[];
+  hubList.forEach(z=>allZones.push({id:z.zone_id||z.id||'',name:z.name||'',source:'hub',rooms:z.rooms||[],entities:z.entities||[],icon:z.icon||'',metrics:z.metrics||{}}));
+  habList.forEach(z=>{
+    if(!allZones.find(a=>a.id===z.id)){
+      allZones.push({id:z.id||z.zone_type||'',name:z.name_de||z.name||'',source:'habitus',rooms:[],entities:[],icon:z.icon||'mdi:home',metrics:z.metrics||{},keywords:z.keywords_de||[],priority:z.priority||0});
+    }
+  });
+  if(allZones.length){
     zc.innerHTML='';
-    const zoneList=zones.zones;
-    const details=await Promise.allSettled(
-      zoneList.map(z=>api('/api/v1/hub/zones/'+encodeURIComponent(String(z.zone_id||''))))
-    );
-    const detailMap=new Map();
-    details.forEach((item,idx)=>{
-      if(item.status!=='fulfilled')return;
-      const zid=String(zoneList[idx]?.zone_id||'');
-      if(!zid)return;
-      detailMap.set(zid,item.value||{});
-    });
-
-    zoneList.forEach(z=>{
-      const zid=String(z.zone_id||'');
-      const detail=detailMap.get(zid)||{};
-      const zoneName=String(z.name||detail.name||zid||'Zone');
-      const ents=Array.isArray(detail.entities)?detail.entities:[];
-      const rooms=Array.isArray(detail.rooms)?detail.rooms:[];
+    // Fetch hub zone details for hub zones
+    if(hubList.length){
+      const details=await Promise.allSettled(
+        hubList.map(z=>api('/api/v1/hub/zones/'+encodeURIComponent(String(z.zone_id||''))))
+      );
+      details.forEach((item,idx)=>{
+        if(item.status!=='fulfilled')return;
+        const zid=String(hubList[idx]?.zone_id||'');
+        const az=allZones.find(a=>a.id===zid);
+        if(az&&item.value){
+          az.entities=item.value.entities||az.entities;
+          az.rooms=item.value.rooms||az.rooms;
+        }
+      });
+    }
+    allZones.sort((a,b)=>(a.priority||99)-(b.priority||99));
+    allZones.forEach(z=>{
+      const zoneName=z.name||z.id||'Zone';
+      const ents=z.entities||[];
+      const rooms=z.rooms||[];
       const roomNames=rooms.map(r=>String(r?.name||r?.room_id||'')).filter(Boolean);
-      const roomSummary=roomNames.length>3?roomNames.slice(0,3).join(', ')+` +${roomNames.length-3}`:(roomNames.join(', ')||'keine Räume');
-      const zoneIdJson=JSON.stringify(zid);
+      const roomSummary=roomNames.length>3?roomNames.slice(0,3).join(', ')+` +${roomNames.length-3}`:(roomNames.join(', ')||z.keywords?.slice(0,4).join(', ')||'keine Räume');
+      const metrics=z.metrics||{};
+      const metricsHtml=metrics.entity_count!==undefined?
+        `<span class="b" style="font-size:10px">${metrics.entity_count||0} Entities</span> `+
+        (metrics.avg_temperature!=null?`<span class="b" style="font-size:10px">${metrics.avg_temperature.toFixed(1)}°C</span> `:'')+
+        (metrics.occupancy?'<span class="b b-g" style="font-size:10px">Besetzt</span>':''):'';
+      const sourceTag=z.source==='habitus'?'<span class="b b-y" style="font-size:9px">Typ</span>':'<span class="b b-g" style="font-size:9px">Hub</span>';
+      const zoneIdJson=JSON.stringify(z.id);
       const zoneNameJson=JSON.stringify(zoneName);
       const entsJson=JSON.stringify(ents);
       const card=el('div','zone-card',
-        `<h3><span style="color:var(--cyan)">&#x1f3e0;</span> ${escapeHtml(zoneName)}</h3>
-        <p style="font-size:11px;color:var(--dim)">Räume: ${escapeHtml(roomSummary)} · Entitäten: ${ents.length}</p>
+        `<h3><span style="color:var(--cyan)">${z.icon?`<ha-icon icon="${escapeHtml(z.icon)}"></ha-icon>`:'&#x1f3e0;'}</span> ${escapeHtml(zoneName)} ${sourceTag}</h3>
+        <p style="font-size:11px;color:var(--dim)">Räume/Keywords: ${escapeHtml(roomSummary)} · Entitäten: ${ents.length}</p>
+        ${metricsHtml?`<div style="margin:4px 0">${metricsHtml}</div>`:''}
         <div class="zone-entities">${ents.map(e=>`<span class="ze">${escapeHtml(e)}</span>`).join('')}</div>
         <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
           <button onclick='saveZoneScene(${zoneIdJson},${zoneNameJson},${entsJson})' class="btn-scene" title="Aktuelle Zustände als Szene speichern">&#x1f3ac; Szene speichern</button>
