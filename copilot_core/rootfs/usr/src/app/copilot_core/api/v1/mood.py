@@ -179,28 +179,45 @@ def orchestrate_zone(zone_name):
                 events = store.list(limit=50)
                 sensor_data = {"events_count": len(events)}
         
-        # Create orchestrator with HA service call execution
+        # Create orchestrator with HA service call execution via Supervisor API
+        import os, requests as _requests
+        _SUPERVISOR_API = os.environ.get("SUPERVISOR_API", "http://supervisor/core/api")
+        _SUPERVISOR_TOKEN = os.environ.get("SUPERVISOR_TOKEN", "")
+
         def get_sensor_data(entities):
             data = {}
+            if not _SUPERVISOR_TOKEN:
+                return data
+            headers = {"Authorization": f"Bearer {_SUPERVISOR_TOKEN}", "Content-Type": "application/json"}
             for entity_id in entities:
                 try:
-                    state = current_app.hass.states.get(entity_id)
-                    if state:
+                    resp = _requests.get(f"{_SUPERVISOR_API}/states/{entity_id}", headers=headers, timeout=5)
+                    if resp.ok:
+                        state = resp.json()
                         data[entity_id] = {
-                            "state": state.state,
-                            "attributes": dict(state.attributes)
+                            "state": state.get("state"),
+                            "attributes": state.get("attributes", {})
                         }
                 except Exception:
                     pass
             return data
-        
+
         def execute_service_calls(calls):
+            if not _SUPERVISOR_TOKEN:
+                current_app.logger.warning("No SUPERVISOR_TOKEN — cannot execute service calls")
+                return False
+            headers = {"Authorization": f"Bearer {_SUPERVISOR_TOKEN}", "Content-Type": "application/json"}
             try:
                 for call in calls:
                     domain = call.get("domain")
                     service = call.get("service")
                     service_data = call.get("service_data", {})
-                    current_app.hass.services.call(domain, service, service_data, blocking=True)
+                    resp = _requests.post(
+                        f"{_SUPERVISOR_API}/services/{domain}/{service}",
+                        json=service_data, headers=headers, timeout=10
+                    )
+                    if resp.status_code >= 400:
+                        current_app.logger.warning("HA service %s/%s failed: %d", domain, service, resp.status_code)
                 return True
             except Exception as e:
                 current_app.logger.error("Service call execution failed: %s", e)

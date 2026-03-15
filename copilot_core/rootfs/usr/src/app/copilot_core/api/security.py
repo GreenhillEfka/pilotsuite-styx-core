@@ -23,6 +23,11 @@ _token_cache: tuple[str, float] = ("", 0.0)
 _token_lock = threading.Lock()
 _TOKEN_CACHE_TTL = 60.0  # seconds
 
+# HA user token validation cache: {token_hash: expiry_monotonic}
+_ha_token_cache: dict[str, float] = {}
+_ha_token_lock = threading.Lock()
+_HA_TOKEN_CACHE_TTL = 300.0  # 5 minutes
+
 
 def _ensure_auto_token() -> str:
     """Generate and persist an auto-token if none exists (1-Key-Flow).
@@ -117,11 +122,66 @@ def is_auth_required(options_path: str = OPTIONS_PATH) -> bool:
     return True
 
 
+def _validate_ha_user_token(candidate: str) -> bool:
+    """Check if *candidate* is a valid HA user token (short- or long-lived).
+
+    Validates by calling the HA Core API via the internal Docker network.
+    Results are cached for 5 minutes to avoid per-request latency.
+    """
+    if not candidate or len(candidate) < 20:
+        return False
+
+    # Use a hash as cache key (avoid storing full tokens in memory)
+    import hashlib
+    token_key = hashlib.sha256(candidate.encode()).hexdigest()[:16]
+
+    now = time.monotonic()
+    with _ha_token_lock:
+        expiry = _ha_token_cache.get(token_key)
+        if expiry is not None and now < expiry:
+            return True
+
+    # Validate against HA Core API
+    # Inside an add-on container: http://supervisor/core/api proxies to HA
+    # Direct access: http://homeassistant:8123/api
+    ha_urls = [
+        os.environ.get("SUPERVISOR_API", "http://supervisor/core/api"),
+        "http://homeassistant:8123/api",
+    ]
+
+    for base_url in ha_urls:
+        try:
+            import requests as _req
+            resp = _req.get(
+                base_url + ("/" if not base_url.endswith("/") else ""),
+                headers={"Authorization": f"Bearer {candidate}"},
+                timeout=3,
+            )
+            if resp.status_code == 200:
+                with _ha_token_lock:
+                    _ha_token_cache[token_key] = now + _HA_TOKEN_CACHE_TTL
+                    # Prune expired entries
+                    expired = [k for k, v in _ha_token_cache.items() if v < now]
+                    for k in expired:
+                        del _ha_token_cache[k]
+                _LOGGER.debug("Accepted HA user token for %s", base_url)
+                return True
+        except Exception:
+            continue
+
+    return False
+
+
 def validate_token(request) -> bool:
     """Validate the shared token against the incoming request.
 
     Returns True when authentication is disabled or a valid token is provided.
     Returns False when authentication is required and token validation fails.
+
+    Accepts:
+    1. Core's own auth token (X-Auth-Token header or Bearer)
+    2. HA Ingress requests (X-Ingress-Path header present)
+    3. Valid HA user tokens (validated against HA API, cached)
     """
 
     # Check if auth is required
@@ -140,6 +200,20 @@ def validate_token(request) -> bool:
     if auth_header.startswith("Bearer "):
         candidate = auth_header.split(" ", 1)[1].strip()
         if candidate and hmac.compare_digest(candidate, token):
+            return True
+
+    # Trust requests coming through HA Ingress proxy (user already
+    # authenticated by HA at the Ingress gateway).
+    if request.headers.get("X-Ingress-Path"):
+        return True
+
+    # Fallback: check if the token is a valid HA user token
+    # (covers styx-chat-card sending HA frontend access_token)
+    if header_token and _validate_ha_user_token(header_token):
+        return True
+    if auth_header.startswith("Bearer "):
+        candidate = auth_header.split(" ", 1)[1].strip()
+        if candidate and _validate_ha_user_token(candidate):
             return True
 
     # Log failed authentication attempt
