@@ -1,6 +1,6 @@
 {
   "name": "PilotSuite Core",
-  "version": "14.3.15",
+  "version": "14.3.16",
   "slug": "copilot_core",
   "description": "PilotSuite Styx \u2014 AI Home Copilot with Brain Architecture, Neural Sensors, and local LLM conversation.",
   "url": "https://github.com/GreenhillEfka/pilotsuite-styx-core",
