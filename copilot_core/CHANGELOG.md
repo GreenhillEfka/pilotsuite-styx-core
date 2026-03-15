@@ -3,6 +3,14 @@
 This file exists so Home Assistant can show an add-on changelog.
 For full history, see the repository-level `CHANGELOG.md`.
 
+## 14.3.17 (2026-03-15)
+- **Ingress Detection**: `detectIngressBasePath()` fuer korrekte API-Aufrufe im Ingress-Modus
+- **Auth Header Fix**: `X-Auth-Token` statt `Authorization: Bearer` (Ingress Proxy Kompatibilitaet)
+- **System Health**: Dashboard zeigt CPU%, RAM, Disk, Uptime
+- **Cloud API Config**: URL + Key im Dashboard konfigurierbar
+- **Blueprint-Registrierung**: automations_bp + onboarding_bp verdrahtet
+- **Null-Safety**: postJSON(), fetchJSON() abgesichert
+
 ## 13.6.0 (2026-03-11)
 - **Musikwolke Bridge**: End-to-End Sonos-Integration mit Zone-Speaker-Mapping und Follow-Mode
 - **Automation-Modus**: 3-Stufen off/learning/autonomy pro Zone
