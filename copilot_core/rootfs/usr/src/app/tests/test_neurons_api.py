@@ -405,9 +405,9 @@ class TestMoodEndpoints:
         data = json.loads(response.data)
         assert "history" in data["data"]
 
-    def test_get_mood_history_with_limit(self, client):
-        """Test mood history with limit parameter."""
-        response = client.get('/api/v1/neurons/mood/history?limit=5')
+    def test_get_mood_history_with_hours(self, client):
+        """Test mood history with hours parameter."""
+        response = client.get('/api/v1/neurons/mood/history?hours=1')
 
         assert response.status_code == 200
         data = json.loads(response.data)

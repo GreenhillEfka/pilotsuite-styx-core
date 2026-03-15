@@ -8,9 +8,10 @@ import time
 from pathlib import Path
 from typing import Any
 
-from .model import NormEvent, Rule, MiningConfig, EventStreamType, RulesType  
+from .model import NormEvent, Rule, MiningConfig, EventStreamType, RulesType
 from .store import HabitusMinerStore
 from .mining import mine_ab_rules, mine_with_context_stratification
+from .feedback_store import HabitusFeedbackStore
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -29,6 +30,7 @@ class HabitusMinerService:
         self.storage_dir = Path(storage_dir)
         self.config = config or MiningConfig()
         self.store = HabitusMinerStore(self.storage_dir)
+        self.feedback_store = HabitusFeedbackStore(self.storage_dir)
         self._vector_store = vector_store
         self._embedding_engine = embedding_engine
         self._integration_bus = integration_bus
@@ -178,7 +180,10 @@ class HabitusMinerService:
             "Mining completed in %.2fs: found %d rules",
             mining_time, len(rules)
         )
-        
+
+        # Apply feedback weights from previous user decisions
+        rules = self._apply_feedback_weights(rules)
+
         # Cache events and save rules
         self.store.cache_events(events)
         self.store.save_rules(rules)
@@ -190,6 +195,48 @@ class HabitusMinerService:
             self._publish_pattern_events(rules)
 
         return rules
+
+    def _apply_feedback_weights(self, rules: RulesType) -> RulesType:
+        """Apply persistent feedback weights to mined rules.
+
+        Accepted patterns get boosted confidence, rejected patterns get
+        suppressed.  Rules whose weighted confidence drops below the
+        configured min_confidence are removed.
+        """
+        weights = self.feedback_store.get_feedback_weights()
+        if not weights:
+            return rules
+
+        adjusted = []
+        suppressed = 0
+        for rule in rules:
+            # Build pattern key matching the feedback store format
+            pattern_key = f"{rule.A}->{rule.B}"
+            w = weights.get(pattern_key)
+            if w is None:
+                adjusted.append(rule)
+                continue
+
+            # Apply weight multiplier to confidence
+            rule.confidence = min(1.0, rule.confidence * w)
+            from .mining import _wilson_lower_bound
+            # Recalculate lower bound based on adjusted confidence
+            rule.confidence_lb = _wilson_lower_bound(
+                int(rule.nAB * w), rule.nA
+            ) if rule.nA > 0 else 0.0
+
+            # Suppress rules that fall below threshold after feedback
+            if rule.confidence < self.config.min_confidence:
+                suppressed += 1
+                continue
+            adjusted.append(rule)
+
+        if suppressed:
+            _LOGGER.info("Feedback suppressed %d rules below confidence threshold", suppressed)
+
+        # Re-sort by score
+        adjusted.sort(key=lambda r: r.score(), reverse=True)
+        return adjusted
 
     def _embed_rules_in_rag(self, rules: RulesType) -> None:
         """Embed discovered rules in vector store for semantic search.
@@ -416,6 +463,9 @@ class HabitusMinerService:
         incremented without nAB (lowering confidence).  The rule is then
         re-scored and persisted.
 
+        Feedback is also recorded in the persistent feedback store so that
+        future mining runs apply the same reinforcement/suppression.
+
         Returns True if the rule was found and updated.
         """
         rules = self.store.rules
@@ -426,7 +476,7 @@ class HabitusMinerService:
                 break
 
         if target is None:
-            _LOGGER.warning("Feedback for unknown rule %s → %s", rule_a, rule_b)
+            _LOGGER.warning("Feedback for unknown rule %s -> %s", rule_a, rule_b)
             return False
 
         if accepted:
@@ -434,7 +484,7 @@ class HabitusMinerService:
             target.nAB += 1
         else:
             target.nA += 1
-            # nAB stays the same → confidence drops
+            # nAB stays the same -> confidence drops
 
         # Recalculate confidence
         target.confidence = target.nAB / target.nA if target.nA > 0 else 0.0
@@ -442,13 +492,20 @@ class HabitusMinerService:
         target.confidence_lb = _wilson_lower_bound(target.nAB, target.nA)
 
         self.store.save_rules(rules)
+
+        # Persist feedback for future mining runs
+        pattern_key = f"{rule_a}->{rule_b}"
+        action = "accepted" if accepted else "rejected"
+        self.feedback_store.record_feedback(pattern_key, action)
+
         _LOGGER.info(
-            "Feedback applied to %s → %s: accepted=%s, new confidence=%.3f",
+            "Feedback applied to %s -> %s: accepted=%s, new confidence=%.3f",
             rule_a, rule_b, accepted, target.confidence,
         )
         return True
 
     def reset_cache(self) -> None:
-        """Reset all cached data."""
+        """Reset all cached data including feedback."""
         self.store.clear_cache()
-        _LOGGER.info("Reset all cached data")
+        self.feedback_store.clear()
+        _LOGGER.info("Reset all cached data including feedback")

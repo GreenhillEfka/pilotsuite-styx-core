@@ -3,15 +3,22 @@ Event processing pipeline connecting EventStore to BrainGraphService.
 
 This module provides automatic processing of ingested events to update
 the brain graph with real-time smart home state and relationships.
+Includes auto-triggered habitus mining after event ingestion.
 """
 
 import logging
+import os
 import threading
+import time
 from typing import Dict, Any, Optional, Callable, List, Set
 from ..brain_graph.service import BrainGraphService
 from ..dev_surface.service import dev_surface
 
 logger = logging.getLogger(__name__)
+
+# Auto-mining thresholds (configurable via env vars)
+_AUTO_MINE_EVENT_THRESHOLD = int(os.environ.get("HABITUS_AUTO_MINE_EVENT_THRESHOLD", "1000"))
+_AUTO_MINE_INTERVAL_S = int(os.environ.get("HABITUS_AUTO_MINE_INTERVAL_S", "3600"))
 
 
 class EventProcessor:
@@ -23,6 +30,7 @@ class EventProcessor:
     - Configurable event filters and processors
     - Rollback on batch failure (only commits successfully processed events)
     - Idempotency via event ID deduplication
+    - Auto-triggered habitus mining (every N events or M seconds)
     """
 
     def __init__(self, brain_graph_service: Optional[BrainGraphService] = None):
@@ -33,9 +41,33 @@ class EventProcessor:
         self._processed_ids: Set[str] = set()
         self._max_processed_ids = 10000
 
+        # Auto-mining state
+        self._habitus_miner = None  # set via set_habitus_miner()
+        self._events_since_last_mine: int = 0
+        self._last_mine_ts: float = time.time()
+        self._mine_lock = threading.Lock()
+        self._mining_in_progress: bool = False
+        self._habitus_event_buffer: List[Dict[str, Any]] = []
+
         # Register default processors
         if brain_graph_service:
             self.processors.append(self._process_for_brain_graph)
+
+    def set_habitus_miner(self, miner) -> None:
+        """Inject a HabitusMinerService for auto-triggered mining.
+
+        Once set, the processor will automatically trigger habitus mining
+        after every ``HABITUS_AUTO_MINE_EVENT_THRESHOLD`` processed events
+        or every ``HABITUS_AUTO_MINE_INTERVAL_S`` seconds (whichever comes
+        first).  Mining runs in a background thread so it never blocks
+        event processing.
+        """
+        self._habitus_miner = miner
+        logger.info(
+            "Habitus auto-mining enabled (threshold=%d events, interval=%ds)",
+            _AUTO_MINE_EVENT_THRESHOLD,
+            _AUTO_MINE_INTERVAL_S,
+        )
 
     def add_processor(self, processor: Callable[[Dict[str, Any]], None]):
         """Add a custom event processor function."""
@@ -118,7 +150,102 @@ class EventProcessor:
         if stats["processed"] > 0:
             dev_surface.debug("event_processor", f"Processed {stats['processed']} events successfully")
 
+        # Auto-mining: buffer events and check trigger conditions
+        if self._habitus_miner and stats["processed"] > 0:
+            self._buffer_for_mining(events)
+            self._maybe_trigger_mining()
+
         return stats
+
+    # ── Habitus auto-mining helpers ─────────────────────────────────
+
+    def _buffer_for_mining(self, events: List[Dict[str, Any]]) -> None:
+        """Convert processed events to HA-like format and buffer them."""
+        ha_events = []
+        for evt in events:
+            if not isinstance(evt, dict):
+                continue
+            entity_id = evt.get("entity_id", "")
+            attrs = evt.get("attributes", {})
+            old_state = attrs.get("old_state", "")
+            new_state = attrs.get("new_state", "")
+            # Also check top-level "new" dict (brain-graph format)
+            if not new_state and isinstance(evt.get("new"), dict):
+                new_state = evt["new"].get("state", "")
+            if not entity_id or not new_state:
+                continue
+            ha_events.append({
+                "event_type": "state_changed",
+                "time_fired": evt.get("timestamp", ""),
+                "data": {
+                    "entity_id": entity_id,
+                    "old_state": {"state": old_state} if old_state else None,
+                    "new_state": {"state": new_state},
+                },
+            })
+
+        if not ha_events:
+            return
+
+        with self._mine_lock:
+            self._habitus_event_buffer.extend(ha_events)
+            self._events_since_last_mine += len(ha_events)
+
+    def _maybe_trigger_mining(self) -> None:
+        """Check if auto-mining should fire (count or time threshold)."""
+        with self._mine_lock:
+            if self._mining_in_progress:
+                return
+
+            elapsed = time.time() - self._last_mine_ts
+            count = self._events_since_last_mine
+
+            should_mine = (
+                count >= _AUTO_MINE_EVENT_THRESHOLD
+                or (count > 0 and elapsed >= _AUTO_MINE_INTERVAL_S)
+            )
+
+            if not should_mine:
+                return
+
+            # Grab the buffer and reset counters
+            batch = list(self._habitus_event_buffer)
+            self._habitus_event_buffer.clear()
+            self._events_since_last_mine = 0
+            self._last_mine_ts = time.time()
+            self._mining_in_progress = True
+
+        # Fire mining in a background thread (non-blocking)
+        logger.info(
+            "Auto-mining triggered: %d buffered events (count=%d, elapsed=%.0fs)",
+            len(batch), count, elapsed,
+        )
+        thread = threading.Thread(
+            target=self._run_mining,
+            args=(batch,),
+            name="habitus-auto-mine",
+            daemon=True,
+        )
+        thread.start()
+
+    def _run_mining(self, ha_events: List[Dict[str, Any]]) -> None:
+        """Execute habitus mining in background thread (exception-safe)."""
+        try:
+            miner = self._habitus_miner
+            if miner is None:
+                return
+            rules = miner.mine_from_ha_events(ha_events)
+            logger.info(
+                "Auto-mining completed: %d events -> %d rules",
+                len(ha_events), len(rules),
+            )
+        except Exception:
+            logger.exception("Auto-mining failed (non-fatal)")
+        finally:
+            with self._mine_lock:
+                self._mining_in_progress = False
+
+    # ── Brain graph processors ───────────────────────────────────────
 
     def _process_for_brain_graph(self, event: Dict[str, Any]):
         """Process event for brain graph updates."""

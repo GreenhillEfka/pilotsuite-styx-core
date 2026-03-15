@@ -20,6 +20,7 @@ from typing import Any, Dict, Optional
 from flask import Blueprint, jsonify, request
 
 from copilot_core.neurons.manager import get_neuron_manager, NeuronManager, NeuralPipelineResult
+from copilot_core.neurons.mood_history import get_mood_history_store
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -420,45 +421,92 @@ def evaluate_mood():
 
 @bp.route("/mood/history", methods=["GET"])
 def get_mood_history():
-    """Get mood history.
-    
+    """Get mood history from persistent SQLite store.
+
     Query params:
-        limit: Number of entries (default 10, max 100)
-    
+        hours: Look-back window in hours (default 24, max 168 = 7 days)
+
     Returns:
         {
             "success": true,
             "data": {
                 "history": [...],
-                "count": int
+                "count": int,
+                "hours": int
             }
         }
     """
     try:
-        manager = get_neuron_manager()
-        # Server-side cap to prevent DoS
         try:
-            limit = int(request.args.get("limit", "10"))
+            hours = int(request.args.get("hours", "24"))
         except (ValueError, TypeError):
             return jsonify({
                 "success": False,
-                "error": "Invalid 'limit' parameter. Must be a positive integer."
+                "error": "Invalid 'hours' parameter. Must be a positive integer."
             }), 400
-        if limit < 1:
-            limit = 1
-        limit = min(limit, MOOD_HISTORY_MAX_LIMIT)
+        if hours < 1:
+            hours = 1
+        hours = min(hours, 168)  # Cap at 7 days
 
-        history = manager._mood_history[-limit:]
-        
+        store = get_mood_history_store()
+        history = store.get_recent(hours=hours)
+
         return jsonify({
             "success": True,
             "data": {
                 "history": history,
-                "count": len(history)
+                "count": len(history),
+                "hours": hours,
             }
         })
     except Exception as e:
         _LOGGER.error("Error getting mood history: %s", e)
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+
+@bp.route("/mood/trend", methods=["GET"])
+def get_mood_trend():
+    """Get mood distribution/trend over a time period.
+
+    Query params:
+        hours: Look-back window in hours (default 24, max 168 = 7 days)
+
+    Returns:
+        {
+            "success": true,
+            "data": {
+                "count": int,
+                "distribution": {"relax": 5, "focus": 3, ...},
+                "dominant_mood": str,
+                "avg_confidence": float,
+                "period_hours": int
+            }
+        }
+    """
+    try:
+        try:
+            hours = int(request.args.get("hours", "24"))
+        except (ValueError, TypeError):
+            return jsonify({
+                "success": False,
+                "error": "Invalid 'hours' parameter. Must be a positive integer."
+            }), 400
+        if hours < 1:
+            hours = 1
+        hours = min(hours, 168)
+
+        store = get_mood_history_store()
+        trend = store.get_trend(hours=hours)
+
+        return jsonify({
+            "success": True,
+            "data": trend,
+        })
+    except Exception as e:
+        _LOGGER.error("Error getting mood trend: %s", e)
         return jsonify({
             "success": False,
             "error": str(e)

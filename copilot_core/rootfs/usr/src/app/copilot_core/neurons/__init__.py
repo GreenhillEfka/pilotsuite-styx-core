@@ -48,6 +48,9 @@ from .mupl import (
 from .dynamic import (
     DynamicMetaNeuron, DynamicNeuronFactory, ProposedNeuron,
 )
+from .mood_history import (
+    MoodHistoryStore, get_mood_history_store, reset_mood_history_store,
+)
 
 __all__ = [
     # Manager
@@ -132,4 +135,8 @@ __all__ = [
     "DynamicMetaNeuron",
     "DynamicNeuronFactory",
     "ProposedNeuron",
+    # Mood history
+    "MoodHistoryStore",
+    "get_mood_history_store",
+    "reset_mood_history_store",
 ]

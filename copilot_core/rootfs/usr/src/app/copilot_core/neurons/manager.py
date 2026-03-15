@@ -36,6 +36,7 @@ from .base import (
     BaseNeuron, NeuronConfig, NeuronState, NeuronType, MoodType,
     ContextNeuron, StateNeuron, MoodNeuron
 )
+from .mood_history import get_mood_history_store
 from .context import (
     PresenceNeuron, TimeOfDayNeuron, LightLevelNeuron, WeatherNeuron,
     create_context_neuron, CONTEXT_NEURON_CLASSES
@@ -552,6 +553,17 @@ class NeuronManager:
 
         self._last_result = result
         self._mood_history.append(mood_values)
+
+        # Persist mood snapshot to SQLite time-series store
+        try:
+            store = get_mood_history_store()
+            store.record_snapshot(
+                mood=dominant_mood,
+                confidence=confidence,
+                mood_values=mood_values,
+            )
+        except Exception:
+            _LOGGER.exception("Failed to persist mood snapshot")
 
         # Publish pipeline result to integration bus
         if self._bus:
