@@ -301,9 +301,10 @@ def update_config():
 
 @bp.route("/feedback", methods=["POST"])
 def rule_feedback():
-    """Apply user feedback (accepted/rejected) to a rule.
+    """Apply user feedback (accepted/rejected/snoozed) to a rule.
 
     Body: {"rule_a": "...", "rule_b": "...", "accepted": true/false}
+      or: {"rule_a": "...", "rule_b": "...", "action": "accepted"|"rejected"|"snoozed"}
     """
     try:
         data = request.get_json()
@@ -312,10 +313,27 @@ def rule_feedback():
 
         rule_a = data.get("rule_a", "")
         rule_b = data.get("rule_b", "")
+
+        # Support both legacy "accepted" bool and new "action" string
+        action = data.get("action")
         accepted = data.get("accepted")
 
-        if not rule_a or not rule_b or accepted is None:
-            return jsonify({"status": "error", "message": "Missing rule_a, rule_b, or accepted"}), 400
+        if action == "snoozed":
+            # Snoozed: record in feedback store only, don't adjust rule counts
+            if not rule_a or not rule_b:
+                return jsonify({"status": "error", "message": "Missing rule_a or rule_b"}), 400
+            service = _get_service()
+            pattern_key = f"{rule_a}->{rule_b}"
+            service.feedback_store.record_feedback(pattern_key, "snoozed")
+            return jsonify({"status": "ok", "message": "Feedback recorded (snoozed)"})
+
+        if action is not None:
+            accepted = action == "accepted"
+        elif accepted is None:
+            return jsonify({"status": "error", "message": "Missing accepted or action"}), 400
+
+        if not rule_a or not rule_b:
+            return jsonify({"status": "error", "message": "Missing rule_a or rule_b"}), 400
 
         service = _get_service()
         updated = service.apply_feedback(rule_a, rule_b, bool(accepted))

@@ -257,91 +257,35 @@ def _wire_bus_events(services: dict) -> None:
 
 
 def _wire_habitus_auto_mining(services: dict) -> None:
-    """Hook into the event ingest pipeline to auto-trigger habitus mining.
+    """Inject HabitusMinerService into EventProcessor for auto-triggered mining.
 
-    Buffers incoming HA events and triggers mining every
-    ``_HABITUS_MINE_EVERY`` events.  This closes the gap where habitus
-    mining was previously only available via manual API call.
+    The EventProcessor itself handles buffering and trigger logic (every N
+    events or M seconds, configurable via HABITUS_AUTO_MINE_EVENT_THRESHOLD
+    and HABITUS_AUTO_MINE_INTERVAL_S env vars).  Mining runs in a background
+    thread so it never blocks event processing.
     """
-    _HABITUS_MINE_EVERY = 500  # mine after N ingested events
-    _habitus_buffer: list[dict] = []
-    _habitus_lock = threading.Lock()
-
     try:
-        from copilot_core.api.v1.events_ingest import set_post_ingest_callback
         from copilot_core.habitus_miner.service import HabitusMinerService
         from pathlib import Path
+
+        event_processor = services.get("event_processor")
+        if not event_processor:
+            _LOGGER.warning("No EventProcessor available — skipping habitus auto-mining wiring")
+            return
 
         # Resolve storage dir (same as lazy-init in api/v1/habitus.py)
         data_dir = services.get("config", {}).get("data_dir", "/data")
         storage_dir = Path(data_dir) / "habitus_miner"
 
-        _miner_ref: list = [None]  # lazy-init holder
-
-        def _get_or_create_miner() -> HabitusMinerService:
-            if _miner_ref[0] is None:
-                _miner_ref[0] = HabitusMinerService(
-                    storage_dir=storage_dir,
-                    vector_store=services.get("vector_store"),
-                    embedding_engine=services.get("embedding_engine"),
-                    integration_bus=services.get("integration_bus"),
-                )
-            return _miner_ref[0]
-
-        def _on_events_ingested(accepted_events: list) -> None:
-            """Post-ingest callback — buffer events for periodic mining."""
-            if not accepted_events:
-                return
-            # Convert accepted events to HA-like format for the miner
-            ha_events = []
-            for evt in accepted_events:
-                # accepted_events are normalized dicts from EventStore
-                if not isinstance(evt, dict):
-                    continue
-                entity_id = evt.get("entity_id", "")
-                attrs = evt.get("attributes", {})
-                old_state = attrs.get("old_state", "")
-                new_state = attrs.get("new_state", "")
-                if not entity_id or not new_state:
-                    continue
-                ha_events.append({
-                    "event_type": "state_changed",
-                    "time_fired": evt.get("timestamp", ""),
-                    "data": {
-                        "entity_id": entity_id,
-                        "old_state": {"state": old_state} if old_state else None,
-                        "new_state": {"state": new_state},
-                    },
-                })
-
-            if not ha_events:
-                return
-
-            should_mine = False
-            with _habitus_lock:
-                _habitus_buffer.extend(ha_events)
-                if len(_habitus_buffer) >= _HABITUS_MINE_EVERY:
-                    should_mine = True
-
-            if should_mine:
-                with _habitus_lock:
-                    batch = list(_habitus_buffer)
-                    _habitus_buffer.clear()
-                try:
-                    miner = _get_or_create_miner()
-                    rules = miner.mine_from_ha_events(batch)
-                    _LOGGER.info(
-                        "Auto-mining completed: %d events → %d rules",
-                        len(batch), len(rules),
-                    )
-                except Exception:
-                    _LOGGER.debug("Auto-mining failed", exc_info=True)
-
-        set_post_ingest_callback(_on_events_ingested)
-        _LOGGER.info(
-            "Habitus auto-mining wired to event ingest (every %d events)",
-            _HABITUS_MINE_EVERY,
+        miner = HabitusMinerService(
+            storage_dir=storage_dir,
+            vector_store=services.get("vector_store"),
+            embedding_engine=services.get("embedding_engine"),
+            integration_bus=services.get("integration_bus"),
         )
+
+        event_processor.set_habitus_miner(miner)
+        _LOGGER.info("Habitus auto-mining wired into EventProcessor")
     except Exception:
         _LOGGER.exception("Failed to wire habitus auto-mining")
 

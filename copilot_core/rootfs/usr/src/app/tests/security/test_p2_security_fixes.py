@@ -245,59 +245,60 @@ class TestP2_03_NeuronIDValidation:
 # ===========================================================================
 
 class TestP2_04_MoodHistoryLimitCap:
-    """P2-04: Verify server-side limit cap on mood history."""
+    """P2-04: Verify server-side cap on mood history query window.
 
-    def test_default_limit(self, neurons_client):
-        """Default limit should be 10."""
+    The mood history endpoint now uses ?hours= (SQLite-persisted snapshots)
+    instead of the old ?limit= (in-memory deque).  Hours are capped at 168
+    (7 days).
+    """
+
+    def test_default_hours(self, neurons_client):
+        """Default hours should be 24."""
         client, _ = neurons_client
         resp = client.get("/api/v1/neurons/mood/history")
         assert resp.status_code == 200
         data = json.loads(resp.data)
         assert data["success"] is True
+        assert data["data"]["hours"] == 24
 
-    def test_limit_capped_at_100(self, neurons_client):
-        """Limit should be capped at 100 even if higher value requested."""
-        client, manager = neurons_client
-        # Create 150 history entries
-        manager._mood_history = [{"mood": f"m{i}"} for i in range(150)]
-
-        resp = client.get("/api/v1/neurons/mood/history?limit=500")
+    def test_hours_capped_at_168(self, neurons_client):
+        """Hours should be capped at 168 even if higher value requested."""
+        client, _ = neurons_client
+        resp = client.get("/api/v1/neurons/mood/history?hours=9999")
         assert resp.status_code == 200
         data = json.loads(resp.data)
-        assert data["data"]["count"] <= 100
+        assert data["data"]["hours"] == 168
 
-    def test_negative_limit_handled(self, neurons_client):
-        """Negative limit should be clamped to 1."""
+    def test_negative_hours_handled(self, neurons_client):
+        """Negative hours should be clamped to 1."""
         client, _ = neurons_client
-        resp = client.get("/api/v1/neurons/mood/history?limit=-5")
+        resp = client.get("/api/v1/neurons/mood/history?hours=-5")
         assert resp.status_code == 200
         data = json.loads(resp.data)
-        assert data["data"]["count"] >= 0
+        assert data["data"]["hours"] == 1
 
-    def test_non_integer_limit_returns_400(self, neurons_client):
-        """Non-integer limit should return 400."""
+    def test_non_integer_hours_returns_400(self, neurons_client):
+        """Non-integer hours should return 400."""
         client, _ = neurons_client
-        resp = client.get("/api/v1/neurons/mood/history?limit=abc")
+        resp = client.get("/api/v1/neurons/mood/history?hours=abc")
         assert resp.status_code == 400
         data = json.loads(resp.data)
         assert data["success"] is False
         assert "Invalid" in data["error"]
 
-    def test_float_limit_returns_400(self, neurons_client):
-        """Float limit should return 400."""
+    def test_float_hours_returns_400(self, neurons_client):
+        """Float hours should return 400."""
         client, _ = neurons_client
-        resp = client.get("/api/v1/neurons/mood/history?limit=10.5")
+        resp = client.get("/api/v1/neurons/mood/history?hours=10.5")
         assert resp.status_code == 400
 
-    def test_limit_exactly_100(self, neurons_client):
-        """Limit of exactly 100 should be accepted."""
-        client, manager = neurons_client
-        manager._mood_history = [{"mood": f"m{i}"} for i in range(200)]
-
-        resp = client.get("/api/v1/neurons/mood/history?limit=100")
+    def test_hours_exactly_168(self, neurons_client):
+        """Hours of exactly 168 should be accepted."""
+        client, _ = neurons_client
+        resp = client.get("/api/v1/neurons/mood/history?hours=168")
         assert resp.status_code == 200
         data = json.loads(resp.data)
-        assert data["data"]["count"] == 100
+        assert data["data"]["hours"] == 168
 
 
 # ===========================================================================
