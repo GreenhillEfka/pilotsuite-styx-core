@@ -2,6 +2,41 @@
 
 Alle wesentlichen Aenderungen am PilotSuite Styx Core werden in dieser Datei dokumentiert.
 
+## [v14.4.2] - 2026-03-15
+
+### Auto-Mining, Mood History, Feedback Loop
+
+#### Added
+- **Auto-Mining**: EventProcessor triggert automatisch Habitus-Mining (1000 Events / 3600s Intervall)
+- **MoodHistoryStore**: SQLite Time-Series fuer Mood-Evaluationen mit Rate Limiting und Cleanup
+- **Mood API**: `GET /api/v1/neurons/mood/history` + `GET /api/v1/neurons/mood/trend`
+- **Habitus Config**: `POST /api/v1/habitus/config` fuer Mining-Konfiguration von HA
+- **Feedback Store**: Gewichtungsmultiplikatoren (accepted=1.5x, rejected=0.1x, snoozed=0.5x)
+
+#### Changed
+- Event Envelope unterstuetzt `neuron_tags` fuer Layer-Klassifikation
+- NeuronManager verarbeitet neuron_tags aus HA-Events
+
+### Compatibility
+- Core v14.4.2 <-> HA v14.4.2 (Paired Release)
+- Tests: 1793+ passed, 29 neue Mood-History-Tests
+
+---
+
+## [v14.4.0] - 2026-03-15
+
+### Version Sync mit HA v14.4.0
+- Zone Automation Controller Erweiterungen
+
+---
+
+## [v14.3.18] - 2026-03-15
+
+### Dashboard Auth Fix
+- X-Auth-Token fuer Ingress-Kompatibilitaet
+
+---
+
 ## [v14.3.17] - 2026-03-15
 
 ### Paired Release mit HA v14.3.17

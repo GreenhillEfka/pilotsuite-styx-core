@@ -2,6 +2,46 @@
 
 Alle wesentlichen Aenderungen am PilotSuite Styx Core Backend.
 
+## [v14.4.2] - 2026-03-15
+
+### Added
+- **Auto-Mining**: EventProcessor triggert automatisch Habitus-Mining nach 1000 Events oder 3600s
+  - Konfigurierbar via `HABITUS_AUTO_MINE_EVENT_THRESHOLD` und `HABITUS_AUTO_MINE_INTERVAL_S`
+- **MoodHistoryStore**: SQLite-backed Time-Series fuer Mood-Evaluationen
+  - Rate Limiting, automatisches Cleanup, Trend-Analyse
+  - Persistenz in `/data/mood_history.db`
+- **Mood API Endpoints**: `GET /api/v1/neurons/mood/history` und `GET /api/v1/neurons/mood/trend`
+  - Zeitraum-Filter, Limit, Aggregation
+- **Habitus Config Endpoint**: `POST /api/v1/habitus/config` nimmt Mining-Konfiguration von HA entgegen
+- **Habitus Feedback Integration**: `HabitusFeedbackStore` mit Gewichtungsmultiplikatoren
+  - accepted=1.5x, rejected=0.1x, snoozed=0.5x
+
+### Changed
+- **Event Envelope**: Unterstuetzt jetzt `neuron_tags` Attribut fuer Layer-Klassifikation
+- **NeuronManager**: Verarbeitet neuron_tags aus HA-Events fuer korrekte Layer-Zuordnung
+
+### Tests
+- 29 neue Tests fuer MoodHistoryStore + API
+- 1793+ passed, 112 skipped
+
+---
+
+## [v14.4.0] - 2026-03-15
+
+### Added
+- Version Sync mit HA v14.4.0
+- Zone Automation Controller Erweiterungen
+
+---
+
+## [v14.3.18] - 2026-03-15
+
+### Fixed
+- Dashboard Auth: X-Auth-Token fuer Ingress-Kompatibilitaet
+- Version Sync 14.3.17 + Brand Icons
+
+---
+
 ## [v12.16.0] - 2026-03-11
 
 ### Sonos Integration via jishi/node-sonos-http-api
