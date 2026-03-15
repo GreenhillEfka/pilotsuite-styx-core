@@ -763,7 +763,24 @@
 <div class="toast" id="toast"></div>
 
 <script>
-const BASE = location.origin;
+// Ingress-aware base path detection
+function detectIngressBasePath(){
+  try{
+    const p=(window.location&&window.location.pathname)||'';
+    const patterns=[
+      /^(.*\/api\/hassio_ingress\/[^/]+)(?:\/.*)?$/,
+      /^(.*\/hassio\/ingress\/[^/]+)(?:\/.*)?$/,
+      /^(.*\/ingress\/[^/]+)(?:\/.*)?$/,
+    ];
+    for(const pattern of patterns){
+      const m=p.match(pattern);
+      if(m&&m[1])return m[1];
+    }
+  }catch(_err){}
+  return '';
+}
+const _ingressBase = detectIngressBasePath();
+const BASE = _ingressBase ? (location.origin + _ingressBase) : location.origin;
 // Token: server-injected > URL param > localStorage > empty
 const _serverToken = "{{ auth_token|default('', true) }}";
 const _urlToken = new URLSearchParams(location.search).get("token") || "";
