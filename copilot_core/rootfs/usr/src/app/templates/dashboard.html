@@ -1006,9 +1006,9 @@ async function fetchModuleHealth(){
     api('/api/v1/graph/stats'),                         // [0] brain_graph
     apiTry(['/api/v1/habitus/health','/api/v1/habitus/status']), // [1]
     apiTry(['/api/v1/mood','/api/v1/mood/state']),      // [2] mood
-    api('/chat/status'),                                 // [3]
+    api('/api/v1/chat/status'),                                 // [3]
     apiTry(['/api/v1/neurons','/api/v1/hub/brain/activity']), // [4]
-    api('/chat/memory'),                                 // [5]
+    api('/api/v1/chat/memory'),                                 // [5]
     api('/api/v1/energy/health'),                        // [6]
     api('/api/v1/weather/health'),                       // [7]
     api('/api/v1/unifi/health'),                         // [8]
@@ -1104,7 +1104,7 @@ function navigateTo(p){
 async function loadStyx(){
   try{
     // Load status
-    const status=await api('/chat/status');
+    const status=await api('/api/v1/chat/status');
     _chatStatus=status;
     const dot=$('status-dot'),txt=$('status-text');
     if(status){
@@ -2818,7 +2818,7 @@ async function saveRoutingConfig(){
     persist:true,
   };
   try{
-    const r=await fetch(API+'/chat/routing',withAuth({
+    const r=await fetch(API+'/api/v1/chat/routing',withAuth({
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify(payload),
@@ -2838,10 +2838,10 @@ async function saveRoutingConfig(){
 async function loadSettings(){
   // Load all in parallel, resilient
   const settled=await Promise.allSettled([
-    api('/chat/status'),
+    api('/api/v1/chat/status'),
     api('/telegram/status'),
-    api('/chat/memory'),
-    api('/chat/models/recommended'),
+    api('/api/v1/chat/memory'),
+    api('/api/v1/chat/models/recommended'),
     api('/api/v1/capabilities'),
   ]);
   const [statusRes,tgRes,memRes,recRes,capsRes]=settled.map(r=>r.status==='fulfilled'?r.value:null);
