@@ -2,6 +2,23 @@
 
 Alle wesentlichen Aenderungen am PilotSuite Styx Core werden in dieser Datei dokumentiert.
 
+## [v14.4.4] - 2026-03-15
+
+### Mood History DB Fix + Backend Dashboard Mining Controls
+
+#### Fixed
+- **MoodHistoryStore Table Conflict**: Tabelle umbenannt von `mood_snapshots` zu `neuron_mood_history` — verhindert Schema-Kollision mit MoodService (mood/service.py) die dasselbe DB-File nutzt
+- **Mood History/Trend API**: `GET /api/v1/neurons/mood/history` und `/trend` gaben zuvor `"no such column: ts"` zurueck
+
+#### Added
+- **Backend Dashboard: Mining Controls**: Mining-Status (Regeln, Events, Letztes Mining), manueller Mining-Trigger-Button, Config-Anzeige auf der Habitus-Seite
+- **Backend Dashboard: Mood History**: Neuron Mood History Tabelle mit Zeitraum-Auswahl (1h/6h/24h/7d), Trend-Statistiken, Dominant-Mood-Anzeige
+
+### Compatibility
+- Erfordert keine Aenderungen an pilotsuite-styx-ha
+- Bestehende mood_snapshots Daten (MoodService) bleiben erhalten
+- Neue neuron_mood_history Tabelle wird automatisch erstellt
+
 ## [v14.4.2] - 2026-03-15
 
 ### Auto-Mining, Mood History, Feedback Loop

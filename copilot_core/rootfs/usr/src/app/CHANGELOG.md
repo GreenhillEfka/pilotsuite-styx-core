@@ -2,6 +2,16 @@
 
 Alle wesentlichen Aenderungen am PilotSuite Styx Core Backend.
 
+## [v14.4.4] - 2026-03-15
+
+### Fixed
+- **MoodHistoryStore**: Tabelle `mood_snapshots` → `neuron_mood_history` (Schema-Kollision mit MoodService)
+- **Mood History/Trend API**: `"no such column: ts"` Fehler behoben
+
+### Added
+- **Backend Dashboard**: Mining-Status, Trigger-Button, Config-Anzeige auf Habitus-Seite
+- **Backend Dashboard**: Neuron Mood History Tabelle mit Zeitraum-Auswahl + Trend-Stats
+
 ## [v14.4.2] - 2026-03-15
 
 ### Added
