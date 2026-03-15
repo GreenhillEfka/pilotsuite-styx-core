@@ -36,6 +36,44 @@ def _event_store_if_available() -> EventStore | None:
         return None
 
 
+@bp.get("/")
+def mood_root():
+    """Root route — returns zone mood data for HA integration.
+
+    HA mood_context_module expects: {"moods": {zone_name: {...}, ...}}
+    """
+    try:
+        store = _event_store_if_available()
+        events = store.list(limit=200) if store else []
+        score = _scorer().score_from_events(events)
+        mood_dict = score.to_dict()
+
+        # Build moods dict keyed by zone — HA expects {"moods": {...}}
+        moods = {"global": mood_dict}
+
+        # If zone orchestrator is available, add zone data
+        try:
+            from copilot_core.mood.orchestrator import MoodOrchestrator, create_default_config
+            config = create_default_config()
+            orchestrator = MoodOrchestrator(
+                mood_config=config,
+                get_sensor_data=lambda entities: {},
+                execute_service_calls=lambda calls: True,
+            )
+            zone_statuses = orchestrator.get_all_zones_status()
+            for z in zone_statuses:
+                if isinstance(z, dict) and "zone_name" in z:
+                    moods[z["zone_name"]] = z
+        except Exception:
+            pass
+
+        return jsonify({"ok": True, "moods": moods, "mood": mood_dict})
+    except Exception as e:
+        _LOGGER = current_app.logger
+        _LOGGER.exception("Mood root failed")
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
 @bp.post("/score")
 def score():
     """Return a mood score.

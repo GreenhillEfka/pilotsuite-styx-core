@@ -349,6 +349,36 @@ def _register_routes(flask_app: Flask, startup_time: float) -> None:
             "uptime_s": int(time.time() - startup_time),
         })
 
+    @flask_app.get("/api/v1/status")
+    def api_v1_status():
+        """Status endpoint for HA connectivity check and config flow."""
+        return jsonify({
+            "ok": True,
+            "time": _now_iso(),
+            "version": APP_VERSION,
+            "port": int(os.environ.get("PORT", "8909")),
+        })
+
+    @flask_app.get("/api/v1/capabilities")
+    def api_v1_capabilities():
+        """Capabilities endpoint for HA pipeline health."""
+        return jsonify({
+            "ok": True,
+            "time": _now_iso(),
+            "version": APP_VERSION,
+            "modules": {
+                "events": {"enabled": True},
+                "candidates": {"enabled": True},
+                "brain_graph": {"enabled": True},
+                "neurons": {"enabled": True},
+                "mood": {"enabled": True},
+                "habitus": {"enabled": True},
+                "chat": {"enabled": True},
+                "weather": {"enabled": True},
+                "energy": {"enabled": True},
+            },
+        })
+
     @flask_app.get("/version")
     def version():
         return jsonify({

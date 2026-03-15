@@ -1163,6 +1163,9 @@ def register_blueprints(app: Flask, services: dict) -> None:
         ("copilot_core.api.v1.rate_limit",              "rate_limit_bp",    "/api/v1"),
         ("copilot_core.homeassistant.api",              "ha_discovery_bp",  "/api/v1"),
         ("copilot_core.api.v1.metrics",                 "metrics_bp",       "/api/v1"),
+        # ── Stub blueprints for endpoints HA sensors poll ──────────
+        ("copilot_core.api.v1.unifi_stub",              "unifi_stub_bp",    None),
+        ("copilot_core.api.v1.regional_stub",           "regional_stub_bp", None),
     ]
 
     for module_path, bp_attr, prefix in _BLUEPRINTS:
@@ -1446,6 +1449,10 @@ def register_blueprints(app: Flask, services: dict) -> None:
         ("copilot_core.api.v1.presence",           "presence_bp",          None),
         ("copilot_core.api.v1.scenes",             "scenes_bp",            None),
         ("copilot_core.api.v1.shopping",           "shopping_bp",          None),
+        # Agent config (HA calls /api/v1/agent/status, /api/v1/agent/verify, etc.)
+        ("copilot_core.agent_config",              "agent_config_bp",      None),
+        # Comfort stub (HA calls /api/v1/comfort, /api/v1/comfort/lighting)
+        ("copilot_core.api.v1.comfort_stub",       "comfort_stub_bp",      None),
     ]
 
     for module_path, bp_attr, prefix in _EXTRA_BLUEPRINTS:
