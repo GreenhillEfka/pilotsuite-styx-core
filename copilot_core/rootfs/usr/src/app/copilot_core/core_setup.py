@@ -55,7 +55,9 @@ def _wire_bus_events(services: dict) -> None:
         return
 
     # 1) Anomaly Detection ← state.changed (with periodic detect + bus publish)
+    #    Also publishes anomalies to brain graph if available.
     hub_anomaly = services.get("hub_anomaly")
+    _brain_graph_svc = services.get("brain_graph_service")
     if hub_anomaly and hasattr(hub_anomaly, "ingest"):
         try:
             _anomaly_lock = threading.Lock()
@@ -66,7 +68,7 @@ def _wire_bus_events(services: dict) -> None:
             _anomaly_recent: dict[str, float] = {}  # key → timestamp
             _ANOMALY_DEDUP_WINDOW = 600  # suppress duplicates for 10 minutes
 
-            def _anomaly_from_event(event, _svc=hub_anomaly, _bus=bus):
+            def _anomaly_from_event(event, _svc=hub_anomaly, _bus=bus, _bg=_brain_graph_svc):
                 data = event.data if hasattr(event, "data") else {}
                 entity_id = data.get("entity_id", "")
                 value = data.get("value")
@@ -114,11 +116,20 @@ def _wire_bus_events(services: dict) -> None:
                                     "deviation_pct": anomaly.deviation_pct,
                                     "description": anomaly.description_de,
                                 })
+
+                                # Publish anomaly to brain graph
+                                if _bg and hasattr(_svc, "publish_to_brain_graph"):
+                                    try:
+                                        _svc.publish_to_brain_graph(anomaly, _bg)
+                                    except Exception:
+                                        _LOGGER.debug("Anomaly→BrainGraph publish failed", exc_info=True)
                         except Exception:
                             _LOGGER.debug("AnomalyDetection detect cycle failed", exc_info=True)
 
             bus.subscribe("state.changed", _anomaly_from_event)
             _LOGGER.info("AnomalyDetection wired to state.changed events (detect every %d ingestions)", _ANOMALY_DETECT_EVERY)
+            if _brain_graph_svc:
+                _LOGGER.info("AnomalyDetection→BrainGraph integration active")
         except Exception:
             _LOGGER.exception("Failed to wire AnomalyDetection")
 
@@ -673,9 +684,63 @@ async def init_services(hass=None, config: dict = None):
         neuron_manager.configure_from_ha({}, neuron_config)
         webhook_pusher = services.get("webhook_pusher")
         if webhook_pusher and webhook_pusher.enabled:
-            neuron_manager.on_mood_change(
-                lambda mood, conf: webhook_pusher.push_mood_changed(mood, conf)
-            )
+            def _enriched_mood_push(mood, conf, _pusher=webhook_pusher, _mgr=neuron_manager, _svcs=services):
+                """Push mood with zone data, top neurons, and mood dimensions."""
+                try:
+                    # Per-zone mood snapshots
+                    zone_moods = None
+                    mood_svc = _svcs.get("mood_service")
+                    if mood_svc and hasattr(mood_svc, "get_all_zone_moods"):
+                        try:
+                            raw = mood_svc.get_all_zone_moods()
+                            zone_moods = {
+                                zid: {"comfort": round(s.comfort, 3),
+                                      "joy": round(s.joy, 3),
+                                      "frugality": round(s.frugality, 3)}
+                                for zid, s in raw.items()
+                            } if raw else None
+                        except Exception:
+                            pass
+
+                    # Top 3 most active neurons
+                    top_neurons = None
+                    try:
+                        last = _mgr.get_last_result()
+                        if last and last.neuron_states:
+                            scored = []
+                            for nid, ns in last.neuron_states.items():
+                                val = ns.get("value", 0.0) if isinstance(ns, dict) else 0.0
+                                layer = nid.split(".")[0] if "." in nid else "unknown"
+                                scored.append({"id": nid, "layer": layer, "value": round(val, 3)})
+                            scored.sort(key=lambda x: x["value"], reverse=True)
+                            top_neurons = scored[:3]
+                    except Exception:
+                        pass
+
+                    # Mood dimensions (average across zones)
+                    mood_dimensions = None
+                    if zone_moods:
+                        try:
+                            n = len(zone_moods)
+                            mood_dimensions = {
+                                "comfort": sum(z["comfort"] for z in zone_moods.values()) / n,
+                                "joy": sum(z["joy"] for z in zone_moods.values()) / n,
+                                "frugality": sum(z["frugality"] for z in zone_moods.values()) / n,
+                            }
+                        except Exception:
+                            pass
+
+                    _pusher.push_mood_changed(
+                        mood, conf,
+                        zone_moods=zone_moods,
+                        top_neurons=top_neurons,
+                        mood_dimensions=mood_dimensions,
+                    )
+                except Exception:
+                    _LOGGER.debug("Enriched mood push failed, falling back to basic", exc_info=True)
+                    _pusher.push_mood_changed(mood, conf)
+
+            neuron_manager.on_mood_change(_enriched_mood_push)
             neuron_manager.on_suggestion(
                 lambda suggestion: webhook_pusher.push_suggestion(suggestion)
             )
@@ -1065,6 +1130,133 @@ async def init_services(hass=None, config: dict = None):
             _LOGGER.info("WebhookPusher module_data push wired to neuron.evaluated event")
     except Exception:
         _LOGGER.exception("Failed to wire WebhookPusher module_data push")
+
+    # Wire WebhookPusher neuron_fired push via IntegrationBus
+    try:
+        webhook_pusher = services.get("webhook_pusher")
+        bus = services.get("integration_bus")
+        neuron_mgr = services.get("neuron_manager")
+        if webhook_pusher and webhook_pusher.enabled and bus and neuron_mgr:
+            def _push_neuron_fired_on_eval(event, _pusher=webhook_pusher, _mgr=neuron_mgr):
+                """Push neuron_fired for neurons that crossed their threshold."""
+                try:
+                    last = _mgr.get_last_result()
+                    if not last or not last.neuron_states:
+                        return
+                    all_neurons = _mgr.get_all_neurons()
+                    for nid, neuron in all_neurons.items():
+                        if not hasattr(neuron, "state") or not hasattr(neuron, "config"):
+                            continue
+                        if not neuron.state.active:
+                            continue
+                        layer = nid.split(".")[0] if "." in nid else "unknown"
+                        _pusher.push_neuron_fired(
+                            neuron_id=nid,
+                            layer=layer,
+                            value=neuron.state.value,
+                            confidence=neuron.state.value,
+                        )
+                except Exception:
+                    _LOGGER.debug("Neuron fired push failed", exc_info=True)
+
+            bus.subscribe("neuron.evaluated", _push_neuron_fired_on_eval)
+            _LOGGER.info("WebhookPusher neuron_fired push wired to neuron.evaluated event")
+    except Exception:
+        _LOGGER.exception("Failed to wire WebhookPusher neuron_fired push")
+
+    # Wire WebhookPusher candidates_ranked push via IntegrationBus
+    try:
+        webhook_pusher = services.get("webhook_pusher")
+        bus = services.get("integration_bus")
+        candidate_store = services.get("candidate_store")
+        if webhook_pusher and webhook_pusher.enabled and bus and candidate_store:
+            def _push_candidates_on_eval(event, _pusher=webhook_pusher, _store=candidate_store):
+                """Push top-10 ranked candidates after neuron evaluation."""
+                try:
+                    ranked = _store.list_ranked(limit=10, with_explanation=True)
+                    if ranked:
+                        compact = [
+                            {
+                                "id": c.get("id", ""),
+                                "label": c.get("label", ""),
+                                "kind": c.get("kind", ""),
+                                "rank_score": c.get("rank_score", 0.0),
+                                "explanation": c.get("explanation", "")[:200],
+                            }
+                            for c in ranked
+                        ]
+                        _pusher.push_candidate_ranked(compact)
+                except Exception:
+                    _LOGGER.debug("Candidates ranked push failed", exc_info=True)
+
+            bus.subscribe("neuron.evaluated", _push_candidates_on_eval)
+            _LOGGER.info("WebhookPusher candidates_ranked push wired to neuron.evaluated event")
+    except Exception:
+        _LOGGER.exception("Failed to wire WebhookPusher candidates_ranked push")
+
+    # Wire WebhookPusher zone_mood push via IntegrationBus
+    try:
+        webhook_pusher = services.get("webhook_pusher")
+        bus = services.get("integration_bus")
+        if webhook_pusher and webhook_pusher.enabled and bus:
+            def _push_zone_mood_on_eval(event, _pusher=webhook_pusher, _svcs=services):
+                """Push per-zone mood adjustments after neuron evaluation."""
+                try:
+                    zone_auto = _svcs.get("zone_automation")
+                    if not zone_auto:
+                        return
+                    # Iterate known zone configs
+                    configs = getattr(zone_auto, "_configs", {})
+                    for zone_id in configs:
+                        try:
+                            mood = zone_auto.get_mood(zone_id)
+                            adjustment = zone_auto.get_mood_adjustment_for_zone(zone_id)
+                            _pusher.push_zone_mood(
+                                zone_id=zone_id,
+                                mood=mood,
+                                brightness_factor=float(adjustment.get("brightness_factor", 1.0)),
+                                color_temp=int(adjustment.get("color_temp_k", 4000)),
+                            )
+                        except Exception:
+                            pass
+                except Exception:
+                    _LOGGER.debug("Zone mood push failed", exc_info=True)
+
+            bus.subscribe("neuron.evaluated", _push_zone_mood_on_eval)
+            _LOGGER.info("WebhookPusher zone_mood push wired to neuron.evaluated event")
+    except Exception:
+        _LOGGER.exception("Failed to wire WebhookPusher zone_mood push")
+
+    # Wire WebhookPusher brain_insight push via IntegrationBus
+    try:
+        webhook_pusher = services.get("webhook_pusher")
+        bus = services.get("integration_bus")
+        brain_graph = services.get("brain_graph_service")
+        if webhook_pusher and webhook_pusher.enabled and bus and brain_graph:
+            _insight_prev_edge_count = [0]
+
+            def _push_brain_insight_on_eval(event, _pusher=webhook_pusher, _bg=brain_graph):
+                """Push brain_insight when significant graph changes occur."""
+                try:
+                    stats = _bg.store.get_stats() if hasattr(_bg.store, "get_stats") else {}
+                    edge_count = stats.get("edge_count", 0)
+                    node_count = stats.get("node_count", 0)
+                    prev = _insight_prev_edge_count[0]
+                    # Only push when edge count changed by >= 5 (significant growth)
+                    if prev > 0 and abs(edge_count - prev) >= 5:
+                        _pusher.push_brain_insight("correlation", {
+                            "node_count": node_count,
+                            "edge_count": edge_count,
+                            "edge_delta": edge_count - prev,
+                        })
+                    _insight_prev_edge_count[0] = edge_count
+                except Exception:
+                    _LOGGER.debug("Brain insight push failed", exc_info=True)
+
+            bus.subscribe("neuron.evaluated", _push_brain_insight_on_eval)
+            _LOGGER.info("WebhookPusher brain_insight push wired to neuron.evaluated event")
+    except Exception:
+        _LOGGER.exception("Failed to wire WebhookPusher brain_insight push")
 
     # Initialize AutonomyExecutor early (before bus wiring, v14.2.0 fix)
     try:

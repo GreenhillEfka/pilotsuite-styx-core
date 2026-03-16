@@ -73,10 +73,20 @@ def _make_suggestions_app():
 
 @pytest.fixture
 def sug_client():
+    import copilot_core.api.v1.suggestions as _sug_mod
+    # Reset module-level state to prevent cross-test leaking
+    old_engine = _sug_mod._suggestion_engine
+    old_states = _sug_mod._suggestion_states.copy()
+    _sug_mod._suggestion_engine = None
+    _sug_mod._suggestion_states.clear()
     with patch("copilot_core.api.v1.suggestions.require_token", lambda f: f):
         app = _make_suggestions_app()
         with app.test_client() as c:
             yield c
+    # Restore
+    _sug_mod._suggestion_engine = old_engine
+    _sug_mod._suggestion_states.clear()
+    _sug_mod._suggestion_states.update(old_states)
 
 
 class TestSuggestionsAPI:
