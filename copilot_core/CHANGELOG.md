@@ -3,6 +3,16 @@
 This file exists so Home Assistant can show an add-on changelog.
 For full history, see the repository-level `CHANGELOG.md`.
 
+## 14.6.1 (2026-03-16)
+- **Dashboard Modul-Config**: Expandierbare per-Modul Config-Panels mit typisierten Feldern
+- **16 Module konfigurierbar**: toggle, range, number, select pro Modul
+- **Styx Gehirn Kategorie**: Character, Attribution, Hints, Konflikte, ML Pipeline
+
+## 14.6.0 (2026-03-16)
+- **Backend Dashboard**: Komplett neues 7-Tab-Dashboard mit Brain Canvas
+- **4 Netzwerk-Module**: ZWave, Zigbee, Thread, HomeAssistant
+- **Modul-Migration**: ML Pipeline, Character, Attribution, Hints, PII von HA nach Core
+
 ## 14.3.17 (2026-03-15)
 - **Ingress Detection**: `detectIngressBasePath()` fuer korrekte API-Aufrufe im Ingress-Modus
 - **Auth Header Fix**: `X-Auth-Token` statt `Authorization: Bearer` (Ingress Proxy Kompatibilitaet)
