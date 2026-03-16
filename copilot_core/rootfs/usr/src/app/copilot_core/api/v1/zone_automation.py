@@ -345,3 +345,36 @@ def import_entities():
         return jsonify({"ok": True, "imported": count, "source": "custom"})
 
     return jsonify({"ok": False, "error": "Provide 'source': 'example' or 'zones' dict"}), 400
+
+
+# ── Ensure Zones ────────────────────────────────────────────────────────────
+
+
+@zone_automation_bp.route("/ensure-zones", methods=["POST"])
+@require_token
+def ensure_zones():
+    """Ensure zone automation configs exist for a list of zone IDs.
+
+    Body: {"zone_ids": ["wohnbereich", "badbereich", ...]}
+    Auto-creates default ZoneAutomationConfig for each zone_id that
+    doesn't exist yet. Returns the full dashboard afterwards.
+    """
+    if _controller is None:
+        return jsonify({"ok": False, "error": "Controller not initialized"}), 503
+
+    data = request.get_json(silent=True) or {}
+    zone_ids = data.get("zone_ids", [])
+    if not isinstance(zone_ids, list):
+        return jsonify({"ok": False, "error": "'zone_ids' must be a list"}), 400
+
+    created = []
+    for zid in zone_ids:
+        zid = str(zid).strip()
+        if not zid:
+            continue
+        if zid not in _controller._configs:
+            _controller.get_zone_config(zid)  # auto-creates default config
+            created.append(zid)
+
+    _LOGGER.info("Ensured %d zone(s), created %d new: %s", len(zone_ids), len(created), created)
+    return jsonify({"ok": True, "created": created, **_controller.get_dashboard()})
