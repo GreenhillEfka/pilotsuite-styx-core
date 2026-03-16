@@ -404,6 +404,11 @@ async def init_services(hass=None, config: dict = None):
         "hub_heiz": None,
         "hub_bewegung": None,
         "hub_praesenz": None,
+        # Network + HA Integration Modules
+        "hub_zwave": None,
+        "hub_zigbee": None,
+        "hub_thread": None,
+        "ha_module_engine": None,
         # Weather service (for energy forecast engines)
         "weather_service": None,
         # Wecker (Smart Alarm) service
@@ -931,6 +936,15 @@ async def init_services(hass=None, config: dict = None):
     ]
     _init_engine_group(services, _MODULE_ENGINES, "PilotSuite Module engines")
 
+    # Initialize Network + HA Integration Module engines (data-driven)
+    _NETWORK_ENGINES = [
+        ("hub_zwave",       "copilot_core.hub.zwave_module",         "ZWaveModuleEngine"),
+        ("hub_zigbee",      "copilot_core.hub.zigbee_module",        "ZigbeeModuleEngine"),
+        ("hub_thread",      "copilot_core.hub.thread_module",        "ThreadModuleEngine"),
+        ("ha_module_engine","copilot_core.hub.homeassistant_module",  "HomeAssistantModuleEngine"),
+    ]
+    _init_engine_group(services, _NETWORK_ENGINES, "Network + HA Module engines")
+
     try:
         from copilot_core.api.v1.module_endpoints import init_module_endpoints
         init_module_endpoints(
@@ -951,7 +965,8 @@ async def init_services(hass=None, config: dict = None):
             def _push_module_data_on_eval(event):
                 """Push module summaries to HA after neuron evaluation."""
                 modules = {}
-                for name in ("hub_licht", "hub_helligkeit", "hub_heiz", "hub_bewegung", "hub_praesenz"):
+                for name in ("hub_licht", "hub_helligkeit", "hub_heiz", "hub_bewegung", "hub_praesenz",
+                             "hub_zwave", "hub_zigbee", "hub_thread"):
                     engine = services.get(name)
                     if engine and hasattr(engine, "get_summary"):
                         try:
@@ -1397,6 +1412,11 @@ def register_blueprints(app: Flask, services: dict) -> None:
         ("copilot_core.agent_config",              "agent_config_bp",      None),
         # Comfort stub (HA calls /api/v1/comfort, /api/v1/comfort/lighting)
         ("copilot_core.api.v1.comfort_stub",       "comfort_stub_bp",      None),
+        # Network + HA Integration Module blueprints (built-in prefix)
+        ("copilot_core.api.v1.zwave_module",       "zwave_module_bp",      None),
+        ("copilot_core.api.v1.zigbee_module",      "zigbee_module_bp",     None),
+        ("copilot_core.api.v1.thread_module",      "thread_module_bp",     None),
+        ("copilot_core.api.v1.ha_module",           "ha_module_bp",         None),
     ]
 
     for module_path, bp_attr, prefix in _EXTRA_BLUEPRINTS:
