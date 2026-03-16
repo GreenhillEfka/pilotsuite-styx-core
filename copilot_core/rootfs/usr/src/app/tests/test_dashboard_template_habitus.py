@@ -31,9 +31,10 @@ def test_dashboard_template_detects_ingress_base_for_api_calls() -> None:
 
 def test_dashboard_template_includes_module_config_panel() -> None:
     text = _dashboard_template()
-    assert 'id="module-config-select"' in text
     assert "MODULE_CONFIG_SPECS" in text
-    assert "loadSelectedModuleConfig" in text
+    assert "toggleModuleDetail" in text
+    assert "loadModuleDetail" in text
+    assert "saveModuleConfig" in text
 
 
 def test_dashboard_template_uses_persistent_brain_chat_history() -> None:
