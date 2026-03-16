@@ -10,6 +10,7 @@ Endpoints:
     POST /api/v1/zone-automation/zones/<zone_id>/presence  — Report presence event
     POST /api/v1/zone-automation/zones/<zone_id>/brightness — Report brightness update
     POST /api/v1/zone-automation/zones/<zone_id>/override   — Toggle override switch
+    POST /api/v1/zone-automation/zones/<zone_id>/mood       — Set mood state for zone
     GET  /api/v1/zone-automation/zones/<zone_id>/entities   — List zone entities
     POST /api/v1/zone-automation/zones/<zone_id>/entities   — Add entity to zone
     DELETE /api/v1/zone-automation/zones/<zone_id>/entities/<entity_id> — Remove entity
@@ -18,6 +19,7 @@ Endpoints:
     GET  /api/v1/zone-automation/tags                    — List tag definitions
     GET  /api/v1/zone-automation/roles                   — List role definitions
     GET  /api/v1/zone-automation/entities/search         — Search entities
+    GET  /api/v1/zone-automation/mood-profiles           — List all mood adjustment profiles
     POST /api/v1/zone-automation/import                  — Import from example config
 """
 
@@ -179,6 +181,44 @@ def report_brightness(zone_id: str):
 
     result = _controller.update_brightness(zone_id, indoor, outdoor)
     return jsonify({"ok": True, **result})
+
+
+# ── Mood management ──────────────────────────────────────────────────────────
+
+
+@zone_automation_bp.route("/zones/<zone_id>/mood", methods=["POST"])
+@require_token
+def set_zone_mood(zone_id: str):
+    """Set the current mood state for a zone.
+
+    Body: {"mood": "relax" | "focus" | "active" | "sleep" | "away" | "alert" | "social" | "recovery" | ...}
+
+    The mood state adjusts light brightness and color temperature automatically
+    when mood_aware_enabled is True in the zone's light config.
+    Unknown mood states fall back to neutral defaults (factor=1.0, temp=4000K).
+    """
+    if _controller is None:
+        return jsonify({"ok": False, "error": "Controller not initialized"}), 503
+
+    data = request.get_json(silent=True) or {}
+    mood = data.get("mood", "").strip()
+    if not mood:
+        return jsonify({"ok": False, "error": "Missing 'mood' field"}), 400
+
+    result = _controller.set_mood(zone_id, mood)
+    return jsonify({"ok": True, **result})
+
+
+@zone_automation_bp.route("/mood-profiles", methods=["GET"])
+@optional_token
+def get_mood_profiles():
+    """List all available mood adjustment profiles.
+
+    Returns the MOOD_ADJUSTMENTS dict mapping mood names to
+    {brightness_factor, color_temp_k, transition_s}.
+    """
+    from copilot_core.hub.zone_automation import MOOD_ADJUSTMENTS
+    return jsonify({"ok": True, "profiles": MOOD_ADJUSTMENTS})
 
 
 # ── Entity management ────────────────────────────────────────────────────────

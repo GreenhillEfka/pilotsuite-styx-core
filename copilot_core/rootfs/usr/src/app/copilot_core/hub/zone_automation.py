@@ -44,6 +44,7 @@ class ZoneLightConfig:
     lux_outdoor_compensation: bool = True  # Relative indoor/outdoor brightness
     color_temp_auto: bool = True  # Circadian color temperature
     color_temp_k: int = 4000  # Manual color temp if auto=False (2200-6500)
+    mood_aware_enabled: bool = True  # Apply mood-based brightness/color adjustments
 
 
 @dataclass
@@ -60,6 +61,42 @@ class ZoneMusicConfig:
 
 
 AUTOMATION_MODES = ("off", "learning", "autonomy")
+
+# ── Mood Adjustment Profiles ─────────────────────────────────────────────────
+# Maps mood state names to lighting adjustment parameters.
+# brightness_factor: multiplier for base brightness (0.0-1.0)
+# color_temp_k: recommended color temperature in Kelvin
+# transition_s: seconds for smooth transition
+
+MOOD_ADJUSTMENTS: dict[str, dict[str, float | int]] = {
+    "relax": {"brightness_factor": 0.6, "color_temp_k": 2700, "transition_s": 5},
+    "focus": {"brightness_factor": 0.9, "color_temp_k": 4500, "transition_s": 2},
+    "active": {"brightness_factor": 1.0, "color_temp_k": 5000, "transition_s": 1},
+    "sleep": {"brightness_factor": 0.1, "color_temp_k": 2200, "transition_s": 10},
+    "away": {"brightness_factor": 0.0, "color_temp_k": 3000, "transition_s": 1},
+    "alert": {"brightness_factor": 1.0, "color_temp_k": 6500, "transition_s": 0.5},
+    "social": {"brightness_factor": 0.8, "color_temp_k": 3500, "transition_s": 3},
+    "recovery": {"brightness_factor": 0.4, "color_temp_k": 2500, "transition_s": 8},
+    # Mood engine states mapped to profiles
+    "night": {"brightness_factor": 0.1, "color_temp_k": 2200, "transition_s": 10},
+    "stress": {"brightness_factor": 0.7, "color_temp_k": 3500, "transition_s": 3},
+    "neutral": {"brightness_factor": 1.0, "color_temp_k": 4000, "transition_s": 2},
+}
+
+# Default adjustment when mood is unknown or not in the profiles dict
+_DEFAULT_MOOD_ADJUSTMENT: dict[str, float | int] = {
+    "brightness_factor": 1.0,
+    "color_temp_k": 4000,
+    "transition_s": 2,
+}
+
+
+def get_mood_adjustment(mood_state: str) -> dict[str, float | int]:
+    """Return mood adjustment profile for the given mood state.
+
+    Falls back to neutral defaults for unknown mood states.
+    """
+    return MOOD_ADJUSTMENTS.get(mood_state.lower().strip(), _DEFAULT_MOOD_ADJUSTMENT)
 
 
 @dataclass
@@ -260,9 +297,48 @@ class ZoneAutomationController:
         # Optional MusikwolkeBridge for executing music actions
         self._music_bridge: Any | None = None
 
+        # Per-zone mood state (mood name string, default "neutral")
+        self._zone_moods: dict[str, str] = {}
+
     def set_music_bridge(self, bridge: Any) -> None:
         """Attach a MusikwolkeBridge to auto-execute music actions."""
         self._music_bridge = bridge
+
+    # ── Mood management ─────────────────────────────────────────────────
+
+    def set_mood(self, zone_id: str, mood_state: str) -> dict[str, Any]:
+        """Set the current mood for a zone.
+
+        Args:
+            zone_id: Zone identifier.
+            mood_state: Mood state name (e.g., 'relax', 'focus', 'active').
+
+        Returns:
+            Dict with applied mood adjustment profile.
+        """
+        mood_key = mood_state.lower().strip()
+        self._zone_moods[zone_id] = mood_key
+        adjustment = get_mood_adjustment(mood_key)
+        known = mood_key in MOOD_ADJUSTMENTS
+        logger.info(
+            "Zone '%s' mood set to '%s' (known=%s, brightness_factor=%.1f, color_temp_k=%d)",
+            zone_id, mood_key, known,
+            adjustment["brightness_factor"], adjustment["color_temp_k"],
+        )
+        return {
+            "zone_id": zone_id,
+            "mood": mood_key,
+            "known_profile": known,
+            "adjustment": adjustment,
+        }
+
+    def get_mood(self, zone_id: str) -> str:
+        """Get the current mood for a zone (default: 'neutral')."""
+        return self._zone_moods.get(zone_id, "neutral")
+
+    def get_mood_adjustment_for_zone(self, zone_id: str) -> dict[str, float | int]:
+        """Get the active mood adjustment profile for a zone."""
+        return get_mood_adjustment(self.get_mood(zone_id))
 
     # ── Configuration ────────────────────────────────────────────────────
 
@@ -364,8 +440,10 @@ class ZoneAutomationController:
                 target = self._compute_target_brightness(zone_id, config)
                 actions["light_on"] = True
                 actions["brightness_pct"] = target
-                actions["color_temp_k"] = config.light.color_temp_k
+                actions["color_temp_k"] = self._compute_mood_color_temp(zone_id, config)
                 actions["color_temp_auto"] = config.light.color_temp_auto
+                actions["transition_s"] = self._get_mood_transition(zone_id, config)
+                actions["mood"] = self.get_mood(zone_id)
                 state.lights_on = True
                 state.current_brightness_pct = target
                 state.dampened_brightness_pct = target
@@ -470,7 +548,7 @@ class ZoneAutomationController:
         state.dampened_brightness_pct = raw_target
         state.current_brightness_pct = raw_target
 
-        return {
+        result: dict[str, Any] = {
             "zone_id": zone_id,
             "adjust": True,
             "brightness_pct": raw_target,
@@ -478,10 +556,18 @@ class ZoneAutomationController:
             "previous": current,
         }
 
+        # Include mood-aware color temp and transition when enabled
+        if config.light.mood_aware_enabled:
+            result["color_temp_k"] = self._compute_mood_color_temp(zone_id, config)
+            result["transition_s"] = self._get_mood_transition(zone_id, config)
+            result["mood"] = self.get_mood(zone_id)
+
+        return result
+
     def _compute_target_brightness(self, zone_id: str, config: ZoneAutomationConfig,
                                    indoor_lux: float = 0.0,
                                    outdoor_lux: float = 0.0) -> int:
-        """Compute target brightness percentage considering indoor/outdoor compensation."""
+        """Compute target brightness percentage considering indoor/outdoor compensation and mood."""
         target_pct = config.light.brightness_target_pct
 
         if config.light.lux_outdoor_compensation and outdoor_lux > 0 and indoor_lux >= 0:
@@ -494,14 +580,48 @@ class ZoneAutomationController:
                 target_pct = min(100, max(config.light.brightness_min_pct,
                                           int(target_pct * compensation_pct / 100)))
 
-        return max(config.light.brightness_min_pct, min(100, target_pct))
+        base_brightness = max(config.light.brightness_min_pct, min(100, target_pct))
+
+        # Apply mood-based brightness factor when mood_aware_enabled
+        if config.light.mood_aware_enabled:
+            adjustment = self.get_mood_adjustment_for_zone(zone_id)
+            brightness_factor = float(adjustment["brightness_factor"])
+            base_brightness = int(base_brightness * brightness_factor)
+            base_brightness = max(0, min(100, base_brightness))
+
+        return base_brightness
+
+    def _compute_mood_color_temp(self, zone_id: str, config: ZoneAutomationConfig) -> int:
+        """Compute blended color temperature from zone config and mood profile.
+
+        When mood_aware_enabled, blends zone's configured color_temp_k with
+        the mood profile's recommended color_temp_k (50/50 average).
+        When mood_aware is disabled, returns the zone's configured color temp.
+        """
+        zone_temp = config.light.color_temp_k
+        if not config.light.mood_aware_enabled:
+            return zone_temp
+        adjustment = self.get_mood_adjustment_for_zone(zone_id)
+        mood_temp = int(adjustment["color_temp_k"])
+        blended = (zone_temp + mood_temp) // 2
+        # Clamp to valid color temperature range
+        return max(2200, min(6500, blended))
+
+    def _get_mood_transition(self, zone_id: str, config: ZoneAutomationConfig) -> float:
+        """Get mood-recommended transition duration in seconds."""
+        if not config.light.mood_aware_enabled:
+            return 0.0
+        adjustment = self.get_mood_adjustment_for_zone(zone_id)
+        return float(adjustment["transition_s"])
 
     # ── Zone state query ─────────────────────────────────────────────────
 
     def get_zone_state(self, zone_id: str) -> dict[str, Any]:
-        """Get runtime state for a zone."""
+        """Get runtime state for a zone (includes mood info)."""
         config = self.get_zone_config(zone_id)
         state = self._get_state(zone_id)
+        mood = self.get_mood(zone_id)
+        adjustment = self.get_mood_adjustment_for_zone(zone_id)
         return {
             "zone_id": zone_id,
             "config": config.to_dict(),
@@ -513,6 +633,9 @@ class ZoneAutomationController:
                 "current_brightness_pct": state.current_brightness_pct,
                 "dampened_brightness_pct": state.dampened_brightness_pct,
                 "music_playing": state.music_playing,
+                "current_mood": mood,
+                "mood_brightness_factor": float(adjustment["brightness_factor"]),
+                "mood_color_temp": int(adjustment["color_temp_k"]),
             },
         }
 
@@ -695,12 +818,17 @@ class ZoneAutomationController:
                     and config.automation_mode == "autonomy"):
                 zone_result["state"] = "absence_confirmed"
 
+            mood = self.get_mood(zone_id)
+            adjustment = self.get_mood_adjustment_for_zone(zone_id)
             zone_result["snapshot"] = {
                 "occupied": state.occupied,
                 "lights_on": state.lights_on,
                 "brightness_pct": state.current_brightness_pct,
                 "music_playing": state.music_playing,
                 "automation_mode": config.automation_mode,
+                "current_mood": mood,
+                "mood_brightness_factor": float(adjustment["brightness_factor"]),
+                "mood_color_temp": int(adjustment["color_temp_k"]),
             }
             results.append(zone_result)
 

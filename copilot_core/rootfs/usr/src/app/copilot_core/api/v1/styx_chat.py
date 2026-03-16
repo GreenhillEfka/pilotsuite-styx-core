@@ -131,6 +131,7 @@ def styx_chat(body: ChatRequestSchema) -> Any:
             "sources": result.get("sources", []),
             "query_type": result.get("query_type", "local"),
             "context_used": result.get("context_used", []),
+            "home_context_used": result.get("home_context_used", False),
         })
 
     except Exception as exc:
