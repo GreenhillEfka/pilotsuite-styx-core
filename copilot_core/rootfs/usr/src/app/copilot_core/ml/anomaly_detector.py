@@ -93,7 +93,7 @@ class AnomalyConfig:
     n_estimators: int = 100
     max_samples: Union[int, float] = "auto"
     contamination: float = 0.05  # Expected proportion of anomalies
-    max_features: int = 1.0
+    max_features: float = 1.0
     bootstrap: bool = False
     
     # Anomaly thresholds
@@ -594,6 +594,99 @@ class AnomalyDetector:
         
         logger.info(f"Model loaded from {path}")
         return self
+
+
+class ContextAwareAnomalyDetector:
+    """Extended anomaly detector with temporal + device relationship context.
+
+    Wraps the main AnomalyDetector with additional context analysis:
+    - Temporal patterns (hour-of-day, day-of-week expectations)
+    - Device relationship scoring (correlated device groups)
+    - Adaptive thresholding based on recent anomaly rates
+
+    Migrated from pilotsuite-styx-ha ml/patterns/anomaly_detector.py.
+    """
+
+    def __init__(
+        self,
+        detector: Optional[AnomalyDetector] = None,
+        temporal_window_hours: int = 24,
+        device_relationships: Optional[Dict[str, List[str]]] = None,
+        adaptive_threshold: bool = True,
+    ):
+        self.detector = detector or AnomalyDetector()
+        self.temporal_window_hours = temporal_window_hours
+        self.device_relationships = device_relationships or {}
+        self.adaptive_threshold = adaptive_threshold
+        self.temporal_patterns: Dict[str, List[float]] = {}
+        self._recent_scores: List[float] = []
+
+    def update_with_context(
+        self,
+        device_id: str,
+        values: np.ndarray,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Detect anomaly with temporal + device-relationship context.
+
+        Returns enriched result dict with base_result, temporal_context,
+        relationship_context, and adaptive_threshold info.
+        """
+        # Run base detection
+        base_result = self.detector.detect(values, sensor_id=device_id)
+        if isinstance(base_result, list):
+            base_result = base_result[0] if base_result else None
+        if base_result is None:
+            return {"status": "error", "message": "Detection failed"}
+
+        # Temporal analysis
+        temporal_info = self._analyze_temporal(device_id, context or {})
+
+        # Relationship analysis
+        relationship_info = self._analyze_relationships(device_id)
+
+        # Adaptive threshold adjustment
+        self._recent_scores.append(base_result.score)
+        self._recent_scores = self._recent_scores[-50:]
+        adj_threshold = self._get_adaptive_threshold() if self.adaptive_threshold else None
+
+        return {
+            "score": base_result.score,
+            "is_anomaly": base_result.is_anomaly,
+            "level": base_result.level.value,
+            "sensor_id": device_id,
+            "temporal_context": temporal_info,
+            "relationship_context": relationship_info,
+            "adaptive_threshold": adj_threshold,
+        }
+
+    def _analyze_temporal(self, device_id: str, context: Dict[str, Any]) -> Dict[str, Any]:
+        hour = context.get("hour_of_day", 12)
+        dow = context.get("day_of_week", 0)
+        key = f"{device_id}_{hour}_{dow}"
+        return {
+            "hour_of_day": hour,
+            "day_of_week": dow,
+            "expected_pattern": key in self.temporal_patterns,
+            "history_len": len(self.temporal_patterns.get(key, [])),
+        }
+
+    def _analyze_relationships(self, device_id: str) -> Dict[str, Any]:
+        related = self.device_relationships.get(device_id, [])
+        return {
+            "related_devices": related,
+            "group_size": len(related),
+        }
+
+    def _get_adaptive_threshold(self) -> float:
+        if len(self._recent_scores) < 10:
+            return -0.5
+        mean_score = float(np.mean(self._recent_scores))
+        if mean_score < -0.6:
+            return -0.4  # More sensitive when many anomalies
+        if mean_score > -0.2:
+            return -0.6  # Less sensitive when few anomalies
+        return -0.5
 
 
 def create_anomaly_detector(

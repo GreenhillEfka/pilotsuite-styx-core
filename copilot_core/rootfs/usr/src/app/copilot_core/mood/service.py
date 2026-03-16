@@ -110,6 +110,22 @@ class MoodService:
             try:
                 conn.execute("PRAGMA journal_mode=WAL")
                 conn.execute("PRAGMA busy_timeout=5000")
+                # Check if old table exists without zone_id column
+                try:
+                    cols = [
+                        row[1]
+                        for row in conn.execute(
+                            "PRAGMA table_info(mood_snapshots)"
+                        ).fetchall()
+                    ]
+                    if cols and "zone_id" not in cols:
+                        conn.execute("DROP TABLE mood_snapshots")
+                        conn.commit()
+                        logger.info(
+                            "Dropped legacy mood_snapshots table (missing zone_id)"
+                        )
+                except Exception:
+                    pass
                 conn.executescript("""
                     CREATE TABLE IF NOT EXISTS mood_snapshots (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,

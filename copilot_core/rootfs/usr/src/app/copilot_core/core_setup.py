@@ -404,10 +404,28 @@ async def init_services(hass=None, config: dict = None):
         "hub_heiz": None,
         "hub_bewegung": None,
         "hub_praesenz": None,
+        # Network + HA Integration Modules
+        "hub_zwave": None,
+        "hub_zigbee": None,
+        "hub_thread": None,
+        "ha_module_engine": None,
         # Weather service (for energy forecast engines)
         "weather_service": None,
         # Wecker (Smart Alarm) service
         "wecker": None,
+        # Multi-user conflict resolution
+        "conflict_resolver": None,
+        # ML Pipeline (inference + training)
+        "inference_engine": None,
+        "training_pipeline": None,
+        # ML Habit Prediction + Multi-User Learning
+        "habit_predictor": None,
+        "multi_user_learner": None,
+        # Styx Character (personality presets)
+        "character_service": None,
+        # Styx Action Attribution + User Hints NLP
+        "action_attribution": None,
+        "user_hints": None,
     }
 
     # Initialize system health service (requires hass)
@@ -684,6 +702,55 @@ async def init_services(hass=None, config: dict = None):
     except Exception:
         _LOGGER.exception("Failed to init VectorStore / EmbeddingEngine")
 
+    # Initialize Conflict Resolver (wired to UserPreferenceStore)
+    try:
+        from copilot_core.storage.conflict_resolution import ConflictResolver
+        from copilot_core.storage.user_preferences import get_user_preference_store
+        services["conflict_resolver"] = ConflictResolver(
+            user_preference_store=get_user_preference_store(),
+        )
+        _LOGGER.info("ConflictResolver initialized")
+    except Exception:
+        _LOGGER.exception("Failed to init ConflictResolver")
+
+    # Initialize ML Pipeline (Inference + Training)
+    try:
+        from copilot_core.ml.inference import InferenceEngine
+        from copilot_core.ml.training import TrainingPipeline
+        services["inference_engine"] = InferenceEngine()
+        services["training_pipeline"] = TrainingPipeline()
+        _LOGGER.info("ML Pipeline initialized (InferenceEngine + TrainingPipeline)")
+    except Exception:
+        _LOGGER.exception("Failed to init ML Pipeline")
+
+    # Initialize Habit Predictor + Multi-User Learner
+    try:
+        from copilot_core.ml.habit_predictor import HabitPredictor
+        from copilot_core.ml.multi_user_learner import MultiUserLearner
+        services["habit_predictor"] = HabitPredictor()
+        services["multi_user_learner"] = MultiUserLearner()
+        _LOGGER.info("HabitPredictor + MultiUserLearner initialized")
+    except Exception:
+        _LOGGER.exception("Failed to init HabitPredictor / MultiUserLearner")
+
+    # Initialize Styx Character Service
+    try:
+        from copilot_core.styx.character_service import CharacterService
+        services["character_service"] = CharacterService()
+        _LOGGER.info("CharacterService initialized")
+    except Exception:
+        _LOGGER.exception("Failed to init CharacterService")
+
+    # Initialize Styx Action Attribution + User Hints NLP
+    try:
+        from copilot_core.styx.action_attribution import ActionAttributionEngine
+        from copilot_core.styx.user_hints import UserHintsEngine
+        services["action_attribution"] = ActionAttributionEngine()
+        services["user_hints"] = UserHintsEngine()
+        _LOGGER.info("ActionAttributionEngine + UserHintsEngine initialized")
+    except Exception:
+        _LOGGER.exception("Failed to init ActionAttribution / UserHints")
+
     # Initialize Telegram Bot with lazy loading
     try:
         telegram_config = config.get("telegram", {}) if config else {}
@@ -931,6 +998,15 @@ async def init_services(hass=None, config: dict = None):
     ]
     _init_engine_group(services, _MODULE_ENGINES, "PilotSuite Module engines")
 
+    # Initialize Network + HA Integration Module engines (data-driven)
+    _NETWORK_ENGINES = [
+        ("hub_zwave",       "copilot_core.hub.zwave_module",         "ZWaveModuleEngine"),
+        ("hub_zigbee",      "copilot_core.hub.zigbee_module",        "ZigbeeModuleEngine"),
+        ("hub_thread",      "copilot_core.hub.thread_module",        "ThreadModuleEngine"),
+        ("ha_module_engine","copilot_core.hub.homeassistant_module",  "HomeAssistantModuleEngine"),
+    ]
+    _init_engine_group(services, _NETWORK_ENGINES, "Network + HA Module engines")
+
     try:
         from copilot_core.api.v1.module_endpoints import init_module_endpoints
         init_module_endpoints(
@@ -951,7 +1027,8 @@ async def init_services(hass=None, config: dict = None):
             def _push_module_data_on_eval(event):
                 """Push module summaries to HA after neuron evaluation."""
                 modules = {}
-                for name in ("hub_licht", "hub_helligkeit", "hub_heiz", "hub_bewegung", "hub_praesenz"):
+                for name in ("hub_licht", "hub_helligkeit", "hub_heiz", "hub_bewegung", "hub_praesenz",
+                             "hub_zwave", "hub_zigbee", "hub_thread"):
                     engine = services.get(name)
                     if engine and hasattr(engine, "get_summary"):
                         try:
@@ -1397,6 +1474,21 @@ def register_blueprints(app: Flask, services: dict) -> None:
         ("copilot_core.agent_config",              "agent_config_bp",      None),
         # Comfort stub (HA calls /api/v1/comfort, /api/v1/comfort/lighting)
         ("copilot_core.api.v1.comfort_stub",       "comfort_stub_bp",      None),
+        # Network + HA Integration Module blueprints (built-in prefix)
+        ("copilot_core.api.v1.zwave_module",       "zwave_module_bp",      None),
+        ("copilot_core.api.v1.zigbee_module",      "zigbee_module_bp",     None),
+        ("copilot_core.api.v1.thread_module",      "thread_module_bp",     None),
+        ("copilot_core.api.v1.ha_module",           "ha_module_bp",         None),
+        # Multi-user conflict resolution
+        ("copilot_core.api.v1.conflict_resolution", "bp",                   None),
+        # ML Pipeline API (training, inference, model management)
+        ("copilot_core.api.v1.ml_pipeline",         "bp",                   None),
+        # Character API (Styx personality management)
+        ("copilot_core.api.v1.character",           "bp",                   None),
+        # Action Attribution API
+        ("copilot_core.api.v1.action_attribution",  "bp",                   None),
+        # User Hints NLP API
+        ("copilot_core.api.v1.user_hints",          "bp",                   None),
     ]
 
     for module_path, bp_attr, prefix in _EXTRA_BLUEPRINTS:
