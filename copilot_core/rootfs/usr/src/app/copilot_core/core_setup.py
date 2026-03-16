@@ -409,6 +409,7 @@ async def init_services(hass=None, config: dict = None):
         "hub_zigbee": None,
         "hub_thread": None,
         "ha_module_engine": None,
+        "module_router": None,
         # Weather service (for energy forecast engines)
         "weather_service": None,
         # Wecker (Smart Alarm) service
@@ -1007,6 +1008,28 @@ async def init_services(hass=None, config: dict = None):
     ]
     _init_engine_group(services, _NETWORK_ENGINES, "Network + HA Module engines")
 
+    # Initialize ModuleRouter — routes HA states to network modules
+    try:
+        from copilot_core.hub.module_router import ModuleRouter
+        ha_client = services.get("ha_client")
+        module_router = ModuleRouter(
+            hub_zwave=services.get("hub_zwave"),
+            hub_zigbee=services.get("hub_zigbee"),
+            hub_thread=services.get("hub_thread"),
+            ha_module_engine=services.get("ha_module_engine"),
+            ha_client=ha_client,
+        )
+        services["module_router"] = module_router
+        _LOGGER.info("ModuleRouter initialized (HA client: %s)", "yes" if ha_client else "no")
+
+        # Wire ModuleRouter into EventProcessor for incremental state updates
+        event_processor = services.get("event_processor")
+        if event_processor and hasattr(event_processor, "add_processor"):
+            event_processor.add_processor(module_router.ingest_event)
+            _LOGGER.info("ModuleRouter wired to EventProcessor (incremental updates)")
+    except Exception:
+        _LOGGER.exception("Failed to init ModuleRouter")
+
     try:
         from copilot_core.api.v1.module_endpoints import init_module_endpoints
         init_module_endpoints(
@@ -1479,6 +1502,7 @@ def register_blueprints(app: Flask, services: dict) -> None:
         ("copilot_core.api.v1.zigbee_module",      "zigbee_module_bp",     None),
         ("copilot_core.api.v1.thread_module",      "thread_module_bp",     None),
         ("copilot_core.api.v1.ha_module",           "ha_module_bp",         None),
+        ("copilot_core.api.v1.module_router_api",  "module_router_bp",     None),
         # Multi-user conflict resolution
         ("copilot_core.api.v1.conflict_resolution", "bp",                   None),
         # ML Pipeline API (training, inference, model management)

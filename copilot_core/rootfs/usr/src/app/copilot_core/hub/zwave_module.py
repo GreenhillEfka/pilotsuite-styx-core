@@ -53,7 +53,14 @@ class ZWaveModuleEngine:
         self._devices: dict[str, ZWaveDevice] = {}
         self._controller_state: str = "unknown"
         self._last_heal: datetime | None = None
+        self._last_update: datetime | None = None
         self._error_count: int = 0
+        self._config: dict[str, Any] = {
+            "enabled": True,
+            "polling_interval_s": 120,
+            "alert_dead_devices": True,
+            "alert_threshold_dead": 1,
+        }
 
     def update_from_ha(self, states: dict[str, Any]) -> None:
         """Verarbeitet HA Entity States fuer Z-Wave Netzwerk.
@@ -65,6 +72,7 @@ class ZWaveModuleEngine:
         """
         try:
             self._devices.clear()
+            self._last_update = datetime.now(tz=timezone.utc)
             for entity_id, state_obj in states.items():
                 if not isinstance(state_obj, dict):
                     continue
@@ -148,9 +156,19 @@ class ZWaveModuleEngine:
             "devices_dead": d.devices_dead,
             "devices_sleeping": d.devices_sleeping,
             "last_heal": d.last_heal.isoformat() if d.last_heal else None,
+            "last_update": self._last_update.isoformat() if self._last_update else None,
             "error_count": d.error_count,
             "devices": d.devices,
         }
+
+    def get_config(self) -> dict[str, Any]:
+        """Gibt aktuelle Modul-Konfiguration zurueck."""
+        return dict(self._config)
+
+    def update_config(self, updates: dict[str, Any]) -> dict[str, Any]:
+        """Aktualisiert Modul-Konfiguration."""
+        self._config.update(updates)
+        return dict(self._config)
 
     def get_context_for_llm(self) -> str:
         """LLM-Kontextinjektion."""

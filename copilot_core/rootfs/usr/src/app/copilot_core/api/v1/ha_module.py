@@ -125,3 +125,61 @@ def configure_events():
     except Exception as e:
         _LOGGER.error("HA-Modul Events Config fehlgeschlagen: %s", e)
         return jsonify({"status": "error", "message": str(e)}), 500
+
+
+# -- GET /config ----------------------------------------------------------------
+
+@ha_module_bp.route("/config", methods=["GET"])
+def get_config():
+    """Gibt die vollstaendige Modul-Konfiguration zurueck."""
+    try:
+        engine = _get_engine()
+        config = engine.get_config()
+        return jsonify({"status": "ok", "module": "homeassistant", "config": config})
+    except Exception as e:
+        _LOGGER.error("HA-Modul Config Lesen fehlgeschlagen: %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+# -- POST /config ---------------------------------------------------------------
+
+@ha_module_bp.route("/config", methods=["POST"])
+def update_config():
+    """Aktualisiert die Modul-Konfiguration.
+
+    Body: {"forwarded_domains": [...], "webhook_retry_count": 3, ...}
+    """
+    try:
+        data = request.get_json(silent=True) or {}
+        engine = _get_engine()
+        updated = engine.update_config(data)
+
+        # Persist via ModuleRouter if available
+        router = current_app.config.get("COPILOT_SERVICES", {}).get("module_router")
+        if router:
+            router.update_config("homeassistant", updated)
+
+        return jsonify({"status": "ok", "module": "homeassistant", "config": updated})
+    except Exception as e:
+        _LOGGER.error("HA-Modul Config Update fehlgeschlagen: %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+# -- POST /refresh --------------------------------------------------------------
+
+@ha_module_bp.route("/refresh", methods=["POST"])
+def refresh():
+    """Triggert sofortiges Refresh aller Netzwerk-Module aus HA."""
+    import asyncio
+
+    router = current_app.config.get("COPILOT_SERVICES", {}).get("module_router")
+    if not router:
+        return jsonify({"status": "error", "message": "ModuleRouter not available"}), 503
+
+    try:
+        result = asyncio.run(router.async_refresh_from_ha())
+    except Exception as e:
+        _LOGGER.error("HA-Modul Refresh fehlgeschlagen: %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+    return jsonify({"status": "ok", "module": "homeassistant", **result})

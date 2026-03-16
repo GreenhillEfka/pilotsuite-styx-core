@@ -77,3 +77,57 @@ def zigbee_devices():
         "total": len(devices),
         "devices": devices,
     })
+
+
+@zigbee_module_bp.get("/config")
+def zigbee_config():
+    """Return Zigbee module configuration."""
+    svc, err = _get_service()
+    if err:
+        return err
+
+    try:
+        config = svc.get_config()
+    except Exception as exc:
+        _LOGGER.exception("Failed to get Zigbee config")
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+    return jsonify({"ok": True, "protocol": "zigbee", "config": config})
+
+
+@zigbee_module_bp.post("/config")
+def zigbee_update_config():
+    """Update Zigbee module configuration."""
+    svc, err = _get_service()
+    if err:
+        return err
+
+    data = request.get_json(silent=True) or {}
+    try:
+        updated = svc.update_config(data)
+        router = current_app.config.get("COPILOT_SERVICES", {}).get("module_router")
+        if router:
+            router.update_config("zigbee", updated)
+    except Exception as exc:
+        _LOGGER.exception("Failed to update Zigbee config")
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+    return jsonify({"ok": True, "protocol": "zigbee", "config": updated})
+
+
+@zigbee_module_bp.post("/refresh")
+def zigbee_refresh():
+    """Trigger immediate Zigbee state refresh from HA."""
+    import asyncio
+
+    router = current_app.config.get("COPILOT_SERVICES", {}).get("module_router")
+    if not router:
+        return jsonify({"ok": False, "error": "ModuleRouter not available"}), 503
+
+    try:
+        result = asyncio.run(router.async_refresh_from_ha())
+    except Exception as exc:
+        _LOGGER.exception("Failed to refresh Zigbee")
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+    return jsonify({"ok": True, "protocol": "zigbee", **result})

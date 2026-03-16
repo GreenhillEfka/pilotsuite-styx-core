@@ -49,6 +49,10 @@ class ThreadModuleEngine:
         self._devices: dict[str, ThreadDevice] = {}
         self._border_router_state: str = "unknown"
         self._last_update: datetime | None = None
+        self._config: dict[str, Any] = {
+            "enabled": True,
+            "polling_interval_s": 120,
+        }
 
     def update_from_ha(self, states: dict[str, Any]) -> None:
         """Verarbeitet HA Entity States fuer Thread Netzwerk.
@@ -138,6 +142,15 @@ class ThreadModuleEngine:
             "last_update": d.last_update.isoformat() if d.last_update else None,
             "devices": d.devices,
         }
+
+    def get_config(self) -> dict[str, Any]:
+        """Gibt aktuelle Modul-Konfiguration zurueck."""
+        return dict(self._config)
+
+    def update_config(self, updates: dict[str, Any]) -> dict[str, Any]:
+        """Aktualisiert Modul-Konfiguration."""
+        self._config.update(updates)
+        return dict(self._config)
 
     def get_context_for_llm(self) -> str:
         """LLM-Kontextinjektion."""

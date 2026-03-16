@@ -92,6 +92,15 @@ class HomeAssistantModuleEngine:
         self._module_count: int = 0
         self._active_dashboard_views: list[str] = []
         self._event_timestamps: list[float] = []
+        self._config: dict[str, Any] = {
+            "enabled": True,
+            "forwarded_domains": [
+                "light", "sensor", "binary_sensor", "switch",
+                "climate", "media_player", "cover", "fan",
+            ],
+            "webhook_retry_count": 3,
+            "connection_timeout_s": 10,
+        }
 
     # -- Connection ----------------------------------------------------------
 
@@ -190,6 +199,20 @@ class HomeAssistantModuleEngine:
             "erreichbar" if reachable else "nicht erreichbar",
             "gueltig" if token_valid else "ungueltig",
         )
+
+    # -- Config ---------------------------------------------------------------
+
+    def get_config(self) -> dict[str, Any]:
+        """Gibt aktuelle Modul-Konfiguration zurueck."""
+        return dict(self._config)
+
+    def update_config(self, updates: dict[str, Any]) -> dict[str, Any]:
+        """Aktualisiert Modul-Konfiguration."""
+        self._config.update(updates)
+        # Sync forwarded_domains wenn geaendert
+        if "forwarded_domains" in updates:
+            self.configure_forwarded_domains(updates["forwarded_domains"])
+        return dict(self._config)
 
     # -- Dashboard / Summary / LLM ------------------------------------------
 

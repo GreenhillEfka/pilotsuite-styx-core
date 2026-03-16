@@ -77,3 +77,57 @@ def thread_devices():
         "total": len(devices),
         "devices": devices,
     })
+
+
+@thread_module_bp.get("/config")
+def thread_config():
+    """Return Thread module configuration."""
+    svc, err = _get_service()
+    if err:
+        return err
+
+    try:
+        config = svc.get_config()
+    except Exception as exc:
+        _LOGGER.exception("Failed to get Thread config")
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+    return jsonify({"ok": True, "protocol": "thread", "config": config})
+
+
+@thread_module_bp.post("/config")
+def thread_update_config():
+    """Update Thread module configuration."""
+    svc, err = _get_service()
+    if err:
+        return err
+
+    data = request.get_json(silent=True) or {}
+    try:
+        updated = svc.update_config(data)
+        router = current_app.config.get("COPILOT_SERVICES", {}).get("module_router")
+        if router:
+            router.update_config("thread", updated)
+    except Exception as exc:
+        _LOGGER.exception("Failed to update Thread config")
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+    return jsonify({"ok": True, "protocol": "thread", "config": updated})
+
+
+@thread_module_bp.post("/refresh")
+def thread_refresh():
+    """Trigger immediate Thread state refresh from HA."""
+    import asyncio
+
+    router = current_app.config.get("COPILOT_SERVICES", {}).get("module_router")
+    if not router:
+        return jsonify({"ok": False, "error": "ModuleRouter not available"}), 503
+
+    try:
+        result = asyncio.run(router.async_refresh_from_ha())
+    except Exception as exc:
+        _LOGGER.exception("Failed to refresh Thread")
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+    return jsonify({"ok": True, "protocol": "thread", **result})
