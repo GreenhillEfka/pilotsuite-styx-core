@@ -438,6 +438,34 @@ class TestZoneAutomationAPI:
                 data = json.loads(resp.data)
                 assert data["imported"] > 50
 
+    def test_ensure_zones(self):
+        app, ctrl = self._make_client()
+        with patch("copilot_core.api.v1.zone_automation.require_token", lambda f: f):
+            with app.test_client() as c:
+                # No zones initially
+                resp = c.get("/api/v1/zone-automation/dashboard")
+                data = json.loads(resp.data)
+                assert len(data["zones"]) == 0
+
+                # Ensure zones exist
+                resp = c.post("/api/v1/zone-automation/ensure-zones",
+                              json={"zone_ids": ["wohnbereich", "badbereich", "kochbereich"]},
+                              content_type="application/json")
+                assert resp.status_code == 200
+                data = json.loads(resp.data)
+                assert data["ok"] is True
+                assert len(data["created"]) == 3
+                assert "wohnbereich" in data["created"]
+                assert len(data["zones"]) == 3
+
+                # Calling again should not re-create
+                resp = c.post("/api/v1/zone-automation/ensure-zones",
+                              json={"zone_ids": ["wohnbereich", "gangbereich"]},
+                              content_type="application/json")
+                data = json.loads(resp.data)
+                assert data["created"] == ["gangbereich"]
+                assert len(data["zones"]) == 4
+
     def test_search_entities(self):
         app, ctrl = self._make_client()
         ctrl.add_entity("living", "light.wohnzimmer_decke")
