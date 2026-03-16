@@ -2,6 +2,66 @@
 
 Alle wesentlichen Aenderungen am PilotSuite Styx Core werden in dieser Datei dokumentiert.
 
+## [v14.6.1] - 2026-03-16
+
+### Backend-Dashboard Modul-Config-Overhaul
+
+#### Changed
+- **Modul-Config**: Expandierbare per-Modul Config-Panels ersetzen zentralisiertes Dropdown
+- **16 MODULE_CONFIG_SPECS**: Typisierte Konfigurationsfelder (toggle, range, number, select) pro Modul
+- **Neue Kategorie "Styx Gehirn"**: Character, Attribution, User Hints, Konflikte, ML Pipeline im Modul-Tab
+- **Live-Daten**: Jedes Modul zeigt Echtzeit-Stats und hat eigene Action-Buttons
+
+### Compatibility
+- Core v14.6.1 <-> HA v14.6.1 (Paired Release)
+
+---
+
+## [v14.6.0] - 2026-03-16
+
+### Backend Dashboard Komplett-Ueberarbeitung + Modul-Migration HA→Core
+
+#### Added
+- **Backend Dashboard**: Komplett neues 7-Tab-Dashboard (Styx, Module, Stimmung, Habitus, Habituszonen, Status, Einstellungen)
+- **Brain Canvas**: 3-Layer Neuron-Visualisierung (Context/State/Mood) mit Pulsier-Animation
+- **4 neue Netzwerk-Module**: ZWave, Zigbee, Thread, HomeAssistant (hub/ + api/v1/ Blueprints)
+- **Modul-Migration von HA**: ML Pipeline, CharacterService, ActionAttribution, UserHints, PII-Service in Core verschoben
+- **Conflict Resolution API**: `/api/v1/conflicts/state`, `/evaluate`, `/strategy`
+
+#### Changed
+- **Dashboard Design**: Glassmorphism Cards, Sidebar-Navigation, Keyboard Shortcuts (1-7)
+- **Styx Tab**: Brain Graph + Chat + Neuronen zusammengefuehrt als Startseite
+
+#### Fixed
+- 4 vorbestehende Test-Failures (user_id optional + mood schema migration)
+
+### Compatibility
+- Core v14.6.0 <-> HA v14.6.0 (Paired Release)
+- Tests: 1826 passed, 112 skipped
+
+---
+
+## [v14.5.0] - 2026-03-16
+
+### Backend Dashboard + Netzwerk-Module
+
+#### Added
+- Backend Dashboard initial redesign (7 Tabs)
+- ZWave, Zigbee, Thread Module (Supervisor API)
+
+---
+
+## [v14.4.7] - 2026-03-15
+
+### Styx Chat Auth + Mood Fix
+
+#### Fixed
+- styx-chat auth Token-Handling
+- mood Supervisor API Fix
+- user_id optional in verschiedenen Endpoints
+
+---
+
 ## [v14.4.4] - 2026-03-15
 
 ### Mood History DB Fix + Backend Dashboard Mining Controls
