@@ -196,10 +196,10 @@ class TestStyxChatEndpoint:
         response = client.post("/api/styx/chat", json={"user_id": "test_user"})
         assert response.status_code == 400
 
-    def test_styx_chat_missing_user_id(self):
+    def test_styx_chat_missing_user_id_defaults_to_anonymous(self):
         client = self._create_test_client()
         response = client.post("/api/styx/chat", json={"query": "test"})
-        assert response.status_code == 400
+        assert response.status_code in (200, 201)
 
     def test_styx_chat_success(self, mock_rag_results, mock_ollama_response):
         client = self._create_test_client()

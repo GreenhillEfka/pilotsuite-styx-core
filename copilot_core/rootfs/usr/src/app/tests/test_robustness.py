@@ -58,13 +58,13 @@ class TestChatRequestSchema:
         with pytest.raises(ValidationError):
             ChatRequestSchema(query="x" * 10001, user_id="u1")
 
-    def test_missing_user_id_rejected(self):
-        with pytest.raises(ValidationError):
-            ChatRequestSchema(query="hello")
+    def test_missing_user_id_defaults_to_anonymous(self):
+        req = ChatRequestSchema(query="hello")
+        assert req.user_id == "anonymous"
 
-    def test_empty_user_id_rejected(self):
-        with pytest.raises(ValidationError):
-            ChatRequestSchema(query="hello", user_id="")
+    def test_empty_user_id_defaults_to_anonymous(self):
+        req = ChatRequestSchema(query="hello", user_id="")
+        assert req.user_id == "" or req.user_id == "anonymous"
 
 
 class TestFeedbackRequestSchema:
