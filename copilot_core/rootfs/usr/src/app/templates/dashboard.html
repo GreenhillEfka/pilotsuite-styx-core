@@ -124,6 +124,21 @@ a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
 .mod-cat-body{display:none;gap:8px}.mod-cat-body.open{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}
 .mod-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px;transition:border-color .15s}
 .mod-card:hover{border-color:rgba(124,106,239,.3)}
+.mod-card{cursor:pointer}
+.mod-card.expanded{border-color:var(--accent);grid-column:1/-1}
+.mod-detail{display:none;margin-top:10px;border-top:1px solid var(--border);padding-top:10px}
+.mod-card.expanded .mod-detail{display:block}
+.mod-cfg-row{display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap}
+.mod-cfg-row label{font-size:11px;color:var(--dim);min-width:120px}
+.mod-cfg-row input,.mod-cfg-row select{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:4px 8px;color:var(--text);font-size:11px;flex:1;min-width:80px;max-width:200px}
+.mod-cfg-row input[type=checkbox]{flex:none;min-width:auto;width:16px;height:16px;accent-color:var(--accent)}
+.mod-cfg-row input[type=range]{flex:1;min-width:100px;max-width:200px;accent-color:var(--accent)}
+.mod-cfg-row .range-val{font-size:11px;color:var(--accent2);min-width:35px;text-align:right}
+.mod-live{display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:6px;margin-bottom:8px}
+.mod-live-stat{background:var(--surface);border-radius:6px;padding:6px 8px;text-align:center}
+.mod-live-stat .mlv{font-size:16px;font-weight:700;color:var(--accent2)}
+.mod-live-stat .mll{font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px}
+.mod-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
 .mod-card .mod-top{display:flex;align-items:center;gap:10px;margin-bottom:8px}
 .mod-card .mod-icon{width:36px;height:36px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
 .mod-card .mod-name{font-size:13px;font-weight:600;flex:1}
@@ -1000,7 +1015,8 @@ var MODULE_CATEGORIES=[
     {key:'hub_energy',name:'Energie',icon:'⚡',desc:'Energieberatung, Verbrauchsanalyse',stage:'Verarbeitung',endpoints:['/api/v1/energy-forecast/']},
     {key:'hub_maintenance',name:'Predictive Maintenance',icon:'🔧',desc:'Geräte-Wartungsvorhersage',stage:'Lernen',endpoints:['/api/v1/predictive/']},
     {key:'hub_scenes',name:'Szenen',icon:'🎬',desc:'Szenen-Verwaltung, Mood-basierte Szenen',stage:'Aktion',endpoints:['/api/v1/scenes/']},
-    {key:'alarm_engine',name:'Lichtwecker',icon:'⏰',desc:'Sunrise/Sunset mit 5 Kurventypen, Sonos-Musik, Presets',stage:'Aktion',endpoints:['/api/v1/alarm/dashboard']}
+    {key:'alarm_engine',name:'Lichtwecker',icon:'⏰',desc:'Sunrise/Sunset mit 5 Kurventypen, Sonos-Musik, Presets',stage:'Aktion',endpoints:['/api/v1/alarm/dashboard']},
+    {key:'wecker',name:'Wecker',icon:'⏰',desc:'Smart Alarm mit Sonos-Ramp, Licht-Ramp, Snooze/Dismiss',stage:'Aktion',endpoints:['/api/v1/wecker/']}
   ]},
   {id:'communication',name:'Kommunikation',icon:'💬',modules:[
     {key:'llm_provider',name:'Chat/LLM',icon:'🤖',desc:'Ollama LLM (lokal), Cloud-Fallback, Routing',stage:'Verarbeitung',endpoints:['/api/v1/chat/status']},
@@ -1013,19 +1029,86 @@ var MODULE_CATEGORIES=[
     {key:'birthday_service',name:'Geburtstage',icon:'🎂',desc:'Personen, Benachrichtigungszeiten',stage:'Aktion',endpoints:['/api/v1/reminders/birthday']},
     {key:'waste_service',name:'Müllabfuhr',icon:'🗑️',desc:'Standort, Kalender-URL',stage:'Aktion',endpoints:['/api/v1/reminders/waste']},
     {key:'calendar',name:'Kalender',icon:'📅',desc:'CalDAV-URL, Sync-Intervall',stage:'Eingang',endpoints:['/api/v1/calendar/']}
+  ]},
+  {id:'styx_brain',name:'Styx Gehirn',icon:'🧬',modules:[
+    {key:'character_service',name:'Character',icon:'🎭',desc:'5 Personality Presets — Stimmung, Vorschläge, Sprachstil',stage:'Verarbeitung',endpoints:['/api/v1/character/']},
+    {key:'action_attribution',name:'Attribution',icon:'👤',desc:'Multi-Source User-Attribution mit Confidence-Scoring',stage:'Verarbeitung',endpoints:['/api/v1/attribution/']},
+    {key:'user_hints',name:'User Hints',icon:'💬',desc:'Deutsche NLP-Analyse für Automationshinweise',stage:'Lernen',endpoints:['/api/v1/hints/']},
+    {key:'conflict_resolver',name:'Konflikte',icon:'⚖️',desc:'Multi-User Konfliktauflösung bei divergierenden Präferenzen',stage:'Verarbeitung',endpoints:['/api/v1/conflicts/']},
+    {key:'ml_pipeline',name:'ML Pipeline',icon:'📊',desc:'Inference, Training, Habit Prediction, Multi-User Learning',stage:'Lernen',endpoints:['/api/v1/ml/']}
   ]}
 ];
 
 var MODULE_CONFIG_SPECS={
-  hub_licht:{label:'Licht',endpoint:'/api/v1/modules/licht/config'},
-  hub_helligkeit:{label:'Helligkeit',endpoint:'/api/v1/modules/helligkeit/config'},
-  hub_heiz:{label:'Heizung',endpoint:'/api/v1/modules/heiz/config'},
-  hub_bewegung:{label:'Bewegung',endpoint:'/api/v1/modules/bewegung/config'},
-  hub_praesenz:{label:'Präsenz',endpoint:'/api/v1/modules/praesenz/config'},
-  hub_zwave:{label:'Z-Wave',endpoint:'/api/v1/modules/zwave/status'},
-  hub_zigbee:{label:'Zigbee',endpoint:'/api/v1/modules/zigbee/status'},
-  hub_thread:{label:'Thread',endpoint:'/api/v1/modules/thread/status'},
-  hub_homeassistant:{label:'HomeAssistant',endpoint:'/api/v1/modules/homeassistant/status'}
+  hub_licht:{label:'Licht',endpoint:'/api/v1/modules/licht/config',save:'/api/v1/modules/licht/config',
+    fields:[
+      {key:'auto_enabled',label:'Automatik aktiv',type:'toggle'},
+      {key:'presence_delay_s',label:'Präsenz-Verzögerung',type:'range',min:0,max:120,unit:'s'},
+      {key:'absence_delay_s',label:'Abwesenheits-Verzögerung',type:'range',min:30,max:900,unit:'s'}
+    ],live:'/api/v1/modules/licht/status',
+    stats:['lights_on','lights_total','avg_brightness_pct']},
+  hub_helligkeit:{label:'Helligkeit',endpoint:'/api/v1/modules/helligkeit/config',save:'/api/v1/modules/helligkeit/config',
+    fields:[
+      {key:'target_lux',label:'Ziel-Lux',type:'number',min:50,max:1000},
+      {key:'min_lux',label:'Minimum-Lux',type:'number',min:10,max:500}
+    ],live:'/api/v1/modules/helligkeit/status',
+    stats:['avg_indoor_lux','avg_outdoor_lux','deficit_pct']},
+  hub_heiz:{label:'Heizung',endpoint:'/api/v1/modules/heiz/config',save:'/api/v1/modules/heiz/config',
+    fields:[
+      {key:'target_temp',label:'Zieltemperatur',type:'range',min:16,max:28,step:0.5,unit:'°C'},
+      {key:'eco_temp',label:'Eco-Temperatur',type:'range',min:14,max:22,step:0.5,unit:'°C'},
+      {key:'eco_mode',label:'Eco-Modus',type:'toggle'}
+    ],live:'/api/v1/modules/heiz/status',
+    stats:['current_temp','target_temp','humidity','comfort_index']},
+  hub_bewegung:{label:'Bewegung',endpoint:'/api/v1/modules/bewegung/config',
+    fields:[],live:'/api/v1/modules/bewegung/status',
+    stats:['sensors_active','sensors_total','daily_triggers']},
+  hub_praesenz:{label:'Präsenz',endpoint:'/api/v1/modules/praesenz/config',
+    fields:[],live:'/api/v1/presence/',
+    stats:['persons_home','zones_occupied','zones_empty']},
+  hub_zwave:{label:'Z-Wave',endpoint:'/api/v1/modules/zwave/status',
+    fields:[],live:'/api/v1/modules/zwave/status',
+    stats:['device_count','network_state','error_count']},
+  hub_zigbee:{label:'Zigbee',endpoint:'/api/v1/modules/zigbee/status',
+    fields:[],live:'/api/v1/modules/zigbee/status',
+    stats:['device_count','coordinator_status','avg_lqi']},
+  hub_thread:{label:'Thread',endpoint:'/api/v1/modules/thread/status',
+    fields:[],live:'/api/v1/modules/thread/status',
+    stats:['device_count','border_router_status']},
+  hub_homeassistant:{label:'HomeAssistant',endpoint:'/api/v1/modules/homeassistant/status',
+    fields:[],live:'/api/v1/modules/homeassistant/status',
+    stats:['events_forwarded_count','events_per_minute']},
+  hub_anomaly:{label:'Anomalie',endpoint:'/api/v1/anomaly/model/status',
+    fields:[],live:'/api/v1/anomaly/model/status',
+    stats:['total_entities','total_anomalies','profiles_learned'],
+    actions:[{label:'Erkennung starten',method:'POST',path:'/api/v1/anomaly/detect'},{label:'Training starten',method:'POST',path:'/api/v1/anomaly/train'}]},
+  hub_energy:{label:'Energie',endpoint:'/api/v1/energy-forecast/',
+    fields:[
+      {key:'electricity_price_ct_kwh',label:'Strompreis (ct/kWh)',type:'number',min:1,max:100}
+    ],live:'/api/v1/energy-forecast/',
+    stats:['total_daily_kwh','eco_score','savings_potential_eur']},
+  hub_scenes:{label:'Szenen',endpoint:'/api/v1/scenes/dashboard',
+    fields:[],live:'/api/v1/scenes/dashboard',
+    stats:['total_scenes','active_scene']},
+  character_service:{label:'Character',endpoint:'/api/v1/character/current',
+    fields:[
+      {key:'mode',label:'Modus',type:'select',options:['assistant','companion','guardian','efficiency','relaxed']}
+    ],save:'/api/v1/character/mode',
+    live:'/api/v1/character/current',
+    stats:['current_mode']},
+  wecker:{label:'Wecker',endpoint:'/api/v1/wecker/status',
+    fields:[],live:'/api/v1/wecker/status',
+    stats:['total_alarms','enabled','ringing','snoozed'],
+    actions:[{label:'Wecker prüfen',method:'POST',path:'/api/v1/wecker/check'}]},
+  conflict_resolver:{label:'Konflikte',endpoint:'/api/v1/conflicts/state',
+    fields:[
+      {key:'strategy',label:'Strategie',type:'select',options:['weighted','compromise','override']}
+    ],save:'/api/v1/conflicts/strategy',
+    live:'/api/v1/conflicts/state',
+    stats:['active','strategy']},
+  ml_pipeline:{label:'ML Pipeline',endpoint:'/api/v1/ml/status',
+    fields:[],live:'/api/v1/ml/status',
+    stats:['inference_ready','training_ready']}
 };
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -1051,30 +1134,29 @@ function loadModules(){
         var st=s.status;
         var stBadge=st==='active'?badge('aktiv','g'):st==='learning'?badge('lernend','y'):st==='off'?badge('aus','r'):badge(st,'p');
         var stageColor={Eingang:'bc',Verarbeitung:'bb',Korrelation:'bp',Lernen:'bo',Aktion:'bg'}[mod.stage]||'bp';
-        html+='<div class="mod-card">';
+        var hasConfig=!!MODULE_CONFIG_SPECS[mod.key];
+        html+='<div class="mod-card" data-key="'+escHtml(mod.key)+'" onclick="toggleModuleDetail(this,\''+escHtml(mod.key)+'\')">';
         html+='<div class="mod-top"><div class="mod-icon" style="background:rgba(124,106,239,.1)">'+mod.icon+'</div>';
         html+='<span class="mod-name">'+escHtml(mod.name)+'</span><span class="mod-status">'+stBadge+'</span></div>';
         html+='<div class="mod-pipe"><span class="badge '+stageColor+'">'+mod.stage+'</span> <span style="color:var(--dim);font-size:9px">→ Pipeline</span></div>';
         html+='<div class="mod-desc">'+escHtml(mod.desc)+'</div>';
         html+='<div class="mod-endpoints">'+mod.endpoints.map(function(e){return '<code>'+escHtml(e)+'</code>'}).join(' ')+'</div>';
-        /* Metrics placeholder */
-        html+='<div class="mod-metrics">';
-        if(s.health&&s.health.latency_ms)html+='<span>Latenz: '+s.health.latency_ms+'ms</span>';
-        if(s.health&&s.health.calls)html+='<span>Aufrufe: '+s.health.calls+'</span>';
+        if(s.health&&(s.health.latency_ms||s.health.calls)){
+          html+='<div class="mod-metrics">';
+          if(s.health.latency_ms)html+='<span>Latenz: '+s.health.latency_ms+'ms</span>';
+          if(s.health.calls)html+='<span>Aufrufe: '+s.health.calls+'</span>';
+          html+='</div>';
+        }
+        /* Expandable detail panel */
+        html+='<div class="mod-detail" id="mod-detail-'+escHtml(mod.key)+'">';
+        html+='<div class="mod-live" id="mod-live-'+escHtml(mod.key)+'"></div>';
+        html+='<div id="mod-cfg-'+escHtml(mod.key)+'"></div>';
+        html+='<div class="mod-actions" id="mod-act-'+escHtml(mod.key)+'"></div>';
         html+='</div>';
         html+='</div>';
       });
       html+='</div></div>';
     });
-
-    /* Module config panel */
-    html+='<div class="card" style="margin-top:14px"><h3>⚙️ Modul-Konfiguration</h3>';
-    html+='<select id="module-config-select" class="btn" style="width:100%;text-align:left;margin-bottom:8px" onchange="loadSelectedModuleConfig()">';
-    html+='<option value="">Modul auswählen...</option>';
-    Object.keys(MODULE_CONFIG_SPECS).forEach(function(k){
-      html+='<option value="'+escHtml(k)+'">'+escHtml(MODULE_CONFIG_SPECS[k].label||k)+'</option>';
-    });
-    html+='</select><div id="module-config-panel"></div></div>';
 
     $('modules-container').innerHTML=html;
 
@@ -1082,23 +1164,125 @@ function loadModules(){
     var first=document.querySelector('.mod-cat-hd');
     if(first){first.classList.add('open');first.nextElementSibling.classList.add('open')}
 
-    /* Load alarm data */
     loadAlarmData();
   });
 }
 
-function loadSelectedModuleConfig(){
-  var sel=$('module-config-select');
-  var panel=$('module-config-panel');
-  if(!sel||!panel)return;
-  var key=sel.value;
-  if(!key){panel.innerHTML='';return}
+function toggleModuleDetail(card,key){
+  /* Prevent toggle when clicking buttons/inputs inside */
+  if(event&&(event.target.tagName==='BUTTON'||event.target.tagName==='INPUT'||event.target.tagName==='SELECT'))return;
+  var wasOpen=card.classList.contains('expanded');
+  /* Close all expanded cards */
+  document.querySelectorAll('.mod-card.expanded').forEach(function(c){c.classList.remove('expanded')});
+  if(!wasOpen){
+    card.classList.add('expanded');
+    loadModuleDetail(key);
+  }
+}
+
+function loadModuleDetail(key){
   var spec=MODULE_CONFIG_SPECS[key];
-  if(!spec){panel.innerHTML='<div class="empty">Unbekanntes Modul</div>';return}
-  api(spec.endpoint).then(function(data){
-    if(!data){panel.innerHTML='<div class="empty">Nicht erreichbar</div>';return}
-    panel.innerHTML='<pre style="font-size:11px;color:var(--dim);white-space:pre-wrap;overflow-x:auto">'+escHtml(JSON.stringify(data,null,2))+'</pre>';
+  if(!spec)return;
+  /* Load live data */
+  if(spec.live){
+    api(spec.live).then(function(data){
+      var el=$('mod-live-'+key);
+      if(!el||!data)return;
+      var html='';
+      if(spec.stats){
+        spec.stats.forEach(function(k){
+          var val=findVal(data,k);
+          if(val!==undefined){
+            html+='<div class="mod-live-stat"><div class="mlv">'+(typeof val==='number'?Math.round(val*100)/100:val)+'</div><div class="mll">'+k.replace(/_/g,' ')+'</div></div>';
+          }
+        });
+      }
+      if(!html){
+        /* Show raw data summary */
+        var keys=Object.keys(data).filter(function(k){return k!=='ok'&&k!=='success'}).slice(0,6);
+        keys.forEach(function(k){
+          var v=data[k];
+          if(typeof v==='object')v=Array.isArray(v)?v.length+' Einträge':Object.keys(v).length+' Felder';
+          html+='<div class="mod-live-stat"><div class="mlv">'+escHtml(String(v).substring(0,20))+'</div><div class="mll">'+k.replace(/_/g,' ')+'</div></div>';
+        });
+      }
+      el.innerHTML=html;
+    });
+  }
+  /* Load config form */
+  if(spec.fields&&spec.fields.length>0){
+    api(spec.endpoint).then(function(data){
+      var el=$('mod-cfg-'+key);
+      if(!el)return;
+      data=data||{};
+      var html='<div style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Konfiguration</div>';
+      spec.fields.forEach(function(f){
+        var val=findVal(data,f.key);
+        if(val===undefined)val=f.default||'';
+        html+='<div class="mod-cfg-row">';
+        html+='<label>'+escHtml(f.label)+'</label>';
+        if(f.type==='toggle'){
+          html+='<input type="checkbox" data-cfg-key="'+escHtml(f.key)+'" data-mod="'+escHtml(key)+'"'+(val?' checked':'')+' onclick="event.stopPropagation()">';
+        }else if(f.type==='range'){
+          var step=f.step||1;
+          html+='<input type="range" min="'+(f.min||0)+'" max="'+(f.max||100)+'" step="'+step+'" value="'+val+'" data-cfg-key="'+escHtml(f.key)+'" data-mod="'+escHtml(key)+'" oninput="this.nextElementSibling.textContent=this.value+\''+(f.unit||'')+'\'" onclick="event.stopPropagation()">';
+          html+='<span class="range-val">'+val+(f.unit||'')+'</span>';
+        }else if(f.type==='select'){
+          html+='<select data-cfg-key="'+escHtml(f.key)+'" data-mod="'+escHtml(key)+'" onclick="event.stopPropagation()">';
+          (f.options||[]).forEach(function(o){html+='<option value="'+escHtml(o)+'"'+(o===val?' selected':'')+'>'+escHtml(o)+'</option>'});
+          html+='</select>';
+        }else{
+          html+='<input type="'+(f.type||'text')+'" value="'+escHtml(String(val))+'" data-cfg-key="'+escHtml(f.key)+'" data-mod="'+escHtml(key)+'" onclick="event.stopPropagation()"'+(f.min!==undefined?' min="'+f.min+'"':'')+(f.max!==undefined?' max="'+f.max+'"':'')+'>';
+        }
+        html+='</div>';
+      });
+      html+='<button class="btn btn-sm" style="margin-top:6px" onclick="event.stopPropagation();saveModuleConfig(\''+escHtml(key)+'\')">Speichern</button>';
+      el.innerHTML=html;
+    });
+  }
+  /* Render action buttons */
+  if(spec.actions&&spec.actions.length>0){
+    var el=$('mod-act-'+key);
+    if(el){
+      var html='';
+      spec.actions.forEach(function(a){
+        html+='<button class="btn btn-sm" onclick="event.stopPropagation();moduleAction(\''+escHtml(a.path)+'\',\''+escHtml(a.method||'POST')+'\')">'+escHtml(a.label)+'</button>';
+      });
+      el.innerHTML=html;
+    }
+  }
+}
+
+function findVal(obj,key){
+  if(!obj)return undefined;
+  if(key in obj)return obj[key];
+  for(var k in obj){
+    if(typeof obj[k]==='object'&&obj[k]!==null){
+      var v=findVal(obj[k],key);
+      if(v!==undefined)return v;
+    }
+  }
+  return undefined;
+}
+
+function saveModuleConfig(key){
+  var spec=MODULE_CONFIG_SPECS[key];
+  if(!spec||!spec.save)return;
+  var data={};
+  document.querySelectorAll('[data-mod="'+key+'"]').forEach(function(el){
+    var k=el.getAttribute('data-cfg-key');
+    if(el.type==='checkbox')data[k]=el.checked;
+    else if(el.type==='number'||el.type==='range')data[k]=parseFloat(el.value);
+    else data[k]=el.value;
   });
+  apiPost(spec.save,data).then(function(r){
+    if(r)loadModuleDetail(key);
+  });
+}
+
+function moduleAction(path,method){
+  if(method==='POST')apiPost(path,{}).then(function(r){if(r)loadModules()});
+  else api(path).then(function(r){if(r)loadModules()});
 }
 
 /* ═══════════════════════════════════════════════════════════════════
