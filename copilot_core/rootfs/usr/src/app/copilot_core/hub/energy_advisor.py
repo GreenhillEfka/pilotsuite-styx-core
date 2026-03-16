@@ -14,7 +14,7 @@ from __future__ import annotations
 import logging
 from collections import defaultdict
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -467,3 +467,195 @@ class EnergyAdvisorEngine:
             recommendations=recs,
             savings_potential_eur=round(savings, 2),
         )
+
+
+# Migrated from pilotsuite-styx-ha
+
+
+class ContextAwareEnergyOptimizer:
+    """Context-aware energy optimizer with PV, pricing, and peak-shaving awareness.
+
+    Standalone optimizer that considers time-of-use pricing, PV production
+    profiles, and peak consumption patterns to generate scheduling
+    recommendations and identify savings opportunities.
+    """
+
+    def __init__(
+        self,
+        energy_price_per_kwh: float = 0.30,
+        pv_production_profile: dict[int, float] | None = None,
+    ) -> None:
+        """Initialize context-aware energy optimizer.
+
+        Args:
+            energy_price_per_kwh: Current energy price in EUR/kWh.
+            pv_production_profile: Expected PV production in watts by hour (0-23).
+        """
+        self._energy_price_per_kwh = energy_price_per_kwh
+        self._pv_profile: dict[int, float] = pv_production_profile or {}
+        self._optimization_targets: dict[str, dict[str, Any]] = {}
+        self._consumption_log: list[dict[str, Any]] = []
+
+    # ── Configuration ────────────────────────────────────────────────────
+
+    def set_energy_price(self, price_per_kwh: float) -> None:
+        """Update energy price (EUR/kWh)."""
+        self._energy_price_per_kwh = price_per_kwh
+
+    def set_pv_profile(self, profile: dict[int, float]) -> None:
+        """Set PV production profile (hour 0-23 -> watts)."""
+        self._pv_profile = profile
+
+    def set_optimization_target(
+        self,
+        device_id: str,
+        priority: str = "normal",
+        cost_threshold: float | None = None,
+    ) -> None:
+        """Set optimization target for a device.
+
+        Args:
+            device_id: Device identifier.
+            priority: Priority level (high, normal, low).
+            cost_threshold: Maximum acceptable cost in EUR.
+        """
+        self._optimization_targets[device_id] = {
+            "priority": priority,
+            "cost_threshold": cost_threshold,
+            "updated_at": datetime.now(tz=timezone.utc).isoformat(),
+        }
+
+    # ── Consumption tracking ─────────────────────────────────────────────
+
+    def record_consumption(
+        self,
+        device_id: str,
+        power_watts: float,
+        duration_seconds: float,
+        timestamp: datetime | None = None,
+    ) -> None:
+        """Record energy consumption for peak-shaving analysis.
+
+        Args:
+            device_id: Device identifier.
+            power_watts: Power draw in watts.
+            duration_seconds: Duration of consumption in seconds.
+            timestamp: When consumption occurred (default: now).
+        """
+        ts = timestamp or datetime.now(tz=timezone.utc)
+        self._consumption_log.append({
+            "device_id": device_id,
+            "power_watts": power_watts,
+            "duration_seconds": duration_seconds,
+            "energy_wh": (power_watts * duration_seconds) / 3600.0,
+            "timestamp": ts,
+            "hour": ts.hour,
+        })
+        # Retain last 7 days
+        cutoff = datetime.now(tz=timezone.utc) - timedelta(days=7)
+        self._consumption_log = [
+            e for e in self._consumption_log if e["timestamp"] >= cutoff
+        ]
+
+    # ── Optimal scheduling ───────────────────────────────────────────────
+
+    def get_optimal_schedule(
+        self,
+        device_id: str,
+        estimated_duration_hours: float,
+    ) -> dict[str, Any]:
+        """Get optimal scheduling recommendation for a device.
+
+        Considers PV production profile and energy pricing to find the
+        cheapest hour to operate a device.
+
+        Args:
+            device_id: Device identifier.
+            estimated_duration_hours: Estimated runtime in hours.
+
+        Returns:
+            Dict with optimal_start_hour, reason, energy_cost, price_by_hour.
+        """
+        if not self._pv_profile:
+            return {
+                "optimal_start_hour": None,
+                "reason": "Kein PV-Profil verfügbar",
+                "energy_cost": None,
+            }
+
+        costs_by_hour: dict[int, float] = {}
+        for hour, production_w in self._pv_profile.items():
+            # Reduce effective price when PV is producing (up to 50% discount)
+            discount = min(0.5, production_w / 1000.0) if production_w > 0 else 0.0
+            costs_by_hour[hour] = self._energy_price_per_kwh * (1.0 - discount)
+
+        best_hour = min(costs_by_hour, key=costs_by_hour.get)  # type: ignore[arg-type]
+
+        # Check against device cost threshold
+        target = self._optimization_targets.get(device_id, {})
+        cost = costs_by_hour[best_hour] * estimated_duration_hours
+        note = ""
+        if target.get("cost_threshold") is not None and cost > target["cost_threshold"]:
+            note = " (überschreitet Kostenschwelle)"
+
+        return {
+            "optimal_start_hour": best_hour,
+            "reason": f"Niedrigster Preis um {best_hour}:00 Uhr{note}",
+            "energy_cost": round(cost, 4),
+            "price_by_hour": costs_by_hour,
+        }
+
+    # ── Peak shaving ─────────────────────────────────────────────────────
+
+    def analyze_peak_shaving(
+        self,
+        hours: int = 24,
+    ) -> dict[str, Any]:
+        """Analyze peak shaving opportunities from recorded consumption.
+
+        Groups consumption by hour-of-day and identifies peak hours where
+        load shifting could reduce demand charges.
+
+        Args:
+            hours: Lookback window in hours.
+
+        Returns:
+            Dict with peak_hour, peak/avg consumption, savings_opportunity flag.
+        """
+        cutoff = datetime.now(tz=timezone.utc) - timedelta(hours=hours)
+        recent = [e for e in self._consumption_log if e["timestamp"] >= cutoff]
+
+        if not recent:
+            return {"peak_hour": None, "savings_opportunity": False}
+
+        hourly: dict[int, float] = defaultdict(float)
+        for entry in recent:
+            hourly[entry["hour"]] += entry["energy_wh"]
+
+        if not hourly:
+            return {"peak_hour": None, "savings_opportunity": False}
+
+        peak_hour = max(hourly, key=hourly.get)  # type: ignore[arg-type]
+        values = list(hourly.values())
+        avg_wh = sum(values) / len(values)
+        peak_wh = hourly[peak_hour]
+
+        return {
+            "peak_hour": peak_hour,
+            "peak_consumption_wh": round(peak_wh, 2),
+            "avg_consumption_wh": round(avg_wh, 2),
+            "savings_opportunity": peak_wh > avg_wh * 1.2,
+            "peak_to_avg_ratio": round(peak_wh / avg_wh, 2) if avg_wh > 0 else 0.0,
+        }
+
+    # ── Summary ──────────────────────────────────────────────────────────
+
+    def get_summary(self) -> dict[str, Any]:
+        """Return overview of optimizer state."""
+        return {
+            "energy_price_per_kwh": self._energy_price_per_kwh,
+            "pv_hours_configured": len(self._pv_profile),
+            "optimization_targets": len(self._optimization_targets),
+            "consumption_records": len(self._consumption_log),
+            "has_pv_profile": bool(self._pv_profile),
+        }

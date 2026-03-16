@@ -208,6 +208,55 @@ a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
 .set-row label{font-size:12px;flex:1}
 .set-row select,.set-row input[type=text]{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text);font-size:12px;min-width:200px}
 
+/* ── Alarm Cards ── */
+.alarm-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:8px}
+.alarm-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px}
+.alarm-preset-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px}
+
+/* ── Sonos/Musikwolke ── */
+.sonos-room-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px}
+.sonos-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px}
+.sonos-card.playing{border-color:var(--green)}
+.sonos-ctrl{display:flex;gap:6px;margin-top:8px}
+.vol-row{display:flex;align-items:center;gap:6px;margin-top:6px;font-size:10px}
+.vol-row input[type=range]{flex:1;accent-color:var(--accent);height:5px}
+
+/* ── Zone Automation ── */
+.za-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px}
+.za-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px}
+.za-slider{display:flex;align-items:center;gap:8px;margin-bottom:5px;font-size:11px}
+.za-slider label{min-width:120px;color:var(--dim)}
+.za-slider input[type=range]{flex:1;accent-color:var(--accent);height:5px}
+.za-slider .sv{min-width:36px;text-align:right;font-variant-numeric:tabular-nums}
+.za-toggle{display:flex;align-items:center;gap:8px;margin-bottom:5px;font-size:11px}
+.tg-sw{position:relative;width:34px;height:18px;flex-shrink:0}
+.tg-sw input{opacity:0;width:0;height:0}
+.tg-sw .tg-s{position:absolute;cursor:pointer;inset:0;background:var(--border);border-radius:18px;transition:.3s}
+.tg-sw .tg-s::before{content:"";position:absolute;height:14px;width:14px;left:2px;bottom:2px;background:var(--dim);border-radius:50%;transition:.3s}
+.tg-sw input:checked+.tg-s{background:var(--accent)}
+.tg-sw input:checked+.tg-s::before{transform:translateX(16px);background:#fff}
+.za-ent{display:flex;align-items:center;gap:6px;padding:3px 0;font-size:11px;border-bottom:1px solid rgba(30,42,58,.3)}
+.za-ent:last-child{border:none}
+
+/* ── Zone Detail Modal ── */
+.zd-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.7);z-index:100;align-items:center;justify-content:center}
+.zd-overlay.show{display:flex}
+.zd-modal{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;max-width:700px;width:92%;max-height:85vh;overflow-y:auto;box-shadow:var(--shadow)}
+.zd-sec{margin-bottom:14px}
+.zd-sec-hd{font-size:11px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;display:flex;align-items:center;gap:6px}
+.zd-agg-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:6px}
+.zd-agg{background:var(--card);border-radius:8px;padding:8px;text-align:center}
+.zd-agg .za-icon{font-size:16px}.zd-agg .za-count{font-size:16px;font-weight:700}.zd-agg .za-label{font-size:9px;color:var(--dim)}
+.zd-ent-list{display:flex;flex-wrap:wrap;gap:3px;margin-top:3px}
+.zd-ent-tag{font-size:10px;background:var(--card);padding:2px 7px;border-radius:5px}
+.zd-scene-grid{display:flex;flex-wrap:wrap;gap:6px}
+.zd-scene{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:6px 12px;cursor:pointer;font-size:11px;transition:.15s}
+.zd-scene:hover{border-color:var(--accent)}
+.zd-mood-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.zd-mood-item{text-align:center}
+.zd-mood-ring{width:50px;height:50px;border-radius:50%;border:3px solid var(--border);display:inline-flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;margin-bottom:3px}
+.zd-actions{display:flex;flex-wrap:wrap;gap:6px}
+
 /* ── Responsive ── */
 @media(max-width:900px){
   .sidebar{width:60px}.sidebar .logo-text,.sidebar .logo-ver,.sidebar nav button span:not(.nav-icon),.sidebar nav button .nav-key{display:none}.sidebar nav button{justify-content:center;padding:10px}
@@ -294,6 +343,18 @@ a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
 <!-- ═══════ TAB 2: MODULE ═══════ -->
 <div id="tab-modules" class="tab-content">
   <div id="modules-container"><div class="empty">Module werden geladen...</div></div>
+  <!-- Lichtwecker Management (Modul-Steuerung) -->
+  <div class="card" style="margin-top:16px">
+    <h3>⏰ Lichtwecker</h3>
+    <p style="color:var(--dim);font-size:10px;margin-bottom:10px">Sunrise/Sunset Lichtwecker mit Musiksteuerung — Kurven, Presets, Zeitplaene.</p>
+    <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+      <button class="btn" onclick="showAlarmCreate()">+ Neuer Wecker</button>
+      <button class="btn btn-sm" onclick="loadAlarmData()">Aktualisieren</button>
+    </div>
+    <div id="alarm-list" style="margin-bottom:14px"></div>
+    <div id="alarm-presets" style="margin-bottom:10px"></div>
+    <div id="alarm-curves"></div>
+  </div>
 </div>
 
 <!-- ═══════ TAB 3: STIMMUNG ═══════ -->
@@ -308,6 +369,39 @@ a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
     <div class="card"><h3>🗺️ Zone Moods</h3><div id="mood-zones" class="grid g3"></div></div>
   </div>
   <div class="card" style="margin-top:16px"><h3>⚡ Mood Actions</h3><div id="mood-actions"></div></div>
+  <!-- Conflict Resolution -->
+  <div class="card" style="margin-top:16px">
+    <h3>👥 Multi-User Konflikte <span id="conflict-badge" style="font-size:9px;padding:2px 8px;border-radius:8px;margin-left:6px"></span></h3>
+    <p style="color:var(--dim);font-size:10px;margin-bottom:10px">Erkennt divergierende Stimmungspraeferenzen zwischen Nutzern und loest sie auf.</p>
+    <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;align-items:center">
+      <label style="font-size:11px;color:var(--dim)">Strategie:</label>
+      <select id="conflict-strategy" onchange="setConflictStrategy()" style="padding:4px 8px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:11px">
+        <option value="weighted">Gewichtet (Prioritaet)</option>
+        <option value="compromise">Kompromiss (Gleichverteilt)</option>
+        <option value="override">Einzeluser-Override</option>
+      </select>
+      <input type="text" id="conflict-override-user" placeholder="Override User..." style="display:none;width:120px;padding:4px 8px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:11px">
+      <button class="btn btn-sm" onclick="evaluateConflicts()">Jetzt auswerten</button>
+    </div>
+    <div id="conflict-details"></div>
+    <div id="conflict-resolved" style="margin-top:8px"></div>
+  </div>
+  <!-- Musikwolke / Sonos -->
+  <div class="card" style="margin-top:16px">
+    <h3>🔊 Musikwolke <span id="sonos-health-badge" style="font-size:9px;padding:2px 8px;border-radius:8px;margin-left:6px"></span></h3>
+    <p style="color:var(--dim);font-size:10px;margin-bottom:10px">Audio folgt automatisch durch Zonen. Sonos-Steuerung, TTS, Presets.</p>
+    <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">
+      <button class="btn btn-sm" onclick="sonosPauseAll()">Alle pausieren</button>
+      <button class="btn btn-sm" onclick="sonosResumeAll()">Alle fortsetzen</button>
+    </div>
+    <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">
+      <input type="text" id="sonos-tts-text" placeholder="TTS-Durchsage..." style="flex:1;min-width:180px;padding:6px 10px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px">
+      <select id="sonos-tts-room" style="padding:6px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px"><option value="">Alle</option></select>
+      <button class="btn btn-sm" onclick="sonosSay()">Senden</button>
+    </div>
+    <div class="sonos-room-grid" id="sonos-rooms"></div>
+    <div id="sonos-presets" style="margin-top:10px"></div>
+  </div>
 </div>
 
 <!-- ═══════ TAB 4: HABITUS ═══════ -->
@@ -337,6 +431,12 @@ a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
       <div class="card" style="margin-top:12px"><h3>🔗 Entity Mapping</h3><div id="zone-entity-map"></div></div>
     </div>
   </div>
+  <!-- Zone Automation Config -->
+  <div class="card" style="margin-top:16px">
+    <h3>⚙️ Zone Automation <span class="count" id="za-active-count">0</span></h3>
+    <p style="color:var(--dim);font-size:10px;margin-bottom:10px">Praesenzabhaengige Licht- und Musiksteuerung pro Zone.</p>
+    <div class="za-grid" id="za-zones"></div>
+  </div>
 </div>
 
 <!-- ═══════ TAB 6: STATUS ═══════ -->
@@ -356,6 +456,28 @@ a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
   <div class="set-group"><h3>🔗 Verbindungen</h3><div id="set-connections"></div></div>
   <div class="set-group"><h3>🧠 Brain Graph</h3><div id="set-brain"></div></div>
   <div class="set-group"><h3>🔒 Sicherheit</h3><div id="set-security"></div></div>
+</div>
+
+<!-- Alarm Create Modal -->
+<div id="alarm-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.7);z-index:100;align-items:center;justify-content:center" onclick="if(event.target===this)this.style.display='none'">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;max-width:560px;width:90%;max-height:85vh;overflow-y:auto;box-shadow:var(--shadow)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <h3 id="alarm-modal-title" style="font-size:15px;font-weight:700">Neuer Wecker</h3>
+      <button onclick="$('alarm-modal').style.display='none'" style="background:none;border:none;color:var(--dim);font-size:18px;cursor:pointer">&times;</button>
+    </div>
+    <div id="alarm-modal-content"></div>
+  </div>
+</div>
+
+<!-- Zone Detail Modal -->
+<div class="zd-overlay" id="zone-detail-modal" onclick="if(event.target===this)this.style.display='none'">
+  <div class="zd-modal">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <h3 id="zd-title" style="font-size:15px;font-weight:700">Zone</h3>
+      <button onclick="$('zone-detail-modal').style.display='none'" style="background:none;border:none;color:var(--dim);font-size:18px;cursor:pointer">&times;</button>
+    </div>
+    <div id="zd-content"></div>
+  </div>
 </div>
 
 </div><!-- /main -->
@@ -877,7 +999,8 @@ var MODULE_CATEGORIES=[
     {key:'hub_anomaly',name:'Anomalie',icon:'⚠️',desc:'Anomalieerkennung, Muster-Profile',stage:'Verarbeitung',endpoints:['/api/v1/anomaly/']},
     {key:'hub_energy',name:'Energie',icon:'⚡',desc:'Energieberatung, Verbrauchsanalyse',stage:'Verarbeitung',endpoints:['/api/v1/energy-forecast/']},
     {key:'hub_maintenance',name:'Predictive Maintenance',icon:'🔧',desc:'Geräte-Wartungsvorhersage',stage:'Lernen',endpoints:['/api/v1/predictive/']},
-    {key:'hub_scenes',name:'Szenen',icon:'🎬',desc:'Szenen-Verwaltung, Mood-basierte Szenen',stage:'Aktion',endpoints:['/api/v1/scenes/']}
+    {key:'hub_scenes',name:'Szenen',icon:'🎬',desc:'Szenen-Verwaltung, Mood-basierte Szenen',stage:'Aktion',endpoints:['/api/v1/scenes/']},
+    {key:'alarm_engine',name:'Lichtwecker',icon:'⏰',desc:'Sunrise/Sunset mit 5 Kurventypen, Sonos-Musik, Presets',stage:'Aktion',endpoints:['/api/v1/alarm/dashboard']}
   ]},
   {id:'communication',name:'Kommunikation',icon:'💬',modules:[
     {key:'llm_provider',name:'Chat/LLM',icon:'🤖',desc:'Ollama LLM (lokal), Cloud-Fallback, Routing',stage:'Verarbeitung',endpoints:['/api/v1/chat/status']},
@@ -958,6 +1081,9 @@ function loadModules(){
     /* Auto-open first category */
     var first=document.querySelector('.mod-cat-hd');
     if(first){first.classList.add('open');first.nextElementSibling.classList.add('open')}
+
+    /* Load alarm data */
+    loadAlarmData();
   });
 }
 
@@ -1046,6 +1172,9 @@ function loadMood(){
     actionsHtml+='<button class="btn" onclick="apiPost(\'/api/v1/mood/reset\',{}).then(function(){loadMood()})">🔄 Reset</button>';
     actionsHtml+='</div>';
     $('mood-actions').innerHTML=actionsHtml;
+
+    loadConflicts();
+    loadSonosData();
   });
 }
 
@@ -1344,10 +1473,12 @@ function loadZones(){
       }
       entityMap.innerHTML=emHtml;
     }
+
+    loadZoneAutomation();
   });
 }
 
-function showZoneDetail(zoneId){addHistory('Zone Detail: '+zoneId)}
+function _showZoneDetailStub(zoneId){addHistory('Zone Detail: '+zoneId)}
 function filterByTag(tagId){addHistory('Filter: '+tagId)}
 
 function createZone(){
@@ -1520,7 +1651,570 @@ function saveRouting(){
 var saveRoutingConfig=saveRouting;
 
 /* ═══════════════════════════════════════════════════════════════════
-   14. Loader Map + Init
+   14. LICHTWECKER / ALARM
+   ═══════════════════════════════════════════════════════════════════ */
+var alarmDashboard=null;
+
+function loadAlarmData(){
+  return api('/api/v1/alarm/dashboard').then(function(data){
+    if(!data||!data.ok)return;
+    alarmDashboard=data;
+    renderAlarmList(data.alarms||[]);
+    renderAlarmPresets(data.presets||[]);
+    renderAlarmCurves(data.curves||[]);
+  });
+}
+
+function renderAlarmList(alarms){
+  var el=$('alarm-list');if(!el)return;
+  if(!alarms.length){el.innerHTML='<div class="empty">Keine Wecker konfiguriert. Erstelle einen neuen oder verwende ein Preset.</div>';return}
+  var html='<div class="alarm-grid">';
+  alarms.forEach(function(a){
+    var rt=a.runtime||{};
+    var sched=a.schedule||{};
+    var stColors={running:'var(--green)',snoozed:'var(--accent)',armed:'var(--blue)',idle:'var(--dim)',completed:'var(--dim)',cancelled:'var(--red)'};
+    var stLabels={running:'Laeuft',snoozed:'Snooze',armed:'Aktiv',idle:'Inaktiv',completed:'Fertig',cancelled:'Abgebr.'};
+    var stColor=stColors[rt.state]||'var(--dim)';
+    var stLabel=stLabels[rt.state]||rt.state||'--';
+    var modeIcon=a.mode==='wake'?'🌅':'🌇';
+    var modeLabel=a.mode==='wake'?'Aufwachen':'Einschlafen';
+    var days=(sched.days||[]).map(function(d){return d.substring(0,2).toUpperCase()}).join(' ');
+    var progress=rt.state==='running'?'<div style="margin-top:6px;background:var(--border);border-radius:4px;height:5px;overflow:hidden"><div style="width:'+(rt.progress_pct||0)+'%;height:100%;background:var(--accent);transition:width 1s"></div></div>':'';
+    html+='<div class="alarm-card">';
+    html+='<div style="display:flex;justify-content:space-between;align-items:center"><span style="font-weight:600;font-size:13px">'+modeIcon+' '+escHtml(a.name||'Wecker')+'</span>';
+    html+='<span style="color:'+stColor+';font-size:10px;font-weight:600">'+stLabel+'</span></div>';
+    html+='<div style="color:var(--dim);font-size:11px;margin:4px 0">'+escHtml(sched.time||'--:--')+' · '+days+' · '+modeLabel;
+    if(a.zone_id)html+=' · Zone: '+escHtml(a.zone_id);
+    html+='</div>';
+    html+='<div style="font-size:10px;color:var(--dim)">Kurve: '+(a.light&&a.light.curve_type||'quadratic')+' · '+(a.light&&a.light.duration_minutes||30)+' Min · '+(a.light&&a.light.cct_start_k||1800)+'K→'+(a.light&&a.light.cct_end_k||5000)+'K</div>';
+    html+=progress;
+    html+='<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">';
+    if(rt.state==='running'||rt.state==='snoozed'){
+      html+='<button class="btn btn-sm" onclick="alarmSnooze(\''+a.alarm_id+'\')">😴 Snooze</button>';
+      html+='<button class="btn btn-sm" style="color:var(--red);border-color:var(--red)" onclick="alarmCancel(\''+a.alarm_id+'\')">Stop</button>';
+    }else{
+      html+='<button class="btn btn-sm" onclick="alarmTrigger(\''+a.alarm_id+'\')">▶ Starten</button>';
+    }
+    html+='<button class="btn btn-sm" onclick="alarmDelete(\''+a.alarm_id+'\')">🗑</button>';
+    html+='</div></div>';
+  });
+  html+='</div>';
+  el.innerHTML=html;
+}
+
+function renderAlarmPresets(presets){
+  var el=$('alarm-presets');if(!el||!presets.length){if(el)el.innerHTML='';return}
+  var html='<div style="font-size:12px;font-weight:600;margin-bottom:6px">Presets</div><div class="alarm-preset-grid">';
+  presets.forEach(function(p){
+    var modeIcon=p.mode==='wake'?'🌅':'🌇';
+    html+='<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px;font-size:11px">';
+    html+='<div style="font-weight:600">'+modeIcon+' '+escHtml(p.label||p.preset_id)+'</div>';
+    html+='<div style="color:var(--dim);margin:3px 0;font-size:10px">'+escHtml(p.description||'')+'</div>';
+    html+='<button class="btn btn-sm" style="margin-top:4px" onclick="alarmFromPreset(\''+escHtml(p.preset_id)+'\')">Wecker erstellen</button>';
+    html+='</div>';
+  });
+  html+='</div>';
+  el.innerHTML=html;
+}
+
+function renderAlarmCurves(curves){
+  var el=$('alarm-curves');if(!el||!curves.length){if(el)el.innerHTML='';return}
+  var html='<div style="font-size:12px;font-weight:600;margin-bottom:6px">Kurventypen</div><div style="display:flex;gap:8px;flex-wrap:wrap">';
+  curves.forEach(function(c){
+    var pts=(c.samples||[]).map(function(v,i){return (i*10)+','+(100-v*100)}).join(' ');
+    html+='<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px;text-align:center;min-width:90px">';
+    html+='<svg viewBox="0 0 100 100" style="width:55px;height:35px;display:block;margin:0 auto"><polyline points="'+pts+'" fill="none" stroke="var(--accent)" stroke-width="2"/></svg>';
+    html+='<div style="font-size:10px;font-weight:600;margin-top:2px">'+escHtml(c.type||'')+'</div>';
+    html+='<div style="font-size:9px;color:var(--dim)">'+escHtml((c.description||'').split('—')[0].trim())+'</div>';
+    html+='</div>';
+  });
+  html+='</div>';
+  el.innerHTML=html;
+}
+
+function alarmTrigger(id){
+  apiPost('/api/v1/alarm/alarms/'+id+'/trigger',{}).then(function(r){
+    if(r&&r.ok)addHistory('Wecker gestartet');loadAlarmData();
+  });
+}
+function alarmSnooze(id){
+  apiPost('/api/v1/alarm/alarms/'+id+'/snooze',{}).then(function(r){
+    if(r&&r.ok)addHistory('Snooze ('+(r.snooze_minutes||9)+' Min)');loadAlarmData();
+  });
+}
+function alarmCancel(id){
+  apiPost('/api/v1/alarm/alarms/'+id+'/cancel',{}).then(function(r){
+    if(r&&r.ok)addHistory('Wecker gestoppt');loadAlarmData();
+  });
+}
+function alarmDelete(id){
+  if(!confirm('Wecker loeschen?'))return;
+  fetch(API+'/api/v1/alarm/alarms/'+id,withAuth({method:'DELETE'})).then(function(){
+    addHistory('Wecker geloescht');loadAlarmData();
+  });
+}
+function alarmFromPreset(presetId){
+  apiPost('/api/v1/alarm/presets/'+presetId+'/create-alarm',{
+    schedule:{time:'07:00',days:['mon','tue','wed','thu','fri']}
+  }).then(function(r){
+    if(r&&r.ok){addHistory('Wecker aus Preset erstellt');loadAlarmData()}
+  });
+}
+
+function showAlarmCreate(){
+  var modal=$('alarm-modal');var content=$('alarm-modal-content');
+  if(!modal||!content)return;
+  $('alarm-modal-title').textContent='Neuer Wecker';
+  var curves=(alarmDashboard&&alarmDashboard.curves||[]).map(function(c){return '<option value="'+escHtml(c.type)+'">'+escHtml(c.type)+' — '+escHtml((c.description||'').split('—')[0].trim())+'</option>'}).join('');
+  if(!curves)curves='<option value="quadratic">quadratic</option><option value="sigmoid">sigmoid</option><option value="linear">linear</option><option value="exponential">exponential</option><option value="philips_hue">philips_hue</option>';
+  var inputStyle='padding:6px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;font-size:12px;width:100%';
+  var labelStyle='font-size:11px;font-weight:600;color:var(--dim);margin-bottom:2px';
+  content.innerHTML=
+    '<div style="display:flex;flex-direction:column;gap:10px">'+
+    '<div><div style="'+labelStyle+'">Name</div><input id="alarm-new-name" type="text" value="Wecker" style="'+inputStyle+'"></div>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'+
+      '<div><div style="'+labelStyle+'">Modus</div><select id="alarm-new-mode" style="'+inputStyle+'"><option value="wake">Aufwachen (Sunrise)</option><option value="sleep">Einschlafen (Sunset)</option></select></div>'+
+      '<div><div style="'+labelStyle+'">Zeit</div><input id="alarm-new-time" type="time" value="07:00" style="'+inputStyle+'"></div>'+
+    '</div>'+
+    '<div><div style="'+labelStyle+'">Tage</div><div id="alarm-new-days" style="display:flex;gap:6px;flex-wrap:wrap">'+
+      ['mon','tue','wed','thu','fri','sat','sun'].map(function(d){return '<label style="font-size:11px;display:flex;align-items:center;gap:2px;cursor:pointer"><input type="checkbox" value="'+d+'"'+(['mon','tue','wed','thu','fri'].indexOf(d)>=0?' checked':'')+'>'+d.toUpperCase()+'</label>'}).join('')+
+    '</div></div>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'+
+      '<div><div style="'+labelStyle+'">Lichtkurve</div><select id="alarm-new-curve" style="'+inputStyle+'">'+curves+'</select></div>'+
+      '<div><div style="'+labelStyle+'">Dauer (Min)</div><input id="alarm-new-duration" type="number" value="30" min="5" max="120" style="'+inputStyle+'"></div>'+
+    '</div>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'+
+      '<div><div style="'+labelStyle+'">Snooze (Min)</div><input id="alarm-new-snooze" type="number" value="9" min="1" max="30" style="'+inputStyle+'"></div>'+
+      '<div><div style="'+labelStyle+'">Licht-Entities</div><input id="alarm-new-lights" type="text" placeholder="light.schlafzimmer" style="'+inputStyle+'"></div>'+
+    '</div>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'+
+      '<div><div style="'+labelStyle+'">Sonos-Raum</div><input id="alarm-new-sonos" type="text" placeholder="Schlafzimmer" style="'+inputStyle+'"></div>'+
+      '<div><div style="'+labelStyle+'">Sonos Favorit</div><input id="alarm-new-fav" type="text" placeholder="Morning Jazz" style="'+inputStyle+'"></div>'+
+    '</div>'+
+    '<button class="btn" style="margin-top:6px;padding:10px;background:var(--accent);color:#fff;font-weight:600;border-color:var(--accent)" onclick="submitAlarmCreate()">Wecker erstellen</button>'+
+    '</div>';
+  modal.style.display='flex';
+}
+
+function submitAlarmCreate(){
+  var name=($('alarm-new-name')||{}).value||'Wecker';
+  var mode=($('alarm-new-mode')||{}).value||'wake';
+  var time=($('alarm-new-time')||{}).value||'07:00';
+  var days=[].slice.call(document.querySelectorAll('#alarm-new-days input:checked')).map(function(c){return c.value});
+  var curve=($('alarm-new-curve')||{}).value||'quadratic';
+  var duration=parseInt(($('alarm-new-duration')||{}).value||'30');
+  var snooze=parseInt(($('alarm-new-snooze')||{}).value||'9');
+  var lights=(($('alarm-new-lights')||{}).value||'').split(',').map(function(s){return s.trim()}).filter(Boolean);
+  var sonos=($('alarm-new-sonos')||{}).value||'';
+  var fav=($('alarm-new-fav')||{}).value||'';
+  var isWake=mode==='wake';
+  var data={
+    name:name,mode:mode,
+    schedule:{time:time,days:days,enabled:true},
+    light:{entity_ids:lights,curve_type:curve,duration_minutes:duration,
+      brightness_start_pct:isWake?0:80,brightness_end_pct:isWake?100:0,
+      cct_start_k:isWake?1800:3000,cct_end_k:isWake?5000:1800},
+    music:{source_type:'favorite',source_name:fav,sonos_room:sonos,
+      volume_start_pct:isWake?5:30,volume_end_pct:isWake?40:5,
+      enabled:!!(sonos||fav)},
+    snooze_minutes:snooze
+  };
+  apiPost('/api/v1/alarm/alarms',data).then(function(r){
+    if(r&&r.ok){
+      addHistory('Wecker "'+name+'" erstellt');
+      $('alarm-modal').style.display='none';
+      loadAlarmData();
+    }else{addHistory('Wecker erstellen fehlgeschlagen')}
+  });
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   14b. MUSIKWOLKE / SONOS CONTROLS
+   ═══════════════════════════════════════════════════════════════════ */
+
+function loadSonosData(){
+  return Promise.all([
+    api('/api/v1/sonos/health'),
+    api('/api/v1/sonos/rooms'),
+    api('/api/v1/sonos/presets')
+  ]).then(function(results){
+    var health=results[0],roomsResp=results[1],presetsResp=results[2];
+
+    /* Health badge */
+    var hb=$('sonos-health-badge');
+    if(hb){
+      if(health&&health.healthy){hb.textContent='Online';hb.style.background='rgba(52,211,153,.15)';hb.style.color='var(--green)'}
+      else{hb.textContent='Offline';hb.style.background='rgba(248,113,113,.15)';hb.style.color='var(--red)'}
+    }
+
+    /* TTS room dropdown */
+    var rooms=(roomsResp&&roomsResp.rooms)||[];
+    var sel=$('sonos-tts-room');
+    if(sel){
+      sel.innerHTML='<option value="">Alle</option>'+rooms.map(function(r){return '<option value="'+escHtml(r)+'">'+escHtml(r)+'</option>'}).join('');
+    }
+
+    /* Room cards with playback state */
+    var cardsEl=$('sonos-rooms');
+    if(!cardsEl)return;
+    if(!rooms.length){cardsEl.innerHTML='<div class="empty">Keine Sonos-Raeume</div>';return}
+
+    var promises=rooms.map(function(room){
+      return api('/api/v1/sonos/rooms/'+encodeURIComponent(room)+'/state').then(function(st){
+        return {room:room,state:(st&&st.state)||{}};
+      });
+    });
+    return Promise.all(promises).then(function(roomStates){
+      var html='';
+      roomStates.forEach(function(rs){
+        var room=rs.room,state=rs.state;
+        var pb=(state.playbackState||state.currentState||'STOPPED').toUpperCase();
+        var vol=state.volume||0;
+        var track=state.currentTrack||{};
+        var title=track.title||track.artist||'';
+        var isPlaying=pb==='PLAYING';
+        var isPaused=pb.indexOf('PAUSE')>=0;
+        var stLabel=isPlaying?'Spielt':isPaused?'Pause':'Idle';
+        var stBadge=isPlaying?badge(stLabel,'g'):isPaused?badge(stLabel,'y'):badge(stLabel,'p');
+        var rEnc=encodeURIComponent(room);
+        html+='<div class="sonos-card'+(isPlaying?' playing':'')+'">';
+        html+='<div style="display:flex;align-items:center;gap:8px"><span style="font-size:16px">🔊</span>';
+        html+='<span style="font-weight:600;font-size:13px;flex:1">'+escHtml(room)+'</span>'+stBadge+'</div>';
+        if(title)html+='<div style="font-size:11px;color:var(--dim);margin-top:4px">🎵 '+escHtml(title)+(track.artist?' — '+escHtml(track.artist):'')+'</div>';
+        html+='<div class="vol-row"><span>🔈</span>';
+        html+='<input type="range" min="0" max="100" value="'+vol+'" onchange="sonosSetVol(\''+rEnc+'\',this.value)" oninput="this.nextElementSibling.textContent=this.value+\'%\'">';
+        html+='<span>'+vol+'%</span></div>';
+        html+='<div class="sonos-ctrl">';
+        html+='<button class="btn btn-sm" onclick="sonosPlay(\''+rEnc+'\')">▶</button>';
+        html+='<button class="btn btn-sm" onclick="sonosPause(\''+rEnc+'\')">⏸</button>';
+        html+='<button class="btn btn-sm" onclick="sonosNext(\''+rEnc+'\')">⏭</button>';
+        html+='<select style="font-size:10px;padding:3px 6px;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text)" onchange="sonosPlayFav(\''+rEnc+'\',this.value);this.selectedIndex=0" id="sfav-'+room.replace(/\s/g,'_')+'">';
+        html+='<option value="">Favorit...</option></select>';
+        html+='</div></div>';
+      });
+      cardsEl.innerHTML=html;
+
+      /* Load favorites per room */
+      roomStates.forEach(function(rs){
+        api('/api/v1/sonos/rooms/'+encodeURIComponent(rs.room)+'/favorites').then(function(fr){
+          var favs=(fr&&fr.favorites)||[];
+          var fsel=$('sfav-'+rs.room.replace(/\s/g,'_'));
+          if(fsel&&favs.length){
+            fsel.innerHTML='<option value="">Favorit...</option>'+favs.map(function(f){
+              var name=typeof f==='string'?f:(f.title||f.name||'');
+              return '<option value="'+escHtml(name)+'">'+escHtml(name)+'</option>';
+            }).join('');
+          }
+        });
+      });
+    });
+
+    /* Presets */
+    var presets=(presetsResp&&presetsResp.presets)||[];
+    var prEl=$('sonos-presets');
+    if(prEl&&presets.length){
+      prEl.innerHTML='<div style="font-size:11px;font-weight:600;margin-bottom:4px">Presets</div><div style="display:flex;gap:6px;flex-wrap:wrap">'+
+        presets.map(function(p){return '<button class="btn btn-sm" onclick="sonosPreset(\''+escHtml(p.preset_id)+'\')">'+escHtml(p.label||p.preset_id)+'</button>'}).join('')+'</div>';
+    }
+  });
+}
+
+function sonosPlay(r){apiPost('/api/v1/sonos/rooms/'+r+'/play',{}).then(function(){addHistory('Sonos Play: '+decodeURIComponent(r))})}
+function sonosPause(r){apiPost('/api/v1/sonos/rooms/'+r+'/pause',{}).then(function(){addHistory('Sonos Pause: '+decodeURIComponent(r))})}
+function sonosNext(r){apiPost('/api/v1/sonos/rooms/'+r+'/next',{}).then(function(){addHistory('Sonos Next: '+decodeURIComponent(r))})}
+function sonosSetVol(r,v){apiPost('/api/v1/sonos/rooms/'+r+'/volume',{volume:parseInt(v)})}
+function sonosPlayFav(r,name){if(!name)return;apiPost('/api/v1/sonos/rooms/'+r+'/favorite',{name:name}).then(function(){addHistory('Sonos: '+decodeURIComponent(name))})}
+function sonosPauseAll(){apiPost('/api/v1/sonos/pauseall',{}).then(function(){addHistory('Alle Sonos pausiert')})}
+function sonosResumeAll(){apiPost('/api/v1/sonos/resumeall',{}).then(function(){addHistory('Alle Sonos fortgesetzt')})}
+function sonosSay(){
+  var text=($('sonos-tts-text')||{}).value;if(!text)return;
+  var room=($('sonos-tts-room')||{}).value;
+  var ep=room?'/api/v1/sonos/rooms/'+encodeURIComponent(room)+'/say':'/api/v1/sonos/sayall';
+  apiPost(ep,{text:text}).then(function(){addHistory('TTS: '+text);$('sonos-tts-text').value=''});
+}
+function sonosPreset(id){apiPost('/api/v1/sonos/presets/'+id+'/apply',{}).then(function(r){addHistory(r&&r.ok?'Preset angewendet':'Preset-Fehler')})}
+
+/* ═══════════════════════════════════════════════════════════════════
+   14b2. CONFLICT RESOLUTION
+   ═══════════════════════════════════════════════════════════════════ */
+
+function loadConflicts(){
+  api('/api/v1/conflicts/state').then(function(d){
+    if(!d||!d.ok){$('conflict-details').innerHTML='<div class="empty">Nicht verfuegbar</div>';return}
+    var badge=$('conflict-badge');
+    if(d.active){
+      badge.textContent=d.conflict_count+' Konflikt'+(d.conflict_count>1?'e':'');
+      badge.style.background='var(--red)';badge.style.color='#fff';
+    }else{
+      badge.textContent='Keine Konflikte';
+      badge.style.background='var(--green)';badge.style.color='#fff';
+    }
+    /* Strategy dropdown */
+    var sel=$('conflict-strategy');
+    if(sel)sel.value=d.resolution||'weighted';
+    var ovr=$('conflict-override-user');
+    if(ovr)ovr.style.display=(d.resolution==='override')?'':'none';
+    /* Details */
+    var el=$('conflict-details');
+    if(!d.active||!d.details||!d.details.length){
+      el.innerHTML='<div style="font-size:11px;color:var(--dim)">'+d.users_involved.length+' Nutzer, keine divergierenden Praeferenzen.</div>';
+    }else{
+      var html='<div style="display:grid;gap:6px">';
+      d.details.forEach(function(c){
+        var pctA=Math.round(c.value_a*100),pctB=Math.round(c.value_b*100);
+        html+='<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--surface);border-radius:6px;font-size:11px">';
+        html+='<span style="font-weight:600;min-width:70px;color:var(--orange)">'+escHtml(c.axis)+'</span>';
+        html+='<span>'+escHtml(c.user_a)+': '+pctA+'%</span>';
+        html+='<span style="color:var(--red)">↔</span>';
+        html+='<span>'+escHtml(c.user_b)+': '+pctB+'%</span>';
+        html+='<span style="color:var(--dim);margin-left:auto">Δ '+Math.round(c.divergence*100)+'%</span>';
+        html+='</div>';
+      });
+      html+='</div>';
+      el.innerHTML=html;
+    }
+    /* Resolved mood */
+    var res=$('conflict-resolved');
+    if(d.resolved_mood&&Object.keys(d.resolved_mood).length){
+      var rh='<div style="font-size:11px;color:var(--dim);margin-bottom:4px">Aufgeloeste Stimmung ('+escHtml(d.resolution)+'):</div>';
+      rh+='<div style="display:flex;gap:10px">';
+      Object.keys(d.resolved_mood).forEach(function(k){
+        rh+='<span style="font-size:11px"><b>'+escHtml(k)+'</b>: '+Math.round(d.resolved_mood[k]*100)+'%</span>';
+      });
+      rh+='</div>';
+      res.innerHTML=rh;
+    }else{res.innerHTML=''}
+  }).catch(function(){
+    $('conflict-details').innerHTML='<div class="empty">API nicht erreichbar</div>';
+  });
+}
+function setConflictStrategy(){
+  var sel=$('conflict-strategy');if(!sel)return;
+  var strategy=sel.value;
+  var ovrEl=$('conflict-override-user');
+  if(ovrEl)ovrEl.style.display=(strategy==='override')?'':'none';
+  var body={strategy:strategy};
+  if(strategy==='override'&&ovrEl&&ovrEl.value)body.override_user=ovrEl.value;
+  apiPost('/api/v1/conflicts/strategy',body).then(function(){loadConflicts()});
+}
+function evaluateConflicts(){
+  apiPost('/api/v1/conflicts/evaluate',{}).then(function(){loadConflicts()});
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   14c. ZONE AUTOMATION CONFIG
+   ═══════════════════════════════════════════════════════════════════ */
+
+function loadZoneAutomation(){
+  return api('/api/v1/zone-automation/dashboard').then(function(data){
+    if(!data||!data.ok)return;
+    var zones=data.zones||[];
+    $('za-active-count').textContent=zones.filter(function(z){return z.config&&z.config.automation_mode!=='off'}).length;
+    var el=$('za-zones');if(!el)return;
+    if(!zones.length){el.innerHTML='<div class="empty">Keine Zonen konfiguriert</div>';return}
+
+    el.innerHTML=zones.map(function(z){
+      var c=z.config||{};var lc=c.light||{};var mc=c.music||{};var st=z.state||{};
+      var zid=z.zone_id;
+      var mode=c.automation_mode||'learning';
+      var mColors={off:'var(--dim)',learning:'var(--yellow)',autonomy:'var(--green)'};
+      var mLabels={off:'Aus',learning:'Lernend',autonomy:'Autonom'};
+      var html='<div class="za-card">';
+      html+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">';
+      html+='<span style="font-weight:600;font-size:13px;flex:1">'+escHtml(c.zone_name||zid)+'</span>';
+      if(st.occupied)html+='<span style="color:var(--green);font-size:10px">● Besetzt</span>';
+      html+='<span style="color:'+mColors[mode]+';font-size:10px;font-weight:600">'+mLabels[mode]+'</span></div>';
+
+      /* Mode selector */
+      html+='<div style="display:flex;gap:3px;margin-bottom:10px">';
+      ['off','learning','autonomy'].forEach(function(m){
+        var active=mode===m;
+        html+='<button class="btn btn-sm" style="flex:1;'+(active?'background:'+mColors[m]+';color:#000;border-color:'+mColors[m]:'')+'" onclick="zaSetMode(\''+zid+'\',\''+m+'\')">'+mLabels[m]+'</button>';
+      });
+      html+='</div>';
+
+      /* Light config */
+      html+='<div style="font-size:10px;font-weight:600;color:var(--accent);margin-bottom:4px;display:flex;align-items:center;gap:6px">💡 Licht';
+      html+='<label class="tg-sw"><input type="checkbox" '+(lc.enabled?'checked':'')+' onchange="zaToggleLight(\''+zid+'\',this.checked)"><span class="tg-s"></span></label></div>';
+      if(lc.enabled){
+        html+=zaSlider(zid,'light','presence_delay_s',lc.presence_delay_s||5,'Praesenz-Delay','s',0,120,1);
+        html+=zaSlider(zid,'light','absence_delay_s',lc.absence_delay_s||120,'Abschalt-Delay','s',0,600,10);
+        html+=zaSlider(zid,'light','brightness_target_pct',lc.brightness_target_pct||80,'Helligkeit','%',0,100,1);
+        html+=zaSlider(zid,'light','dampening_band_pct',lc.dampening_band_pct||10,'Daempfung','%',0,50,1);
+      }
+
+      /* Music config */
+      html+='<div style="font-size:10px;font-weight:600;color:var(--accent);margin:8px 0 4px;display:flex;align-items:center;gap:6px">🎵 Musik';
+      html+='<label class="tg-sw"><input type="checkbox" '+(mc.enabled?'checked':'')+' onchange="zaToggleMusic(\''+zid+'\',this.checked)"><span class="tg-s"></span></label></div>';
+      if(mc.enabled){
+        html+='<div class="za-toggle"><label class="tg-sw"><input type="checkbox" '+(mc.presence_auto_play?'checked':'')+' onchange="zaUpdateMusic(\''+zid+'\',\'presence_auto_play\',this.checked)"><span class="tg-s"></span></label><span style="color:var(--dim)">Auto-Play bei Praesenz</span></div>';
+        html+=zaSlider(zid,'music','default_volume_pct',mc.default_volume_pct||30,'Lautstaerke','%',0,100,1);
+        html+='<div class="za-toggle"><label class="tg-sw"><input type="checkbox" '+(mc.follow_mode?'checked':'')+' onchange="zaUpdateMusic(\''+zid+'\',\'follow_mode\',this.checked)"><span class="tg-s"></span></label><span style="color:var(--dim)">Follow-Modus</span></div>';
+      }
+
+      /* Status */
+      if(st.lights_on)html+='<div style="font-size:10px;color:var(--green);margin-top:6px">💡 Licht AN ('+(st.current_brightness_pct||0)+'%)</div>';
+      if(st.music_playing)html+='<div style="font-size:10px;color:var(--accent);margin-top:2px">🎵 Musik laeuft</div>';
+
+      html+='</div>';
+      return html;
+    }).join('');
+  });
+}
+
+function zaSlider(zid,section,key,val,label,unit,min,max,step){
+  var fn=section==='light'?'zaUpdateLight':'zaUpdateMusic';
+  return '<div class="za-slider"><label>'+escHtml(label)+'</label><input type="range" min="'+min+'" max="'+max+'" step="'+step+'" value="'+val+'" onchange="'+fn+'(\''+zid+'\',\''+key+'\',+this.value);this.nextElementSibling.textContent=this.value+\''+unit+'\'"><span class="sv">'+val+unit+'</span></div>';
+}
+
+function zaSetMode(zid,mode){apiPost('/api/v1/zone-automation/zones/'+zid+'/mode',{mode:mode}).then(function(){addHistory('Modus: '+mode+' ('+zid+')');loadZoneAutomation()})}
+function zaToggleLight(zid,en){apiPost('/api/v1/zone-automation/zones/'+zid+'/override',{light_enabled:en}).then(function(){loadZoneAutomation()})}
+function zaToggleMusic(zid,en){apiPost('/api/v1/zone-automation/zones/'+zid+'/override',{music_enabled:en}).then(function(){loadZoneAutomation()})}
+function zaUpdateLight(zid,key,val){apiPost('/api/v1/zone-automation/zones/'+zid+'/config',{light:{[key]:val}})}
+function zaUpdateMusic(zid,key,val){apiPost('/api/v1/zone-automation/zones/'+zid+'/config',{music:{[key]:val}})}
+
+/* ═══════════════════════════════════════════════════════════════════
+   14d. ZONE DETAIL MODAL
+   ═══════════════════════════════════════════════════════════════════ */
+var DOMAIN_ICONS={light:'💡',switch:'⭕',binary_sensor:'👁',sensor:'🌡',climate:'❄️',media_player:'🎵',cover:'🚪',person:'👤',device_tracker:'📱',fan:'🌬',lock:'🔒',camera:'📷'};
+var ROLE_ICONS={main_light:'💡',ambient_light:'🕯',sensor:'📡',presence:'👤',media:'🎵',climate:'🌡',cover:'🚪',switch:'⭕',camera:'📷',lock:'🔒',energy:'⚡'};
+
+function showZoneDetail(zoneId){
+  $('zd-title').textContent='Zone: '+zoneId;
+  $('zd-content').innerHTML='<div class="empty">Laden...</div>';
+  var modal=$('zone-detail-modal');modal.style.display='flex';
+
+  Promise.all([
+    api('/api/v1/zone/dashboard/'+encodeURIComponent(zoneId)),
+    api('/api/v1/scenes?zone_id='+encodeURIComponent(zoneId)),
+    api('/api/v1/scenes/presets')
+  ]).then(function(results){
+    var detail=results[0],scenesResp=results[1],presetsResp=results[2];
+    var zd=(detail&&detail.ok)?detail.zone:null;
+    var scenes=scenesResp?(scenesResp.scenes||[]):[];
+    var presets=presetsResp?(presetsResp.presets||[]):[];
+    var entities=zd?(zd.entities||{}):{};
+    var domainEnts=zd?(zd.domain_entities||{}):{};
+    var mood=zd?zd.mood:null;
+    var entityIds=zd?(zd.entity_ids||[]):[];
+    var status=zd?zd.status:'idle';
+    var personCount=zd?(zd.person_count||0):0;
+
+    var html='';
+
+    /* Status header */
+    var stBadge=status==='active'?badge('Aktiv','g'):status==='disabled'?badge('Aus','r'):badge('Idle','y');
+    html+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap">'+stBadge;
+    html+='<span style="font-size:11px;color:var(--dim)">'+personCount+' Person'+(personCount!==1?'en':'')+' · '+entityIds.length+' Entities</span></div>';
+
+    /* Mood rings */
+    if(mood){
+      html+='<div class="zd-sec"><div class="zd-sec-hd">🎭 Stimmung</div><div class="zd-mood-grid">';
+      [{key:'comfort',label:'Komfort',color:'var(--green)'},{key:'joy',label:'Freude',color:'var(--accent)'},{key:'frugality',label:'Sparsamkeit',color:'var(--orange)'}].forEach(function(d){
+        var pct=Math.round((mood[d.key]||0)*100);
+        var deg=Math.round(pct*3.6);
+        html+='<div class="zd-mood-item"><div class="zd-mood-ring" style="border-color:'+d.color+';background:conic-gradient('+d.color+' '+deg+'deg,var(--card) '+deg+'deg)">'+pct+'%</div>';
+        html+='<div style="font-size:9px;color:var(--dim)">'+d.label+'</div></div>';
+      });
+      html+='</div></div>';
+    }
+
+    /* Domain aggregates */
+    if(Object.keys(domainEnts).length){
+      html+='<div class="zd-sec"><div class="zd-sec-hd">📊 Entities nach Typ</div><div class="zd-agg-grid">';
+      Object.keys(domainEnts).forEach(function(dom){
+        html+='<div class="zd-agg"><div class="za-icon">'+(DOMAIN_ICONS[dom]||'⚙')+'</div><div class="za-count">'+domainEnts[dom].length+'</div><div class="za-label">'+dom+'</div></div>';
+      });
+      html+='</div></div>';
+    }
+
+    /* Entities by role */
+    if(Object.keys(entities).length){
+      html+='<div class="zd-sec"><div class="zd-sec-hd">👥 Entities nach Rolle</div>';
+      Object.keys(entities).forEach(function(role){
+        var eids=Array.isArray(entities[role])?entities[role]:[];
+        if(!eids.length)return;
+        html+='<div style="margin-bottom:6px"><span style="font-size:11px;font-weight:600">'+(ROLE_ICONS[role]||'')+' '+role+' ('+eids.length+')</span>';
+        html+='<div class="zd-ent-list">';
+        eids.forEach(function(eid){html+='<span class="zd-ent-tag" title="'+escHtml(eid)+'">'+escHtml(eid.split('.').pop())+'</span>'});
+        html+='</div></div>';
+      });
+      html+='</div>';
+    }
+
+    /* Scenes */
+    html+='<div class="zd-sec"><div class="zd-sec-hd">🎬 Szenen</div><div class="zd-scene-grid">';
+    presets.forEach(function(p){
+      html+='<div class="zd-scene" onclick="zdApplyPreset(\''+escHtml(zoneId)+'\',\''+escHtml(p.preset_id)+'\')">'+escHtml(p.name||p.preset_id)+'</div>';
+    });
+    scenes.forEach(function(s){
+      html+='<div class="zd-scene" onclick="zdApplyScene(\''+escHtml(s.scene_id)+'\')">⭐ '+escHtml(s.name)+'</div>';
+    });
+    html+='</div>';
+    html+='<button class="btn btn-sm" style="margin-top:6px" onclick="zdSaveScene(\''+escHtml(zoneId)+'\')">💾 Szene speichern</button></div>';
+
+    /* Media */
+    var hasMedia=entityIds.some(function(e){return e.indexOf('media_player.')===0});
+    if(hasMedia){
+      html+='<div class="zd-sec"><div class="zd-sec-hd">🎵 Medien</div><div id="zd-media-'+escHtml(zoneId)+'"><div class="empty">Lade Medien...</div></div></div>';
+    }
+
+    /* Quick actions */
+    html+='<div class="zd-sec"><div class="zd-sec-hd">⚡ Aktionen</div><div class="zd-actions">';
+    html+='<button class="btn btn-sm" onclick="zdAskStyx(\''+escHtml(zoneId)+'\')">💬 Im Chat fragen</button>';
+    html+='</div></div>';
+
+    $('zd-content').innerHTML=html;
+
+    /* Async: load media */
+    if(hasMedia)zdLoadMedia(zoneId);
+  });
+}
+
+function zdLoadMedia(zoneId){
+  Promise.all([
+    api('/api/v1/media/zones/'+encodeURIComponent(zoneId)+'/state'),
+    api('/api/v1/media/zones/'+encodeURIComponent(zoneId)+'/favorites')
+  ]).then(function(results){
+    var stateResp=results[0],favResp=results[1];
+    var el=$('zd-media-'+zoneId);if(!el)return;
+    var players=stateResp?(stateResp.players||[]):[];
+    var playing=null;
+    for(var i=0;i<players.length;i++){if(players[i].state==='playing'){playing=players[i];break}}
+    var html='';
+    if(playing){
+      html+='<div style="display:flex;align-items:center;gap:10px;background:var(--card);border-radius:8px;padding:10px">';
+      html+='<span style="font-size:20px">🎶</span><div><div style="font-weight:600;font-size:12px">'+escHtml(playing.media_title||'')+'</div>';
+      html+='<div style="font-size:10px;color:var(--dim)">'+escHtml(playing.media_artist||'')+' · '+escHtml(playing.source||'')+'</div></div></div>';
+    }else{html+='<div style="font-size:11px;color:var(--dim)">Keine Wiedergabe aktiv</div>'}
+    var favs=(favResp&&favResp.ok)?(favResp.favorites||[]):[];
+    if(favs.length){
+      html+='<select style="margin-top:6px;width:100%;padding:6px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:11px" onchange="zdSelectSource(\''+escHtml(zoneId)+'\',this.value)">';
+      html+='<option value="">Favorit waehlen...</option>';
+      favs.forEach(function(f){var n=typeof f==='string'?f:(f.title||f.name||'');html+='<option value="'+escHtml(n)+'">'+escHtml(n)+'</option>'});
+      html+='</select>';
+    }
+    el.innerHTML=html;
+  });
+}
+
+function zdApplyPreset(zid,pid){apiPost('/api/v1/scenes/presets/'+pid+'/apply',{zone_id:zid}).then(function(){addHistory('Preset: '+pid+' ('+zid+')')})}
+function zdApplyScene(sid){apiPost('/api/v1/scenes/'+sid+'/apply',{}).then(function(){addHistory('Szene angewendet')})}
+function zdSaveScene(zid){
+  var name=prompt('Name fuer die Szene:');if(!name)return;
+  apiPost('/api/v1/scenes/create',{zone_id:zid,name:name}).then(function(r){
+    addHistory(r&&r.ok?'Szene "'+name+'" gespeichert':'Fehler beim Speichern');
+  });
+}
+function zdSelectSource(zid,src){if(!src)return;apiPost('/api/v1/media/zones/'+encodeURIComponent(zid)+'/select-source',{source:src})}
+function zdAskStyx(zid){
+  $('zone-detail-modal').style.display='none';
+  switchTab('styx');
+  var inp=$('chat-input');if(inp){inp.value='Was ist der Status der Zone "'+zid+'"?';inp.focus()}
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   15. Loader Map + Init
    ═══════════════════════════════════════════════════════════════════ */
 var loaders={
   styx:loadStyx,
