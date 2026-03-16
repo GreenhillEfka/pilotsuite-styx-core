@@ -28,7 +28,7 @@ from typing import Any, Optional
 
 from flask import Blueprint, jsonify, request
 
-from copilot_core.api.security import require_token
+from copilot_core.api.security import require_token, optional_token
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -51,7 +51,7 @@ def init_zone_automation_api(controller=None) -> None:
 
 
 @zone_automation_bp.route("/dashboard", methods=["GET"])
-@require_token
+@optional_token
 def get_dashboard():
     """Full automation dashboard with all zone states."""
     if _controller is None:
@@ -63,7 +63,7 @@ def get_dashboard():
 
 
 @zone_automation_bp.route("/zones/<zone_id>", methods=["GET"])
-@require_token
+@optional_token
 def get_zone_state(zone_id: str):
     """Get zone automation state and config."""
     if _controller is None:
@@ -284,7 +284,7 @@ def update_entity_role(zone_id: str, entity_id: str):
 
 
 @zone_automation_bp.route("/tags", methods=["GET"])
-@require_token
+@optional_token
 def list_tags():
     """List all available tag definitions."""
     if _controller is None:
@@ -293,7 +293,7 @@ def list_tags():
 
 
 @zone_automation_bp.route("/roles", methods=["GET"])
-@require_token
+@optional_token
 def list_roles():
     """List all available entity roles."""
     if _controller is None:
@@ -302,7 +302,7 @@ def list_roles():
 
 
 @zone_automation_bp.route("/entities/search", methods=["GET"])
-@require_token
+@optional_token
 def search_entities():
     """Search entities across all zones.
 
