@@ -3,7 +3,7 @@ info:
   title: PilotSuite Core API
   description: |
     REST API for the PilotSuite Core Add-on.
-    
+
     This API provides endpoints for:
     - Habitus pattern mining and rules discovery
     - Brain graph visualization and synchronization
@@ -14,13 +14,15 @@ info:
     - System health monitoring
     - Energy monitoring, anomaly detection, and load shifting
     - Zone-based energy tracking and Sankey flow diagrams
-    
+    - Network module management (Z-Wave, Zigbee, Thread, HomeAssistant)
+    - Module router for centralized network module orchestration
+
     ## Authentication
     All endpoints require `X-Auth-Token` header when authentication is enabled.
-    
+
     ## Idempotency
     Event endpoints support `Idempotency-Key` header for deduplication.
-  version: 5.4.0
+  version: 14.7.0
   contact:
     name: PilotSuite
     url: https://github.com/GreenhillEfka/pilotsuite-styx-core
@@ -61,6 +63,16 @@ tags:
     description: Energy monitoring, anomaly detection, load shifting, and Sankey diagrams
   - name: Documentation
     description: Interactive API documentation and OpenAPI spec
+  - name: ModuleRouter
+    description: Centralized network module orchestration, status, and config
+  - name: Z-Wave
+    description: Z-Wave network module status, devices, and config
+  - name: Zigbee
+    description: Zigbee network module status, devices, and config
+  - name: Thread
+    description: Thread/Matter network module status, devices, and config
+  - name: HomeAssistant Module
+    description: HomeAssistant integration module status, events, and config
 
 paths:
   # ==================== HABITUS ====================
@@ -1090,6 +1102,547 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/VoiceSuggestionsResponse'
+
+  # ==================== MODULE ROUTER ====================
+  /api/v1/modules/router/status:
+    get:
+      tags: [ModuleRouter]
+      summary: Get status of all network modules
+      operationId: getModuleRouterStatus
+      description: Returns status of all network modules (Z-Wave, Zigbee, Thread, HomeAssistant) via the centralized ModuleRouter
+      responses:
+        '200':
+          description: Module router status with per-module summaries
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModuleRouterStatusResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '503':
+          description: ModuleRouter service not available
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceUnavailableResponse'
+
+  /api/v1/modules/router/config:
+    get:
+      tags: [ModuleRouter]
+      summary: Get configuration of all network modules
+      operationId: getModuleRouterConfig
+      description: Returns merged configuration (defaults + persisted) for all network modules
+      responses:
+        '200':
+          description: All module configurations
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModuleRouterConfigResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '503':
+          description: ModuleRouter service not available
+
+  /api/v1/modules/router/config/{module}:
+    post:
+      tags: [ModuleRouter]
+      summary: Update configuration of a specific network module
+      operationId: updateModuleRouterConfig
+      description: Updates and persists configuration for a single network module (zwave, zigbee, thread, homeassistant)
+      parameters:
+        - name: module
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [zwave, zigbee, thread, homeassistant]
+          description: Network module identifier
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ModuleConfigUpdate'
+      responses:
+        '200':
+          description: Configuration updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModuleConfigUpdateResponse'
+        '400':
+          description: Unknown module name
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModuleConfigBadRequest'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '503':
+          description: ModuleRouter service not available
+
+  /api/v1/modules/router/refresh:
+    post:
+      tags: [ModuleRouter]
+      summary: Trigger immediate refresh of all network modules
+      operationId: refreshModuleRouter
+      description: Fetches all entity states from HA via HomeAssistantClient.get_states() and routes them to all enabled network module engines
+      responses:
+        '200':
+          description: Refresh result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModuleRefreshResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+        '503':
+          description: ModuleRouter service not available
+
+  # ==================== Z-WAVE MODULE ====================
+  /api/v1/modules/zwave/status:
+    get:
+      tags: [Z-Wave]
+      summary: Get Z-Wave network status
+      operationId: getZWaveStatus
+      description: Returns Z-Wave network status including controller state, device counts, dead/sleeping devices, and error count
+      responses:
+        '200':
+          description: Z-Wave network status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ZWaveStatusResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '503':
+          description: Z-Wave module not available
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceUnavailableResponse'
+
+  /api/v1/modules/zwave/devices:
+    get:
+      tags: [Z-Wave]
+      summary: List Z-Wave devices
+      operationId: getZWaveDevices
+      description: Returns list of all known Z-Wave devices with state, dead/sleeping status, and last seen timestamp
+      responses:
+        '200':
+          description: Z-Wave device list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NetworkDeviceListResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '503':
+          description: Z-Wave module not available
+
+  /api/v1/modules/zwave/config:
+    get:
+      tags: [Z-Wave]
+      summary: Get Z-Wave module configuration
+      operationId: getZWaveConfig
+      description: Returns current Z-Wave module configuration (polling interval, alert settings)
+      responses:
+        '200':
+          description: Z-Wave configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NetworkModuleConfigResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '503':
+          description: Z-Wave module not available
+    post:
+      tags: [Z-Wave]
+      summary: Update Z-Wave module configuration
+      operationId: updateZWaveConfig
+      description: Updates Z-Wave module configuration and persists via ModuleRouter
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ZWaveConfigUpdate'
+      responses:
+        '200':
+          description: Configuration updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NetworkModuleConfigResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '503':
+          description: Z-Wave module not available
+
+  /api/v1/modules/zwave/refresh:
+    post:
+      tags: [Z-Wave]
+      summary: Trigger Z-Wave state refresh
+      operationId: refreshZWave
+      description: Triggers immediate refresh of Z-Wave state from HA via the ModuleRouter
+      responses:
+        '200':
+          description: Refresh result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModuleRefreshResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '503':
+          description: ModuleRouter not available
+
+  # ==================== ZIGBEE MODULE ====================
+  /api/v1/modules/zigbee/status:
+    get:
+      tags: [Zigbee]
+      summary: Get Zigbee network status
+      operationId: getZigbeeStatus
+      description: Returns Zigbee network status including coordinator state, device counts, average LQI, and offline devices
+      responses:
+        '200':
+          description: Zigbee network status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ZigbeeStatusResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '503':
+          description: Zigbee module not available
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceUnavailableResponse'
+
+  /api/v1/modules/zigbee/devices:
+    get:
+      tags: [Zigbee]
+      summary: List Zigbee devices
+      operationId: getZigbeeDevices
+      description: Returns list of all known Zigbee devices with state, LQI, online/offline status
+      responses:
+        '200':
+          description: Zigbee device list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NetworkDeviceListResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '503':
+          description: Zigbee module not available
+
+  /api/v1/modules/zigbee/config:
+    get:
+      tags: [Zigbee]
+      summary: Get Zigbee module configuration
+      operationId: getZigbeeConfig
+      description: Returns current Zigbee module configuration (polling interval, LQI thresholds)
+      responses:
+        '200':
+          description: Zigbee configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NetworkModuleConfigResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '503':
+          description: Zigbee module not available
+    post:
+      tags: [Zigbee]
+      summary: Update Zigbee module configuration
+      operationId: updateZigbeeConfig
+      description: Updates Zigbee module configuration and persists via ModuleRouter
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ZigbeeConfigUpdate'
+      responses:
+        '200':
+          description: Configuration updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NetworkModuleConfigResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '503':
+          description: Zigbee module not available
+
+  /api/v1/modules/zigbee/refresh:
+    post:
+      tags: [Zigbee]
+      summary: Trigger Zigbee state refresh
+      operationId: refreshZigbee
+      description: Triggers immediate refresh of Zigbee state from HA via the ModuleRouter
+      responses:
+        '200':
+          description: Refresh result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModuleRefreshResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '503':
+          description: ModuleRouter not available
+
+  # ==================== THREAD MODULE ====================
+  /api/v1/modules/thread/status:
+    get:
+      tags: [Thread]
+      summary: Get Thread network status
+      operationId: getThreadStatus
+      description: Returns Thread mesh network status including border router state, device count, and router count
+      responses:
+        '200':
+          description: Thread network status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ThreadStatusResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '503':
+          description: Thread module not available
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceUnavailableResponse'
+
+  /api/v1/modules/thread/devices:
+    get:
+      tags: [Thread]
+      summary: List Thread devices
+      operationId: getThreadDevices
+      description: Returns list of all known Thread devices with state and router role
+      responses:
+        '200':
+          description: Thread device list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NetworkDeviceListResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '503':
+          description: Thread module not available
+
+  /api/v1/modules/thread/config:
+    get:
+      tags: [Thread]
+      summary: Get Thread module configuration
+      operationId: getThreadConfig
+      description: Returns current Thread module configuration (polling interval)
+      responses:
+        '200':
+          description: Thread configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NetworkModuleConfigResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '503':
+          description: Thread module not available
+    post:
+      tags: [Thread]
+      summary: Update Thread module configuration
+      operationId: updateThreadConfig
+      description: Updates Thread module configuration and persists via ModuleRouter
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ThreadConfigUpdate'
+      responses:
+        '200':
+          description: Configuration updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NetworkModuleConfigResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '503':
+          description: Thread module not available
+
+  /api/v1/modules/thread/refresh:
+    post:
+      tags: [Thread]
+      summary: Trigger Thread state refresh
+      operationId: refreshThread
+      description: Triggers immediate refresh of Thread state from HA via the ModuleRouter
+      responses:
+        '200':
+          description: Refresh result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModuleRefreshResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '503':
+          description: ModuleRouter not available
+
+  # ==================== HOMEASSISTANT MODULE ====================
+  /api/v1/modules/homeassistant/status:
+    get:
+      tags: [HomeAssistant Module]
+      summary: Get HomeAssistant module status
+      operationId: getHAModuleStatus
+      description: Returns complete HA integration module status including connection, event forwarding, webhook, and supervisor health
+      responses:
+        '200':
+          description: HA module status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HAModuleStatusResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/v1/modules/homeassistant/connection:
+    get:
+      tags: [HomeAssistant Module]
+      summary: Get HA connection status
+      operationId: getHAModuleConnection
+      description: Returns connection status to HA instance including reachability, response times, and error/success counts
+      responses:
+        '200':
+          description: Connection status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HAConnectionResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/v1/modules/homeassistant/events:
+    get:
+      tags: [HomeAssistant Module]
+      summary: Get event forwarding statistics
+      operationId: getHAModuleEvents
+      description: Returns event forwarding statistics including per-domain counts and rate
+      responses:
+        '200':
+          description: Event forwarding stats
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HAEventForwardingResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/v1/modules/homeassistant/events/config:
+    post:
+      tags: [HomeAssistant Module]
+      summary: Configure event forwarding domains
+      operationId: configureHAModuleEvents
+      description: Sets which HA domains are forwarded to Core for event processing
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HAEventDomainsConfig'
+      responses:
+        '200':
+          description: Event forwarding configured
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HAEventDomainsConfigResponse'
+        '400':
+          description: Missing or invalid domains list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/v1/modules/homeassistant/config:
+    get:
+      tags: [HomeAssistant Module]
+      summary: Get HA module configuration
+      operationId: getHAModuleConfig
+      description: Returns complete HA integration module configuration
+      responses:
+        '200':
+          description: HA module configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HAModuleConfigResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+    post:
+      tags: [HomeAssistant Module]
+      summary: Update HA module configuration
+      operationId: updateHAModuleConfig
+      description: Updates HA module configuration (forwarded domains, webhook retry count, etc.) and persists via ModuleRouter
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HAModuleConfigUpdate'
+      responses:
+        '200':
+          description: Configuration updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HAModuleConfigResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/v1/modules/homeassistant/refresh:
+    post:
+      tags: [HomeAssistant Module]
+      summary: Trigger HA module refresh
+      operationId: refreshHAModule
+      description: Triggers immediate refresh of all network modules from HA via the ModuleRouter
+      responses:
+        '200':
+          description: Refresh result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModuleRefreshResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+        '503':
+          description: ModuleRouter not available
 
 components:
   schemas:
@@ -2271,6 +2824,505 @@ components:
               priority:
                 type: string
 
+    # ---------- MODULE ROUTER ----------
+    ModuleRouterStatusResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        refresh_count:
+          type: integer
+          description: Total number of refresh cycles since startup
+        last_refresh_ago_s:
+          type: number
+          nullable: true
+          description: Seconds since last refresh (null if never refreshed)
+        modules:
+          type: object
+          description: Per-module status keyed by module name
+          properties:
+            zwave:
+              $ref: '#/components/schemas/ModuleStatus'
+            zigbee:
+              $ref: '#/components/schemas/ModuleStatus'
+            thread:
+              $ref: '#/components/schemas/ModuleStatus'
+            homeassistant:
+              $ref: '#/components/schemas/ModuleStatus'
+
+    ModuleStatus:
+      type: object
+      properties:
+        available:
+          type: boolean
+          description: Whether the module engine is initialized
+        enabled:
+          type: boolean
+          description: Whether the module is enabled in config
+        has_data:
+          type: boolean
+          description: Whether the module has received data
+        summary:
+          type: object
+          description: Module-specific summary data
+
+    ModuleRouterConfigResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        config:
+          type: object
+          description: Per-module configuration
+          properties:
+            zwave:
+              $ref: '#/components/schemas/ZWaveConfig'
+            zigbee:
+              $ref: '#/components/schemas/ZigbeeConfig'
+            thread:
+              $ref: '#/components/schemas/ThreadConfig'
+            homeassistant:
+              $ref: '#/components/schemas/HAConfig'
+
+    ModuleConfigUpdate:
+      type: object
+      description: Key-value pairs to update in the module config
+      additionalProperties: true
+      example:
+        polling_interval_s: 60
+        enabled: true
+
+    ModuleConfigUpdateResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        module:
+          type: string
+          description: Module name that was updated
+        config:
+          type: object
+          description: Updated configuration
+
+    ModuleConfigBadRequest:
+      type: object
+      properties:
+        ok:
+          type: boolean
+          example: false
+        error:
+          type: string
+        valid:
+          type: array
+          items:
+            type: string
+          example: [zwave, zigbee, thread, homeassistant]
+
+    ModuleRefreshResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        entity_count:
+          type: integer
+          description: Number of entities fetched from HA
+        modules:
+          type: object
+          description: Per-module device counts after refresh
+          additionalProperties:
+            type: integer
+        duration_ms:
+          type: number
+          description: Refresh duration in milliseconds
+
+    ServiceUnavailableResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+          example: false
+        error:
+          type: string
+        hint:
+          type: string
+
+    # ---------- Z-WAVE ----------
+    ZWaveConfig:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        polling_interval_s:
+          type: integer
+          description: Polling interval in seconds
+          example: 120
+        alert_dead_devices:
+          type: boolean
+          description: Whether to alert on dead Z-Wave devices
+        alert_threshold_dead:
+          type: integer
+          description: Number of dead devices before alert
+
+    ZWaveConfigUpdate:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        polling_interval_s:
+          type: integer
+        alert_dead_devices:
+          type: boolean
+        alert_threshold_dead:
+          type: integer
+
+    ZWaveStatusResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        protocol:
+          type: string
+          example: zwave
+        controller_state:
+          type: string
+          description: Controller state (ready, not ready, error, unknown)
+        device_count:
+          type: integer
+        devices_dead:
+          type: integer
+        devices_sleeping:
+          type: integer
+        last_heal:
+          type: string
+          format: date-time
+          nullable: true
+        error_count:
+          type: integer
+        devices:
+          type: array
+          items:
+            $ref: '#/components/schemas/NetworkDevice'
+
+    # ---------- ZIGBEE ----------
+    ZigbeeConfig:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        polling_interval_s:
+          type: integer
+          example: 120
+        alert_low_lqi:
+          type: boolean
+          description: Whether to alert on low LQI values
+        lqi_threshold:
+          type: integer
+          description: LQI threshold below which alerts are triggered
+          example: 50
+
+    ZigbeeConfigUpdate:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        polling_interval_s:
+          type: integer
+        alert_low_lqi:
+          type: boolean
+        lqi_threshold:
+          type: integer
+
+    ZigbeeStatusResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        protocol:
+          type: string
+          example: zigbee
+        coordinator_state:
+          type: string
+          description: Coordinator state (ready, unknown)
+        device_count:
+          type: integer
+        avg_lqi:
+          type: number
+          description: Average link quality indicator across all devices
+        devices_offline:
+          type: integer
+        last_update:
+          type: string
+          format: date-time
+          nullable: true
+        devices:
+          type: array
+          items:
+            $ref: '#/components/schemas/NetworkDevice'
+
+    # ---------- THREAD ----------
+    ThreadConfig:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        polling_interval_s:
+          type: integer
+          example: 120
+
+    ThreadConfigUpdate:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        polling_interval_s:
+          type: integer
+
+    ThreadStatusResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        protocol:
+          type: string
+          example: thread
+        border_router_state:
+          type: string
+          description: Border router state (ready, unknown)
+        device_count:
+          type: integer
+        router_count:
+          type: integer
+          description: Number of Thread router devices
+        last_update:
+          type: string
+          format: date-time
+          nullable: true
+        devices:
+          type: array
+          items:
+            $ref: '#/components/schemas/NetworkDevice'
+
+    # ---------- SHARED NETWORK MODULE ----------
+    NetworkDevice:
+      type: object
+      properties:
+        entity_id:
+          type: string
+        friendly_name:
+          type: string
+        state:
+          type: string
+        is_dead:
+          type: boolean
+          description: Z-Wave only
+        is_sleeping:
+          type: boolean
+          description: Z-Wave only
+        lqi:
+          type: integer
+          nullable: true
+          description: Zigbee only (link quality indicator)
+        is_offline:
+          type: boolean
+          description: Zigbee only
+        is_router:
+          type: boolean
+          description: Thread only
+        last_seen:
+          type: string
+          format: date-time
+          nullable: true
+
+    NetworkDeviceListResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        protocol:
+          type: string
+          enum: [zwave, zigbee, thread]
+        total:
+          type: integer
+        devices:
+          type: array
+          items:
+            $ref: '#/components/schemas/NetworkDevice'
+
+    NetworkModuleConfigResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        protocol:
+          type: string
+          enum: [zwave, zigbee, thread]
+        config:
+          type: object
+          description: Module-specific configuration
+
+    # ---------- HOMEASSISTANT MODULE ----------
+    HAConfig:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        forwarded_domains:
+          type: array
+          items:
+            type: string
+          example: [light, sensor, binary_sensor, switch, climate, media_player, cover, fan]
+        webhook_retry_count:
+          type: integer
+          example: 3
+        connection_timeout_s:
+          type: integer
+          example: 10
+
+    HAModuleStatusResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [ok, error]
+        module:
+          type: string
+          example: homeassistant
+        connection:
+          type: object
+          description: Connection status to HA instance
+          properties:
+            reachable:
+              type: boolean
+            response_time_ms:
+              type: number
+            error_count:
+              type: integer
+            success_count:
+              type: integer
+        event_forwarding:
+          type: object
+          description: Event forwarding statistics
+          properties:
+            forwarded_domains:
+              type: array
+              items:
+                type: string
+            events_forwarded_count:
+              type: integer
+            events_per_minute:
+              type: number
+            domain_counts:
+              type: object
+              additionalProperties:
+                type: integer
+        webhook:
+          type: object
+          description: Webhook push status (Core to HA)
+          properties:
+            push_count:
+              type: integer
+            push_errors:
+              type: integer
+            last_error_message:
+              type: string
+        supervisor:
+          type: object
+          description: Supervisor API health
+          properties:
+            reachable:
+              type: boolean
+            token_valid:
+              type: boolean
+        integration_entity_count:
+          type: integer
+        module_count:
+          type: integer
+        active_dashboard_views:
+          type: array
+          items:
+            type: string
+
+    HAConnectionResponse:
+      type: object
+      properties:
+        status:
+          type: string
+        reachable:
+          type: boolean
+        response_time_ms:
+          type: number
+        error_count:
+          type: integer
+        success_count:
+          type: integer
+
+    HAEventForwardingResponse:
+      type: object
+      properties:
+        status:
+          type: string
+        forwarded_domains:
+          type: array
+          items:
+            type: string
+        events_forwarded_count:
+          type: integer
+        events_per_minute:
+          type: number
+        domain_counts:
+          type: object
+          additionalProperties:
+            type: integer
+
+    HAEventDomainsConfig:
+      type: object
+      required:
+        - domains
+      properties:
+        domains:
+          type: array
+          items:
+            type: string
+          description: List of HA domains to forward
+          example: [light, switch, climate, media_player]
+
+    HAEventDomainsConfigResponse:
+      type: object
+      properties:
+        status:
+          type: string
+        message:
+          type: string
+        domains:
+          type: array
+          items:
+            type: string
+
+    HAModuleConfigResponse:
+      type: object
+      properties:
+        status:
+          type: string
+        module:
+          type: string
+          example: homeassistant
+        config:
+          type: object
+          description: Full HA module configuration
+
+    HAModuleConfigUpdate:
+      type: object
+      description: Configuration fields to update
+      properties:
+        forwarded_domains:
+          type: array
+          items:
+            type: string
+        webhook_retry_count:
+          type: integer
+        connection_timeout_s:
+          type: integer
+
   responses:
     ErrorResponse:
       description: Error response
@@ -2278,6 +3330,17 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
+
+    UnauthorizedResponse:
+      description: Authentication required
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                example: unauthorized
 
   securitySchemes:
     ApiKeyAuth:
