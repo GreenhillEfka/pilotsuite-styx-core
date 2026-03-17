@@ -58,11 +58,13 @@ class TestZoneDashboardEnrichment:
 
 class TestSuggestionsStateMgmt:
     def _make_client(self):
+        import copilot_core.api.v1.suggestions as _sug_mod
+        # Reset module-level state to prevent cross-test leaking
+        _sug_mod._suggestion_engine = None
+        _sug_mod._suggestion_states.clear()
         app = Flask(__name__)
         app.config["TESTING"] = True
-        from copilot_core.api.v1.suggestions import suggestions_bp, _suggestion_states
-        _suggestion_states.clear()
-        app.register_blueprint(suggestions_bp)
+        app.register_blueprint(_sug_mod.suggestions_bp)
         return app
 
     def test_accept_then_list_excludes(self):
