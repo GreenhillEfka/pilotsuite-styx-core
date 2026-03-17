@@ -1066,18 +1066,39 @@ var MODULE_CONFIG_SPECS={
   hub_praesenz:{label:'Präsenz',endpoint:'/api/v1/modules/praesenz/config',
     fields:[],live:'/api/v1/presence/',
     stats:['persons_home','zones_occupied','zones_empty']},
-  hub_zwave:{label:'Z-Wave',endpoint:'/api/v1/modules/zwave/status',
-    fields:[],live:'/api/v1/modules/zwave/status',
-    stats:['device_count','network_state','error_count']},
-  hub_zigbee:{label:'Zigbee',endpoint:'/api/v1/modules/zigbee/status',
-    fields:[],live:'/api/v1/modules/zigbee/status',
-    stats:['device_count','coordinator_status','avg_lqi']},
-  hub_thread:{label:'Thread',endpoint:'/api/v1/modules/thread/status',
-    fields:[],live:'/api/v1/modules/thread/status',
-    stats:['device_count','border_router_status']},
-  hub_homeassistant:{label:'HomeAssistant',endpoint:'/api/v1/modules/homeassistant/status',
-    fields:[],live:'/api/v1/modules/homeassistant/status',
-    stats:['events_forwarded_count','events_per_minute']},
+  hub_zwave:{label:'Z-Wave',endpoint:'/api/v1/modules/zwave/config',
+    fields:[
+      {key:'enabled',label:'Aktiviert',type:'toggle'},
+      {key:'polling_interval_s',label:'Polling-Intervall',type:'range',min:30,max:600,step:30,unit:'s'},
+      {key:'alert_dead_devices',label:'Alert bei toten Geräten',type:'toggle'},
+      {key:'alert_threshold_dead',label:'Schwellwert tote Geräte',type:'number',min:1,max:20}
+    ],save:'/api/v1/modules/zwave/config',live:'/api/v1/modules/zwave/status',
+    stats:['device_count','controller_state','devices_dead','devices_sleeping','error_count'],
+    actions:[{label:'Jetzt aktualisieren',method:'POST',path:'/api/v1/modules/zwave/refresh'}]},
+  hub_zigbee:{label:'Zigbee',endpoint:'/api/v1/modules/zigbee/config',
+    fields:[
+      {key:'enabled',label:'Aktiviert',type:'toggle'},
+      {key:'polling_interval_s',label:'Polling-Intervall',type:'range',min:30,max:600,step:30,unit:'s'},
+      {key:'alert_low_lqi',label:'Alert bei schwachem Signal',type:'toggle'},
+      {key:'lqi_threshold',label:'LQI-Schwellwert',type:'range',min:10,max:100,step:5}
+    ],save:'/api/v1/modules/zigbee/config',live:'/api/v1/modules/zigbee/status',
+    stats:['device_count','coordinator_state','avg_lqi','devices_offline'],
+    actions:[{label:'Jetzt aktualisieren',method:'POST',path:'/api/v1/modules/zigbee/refresh'}]},
+  hub_thread:{label:'Thread',endpoint:'/api/v1/modules/thread/config',
+    fields:[
+      {key:'enabled',label:'Aktiviert',type:'toggle'},
+      {key:'polling_interval_s',label:'Polling-Intervall',type:'range',min:30,max:600,step:30,unit:'s'}
+    ],save:'/api/v1/modules/thread/config',live:'/api/v1/modules/thread/status',
+    stats:['device_count','border_router_state','router_count'],
+    actions:[{label:'Jetzt aktualisieren',method:'POST',path:'/api/v1/modules/thread/refresh'}]},
+  hub_homeassistant:{label:'HomeAssistant',endpoint:'/api/v1/modules/homeassistant/config',
+    fields:[
+      {key:'enabled',label:'Aktiviert',type:'toggle'},
+      {key:'connection_timeout_s',label:'Verbindungs-Timeout',type:'range',min:5,max:30,step:1,unit:'s'},
+      {key:'webhook_retry_count',label:'Webhook-Retries',type:'number',min:0,max:10}
+    ],save:'/api/v1/modules/homeassistant/config',live:'/api/v1/modules/homeassistant/status',
+    stats:['events_forwarded_count','events_per_minute','push_count','push_errors'],
+    actions:[{label:'Alle Module aktualisieren',method:'POST',path:'/api/v1/modules/homeassistant/refresh'}]},
   hub_anomaly:{label:'Anomalie',endpoint:'/api/v1/anomaly/model/status',
     fields:[],live:'/api/v1/anomaly/model/status',
     stats:['total_entities','total_anomalies','profiles_learned'],
@@ -1732,25 +1753,77 @@ function loadStatus(){
       '<div class="status-row"><span class="sr-label">Gesamt Events</span><span class="sr-val">'+evCount+'</span></div>'+
       '<div class="status-row"><span class="sr-label">Status</span><span class="sr-val">'+(evCount>0?badge('aktiv','g'):badge('leer','y'))+'</span></div>';
 
-    /* Network modules (separate fetch) */
+    /* Network modules + HA Integration (separate fetch) */
     return Promise.all([
       api('/api/v1/modules/zwave/status'),
       api('/api/v1/modules/zigbee/status'),
-      api('/api/v1/modules/thread/status')
+      api('/api/v1/modules/thread/status'),
+      api('/api/v1/modules/homeassistant/status'),
+      api('/api/v1/modules/router/status')
     ]);
   }).then(function(netResults){
-    var zwave=netResults[0],zigbee=netResults[1],thread=netResults[2];
+    var zwave=netResults[0],zigbee=netResults[1],thread=netResults[2],
+        haModule=netResults[3],router=netResults[4];
     var nHtml='';
-    [{name:'Z-Wave',data:zwave,icon:'📻'},{name:'Zigbee',data:zigbee,icon:'🔗'},{name:'Thread',data:thread,icon:'🧵'}].forEach(function(n){
-      var d=n.data;
-      if(d&&d.ok!==false){
-        nHtml+='<div class="status-row"><span class="sr-label">'+n.icon+' '+n.name+'</span>';
-        nHtml+='<span class="sr-val">'+badge('verbunden','g')+' '+(d.device_count||d.devices||0)+' Geräte</span></div>';
-      }else{
-        nHtml+='<div class="status-row"><span class="sr-label">'+n.icon+' '+n.name+'</span>';
-        nHtml+='<span class="sr-val">'+badge('nicht verfügbar','r')+'</span></div>';
+    /* Z-Wave details */
+    if(zwave&&zwave.ok!==false){
+      nHtml+='<div class="status-row"><span class="sr-label">📻 Z-Wave</span>';
+      nHtml+='<span class="sr-val">'+badge('verbunden','g')+' '+(zwave.device_count||0)+' Geräte';
+      if(zwave.devices_dead>0)nHtml+=' · <span style="color:var(--red)">'+zwave.devices_dead+' tot</span>';
+      if(zwave.devices_sleeping>0)nHtml+=' · '+zwave.devices_sleeping+' schlafend';
+      nHtml+='</span></div>';
+      if(zwave.controller_state&&zwave.controller_state!=='unknown')
+        nHtml+='<div class="status-row"><span class="sr-label" style="padding-left:24px">Controller</span><span class="sr-val">'+escHtml(zwave.controller_state)+'</span></div>';
+    }else{
+      nHtml+='<div class="status-row"><span class="sr-label">📻 Z-Wave</span><span class="sr-val">'+badge('nicht verfügbar','r')+'</span></div>';
+    }
+    /* Zigbee details */
+    if(zigbee&&zigbee.ok!==false){
+      nHtml+='<div class="status-row"><span class="sr-label">🔗 Zigbee</span>';
+      nHtml+='<span class="sr-val">'+badge('verbunden','g')+' '+(zigbee.device_count||0)+' Geräte';
+      if(zigbee.avg_lqi>0)nHtml+=' · LQI: '+zigbee.avg_lqi;
+      if(zigbee.devices_offline>0)nHtml+=' · <span style="color:var(--red)">'+zigbee.devices_offline+' offline</span>';
+      nHtml+='</span></div>';
+      if(zigbee.coordinator_state&&zigbee.coordinator_state!=='unknown')
+        nHtml+='<div class="status-row"><span class="sr-label" style="padding-left:24px">Coordinator</span><span class="sr-val">'+escHtml(zigbee.coordinator_state)+'</span></div>';
+    }else{
+      nHtml+='<div class="status-row"><span class="sr-label">🔗 Zigbee</span><span class="sr-val">'+badge('nicht verfügbar','r')+'</span></div>';
+    }
+    /* Thread details */
+    if(thread&&thread.ok!==false){
+      nHtml+='<div class="status-row"><span class="sr-label">🧵 Thread</span>';
+      nHtml+='<span class="sr-val">'+badge('verbunden','g')+' '+(thread.device_count||0)+' Geräte';
+      if(thread.router_count>0)nHtml+=' · '+thread.router_count+' Router';
+      nHtml+='</span></div>';
+      if(thread.border_router_state&&thread.border_router_state!=='unknown')
+        nHtml+='<div class="status-row"><span class="sr-label" style="padding-left:24px">Border Router</span><span class="sr-val">'+escHtml(thread.border_router_state)+'</span></div>';
+    }else{
+      nHtml+='<div class="status-row"><span class="sr-label">🧵 Thread</span><span class="sr-val">'+badge('nicht verfügbar','r')+'</span></div>';
+    }
+    /* HA Integration details */
+    if(haModule&&haModule.status==='ok'){
+      var conn=haModule.connection||{};
+      var ef=haModule.event_forwarding||{};
+      var wh=haModule.webhook||{};
+      nHtml+='<div class="status-row" style="margin-top:8px;border-top:1px solid var(--border);padding-top:8px"><span class="sr-label">🏠 HA Integration</span>';
+      nHtml+='<span class="sr-val">'+(conn.reachable?badge('verbunden','g'):badge('getrennt','r'));
+      nHtml+=' '+(haModule.integration_entity_count||0)+' Entities</span></div>';
+      if(ef.events_forwarded_count>0){
+        nHtml+='<div class="status-row"><span class="sr-label" style="padding-left:24px">Events</span>';
+        nHtml+='<span class="sr-val">'+ef.events_forwarded_count+' weitergeleitet · '+(ef.events_per_minute||0)+'/min</span></div>';
       }
-    });
+      if(wh.push_count>0){
+        nHtml+='<div class="status-row"><span class="sr-label" style="padding-left:24px">Webhooks</span>';
+        nHtml+='<span class="sr-val">'+wh.push_count+' Pushes'+(wh.push_errors>0?' · <span style="color:var(--red)">'+wh.push_errors+' Fehler</span>':'')+'</span></div>';
+      }
+    }
+    /* Router status */
+    if(router&&router.ok){
+      nHtml+='<div class="status-row" style="margin-top:6px"><span class="sr-label" style="padding-left:24px">ModuleRouter</span>';
+      nHtml+='<span class="sr-val">'+(router.refresh_count||0)+' Refreshes';
+      if(router.last_refresh_ago_s!==null)nHtml+=' · vor '+Math.round(router.last_refresh_ago_s)+'s';
+      nHtml+='</span></div>';
+    }
     $('status-network').innerHTML=nHtml||'<div class="empty">Keine Netzwerk-Module</div>';
   });
 }

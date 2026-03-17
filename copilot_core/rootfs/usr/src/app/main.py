@@ -226,7 +226,16 @@ def _register_routes(flask_app: Flask, startup_time: float) -> None:
 
     @flask_app.get("/health")
     def health():
-        return jsonify({"ok": True, "time": _now_iso()})
+        services = flask_app.config.get("COPILOT_SERVICES", {})
+        service_count = sum(1 for v in services.values() if v is not None)
+        return jsonify({
+            "ok": True,
+            "time": _now_iso(),
+            "version": APP_VERSION,
+            "uptime_s": int(time.time() - startup_time),
+            "services": service_count,
+            "docs": "/api/v1/docs/",
+        })
 
     @flask_app.get("/ready")
     def readiness():

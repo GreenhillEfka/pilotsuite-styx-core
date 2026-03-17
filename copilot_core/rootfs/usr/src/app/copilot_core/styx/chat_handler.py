@@ -5,6 +5,7 @@ Verarbeitet Chat-Queries mit kontextuellem Wissen aus:
 - Lokalen Datenquellen (HA-States, Dokumente, History)
 - Optional: Web-Suche via SearXNG
 - Direkte interne RAG-Pipeline (BM25 + Semantic + RRF)
+- Live Home-Context (Stimmung, Praesenz, Energie, Brain-Aktivitaet)
 
 LLM-Fallback-Kette:
   1. Ollama (lokal, offline, privacy-first)
@@ -17,6 +18,7 @@ from __future__ import annotations
 import logging
 import os
 import time
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 import requests
@@ -153,7 +155,7 @@ class ChatHandler:
         # 3. Get conversation memory context
         memory_context = self._get_memory_context(query, conversation_id)
 
-        # 4. Build prompt with RAG context + memory
+        # 4. Build prompt with RAG context + memory + home context
         prompt = self._build_prompt(query, rag_results, memory_context)
 
         # 5. LLM inference (Ollama → Cloud fallback)
@@ -170,10 +172,11 @@ class ChatHandler:
                 logger.warning("Failed to store assistant response in memory: %s", exc)
 
         elapsed_ms = (time.perf_counter() - start) * 1000
+        home_context_used = "Aktueller Haus-Status:" in prompt
         logger.info(
-            "Chat complete in %.0fms (sources=%d, type=%s, memory=%s)",
+            "Chat complete in %.0fms (sources=%d, type=%s, memory=%s, home_ctx=%s)",
             elapsed_ms, len(rag_results.get("sources", [])), query_type,
-            bool(memory_context),
+            bool(memory_context), home_context_used,
         )
 
         return {
@@ -183,6 +186,7 @@ class ChatHandler:
             "context_used": rag_results.get("results", []),
             "elapsed_ms": round(elapsed_ms, 1),
             "memory_used": bool(memory_context),
+            "home_context_used": home_context_used,
         }
 
     # ── Internal RAG search ───────────────────────────────────────────
@@ -361,11 +365,258 @@ class ChatHandler:
 
         return "\n".join(parts)
 
+    # ── Home Context Builder ─────────────────────────────────────────
+
+    @staticmethod
+    def _get_services() -> Dict[str, Any]:
+        """Get COPILOT_SERVICES from Flask app context (best effort)."""
+        try:
+            from flask import current_app
+            return current_app.config.get("COPILOT_SERVICES", {}) or {}
+        except Exception:
+            return {}
+
+    def _build_home_context(self) -> str:
+        """Build concise home context summary from live service data.
+
+        Gathers data from available services:
+        - Mood state + confidence per zone
+        - Zone occupancy / presence
+        - Recent significant events
+        - Time of day / weekday context
+        - Energy status
+        - Active automations count
+        - Brain graph activity summary
+
+        Each source is individually wrapped in try/except so a single
+        failure never blocks the other context sources.
+
+        Returns:
+            Compact German-language context string (target: <500 tokens).
+        """
+        services = self._get_services()
+        parts: List[str] = []
+
+        # ── 1. Time context ──────────────────────────────────────────
+        try:
+            now = datetime.now(timezone.utc)
+            # Try to get local time via Europe/Berlin (add-on default)
+            try:
+                import zoneinfo
+                local_tz = zoneinfo.ZoneInfo("Europe/Berlin")
+                local_now = now.astimezone(local_tz)
+            except Exception:
+                local_now = now
+
+            hour = local_now.hour
+            if 5 <= hour < 10:
+                tageszeit = "Morgen"
+            elif 10 <= hour < 12:
+                tageszeit = "Vormittag"
+            elif 12 <= hour < 14:
+                tageszeit = "Mittag"
+            elif 14 <= hour < 18:
+                tageszeit = "Nachmittag"
+            elif 18 <= hour < 22:
+                tageszeit = "Abend"
+            else:
+                tageszeit = "Nacht"
+
+            wochentag = ["Montag", "Dienstag", "Mittwoch", "Donnerstag",
+                         "Freitag", "Samstag", "Sonntag"][local_now.weekday()]
+            ist_wochenende = local_now.weekday() >= 5
+            we_label = "Wochenende" if ist_wochenende else "Werktag"
+            parts.append(
+                f"Zeitkontext: {wochentag}, {tageszeit} ({local_now.strftime('%H:%M')} Uhr), {we_label}"
+            )
+        except Exception as exc:
+            logger.debug("Home context: time failed: %s", exc)
+
+        # ── 2. Mood state ────────────────────────────────────────────
+        try:
+            mood_service = services.get("mood_service")
+            if mood_service:
+                summary = mood_service.get_summary()
+                if summary and summary.get("zones", 0) > 0:
+                    comfort = summary.get("average_comfort", 0.5)
+                    joy = summary.get("average_joy", 0.5)
+                    frugality = summary.get("average_frugality", 0.5)
+                    media_zones = summary.get("zones_with_media", 0)
+                    zone_count = summary.get("zones", 0)
+
+                    # Determine dominant mood description
+                    if comfort >= 0.7 and joy >= 0.6:
+                        stimmung = "behaglich und freudig"
+                    elif comfort >= 0.6:
+                        stimmung = "komfortabel"
+                    elif joy >= 0.6:
+                        stimmung = "lebhaft"
+                    elif frugality >= 0.7:
+                        stimmung = "sparsam/energiebewusst"
+                    elif comfort < 0.4:
+                        stimmung = "unbehaglich"
+                    else:
+                        stimmung = "neutral"
+
+                    mood_line = (
+                        f"Hausstimmung: {stimmung} "
+                        f"(Komfort {comfort:.0%}, Freude {joy:.0%}, "
+                        f"Sparsamkeit {frugality:.0%})"
+                    )
+                    if media_zones > 0:
+                        mood_line += f", Medien aktiv in {media_zones}/{zone_count} Zonen"
+                    parts.append(mood_line)
+        except Exception as exc:
+            logger.debug("Home context: mood failed: %s", exc)
+
+        # ── 3. Zone occupancy / presence ─────────────────────────────
+        try:
+            hub_presence = services.get("hub_presence")
+            if hub_presence:
+                household = hub_presence.get_household_status()
+                status = household.get("status", "unknown")
+                home_names = household.get("home_names", [])
+                away_names = household.get("away_names", [])
+
+                if status == "home":
+                    pres_line = f"Praesenz: Alle zuhause ({', '.join(home_names[:5])})"
+                elif status == "away":
+                    pres_line = "Praesenz: Niemand zuhause"
+                elif status == "partial":
+                    pres_line = (
+                        f"Praesenz: {', '.join(home_names[:5])} zuhause"
+                    )
+                    if away_names:
+                        pres_line += f"; abwesend: {', '.join(away_names[:5])}"
+                else:
+                    pres_line = "Praesenz: unbekannt"
+
+                # Add occupied rooms if available
+                try:
+                    rooms = hub_presence.get_rooms()
+                    occupied = [
+                        r.get("room_name") or r.get("room_id", "?")
+                        for r in rooms
+                        if r.get("persons_present")
+                    ]
+                    if occupied:
+                        pres_line += f" | Belegte Raeume: {', '.join(occupied[:6])}"
+                except Exception:
+                    pass
+
+                parts.append(pres_line)
+        except Exception as exc:
+            logger.debug("Home context: presence failed: %s", exc)
+
+        # ── 4. Recent events summary ─────────────────────────────────
+        try:
+            # Try the event store via events API singleton
+            from copilot_core.api.v1.events import _store as _get_event_store
+            store = _get_event_store()
+            recent = store.list(limit=5)
+            if recent:
+                event_lines = []
+                for evt in recent[-5:]:
+                    evt_type = evt.get("type", "?")
+                    entity = evt.get("entity_id", "")
+                    text = evt.get("text", "")
+                    ts = evt.get("ts", "")
+                    label = entity or text or evt_type
+                    if len(label) > 60:
+                        label = label[:57] + "..."
+                    event_lines.append(f"  - {evt_type}: {label}")
+                if event_lines:
+                    parts.append(
+                        "Letzte Ereignisse:\n" + "\n".join(event_lines)
+                    )
+        except Exception as exc:
+            logger.debug("Home context: events failed: %s", exc)
+
+        # ── 5. Energy status ─────────────────────────────────────────
+        try:
+            hub_energy = services.get("hub_energy")
+            if hub_energy:
+                energy_summary = hub_energy.get_summary()
+                if energy_summary:
+                    price = energy_summary.get("energy_price_per_kwh", 0)
+                    has_pv = energy_summary.get("has_pv_profile", False)
+                    targets = energy_summary.get("optimization_targets", 0)
+                    energy_line = f"Energie: {price:.2f} EUR/kWh" if price else "Energie: Preis nicht konfiguriert"
+                    if has_pv:
+                        energy_line += ", PV-Anlage vorhanden"
+                    if targets:
+                        energy_line += f", {targets} Optimierungsziele"
+                    parts.append(energy_line)
+        except Exception as exc:
+            logger.debug("Home context: energy failed: %s", exc)
+
+        # ── 6. Active automations count ──────────────────────────────
+        try:
+            zone_automation = services.get("zone_automation")
+            if zone_automation and hasattr(zone_automation, "get_zones"):
+                zones = zone_automation.get_zones()
+                if zones:
+                    active_zones = sum(
+                        1 for z in zones
+                        if isinstance(z, dict) and z.get("light_enabled")
+                    )
+                    parts.append(
+                        f"Zonen-Automationen: {active_zones}/{len(zones)} aktiv"
+                    )
+        except Exception as exc:
+            logger.debug("Home context: automations failed: %s", exc)
+
+        # ── 7. Brain graph activity summary ──────────────────────────
+        try:
+            hub_brain = services.get("hub_brain_activity")
+            if hub_brain:
+                status = hub_brain.get_status()
+                state = status.state if hasattr(status, "state") else str(status)
+                total_pulses = getattr(status, "total_pulses", 0)
+                uptime_h = getattr(status, "uptime_seconds", 0) / 3600
+
+                state_labels = {
+                    "active": "aktiv",
+                    "idle": "bereit",
+                    "sleeping": "schlafend",
+                }
+                state_de = state_labels.get(state, state)
+                parts.append(
+                    f"Gehirn: {state_de}, {total_pulses} Impulse, "
+                    f"Laufzeit {uptime_h:.1f}h"
+                )
+        except Exception as exc:
+            logger.debug("Home context: brain activity failed: %s", exc)
+
+        try:
+            brain_graph = services.get("brain_graph_service")
+            if brain_graph:
+                stats = brain_graph.get_stats()
+                nodes = stats.get("node_count", stats.get("nodes", 0))
+                edges = stats.get("edge_count", stats.get("edges", 0))
+                if nodes or edges:
+                    parts.append(
+                        f"Wissensgraph: {nodes} Knoten, {edges} Kanten"
+                    )
+        except Exception as exc:
+            logger.debug("Home context: brain graph stats failed: %s", exc)
+
+        if not parts:
+            return ""
+
+        return "Aktueller Haus-Status:\n" + "\n".join(parts)
+
     # ── Prompt building ───────────────────────────────────────────────
 
     def _build_prompt(self, query: str, rag_results: Dict[str, Any],
                       memory_context: str = "") -> str:
-        """Build LLM prompt with RAG context and conversation memory."""
+        """Build LLM prompt with home context, RAG context, and conversation memory.
+
+        Returns a tuple-style string with system+context sections for the
+        single-prompt path (direct Ollama /api/generate).  The structured
+        message path (_call_llm with LLMProvider) splits this into proper
+        system/user messages.
+        """
         results = rag_results.get("results", [])
 
         prompt_parts = []
@@ -374,8 +625,14 @@ class ChatHandler:
         prompt_parts.append(
             "Du bist PilotSuite Styx, ein intelligenter Smart-Home-Assistent.\n"
             "Beantworte Fragen praezise und hilfreich auf Deutsch.\n"
+            "Nutze den aktuellen Haus-Status, um kontextbezogen zu antworten.\n"
             "Wenn du unsicher bist, sage es offen."
         )
+
+        # Live home context (mood, presence, energy, brain, etc.)
+        home_context = self._build_home_context()
+        if home_context:
+            prompt_parts.append(home_context)
 
         # Memory context (preferences + history)
         if memory_context:
@@ -404,9 +661,29 @@ class ChatHandler:
 
     # ── LLM inference with fallback ─────────────────────────────────
 
+    @staticmethod
+    def _split_system_user(prompt: str) -> tuple:
+        """Split a combined prompt into system message and user message.
+
+        The prompt layout from _build_prompt is:
+          system instruction\\n\\nhome context\\n\\nmemory\\n\\nRAG\\n\\nFrage: <query>
+
+        We split at the last "Frage: " marker so everything before becomes
+        the system message and the question becomes the user message.
+        """
+        marker = "\n\nFrage: "
+        idx = prompt.rfind(marker)
+        if idx > 0:
+            system_part = prompt[:idx].strip()
+            user_part = prompt[idx + len(marker):].strip()
+            return system_part, user_part
+        # Fallback: everything as user message
+        return "", prompt
+
     def _call_llm(self, prompt: str, model: str) -> str:
         """Call LLM using LLMProvider (Ollama → Cloud fallback).
 
+        Uses proper system/user message separation for better LLM behavior.
         If LLMProvider is unavailable, falls back to direct Ollama /api/generate.
         """
         self._ensure_initialized()
@@ -414,7 +691,11 @@ class ChatHandler:
         # Primary path: use LLMProvider with full fallback chain
         if self._llm_provider is not None:
             try:
-                messages = [{"role": "user", "content": prompt}]
+                system_msg, user_msg = self._split_system_user(prompt)
+                messages = []
+                if system_msg:
+                    messages.append({"role": "system", "content": system_msg})
+                messages.append({"role": "user", "content": user_msg or prompt})
                 result = self._llm_provider.chat(
                     messages=messages,
                     model=model or None,

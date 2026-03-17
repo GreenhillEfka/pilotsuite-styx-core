@@ -77,3 +77,58 @@ def zwave_devices():
         "total": len(devices),
         "devices": devices,
     })
+
+
+@zwave_module_bp.get("/config")
+def zwave_config():
+    """Return Z-Wave module configuration."""
+    svc, err = _get_service()
+    if err:
+        return err
+
+    try:
+        config = svc.get_config()
+    except Exception as exc:
+        _LOGGER.exception("Failed to get Z-Wave config")
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+    return jsonify({"ok": True, "protocol": "zwave", "config": config})
+
+
+@zwave_module_bp.post("/config")
+def zwave_update_config():
+    """Update Z-Wave module configuration."""
+    svc, err = _get_service()
+    if err:
+        return err
+
+    data = request.get_json(silent=True) or {}
+    try:
+        updated = svc.update_config(data)
+        # Persist via ModuleRouter if available
+        router = current_app.config.get("COPILOT_SERVICES", {}).get("module_router")
+        if router:
+            router.update_config("zwave", updated)
+    except Exception as exc:
+        _LOGGER.exception("Failed to update Z-Wave config")
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+    return jsonify({"ok": True, "protocol": "zwave", "config": updated})
+
+
+@zwave_module_bp.post("/refresh")
+def zwave_refresh():
+    """Trigger immediate Z-Wave state refresh from HA."""
+    import asyncio
+
+    router = current_app.config.get("COPILOT_SERVICES", {}).get("module_router")
+    if not router:
+        return jsonify({"ok": False, "error": "ModuleRouter not available"}), 503
+
+    try:
+        result = asyncio.run(router.async_refresh_from_ha())
+    except Exception as exc:
+        _LOGGER.exception("Failed to refresh Z-Wave")
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+    return jsonify({"ok": True, "protocol": "zwave", **result})

@@ -8,7 +8,8 @@ Envelope-Format (muss mit dem webhook.py-Handler uebereinstimmen)::
 
     {"type": "<event_type>", "data": {<payload>}}
 
-Kanonische event_type-Werte: "status", "mood", "neuron", "suggestion".
+Kanonische event_type-Werte: "status", "mood", "neuron", "suggestion",
+"neuron_fired", "brain_insight", "candidates_ranked", "zone_mood".
 """
 from __future__ import annotations
 
@@ -20,7 +21,8 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
-from typing import Any, Callable, Dict, Optional
+from datetime import datetime, timezone
+from typing import Any, Callable, Dict, List, Optional
 
 from copilot_core.webhook_delivery import WebhookDeliveryQueue
 from copilot_core.webhook_destination_policy import (
@@ -31,11 +33,19 @@ from copilot_core.webhook_signing import build_webhook_signature
 _LOGGER = logging.getLogger(__name__)
 
 
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
 EVENT_TYPE_STATUS = "status"
 EVENT_TYPE_MOOD = "mood"
 EVENT_TYPE_NEURON = "neuron"
 EVENT_TYPE_SUGGESTION = "suggestion"
 EVENT_TYPE_ANOMALY = "anomaly"
+EVENT_TYPE_NEURON_FIRED = "neuron_fired"
+EVENT_TYPE_BRAIN_INSIGHT = "brain_insight"
+EVENT_TYPE_CANDIDATES_RANKED = "candidates_ranked"
+EVENT_TYPE_ZONE_MOOD = "zone_mood"
 
 
 class WebhookPusher:
@@ -157,12 +167,36 @@ class WebhookPusher:
     # Public push methods
     # ------------------------------------------------------------------
 
-    def push_mood_changed(self, mood: str, confidence: float) -> None:
-        """Sendet ein mood-Ereignis mit Stimmung und Konfidenz."""
-        self._send_envelope(EVENT_TYPE_MOOD, {
+    def push_mood_changed(
+        self,
+        mood: str,
+        confidence: float,
+        zone_moods: Optional[Dict[str, Any]] = None,
+        top_neurons: Optional[List[Dict[str, Any]]] = None,
+        mood_dimensions: Optional[Dict[str, float]] = None,
+    ) -> None:
+        """Sendet ein mood-Ereignis mit Stimmung, Konfidenz und optionalen Anreicherungen.
+
+        Args:
+            mood: Dominante Stimmung (z.B. "relax", "focus").
+            confidence: Konfidenzwert [0, 1].
+            zone_moods: Per-zone mood data (zone_id -> {comfort, joy, frugality}).
+            top_neurons: Top 3 most active neurons [{id, layer, value}].
+            mood_dimensions: Mood dimension scores {comfort, joy, frugality}.
+        """
+        data: Dict[str, Any] = {
             "mood": mood,
             "confidence": round(confidence, 4),
-        })
+        }
+        if zone_moods:
+            data["zone_moods"] = zone_moods
+        if top_neurons:
+            data["top_neurons"] = top_neurons[:3]
+        if mood_dimensions:
+            data["mood_dimensions"] = {
+                k: round(v, 3) for k, v in mood_dimensions.items()
+            }
+        self._send_envelope(EVENT_TYPE_MOOD, data)
 
     def push_neuron_update(self, result_dict: Dict[str, Any]) -> None:
         """Sendet ein neuron-Ereignis mit der Pipeline-Ergebniszusammenfassung."""
@@ -257,6 +291,61 @@ class WebhookPusher:
         self._send_envelope("zone_update", {
             "zone_id": zone_id,
             **zone_data,
+        })
+
+    def push_neuron_fired(
+        self, neuron_id: str, layer: str, value: float, confidence: float,
+    ) -> None:
+        """Push when a significant neuron fires (value crosses threshold)."""
+        self._send_envelope(EVENT_TYPE_NEURON_FIRED, {
+            "neuron_id": neuron_id,
+            "layer": layer,
+            "value": round(value, 3),
+            "confidence": round(confidence, 3),
+            "timestamp": _now_iso(),
+        })
+
+    def push_brain_insight(self, insight_type: str, data: Dict[str, Any]) -> None:
+        """Push brain graph insights (new correlation, pattern, anomaly link).
+
+        Args:
+            insight_type: One of "correlation", "sequence", "cluster".
+            data: Insight-specific payload (kept compact).
+        """
+        self._send_envelope(EVENT_TYPE_BRAIN_INSIGHT, {
+            "insight_type": insight_type,
+            **data,
+            "timestamp": _now_iso(),
+        })
+
+    def push_candidate_ranked(self, candidates: List[Dict[str, Any]]) -> None:
+        """Push top-ranked candidates with scores and explanations."""
+        self._send_envelope(EVENT_TYPE_CANDIDATES_RANKED, {
+            "candidates": candidates[:10],
+            "timestamp": _now_iso(),
+        })
+
+    def push_zone_mood(
+        self,
+        zone_id: str,
+        mood: str,
+        brightness_factor: float,
+        color_temp: int,
+    ) -> None:
+        """Push per-zone mood adjustment.
+
+        Args:
+            zone_id: Zone identifier.
+            mood: Active mood state name (e.g. "relax", "focus").
+            brightness_factor: Brightness multiplier [0, 1].
+            color_temp: Color temperature in Kelvin.
+        """
+        self._send_envelope(EVENT_TYPE_ZONE_MOOD, {
+            "zone_id": zone_id,
+            "mood": mood,
+            "brightness_factor": round(brightness_factor, 2),
+            "color_temp_k": color_temp,
+            "timestamp": _now_iso(),
         })
 
     # ------------------------------------------------------------------

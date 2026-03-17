@@ -897,6 +897,66 @@ class AnomalyDetectionEngine:
         """Rank severity for comparison."""
         return {"ok": 0, "info": 1, "warning": 2, "critical": 3}.get(severity, 0)
 
+    def publish_to_brain_graph(self, anomaly: "Anomaly", brain_graph_service) -> None:
+        """Create anomaly node in brain graph linked to affected entity.
+
+        This enriches the brain graph with anomaly context so that patterns
+        and sequences can incorporate anomaly signals.  Silently returns on
+        any error to avoid disrupting the detection pipeline.
+        """
+        if not brain_graph_service:
+            return
+        try:
+            entity_id = anomaly.entity_id
+            if not entity_id:
+                return
+            detected_at = anomaly.detected_at.isoformat() if anomaly.detected_at else ""
+            anomaly_node_id = f"anomaly:{entity_id}:{detected_at}"
+
+            # Touch anomaly node (use 'event' kind — closest allowed NodeKind)
+            brain_graph_service.touch_node(
+                node_id=anomaly_node_id,
+                kind="event",
+                label=anomaly.description_de or "Anomalie",
+                domain="anomaly",
+                meta_patch={
+                    "severity": anomaly.severity,
+                    "score": anomaly.score,
+                    "anomaly_type": anomaly.anomaly_type,
+                },
+                tags=["anomaly", anomaly.severity, anomaly.anomaly_type],
+                source={"system": "anomaly_detection", "name": "hub"},
+            )
+
+            # Ensure entity node exists
+            entity_node_id = f"ha.entity:{entity_id}" if not entity_id.startswith("ha.entity:") else entity_id
+            brain_graph_service.touch_node(
+                node_id=entity_node_id,
+                delta=0.1,
+                kind="entity",
+                label=entity_id.split(".")[-1].replace("_", " ").title() if "." in entity_id else entity_id,
+                source={"system": "anomaly_detection", "name": "entity_ref"},
+            )
+
+            # Create edge from entity to anomaly
+            brain_graph_service.link(
+                from_node=entity_node_id,
+                edge_type="affects",
+                to_node=anomaly_node_id,
+                initial_weight=max(0.1, anomaly.score / 100.0),
+                evidence={
+                    "kind": "anomaly_detection",
+                    "ref": anomaly.anomaly_id,
+                    "summary": f"{anomaly.anomaly_type}: {anomaly.severity}",
+                },
+            )
+            logger.debug(
+                "Published anomaly %s to brain graph (entity=%s)",
+                anomaly.anomaly_id, entity_id,
+            )
+        except Exception:
+            logger.debug("Failed to publish anomaly to brain graph", exc_info=True)
+
     def health_check(self) -> dict[str, Any]:
         """Return health status for backend health endpoint."""
         return {

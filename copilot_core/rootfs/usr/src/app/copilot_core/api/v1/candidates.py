@@ -3,7 +3,7 @@ from hashlib import sha256
 from flask import Blueprint, current_app, jsonify, request
 
 from copilot_core.brain_graph.provider import get_graph_service
-from copilot_core.storage.candidates import CandidateStore
+from copilot_core.storage.candidates import CandidateStore, rank_score, generate_explanation
 
 bp = Blueprint("candidates", __name__, url_prefix="/candidates")
 
@@ -55,7 +55,13 @@ def list_candidates():
         limit = 50
 
     kind = request.args.get("kind")
-    items = _store().list(limit=limit, kind=kind)
+
+    # Use ranked listing when ?ranked=true (default: true for better UX)
+    ranked = request.args.get("ranked", "true").lower() in ("true", "1", "yes")
+    if ranked:
+        items = _store().list_ranked(limit=limit, kind=kind, with_explanation=True)
+    else:
+        items = _store().list(limit=limit, kind=kind)
     return jsonify({"ok": True, "count": len(items), "items": items})
 
 
@@ -64,7 +70,14 @@ def get_candidate(candidate_id: str):
     it = _store().get(candidate_id)
     if not it:
         return jsonify({"ok": False, "error": "not_found"}), 404
-    return jsonify({"ok": True, "candidate": it})
+    # Enrich with score and explanation
+    enriched = dict(it)
+    try:
+        enriched["rank_score"] = rank_score(enriched)
+        enriched["explanation"] = generate_explanation(enriched)
+    except Exception:
+        pass
+    return jsonify({"ok": True, "candidate": enriched})
 
 
 @bp.delete("/<candidate_id>")
@@ -233,5 +246,18 @@ def graph_candidates():
                 },
             }
         )
+
+    # Enrich with ranking scores and explanations, then sort
+    for item in items:
+        try:
+            # Map graph data into attributes format for rank_score compatibility
+            data = item.get("data") or {}
+            item["attributes"] = data
+            item["rank_score"] = rank_score(item, all_candidates=items)
+            item["explanation"] = generate_explanation(item)
+        except Exception:
+            item["rank_score"] = 0.0
+            item["explanation"] = ""
+    items.sort(key=lambda c: c.get("rank_score", 0.0), reverse=True)
 
     return jsonify({"ok": True, "count": len(items), "items": items, "types": sorted(list(allow_types))})

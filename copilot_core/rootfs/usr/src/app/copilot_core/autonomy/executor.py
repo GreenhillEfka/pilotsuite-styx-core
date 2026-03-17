@@ -18,6 +18,14 @@ _LOGGER = logging.getLogger(__name__)
 # Rate limiting: max 1 action per module per zone per N seconds
 _RATE_LIMIT_SECONDS = 30
 
+# Domain reversibility classification
+_REVERSIBLE_DOMAINS = {"light", "switch", "fan", "media_player", "climate", "scene"}
+_IRREVERSIBLE_DOMAINS = {"lock", "alarm_control_panel", "cover"}  # cover = partially
+_HIGH_RISK_DOMAINS = {"lock", "alarm_control_panel"}
+
+# Confidence threshold for irreversible/high-risk actions
+_HIGH_RISK_CONFIDENCE_THRESHOLD = 0.95
+
 
 @dataclass
 class ExecutionResult:
@@ -101,6 +109,56 @@ class AutonomyExecutor:
         """Record execution timestamp for rate limiting."""
         key = f"{zone_id}:{module_id}"
         self._rate_limits[key] = time.time()
+
+    # ── Reversibility Check ──────────────────────────────────────────────
+
+    def _check_reversibility(self, action: Dict[str, Any]) -> tuple[bool, str]:
+        """Check if an action is safely reversible.
+
+        Returns (is_safe, reason).
+        High-risk actions require higher confidence threshold.
+        """
+        try:
+            action_type = action.get("type", "")
+            # Extract domain from action type (e.g. "light.turn_on" → "light")
+            domain = action_type.split(".")[0] if "." in action_type else ""
+
+            # Also check entity_id domain as fallback
+            entity_id = action.get("entity_id", "")
+            entity_domain = entity_id.split(".")[0] if "." in entity_id else ""
+
+            effective_domain = domain or entity_domain
+
+            if effective_domain in _HIGH_RISK_DOMAINS:
+                return False, f"Domain {effective_domain} ist sicherheitskritisch"
+            if effective_domain in _IRREVERSIBLE_DOMAINS:
+                return True, f"Domain {effective_domain} ist eingeschraenkt reversibel"
+            if effective_domain in _REVERSIBLE_DOMAINS:
+                return True, "Aktion ist sicher reversibel"
+            # Unknown domain: allow but flag
+            return True, f"Domain {effective_domain or 'unbekannt'} — Reversibilitaet unklar"
+        except Exception:
+            _LOGGER.debug("Reversibility check failed", exc_info=True)
+            return True, "Reversibilitaetspruefung fehlgeschlagen — erlaube Aktion"
+
+    def _generate_action_explanation(
+        self, action: Dict[str, Any], decision: str, reason: str
+    ) -> str:
+        """Generate human-readable German explanation for autonomy decision."""
+        try:
+            action_type = action.get("type", "unbekannt")
+            entity_id = action.get("entity_id", "")
+            entity_name = entity_id.split(".")[-1].replace("_", " ").title() if entity_id else "Unbekannt"
+
+            if decision == "executed":
+                return f"{entity_name}: {action_type} ausgefuehrt — {reason}"
+            elif decision == "skipped":
+                return f"{entity_name}: {action_type} uebersprungen — {reason}"
+            elif decision == "suggested":
+                return f"{entity_name}: {action_type} vorgeschlagen — {reason}"
+            return f"{entity_name}: {action_type} → {decision} ({reason})"
+        except Exception:
+            return f"Aktion {decision}: {reason}"
 
     # ── Governance Check ────────────────────────────────────────────────
 
@@ -213,11 +271,36 @@ class AutonomyExecutor:
                 decision="skipped", reason="Rate limited (30s cooldown)",
             )
 
+        # ── REVERSIBILITY CHECK ─────────────────────────────────────────
+        confidence = context.get("confidence", 0)
+        safe_actions = []
+        for action in actions:
+            is_safe, rev_reason = self._check_reversibility(action)
+            if not is_safe and confidence < _HIGH_RISK_CONFIDENCE_THRESHOLD:
+                explanation = self._generate_action_explanation(
+                    action, "skipped", rev_reason,
+                )
+                _LOGGER.warning(
+                    "Reversibility skip: %s (confidence=%.2f < %.2f)",
+                    explanation, confidence, _HIGH_RISK_CONFIDENCE_THRESHOLD,
+                )
+            else:
+                safe_actions.append(action)
+
+        if not safe_actions:
+            with self._stats_lock:
+                self._stats["skipped"] += 1
+            return ExecutionResult(
+                zone_id=zone_id, module_id=module_id,
+                decision="skipped",
+                reason="Alle Aktionen durch Reversibilitaetspruefung blockiert",
+            )
+
         # ── EXECUTE ─────────────────────────────────────────────────────
         errors = []
         executed_actions = []
 
-        for action in actions:
+        for action in safe_actions:
             action_type = action.get("type", "")
             try:
                 if action_type == "light.turn_on" and self._ha_bridge:

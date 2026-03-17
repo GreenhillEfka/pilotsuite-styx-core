@@ -7,42 +7,50 @@
 <style>
   :root {
     /* ── PilotSuite Design System ────────────────────── */
-    --bg: #0f0f1a; --surface: #1a1a2e; --surface2: #222240;
-    --text: #e0e0f0; --muted: #9e9eb8; --accent: #4fc3f7;
-    --green: #81c784; --orange: #ffb74d; --red: #ef5350;
-    --purple: #ce93d8; --radius: 12px;
+    --bg: #0b0d14; --surface: #151825; --surface2: #1e2236;
+    --text: #e4e6f0; --muted: #8b8faa; --accent: #56c8fa;
+    --green: #6dcf8c; --orange: #f5a623; --red: #f25555;
+    --purple: #c78dff; --radius: 14px;
     /* Semantic status colors */
-    --status-ok: #81c784; --status-warn: #ffb74d;
-    --status-error: #ef5350; --status-info: #4fc3f7;
+    --status-ok: #6dcf8c; --status-warn: #f5a623;
+    --status-error: #f25555; --status-info: #56c8fa;
     /* Typography scale (min 0.75rem for readability) */
     --fs-xs: 0.75rem; --fs-sm: 0.8125rem; --fs-base: 0.875rem;
     --fs-md: 0.9375rem; --fs-lg: 1.0625rem; --fs-xl: 1.25rem;
     /* Spacing scale */
     --sp-xs: 4px; --sp-sm: 8px; --sp-md: 12px; --sp-lg: 16px; --sp-xl: 24px;
     /* Transitions */
-    --transition-fast: 0.15s ease; --transition-base: 0.2s ease;
+    --transition-fast: 0.15s ease; --transition-base: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    /* Glass effect */
+    --glass-bg: rgba(21, 24, 37, 0.75);
+    --glass-border: rgba(255, 255, 255, 0.06);
+    --glass-blur: blur(12px);
+    /* Shadows */
+    --shadow-card: 0 4px 24px rgba(0, 0, 0, 0.28);
+    --shadow-hover: 0 8px 32px rgba(0, 0, 0, 0.4);
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); color: var(--text); }
   .app { max-width: 1400px; margin: 0 auto; padding: 16px; }
   header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; padding: 12px 0; border-bottom: 1px solid var(--surface2); flex-wrap: wrap; }
-  header h1 { font-size: 1.4rem; font-weight: 700; background: linear-gradient(135deg, var(--accent), var(--purple)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+  header h1 { font-size: 1.4rem; font-weight: 700; background: linear-gradient(135deg, var(--accent) 0%, var(--purple) 60%, #ff8a80 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; letter-spacing: -0.01em; }
   header .status { margin-left: auto; font-size: 0.8rem; color: var(--muted); }
   .refresh-countdown { font-size: 0.7rem; color: var(--muted); margin-left: 8px; }
 
   /* ── Tab Navigation ─────────────────────────────── */
   .tabs { display: flex; gap: 4px; margin-bottom: 16px; border-bottom: 2px solid var(--surface2); padding-bottom: 0; overflow-x: auto; }
-  .tab { padding: 10px 18px; cursor: pointer; font-size: 0.85rem; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -2px; white-space: nowrap; transition: all 0.2s; }
-  .tab:hover { color: var(--text); background: var(--surface); border-radius: 8px 8px 0 0; }
-  .tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+  .tab { padding: 10px 18px; cursor: pointer; font-size: 0.85rem; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -2px; white-space: nowrap; transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1); letter-spacing: 0.01em; }
+  .tab:hover { color: var(--text); background: rgba(255,255,255,0.04); border-radius: 8px 8px 0 0; }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; background: rgba(86,200,250,0.05); border-radius: 8px 8px 0 0; }
   .tab-content { display: none; }
   .tab-content.active { display: block; }
 
   /* ── Grid & Cards ───────────────────────────────── */
   .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
-  .card { background: var(--surface); border-radius: var(--radius); padding: 20px; border: 1px solid var(--surface2); }
-  .card h2 { font-size: 0.95rem; font-weight: 600; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
-  .card h2 .icon { width: 20px; height: 20px; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; }
+  .card { background: var(--glass-bg); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur); border-radius: var(--radius); padding: 20px; border: 1px solid var(--glass-border); box-shadow: var(--shadow-card); transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1); }
+  .card:hover { transform: translateY(-2px); box-shadow: var(--shadow-hover); border-color: rgba(255,255,255,0.1); }
+  .card h2 { font-size: 0.95rem; font-weight: 600; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; letter-spacing: 0.01em; }
+  .card h2 .icon { width: 22px; height: 22px; border-radius: 7px; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; }
   .wide { grid-column: span 2; }
   @media (max-width: 1024px) { .grid { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); } .routing-panel { grid-template-columns: 1fr; } }
   @media (max-width: 700px) { .wide { grid-column: span 1; } .grid { grid-template-columns: 1fr; } .summary-strip { gap: 8px; } .summary-chip { min-width: 120px; padding: 10px 12px; } header h1 { font-size: 1.2rem; } .tab { padding: 8px 14px; font-size: var(--fs-sm); } }
@@ -51,12 +59,12 @@
   /* ── Stats & Bars ───────────────────────────────── */
   .stat { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--surface2); }
   .stat:last-child { border-bottom: none; }
-  .stat .label { color: var(--muted); font-size: var(--fs-base); }
-  .stat .value { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .stat .label { color: var(--muted); font-size: var(--fs-base); letter-spacing: 0.02em; }
+  .stat .value { font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
   .bar-row { display: flex; align-items: center; gap: 8px; margin: 4px 0; }
   .bar-label { flex: 0 0 100px; font-size: var(--fs-sm); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .bar-track { flex: 1; height: 6px; background: var(--surface2); border-radius: 3px; overflow: hidden; }
-  .bar-fill { height: 100%; border-radius: 3px; transition: width 0.5s ease; }
+  .bar-fill { height: 100%; border-radius: 3px; transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1); }
   .bar-value { flex: 0 0 40px; text-align: right; font-size: var(--fs-sm); font-variant-numeric: tabular-nums; }
 
   /* ── Mood ────────────────────────────────────────── */
@@ -71,8 +79,8 @@
 
   /* ── Modules ────────────────────────────────────── */
   .module-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px; }
-  .module-chip { padding: 10px 12px; border-radius: 8px; font-size: 0.8rem; display: flex; align-items: center; gap: 8px; cursor: pointer; transition: all 0.2s; }
-  .module-chip:hover { filter: brightness(1.2); transform: translateY(-1px); }
+  .module-chip { padding: 10px 12px; border-radius: 10px; font-size: 0.8rem; display: flex; align-items: center; gap: 8px; cursor: pointer; transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1); border: 1px solid var(--glass-border); }
+  .module-chip:hover { filter: brightness(1.2); transform: translateY(-2px); box-shadow: 0 4px 16px rgba(0,0,0,0.25); }
   .module-chip .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
   .module-chip .module-name { flex: 1; }
   .module-chip .module-state { font-size: var(--fs-xs); color: var(--muted); text-transform: uppercase; letter-spacing: 0.3px; }
@@ -85,8 +93,8 @@
 
   /* ── Model Cards ────────────────────────────────── */
   .model-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
-  .model-card { background: var(--surface2); border-radius: 10px; padding: 14px; border: 1px solid transparent; transition: all 0.2s; position: relative; }
-  .model-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+  .model-card { background: var(--glass-bg); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur); border-radius: 12px; padding: 16px; border: 1px solid var(--glass-border); transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1); position: relative; box-shadow: var(--shadow-card); }
+  .model-card:hover { border-color: var(--accent); transform: translateY(-2px); box-shadow: var(--shadow-hover); }
   .model-card.active-model { border-color: var(--green); }
   .model-card.active-model::after { content: "AKTIV"; position: absolute; top: 8px; right: 8px; background: var(--green); color: #000; font-size: 0.65rem; font-weight: 700; padding: 2px 6px; border-radius: 4px; }
   .model-card .model-name { font-weight: 600; font-size: var(--fs-md); margin-bottom: 4px; }
@@ -96,8 +104,8 @@
   .model-card .tag.installed { background: #1a3a2a; color: var(--green); }
   .model-card .tag.not-installed { background: #3a1a1a; color: var(--red); }
   .model-card .model-actions { display: flex; gap: 6px; }
-  .btn-sm { padding: 6px 14px; border-radius: 6px; border: none; font-size: 0.78rem; cursor: pointer; font-weight: 600; transition: all 0.2s; }
-  .btn-sm:hover { filter: brightness(1.15); }
+  .btn-sm { padding: 6px 14px; border-radius: 8px; border: none; font-size: 0.78rem; cursor: pointer; font-weight: 600; transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1); letter-spacing: 0.01em; }
+  .btn-sm:hover { filter: brightness(1.15); transform: translateY(-1px); box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
   .btn-sm:disabled { opacity: 0.4; cursor: not-allowed; }
   .btn-primary { background: var(--accent); color: #0f0f1a; }
   .btn-success { background: var(--green); color: #0f0f1a; }
@@ -125,23 +133,28 @@
   .neuron-cfg-card .slider-val { flex: 0 0 36px; font-size: var(--fs-xs); text-align: right; font-variant-numeric: tabular-nums; }
 
   /* ── Brain Canvas ───────────────────────────────── */
-  #brain-canvas { width: 100%; height: 400px; border-radius: 8px; background: #0a0a14; cursor: grab; }
   #brain-canvas:active { cursor: grabbing; }
-  .brain-tooltip { position: absolute; background: rgba(0,0,0,0.92); color: #e0e0f0; padding: 6px 10px; border-radius: 6px; font-size: 0.75rem; pointer-events: none; opacity: 0; transition: opacity 0.15s; border: 1px solid var(--accent); z-index: 10; }
+  .brain-tooltip { position: absolute; background: rgba(11,13,20,0.95); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); color: #e4e6f0; padding: 8px 12px; border-radius: 8px; font-size: 0.75rem; pointer-events: none; opacity: 0; transition: opacity 0.2s; border: 1px solid var(--glass-border); z-index: 10; box-shadow: 0 4px 16px rgba(0,0,0,0.4); }
 
   /* ── Chat ────────────────────────────────────────── */
   .chat-wrap { display: flex; flex-direction: column; height: min(500px, 60vh); }
   .chat-messages { flex: 1; overflow-y: auto; padding: var(--sp-md); display: flex; flex-direction: column; gap: 10px; scroll-behavior: smooth; }
-  .chat-msg { max-width: 80%; padding: 10px 16px; border-radius: 16px; font-size: var(--fs-base); line-height: 1.5; word-wrap: break-word; }
-  .chat-msg.user { align-self: flex-end; background: linear-gradient(135deg, #1a3a5a, #1a2e4a); color: #b3e0ff; border-bottom-right-radius: 4px; }
-  .chat-msg.assistant { align-self: flex-start; background: var(--surface2); color: var(--text); border-bottom-left-radius: 4px; }
-  .chat-msg.assistant::before { content: "Styx"; display: block; font-size: var(--fs-xs); color: var(--accent); font-weight: 600; margin-bottom: 4px; }
-  .chat-msg.system { align-self: center; background: transparent; color: var(--muted); font-size: var(--fs-xs); font-style: italic; }
+  .chat-msg { max-width: 80%; padding: 12px 18px; border-radius: 18px; font-size: var(--fs-base); line-height: 1.55; word-wrap: break-word; box-shadow: 0 2px 8px rgba(0,0,0,0.15); animation: msgAppear 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+  @keyframes msgAppear { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  .chat-msg.user { align-self: flex-end; background: linear-gradient(135deg, #1a4068, #163458); color: #c0e8ff; border-bottom-right-radius: 4px; }
+  .chat-msg.assistant { align-self: flex-start; background: var(--glass-bg); backdrop-filter: var(--glass-blur); border: 1px solid var(--glass-border); color: var(--text); border-bottom-left-radius: 4px; }
+  .chat-msg.assistant::before { content: "Styx"; display: block; font-size: var(--fs-xs); color: var(--accent); font-weight: 600; margin-bottom: 4px; letter-spacing: 0.05em; }
+  .chat-msg.system { align-self: center; background: transparent; color: var(--muted); font-size: var(--fs-xs); font-style: italic; box-shadow: none; }
+  .chat-typing { align-self: flex-start; display: flex; gap: 4px; padding: 14px 20px; }
+  .chat-typing .dot { width: 7px; height: 7px; background: var(--muted); border-radius: 50%; animation: typingBounce 1.4s ease-in-out infinite; }
+  .chat-typing .dot:nth-child(2) { animation-delay: 0.2s; }
+  .chat-typing .dot:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes typingBounce { 0%, 60%, 100% { transform: translateY(0); } 30% { transform: translateY(-6px); } }
   .chat-input-row { display: flex; gap: var(--sp-sm); padding: var(--sp-sm) 0 0 0; }
-  .chat-input { flex: 1; background: var(--surface2); border: 1px solid #333; border-radius: 12px; padding: 10px 16px; color: var(--text); font-size: var(--fs-base); outline: none; resize: none; transition: border-color var(--transition-fast); }
-  .chat-input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(79, 195, 247, 0.15); }
-  .chat-send { background: var(--accent); color: #0f0f1a; border: none; border-radius: 12px; padding: 10px 20px; font-weight: 600; cursor: pointer; font-size: var(--fs-base); transition: all var(--transition-fast); }
-  .chat-send:hover { filter: brightness(1.1); transform: translateY(-1px); }
+  .chat-input { flex: 1; background: var(--surface2); border: 1px solid rgba(255,255,255,0.06); border-radius: 14px; padding: 12px 18px; color: var(--text); font-size: var(--fs-base); outline: none; resize: none; transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1); }
+  .chat-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(86, 200, 250, 0.12); }
+  .chat-send { background: linear-gradient(135deg, var(--accent), #3ab8f0); color: #0b0d14; border: none; border-radius: 14px; padding: 10px 22px; font-weight: 600; cursor: pointer; font-size: var(--fs-base); transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1); }
+  .chat-send:hover { filter: brightness(1.1); transform: translateY(-1px); box-shadow: 0 4px 16px rgba(86,200,250,0.25); }
   .chat-send:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
   .chat-status { font-size: var(--fs-xs); color: var(--muted); padding: var(--sp-xs) 0; text-align: right; }
 
@@ -155,15 +168,15 @@
   .candidate-item { padding: 8px; margin: 4px 0; background: var(--surface2); border-radius: 8px; font-size: 0.82rem; }
   .candidate-item .label { font-weight: 500; }
   .candidate-item .meta { color: var(--muted); font-size: 0.75rem; margin-top: 2px; }
-  .refresh-btn { background: var(--surface2); border: none; color: var(--accent); padding: 6px 14px; border-radius: 8px; cursor: pointer; font-size: 0.8rem; }
-  .refresh-btn:hover { background: var(--surface); }
+  .refresh-btn { background: var(--surface2); border: 1px solid var(--glass-border); color: var(--accent); padding: 6px 14px; border-radius: 8px; cursor: pointer; font-size: 0.8rem; transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1); }
+  .refresh-btn:hover { background: rgba(86,200,250,0.08); transform: translateY(-1px); }
   .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
   .status-dot.ok { background: var(--green); }
   .status-dot.warn { background: var(--orange); }
   .status-dot.err { background: var(--red); }
   .section-title { font-size: 0.9rem; font-weight: 600; margin: 16px 0 10px; color: var(--accent); }
-  .toast { position: fixed; bottom: 20px; right: 20px; background: var(--surface); border: 1px solid var(--accent); color: var(--text); padding: 12px 20px; border-radius: 8px; font-size: 0.82rem; z-index: 100; opacity: 0; transition: opacity 0.3s; pointer-events: none; box-shadow: 0 4px 16px rgba(0,0,0,0.4); }
-  .toast.show { opacity: 1; }
+  .toast { position: fixed; bottom: 20px; right: 20px; background: var(--glass-bg); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid var(--glass-border); color: var(--text); padding: 14px 22px; border-radius: 12px; font-size: 0.82rem; z-index: 100; opacity: 0; transform: translateY(10px); transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1); pointer-events: none; box-shadow: 0 8px 32px rgba(0,0,0,0.5); }
+  .toast.show { opacity: 1; transform: translateY(0); }
 
   /* ── Loading Spinner ────────────────────────────── */
   .loading { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--surface2); border-top: 2px solid var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
@@ -186,8 +199,8 @@
 
   /* ── Zone Cards ──────────────────────────────── */
   .zone-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
-  .zone-card { background: var(--surface); border-radius: var(--radius); padding: 16px; border: 1px solid var(--surface2); transition: all 0.2s; cursor: pointer; position: relative; }
-  .zone-card:hover { border-color: var(--accent); transform: translateY(-2px); box-shadow: 0 4px 16px rgba(0,0,0,0.3); }
+  .zone-card { background: var(--glass-bg); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur); border-radius: var(--radius); padding: 16px; border: 1px solid var(--glass-border); transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1); cursor: pointer; position: relative; box-shadow: var(--shadow-card); }
+  .zone-card:hover { border-color: var(--accent); transform: translateY(-3px); box-shadow: var(--shadow-hover); }
   .zone-card .zone-header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
   .zone-card .zone-icon { font-size: 1.5rem; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border-radius: 10px; }
   .zone-card .zone-title { font-weight: 600; font-size: 1rem; }
@@ -198,8 +211,8 @@
 
   /* ── Suggestion Cards ──────────────────────────── */
   .suggestion-grid { display: flex; flex-direction: column; gap: 12px; }
-  .suggestion-card { background: var(--surface); border-radius: var(--radius); padding: 16px; border-left: 4px solid var(--accent); transition: all 0.2s; }
-  .suggestion-card:hover { background: var(--surface2); }
+  .suggestion-card { background: var(--glass-bg); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur); border-radius: var(--radius); padding: 16px; border-left: 4px solid var(--accent); transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: var(--shadow-card); border-right: 1px solid var(--glass-border); border-top: 1px solid var(--glass-border); border-bottom: 1px solid var(--glass-border); }
+  .suggestion-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-hover); }
   .suggestion-card .sug-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px; }
   .suggestion-card .sug-title { font-weight: 600; font-size: 0.9rem; }
   .suggestion-card .sug-confidence { font-size: 0.75rem; padding: 2px 8px; border-radius: 10px; font-weight: 600; }
@@ -225,9 +238,10 @@
   .musikwolke-panel h3 { color: var(--purple); margin-bottom: 8px; }
 
   /* ── Zone Detail Modal ──────────────────────────── */
-  .modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 50; align-items: center; justify-content: center; }
+  .modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); z-index: 50; align-items: center; justify-content: center; }
   .modal-overlay.show { display: flex; }
-  .modal { background: var(--surface); border-radius: var(--radius); padding: 24px; max-width: 600px; width: 90%; max-height: 80vh; overflow-y: auto; border: 1px solid var(--surface2); animation: fadeIn 0.2s ease; }
+  .modal { background: var(--glass-bg); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-radius: 16px; padding: 24px; max-width: 600px; width: 90%; max-height: 80vh; overflow-y: auto; border: 1px solid var(--glass-border); animation: modalAppear 0.3s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: 0 24px 80px rgba(0,0,0,0.5); }
+  @keyframes modalAppear { from { opacity: 0; transform: scale(0.95) translateY(10px); } to { opacity: 1; transform: none; } }
   .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
   .modal-header h3 { font-size: 1.1rem; font-weight: 600; }
   .modal-close { background: none; border: none; color: var(--muted); font-size: 1.3rem; cursor: pointer; padding: 4px 8px; }
@@ -243,9 +257,10 @@
 
   /* ── Overview Summary Cards ──────────────────────── */
   .summary-strip { display: flex; gap: 12px; margin-bottom: 16px; overflow-x: auto; padding-bottom: 4px; }
-  .summary-chip { background: var(--surface); border-radius: 10px; padding: 12px 16px; min-width: 140px; border: 1px solid var(--surface2); flex-shrink: 0; }
-  .summary-chip .sc-label { font-size: var(--fs-xs); color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
-  .summary-chip .sc-value { font-size: var(--fs-xl); font-weight: 700; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .summary-chip { background: var(--glass-bg); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur); border-radius: 12px; padding: 14px 18px; min-width: 145px; border: 1px solid var(--glass-border); flex-shrink: 0; box-shadow: var(--shadow-card); transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1); }
+  .summary-chip:hover { transform: translateY(-2px); box-shadow: var(--shadow-hover); border-color: rgba(255,255,255,0.1); }
+  .summary-chip .sc-label { font-size: var(--fs-xs); color: var(--muted); text-transform: uppercase; letter-spacing: 0.8px; font-weight: 500; }
+  .summary-chip .sc-value { font-size: var(--fs-xl); font-weight: 700; margin-top: 4px; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
   .summary-chip .sc-sub { font-size: var(--fs-xs); color: var(--muted); margin-top: 2px; }
 
   /* ── Suggestion Enhanced ──────────────────────────── */
@@ -284,7 +299,7 @@
   /* ── Neuron Layer Visualization (Beyond State of the Art) ─── */
   .neuron-layer-viz {
     position: relative; width: 100%; height: 500px;
-    background: #060810; border-radius: 12px; overflow: hidden;
+    background: linear-gradient(180deg, #060810 0%, #080c16 100%); border-radius: 14px; overflow: hidden; box-shadow: inset 0 0 60px rgba(0,0,0,0.5);
   }
   .neuron-layer-bg {
     position: absolute; top: 0; bottom: 0; border-radius: 8px;
@@ -323,10 +338,11 @@
     gap: 8px; margin-top: 12px;
   }
   .neuron-stat-chip {
-    background: var(--surface2); border-radius: 8px; padding: 8px 12px; text-align: center;
+    background: linear-gradient(135deg, rgba(30, 34, 54, 0.9), rgba(21, 24, 37, 0.9)); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur); border-radius: 10px; padding: 10px 14px; text-align: center; border: 1px solid var(--glass-border); transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: 0 2px 12px rgba(0,0,0,0.2);
   }
-  .neuron-stat-chip .nsc-label { font-size: 0.65rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
-  .neuron-stat-chip .nsc-value { font-size: 1.1rem; font-weight: 700; margin-top: 2px; font-variant-numeric: tabular-nums; }
+  .neuron-stat-chip:hover { transform: translateY(-1px); border-color: rgba(255,255,255,0.1); }
+  .neuron-stat-chip .nsc-label { font-size: 0.65rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.8px; font-weight: 500; }
+  .neuron-stat-chip .nsc-value { font-size: 1.15rem; font-weight: 700; margin-top: 3px; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
 
   /* ── HomeKit Cards ─────────────────────────────────── */
   .homekit-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; margin-top: 12px; }
@@ -416,6 +432,50 @@
   @media (min-width: 1200px) {
     .zone-grid { grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); }
   }
+
+  /* ── Pipeline Health Strip ──────────────────────── */
+  .pipeline-health { display: flex; align-items: center; gap: 0; margin-bottom: 16px; background: var(--glass-bg); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur); border-radius: 12px; padding: 10px 16px; border: 1px solid var(--glass-border); box-shadow: var(--shadow-card); overflow-x: auto; }
+  .pipeline-stage { display: flex; align-items: center; gap: 6px; font-size: 0.72rem; color: var(--muted); white-space: nowrap; letter-spacing: 0.02em; }
+  .pipeline-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; transition: all 0.3s; }
+  .pipeline-dot.ok { background: var(--green); box-shadow: 0 0 8px rgba(109,207,140,0.5); }
+  .pipeline-dot.warn { background: var(--orange); box-shadow: 0 0 8px rgba(245,166,35,0.5); }
+  .pipeline-dot.err { background: var(--red); box-shadow: 0 0 8px rgba(242,85,85,0.5); }
+  .pipeline-dot.off { background: #444; }
+  .pipeline-arrow { color: var(--muted); font-size: 0.7rem; margin: 0 6px; opacity: 0.5; }
+
+  /* ── Confidence Progress Bar ────────────────────── */
+  .confidence-bar { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+  .confidence-track { flex: 1; height: 6px; background: var(--surface2); border-radius: 3px; overflow: hidden; }
+  .confidence-fill { height: 100%; border-radius: 3px; transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1); }
+  .confidence-label { font-size: 0.75rem; font-variant-numeric: tabular-nums; min-width: 36px; text-align: right; font-weight: 600; }
+
+  /* ── Last Activity List ─────────────────────────── */
+  .last-activity-item { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.04); font-size: 0.78rem; }
+  .last-activity-item:last-child { border-bottom: none; }
+  .last-activity-time { font-size: 0.7rem; color: var(--muted); font-variant-numeric: tabular-nums; min-width: 52px; }
+  .last-activity-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); flex-shrink: 0; }
+
+  /* ── Sparkline Canvas ───────────────────────────── */
+  .sparkline { display: inline-block; vertical-align: middle; margin-left: 6px; }
+
+  /* ── Zone Presence Indicator ────────────────────── */
+  .zone-presence-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 4px; }
+  .zone-presence-dot.active { background: var(--green); animation: presencePulse 2s ease-in-out infinite; }
+  .zone-presence-dot.idle { background: var(--muted); }
+  @keyframes presencePulse { 0%, 100% { opacity: 1; box-shadow: 0 0 4px rgba(109,207,140,0.4); } 50% { opacity: 0.6; box-shadow: 0 0 12px rgba(109,207,140,0.7); } }
+
+  /* ── Zone Mini Mood Ring ─────────────────────────── */
+  .zone-mini-mood-ring { width: 28px; height: 28px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 0.6rem; font-weight: 700; flex-shrink: 0; }
+
+  /* ── Chat Context Bar ───────────────────────────── */
+  .chat-context-bar { font-size: 0.72rem; color: var(--muted); padding: 6px 12px; background: rgba(255,255,255,0.03); border-radius: 8px; margin-bottom: 6px; display: flex; gap: 12px; align-items: center; letter-spacing: 0.01em; }
+  .chat-context-bar .ctx-chip { padding: 2px 8px; background: var(--surface2); border-radius: 4px; font-size: 0.68rem; }
+
+  /* ── Chat Model Badge ───────────────────────────── */
+  .chat-model-badge { font-size: 0.65rem; padding: 2px 8px; background: rgba(86,200,250,0.12); color: var(--accent); border-radius: 4px; font-weight: 600; letter-spacing: 0.03em; }
+
+  /* ── Brain Canvas Enhanced ──────────────────────── */
+  #brain-canvas { width: 100%; height: 400px; border-radius: 10px; background: linear-gradient(180deg, #080a12 0%, #0a0c18 100%); cursor: grab; box-shadow: inset 0 0 40px rgba(0,0,0,0.4); }
 </style>
 </head>
 <body>
@@ -446,6 +506,20 @@
 
   <!-- ═══════════════ TAB: Overview ═══════════════ -->
   <div class="tab-content active" id="tab-overview">
+    <!-- Pipeline Health Strip -->
+    <div class="pipeline-health" id="pipeline-health">
+      <div class="pipeline-stage"><span class="pipeline-dot off" id="ph-ingest"></span>Event Ingest</div>
+      <span class="pipeline-arrow">&rarr;</span>
+      <div class="pipeline-stage"><span class="pipeline-dot off" id="ph-brain"></span>Brain Graph</div>
+      <span class="pipeline-arrow">&rarr;</span>
+      <div class="pipeline-stage"><span class="pipeline-dot off" id="ph-neurons"></span>Neuronen</div>
+      <span class="pipeline-arrow">&rarr;</span>
+      <div class="pipeline-stage"><span class="pipeline-dot off" id="ph-mood"></span>Mood Engine</div>
+      <span class="pipeline-arrow">&rarr;</span>
+      <div class="pipeline-stage"><span class="pipeline-dot off" id="ph-habitus"></span>Habitus</div>
+      <span class="pipeline-arrow">&rarr;</span>
+      <div class="pipeline-stage"><span class="pipeline-dot off" id="ph-candidates"></span>Kandidaten</div>
+    </div>
     <div class="summary-strip" id="summary-strip"></div>
     <div class="grid">
       <div class="card">
@@ -479,6 +553,10 @@
       <div class="card">
         <h2><span class="icon" style="background:#1a3a2a">&#x1F9EC;</span> Habitus-Lernen</h2>
         <div id="habitus-overview-content">&ndash;</div>
+      </div>
+      <div class="card">
+        <h2><span class="icon" style="background:#2a1a2a">&#x1F4DD;</span> Letzte Aktivitaet</h2>
+        <div id="last-activity-content"><span style="color:var(--muted);font-size:0.8rem">Keine Aktivitaeten</span></div>
       </div>
       <div class="card wide">
         <h2><span class="icon" style="background:#1a2a4a">&#x1F52C;</span> Neuronen-Brain Visualisierung</h2>
@@ -713,12 +791,12 @@
       </div>
       <!-- Neuron Stats Strip -->
       <div class="neuron-stats-panel" id="neuron-stats-panel">
-        <div class="neuron-stat-chip"><div class="nsc-label">Neuronen</div><div class="nsc-value" id="nstat-total">14</div></div>
-        <div class="neuron-stat-chip"><div class="nsc-label">Aktiv</div><div class="nsc-value" id="nstat-active" style="color:var(--green)">0</div></div>
-        <div class="neuron-stat-chip"><div class="nsc-label">Feuern</div><div class="nsc-value" id="nstat-firing" style="color:var(--orange)">0</div></div>
-        <div class="neuron-stat-chip"><div class="nsc-label">Synapsen</div><div class="nsc-value" id="nstat-synapses" style="color:var(--purple)">18</div></div>
-        <div class="neuron-stat-chip"><div class="nsc-label">Dom. Mood</div><div class="nsc-value" id="nstat-dominant" style="color:var(--accent)">&mdash;</div></div>
-        <div class="neuron-stat-chip"><div class="nsc-label">Signal&middot;St&auml;rke</div><div class="nsc-value" id="nstat-signal">0%</div></div>
+        <div class="neuron-stat-chip"><div class="nsc-label">&#x1F9E0; Neuronen</div><div class="nsc-value" id="nstat-total">14</div></div>
+        <div class="neuron-stat-chip"><div class="nsc-label">&#x2705; Aktiv</div><div class="nsc-value" id="nstat-active" style="color:var(--green)">0</div></div>
+        <div class="neuron-stat-chip"><div class="nsc-label">&#x26A1; Feuern</div><div class="nsc-value" id="nstat-firing" style="color:var(--orange)">0</div></div>
+        <div class="neuron-stat-chip"><div class="nsc-label">&#x1F517; Synapsen</div><div class="nsc-value" id="nstat-synapses" style="color:var(--purple)">18</div></div>
+        <div class="neuron-stat-chip"><div class="nsc-label">&#x1F3AD; Dom. Mood</div><div class="nsc-value" id="nstat-dominant" style="color:var(--accent)">&mdash;</div></div>
+        <div class="neuron-stat-chip"><div class="nsc-label">&#x1F4E1; Signal</div><div class="nsc-value" id="nstat-signal">0%</div></div>
       </div>
     </div>
 
@@ -792,6 +870,12 @@
     <div class="card wide">
       <h2><span class="icon" style="background:#2a1a3a">&#x1F4AC;</span> Styx Chat</h2>
       <div class="chat-wrap">
+        <div class="chat-context-bar" id="chat-context-bar">
+          <span>Kontext:</span>
+          <span class="ctx-chip" id="chat-ctx-mood">Mood: --</span>
+          <span class="ctx-chip" id="chat-ctx-zones">Zonen: --</span>
+          <span class="ctx-chip" id="chat-ctx-model">Modell: --</span>
+        </div>
         <div class="chat-messages" id="chat-messages">
           <div class="chat-msg system">Willkommen bei Styx. Stelle eine Frage...</div>
         </div>
@@ -956,12 +1040,17 @@ function moodClass(mood) {
 function renderMood(mood) {
   if (!mood || !mood.mood) return "Kein Mood-Daten";
   const conf = Math.round((mood.confidence || 0) * 100);
+  const confColor = conf >= 80 ? 'var(--green)' : conf >= 50 ? 'var(--orange)' : 'var(--red)';
   let html = `<span class="mood-badge ${moodClass(mood.mood)}">${mood.mood}</span>
-    <span style="margin-left:8px;color:var(--muted);font-size:0.85rem">${conf}% Konfidenz</span>`;
+    <div class="confidence-bar">
+      <span style="font-size:0.75rem;color:var(--muted)">Konfidenz</span>
+      <div class="confidence-track"><div class="confidence-fill" style="width:${conf}%;background:${confColor}"></div></div>
+      <span class="confidence-label" style="color:${confColor}">${conf}%</span>
+    </div>`;
   if (mood.mood_values) {
-    const colors = {relax:"#81c784",focus:"#4fc3f7",active:"#ffb74d",sleep:"#ce93d8",alert:"#ef5350",away:"#888",social:"#ff8a65",recovery:"#a5d6a7"};
+    const colors = {relax:"#6dcf8c",focus:"#56c8fa",active:"#f5a623",sleep:"#c78dff",alert:"#f25555",away:"#888",social:"#ff8a65",recovery:"#a5d6a7"};
     html += '<div style="margin-top:12px">';
-    for (const [k, v] of Object.entries(mood.mood_values)) html += barHTML(k, v, colors[k] || "#4fc3f7");
+    for (const [k, v] of Object.entries(mood.mood_values)) html += barHTML(k, v, colors[k] || "#56c8fa");
     html += '</div>';
   }
   return html;
@@ -1435,7 +1524,7 @@ const BRAIN_EDGES = [
   ["state.relaxation","mood.calm",0.3],["state.social","mood.energy",0.2],
 ];
 
-const LAYER_COLORS = ["#4fc3f7","#81c784","#ce93d8"];
+const LAYER_COLORS = ["#56c8fa","#6dcf8c","#c78dff"];
 const LAYER_LABELS = ["Kontext","Zustand","Stimmung"];
 
 let brainNodeValues = {};
@@ -1463,9 +1552,12 @@ function initBrain(canvasId, tooltipId) {
     if (found) {
       hoveredNode = found.id;
       const val = brainNodeValues[found.id] || 0;
-      tooltip.textContent = `${found.id}: ${(val * 100).toFixed(1)}%`;
+      const cfg = neuronConfigs[found.id];
+      const threshold = cfg ? (cfg.config?.threshold || 0.5) : 0.5;
+      const firing = val > 0.6 ? ' | FIRING' : val > threshold ? ' | aktiv' : '';
+      tooltip.innerHTML = `<strong>${found.id}</strong><br>Wert: ${(val * 100).toFixed(1)}%${firing}<br>Schwelle: ${(threshold * 100).toFixed(0)}%`;
       tooltip.style.left = (e.clientX + 12) + "px";
-      tooltip.style.top = (e.clientY - 28) + "px";
+      tooltip.style.top = (e.clientY - 40) + "px";
       tooltip.style.opacity = "1";
     } else {
       hoveredNode = null;
@@ -1536,6 +1628,7 @@ function drawBrainOn(canvasId) {
     const sig = srcVal * Math.abs(weight);
     const isActive = sig > 0.08;
     totalSignal += sig;
+    const isEdgeHovered = hoveredNode === src || hoveredNode === tgt;
 
     // Edge curve
     const cpx1 = sx + (tx - sx) * 0.4, cpy1 = sy;
@@ -1544,13 +1637,14 @@ function drawBrainOn(canvasId) {
     ctx.moveTo(sx, sy);
     ctx.bezierCurveTo(cpx1, cpy1, cpx2, cpy2, tx, ty);
 
-    if (isActive) {
+    if (isActive || isEdgeHovered) {
       // Glowing active edge
-      ctx.strokeStyle = weight > 0 ? "#34D399" : "#F87171";
-      ctx.lineWidth = 1 + sig * 4;
-      ctx.globalAlpha = 0.2 + sig * 0.5;
-      ctx.shadowColor = weight > 0 ? "#34D399" : "#F87171";
-      ctx.shadowBlur = sig * 12;
+      const edgeColor = weight > 0 ? "#34D399" : "#F87171";
+      ctx.strokeStyle = edgeColor;
+      ctx.lineWidth = isEdgeHovered ? 2.5 : (1 + sig * 4);
+      ctx.globalAlpha = isEdgeHovered ? 0.7 : (0.2 + sig * 0.5);
+      ctx.shadowColor = edgeColor;
+      ctx.shadowBlur = isEdgeHovered ? 8 : (sig * 12);
     } else {
       ctx.strokeStyle = weight > 0 ? "#1a3a2a" : "#3a1a1a";
       ctx.lineWidth = 0.5;
@@ -1563,22 +1657,38 @@ function drawBrainOn(canvasId) {
     ctx.setLineDash([]);
     ctx.shadowBlur = 0;
 
+    // Show weight label when hovering connected neuron
+    if (isEdgeHovered) {
+      const midT = 0.5;
+      const u = 0.5;
+      const mx = u*u*u*sx + 3*u*u*midT*cpx1 + 3*u*midT*midT*cpx2 + midT*midT*midT*tx;
+      const my = u*u*u*sy + 3*u*u*midT*cpy1 + 3*u*midT*midT*cpy2 + midT*midT*midT*ty;
+      ctx.font = "bold 9px Inter, sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillStyle = weight > 0 ? "#34D399" : "#F87171";
+      ctx.globalAlpha = 0.9;
+      ctx.fillText(weight.toFixed(2), mx, my - 6);
+      ctx.globalAlpha = 1;
+    }
+
     // Signal particles (multiple per edge when active)
     if (isActive) {
-      const particleCount = Math.max(1, Math.floor(sig * 4));
+      const particleCount = Math.max(1, Math.floor(sig * 5));
       for (let p = 0; p < particleCount; p++) {
-        const speed = 2500 + p * 800;
-        const t = ((now + p * 400) % speed) / speed;
+        const speed = 2000 + p * 600;
+        const t = ((now + p * 350) % speed) / speed;
         const u = 1 - t;
         const px = u*u*u*sx + 3*u*u*t*cpx1 + 3*u*t*t*cpx2 + t*t*t*tx;
         const py = u*u*u*sy + 3*u*u*t*cpy1 + 3*u*t*t*cpy2 + t*t*t*ty;
-        const pr = 2 + sig * 3;
-        const particleAlpha = Math.sin(t * Math.PI) * (0.4 + sig * 0.6);
+        const pr = 2 + sig * 3.5;
+        const particleAlpha = Math.sin(t * Math.PI) * (0.5 + sig * 0.5);
 
         ctx.beginPath();
         ctx.arc(px, py, pr, 0, Math.PI * 2);
         const pg = ctx.createRadialGradient(px, py, 0, px, py, pr);
         pg.addColorStop(0, weight > 0 ? "#34D399" : "#F87171");
+        pg.addColorStop(0.6, (weight > 0 ? "#34D399" : "#F87171") + "66");
         pg.addColorStop(1, "transparent");
         ctx.fillStyle = pg;
         ctx.globalAlpha = particleAlpha;
@@ -1711,13 +1821,34 @@ function drawBrainOn(canvasId) {
 
 let chatBusy = false;
 
-function appendChatMsg(role, text) {
+function appendChatMsg(role, text, meta) {
   const el = document.getElementById("chat-messages");
+  // Remove typing indicator if present
+  const typing = el.querySelector(".chat-typing");
+  if (typing) typing.remove();
   const div = document.createElement("div");
   div.className = "chat-msg " + role;
   div.textContent = text;
+  // Add model badge for assistant messages
+  if (role === "assistant" && meta && meta.model) {
+    const badge = document.createElement("span");
+    badge.className = "chat-model-badge";
+    badge.textContent = meta.model;
+    badge.style.cssText = "display:inline-block;margin-top:6px";
+    div.appendChild(badge);
+  }
   el.appendChild(div);
-  el.scrollTop = el.scrollHeight;
+  el.scrollTo({top: el.scrollHeight, behavior: 'smooth'});
+}
+
+function showTypingIndicator() {
+  const el = document.getElementById("chat-messages");
+  if (el.querySelector(".chat-typing")) return;
+  const typing = document.createElement("div");
+  typing.className = "chat-typing";
+  typing.innerHTML = '<div class="dot"></div><div class="dot"></div><div class="dot"></div>';
+  el.appendChild(typing);
+  el.scrollTo({top: el.scrollHeight, behavior: 'smooth'});
 }
 
 async function sendChat() {
@@ -1730,7 +1861,8 @@ async function sendChat() {
   appendChatMsg("user", query);
   chatBusy = true;
   document.getElementById("chat-send").disabled = true;
-  document.getElementById("chat-status").textContent = "Styx denkt nach...";
+  document.getElementById("chat-status").textContent = "";
+  showTypingIndicator();
 
   try {
     const resp = await fetch(BASE + "/api/styx/chat", {
@@ -1740,7 +1872,7 @@ async function sendChat() {
     });
     const data = await resp.json();
     if (data.ok && data.response) {
-      appendChatMsg("assistant", data.response);
+      appendChatMsg("assistant", data.response, {model: data.model || data.provider || ""});
       const srcCount = (data.sources || []).length;
       document.getElementById("chat-status").textContent = `${data.query_type || "local"} · ${srcCount} Quellen · ${data.elapsed_ms || 0}ms`;
     } else {
@@ -1784,12 +1916,21 @@ function renderZoneCards(zones) {
     const roleChips = Object.entries(z.roles || {}).filter(([,c]) => c > 0).map(([r, c]) =>
       `<span class="zone-role">${ROLE_ICONS[r] || ""} ${r} (${c})</span>`
     ).join("");
+    const isActive = z.status === 'active';
+    const presenceDot = `<span class="zone-presence-dot ${isActive ? 'active' : 'idle'}"></span>`;
+    // Mini mood ring per zone
+    let miniMoodRing = '';
+    if (z.mood_comfort != null || z.mood) {
+      const comfort = Math.round(((z.mood_comfort || (z.mood && z.mood.comfort) || 0)) * 100);
+      const deg = Math.round(comfort * 3.6);
+      miniMoodRing = `<span class="zone-mini-mood-ring" style="background:conic-gradient(var(--green) ${deg}deg, var(--surface2) ${deg}deg)" title="Komfort: ${comfort}%">${comfort}</span>`;
+    }
     return `<div class="zone-card" style="border-left:4px solid ${z.color || 'var(--surface2)'}" onclick="openZoneDetail('${z.id}')">
-      <span class="zone-entity-count">${z.entity_count || 0} Entit&auml;ten</span>
+      <span class="zone-entity-count">${miniMoodRing} ${z.entity_count || 0} Entit&auml;ten</span>
       <div class="zone-header">
         <span class="zone-icon" style="background:${z.color || '#333'}20">${z.icon || ZONE_ICONS[z.id] || "\u{1F3E0}"}</span>
         <div>
-          <div class="zone-title">${z.name_de || z.id}</div>
+          <div class="zone-title">${presenceDot}${z.name_de || z.id}</div>
           <div class="zone-subtitle">${z.name_en || z.id} &middot; Priorit&auml;t ${z.priority || 0}</div>
         </div>
       </div>
@@ -3157,6 +3298,14 @@ async function loadDashboard() {
     renderSuggestionCards(dash.suggestions || []);
     // Summary strip
     renderSummaryStrip(dash);
+    // Pipeline health
+    updatePipelineHealth(dash);
+    // Last activity
+    renderLastActivity(dash);
+    // Chat context bar
+    updateChatContext(dash);
+    // Sparklines for summary chips
+    trackMetricHistory(dash);
   } else {
     const errMsg = !dash ? "API nicht erreichbar" + (!TOKEN ? " (kein Token gesetzt!)" : "") : "API-Fehler: " + (dash.error || "unbekannt");
     document.getElementById("status").innerHTML = `<span style="color:var(--red)">${errMsg}</span>`;
@@ -3170,6 +3319,142 @@ async function loadDashboard() {
 
 async function loadAll() {
   await Promise.all([loadDashboard(), loadLLM(), loadAutomation(), loadAlarmData(), loadHomeKit(), loadZoneDashboard(), loadHabitusData()]);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Pipeline Health Indicator
+// ═══════════════════════════════════════════════════════════════
+
+function updatePipelineHealth(dash) {
+  const setDot = (id, status) => {
+    const el = document.getElementById(id);
+    if (el) { el.className = 'pipeline-dot ' + status; }
+  };
+  // Ingest: ok if bus has events
+  const bus = dash.bus || {};
+  setDot('ph-ingest', bus.events_published > 0 ? (bus.errors > 0 ? 'warn' : 'ok') : 'off');
+  // Brain: ok if graph has nodes
+  const graph = dash.graph || {};
+  setDot('ph-brain', graph.total_nodes > 0 ? 'ok' : 'off');
+  // Neurons: ok if any neuron values exist
+  const neurons = dash.neurons || {};
+  const nCount = neurons.total_count || 0;
+  setDot('ph-neurons', nCount > 0 ? 'ok' : 'off');
+  // Mood: ok if mood is set
+  const mood = dash.mood || {};
+  setDot('ph-mood', mood.mood && mood.mood !== 'unknown' ? 'ok' : (mood.mood === 'unknown' ? 'warn' : 'off'));
+  // Habitus: check for zones
+  const zones = dash.zones || [];
+  setDot('ph-habitus', zones.length > 0 ? 'ok' : 'off');
+  // Candidates: check for suggestions
+  const sugs = dash.suggestions || [];
+  setDot('ph-candidates', sugs.length > 0 ? 'ok' : (zones.length > 0 ? 'warn' : 'off'));
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Last Activity
+// ═══════════════════════════════════════════════════════════════
+
+function renderLastActivity(dash) {
+  const el = document.getElementById('last-activity-content');
+  if (!el) return;
+  const activities = [];
+  // Collect from bus, candidates, suggestions
+  if (dash.bus && dash.bus.events_published > 0) {
+    activities.push({text: `${dash.bus.events_published} Events verarbeitet`, time: dash.timestamp});
+  }
+  if (dash.mood && dash.mood.mood) {
+    activities.push({text: `Mood: ${dash.mood.mood} (${Math.round((dash.mood.confidence||0)*100)}%)`, time: dash.timestamp});
+  }
+  const candidates = dash.candidates || [];
+  for (const c of candidates.slice(0, 2)) {
+    activities.push({text: `Kandidat: ${c.label || c.id}`, time: dash.timestamp});
+  }
+  const sugs = dash.suggestions || [];
+  for (const s of sugs.slice(0, 2)) {
+    activities.push({text: `Vorschlag: ${s.title || s.id}`, time: dash.timestamp});
+  }
+  if (activities.length === 0) {
+    el.innerHTML = '<span style="color:var(--muted);font-size:0.8rem">Keine Aktivitaeten</span>';
+    return;
+  }
+  el.innerHTML = activities.slice(0, 5).map(a => {
+    const ts = a.time ? new Date(a.time).toLocaleTimeString('de-DE', {hour:'2-digit',minute:'2-digit'}) : '--:--';
+    return `<div class="last-activity-item"><span class="last-activity-time">${ts}</span><span class="last-activity-dot"></span><span>${a.text}</span></div>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Chat Context Bar
+// ═══════════════════════════════════════════════════════════════
+
+function updateChatContext(dash) {
+  const moodEl = document.getElementById('chat-ctx-mood');
+  const zonesEl = document.getElementById('chat-ctx-zones');
+  const modelEl = document.getElementById('chat-ctx-model');
+  if (moodEl && dash.mood) moodEl.textContent = 'Mood=' + (dash.mood.mood || '--');
+  if (zonesEl && dash.zones) {
+    const activeZ = (dash.zones || []).filter(z => z.status === 'active' || (z.roles && Object.keys(z.roles).length > 0)).length;
+    zonesEl.textContent = `${activeZ} Zonen aktiv`;
+  }
+  // Model name from LLM status
+  if (modelEl && llmRecommended.status) {
+    modelEl.textContent = llmRecommended.status.primary_model || '--';
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Sparkline Mini-Charts (24h metric history)
+// ═══════════════════════════════════════════════════════════════
+
+const metricHistory = {neurons: [], mood_conf: [], events: []};
+const MAX_HISTORY = 48;
+
+function trackMetricHistory(dash) {
+  metricHistory.neurons.push(dash.neurons?.total_count || 0);
+  metricHistory.mood_conf.push(dash.mood?.confidence || 0);
+  metricHistory.events.push(dash.bus?.events_published || 0);
+  for (const k of Object.keys(metricHistory)) {
+    if (metricHistory[k].length > MAX_HISTORY) metricHistory[k].shift();
+  }
+  // Inject sparklines into summary strip (raw colors needed for canvas)
+  injectSparkline('summary-strip', 4, metricHistory.neurons, '#56c8fa');
+  injectSparkline('summary-strip', 1, metricHistory.mood_conf, '#6dcf8c');
+}
+
+function injectSparkline(parentId, chipIndex, data, color) {
+  const parent = document.getElementById(parentId);
+  if (!parent || data.length < 3) return;
+  const chip = parent.children[chipIndex];
+  if (!chip) return;
+  let canvas = chip.querySelector('.sparkline');
+  if (!canvas) {
+    canvas = document.createElement('canvas');
+    canvas.className = 'sparkline';
+    canvas.width = 48; canvas.height = 16;
+    canvas.style.cssText = 'display:block;margin-top:4px;opacity:0.7';
+    chip.appendChild(canvas);
+  }
+  drawSparkline(canvas, data, color);
+}
+
+function drawSparkline(canvas, data, color) {
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width, h = canvas.height;
+  ctx.clearRect(0, 0, w, h);
+  if (data.length < 2) return;
+  const max = Math.max(...data, 1);
+  const min = Math.min(...data, 0);
+  const range = max - min || 1;
+  ctx.beginPath();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.5;
+  for (let i = 0; i < data.length; i++) {
+    const x = (i / (data.length - 1)) * w;
+    const y = h - ((data[i] - min) / range) * (h - 2) - 1;
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
 }
 
 // Initialize

@@ -1,4 +1,4 @@
-"""HomeAssistant Integration Module API — Status und Konfiguration."""
+"""HomeAssistant Integration Module API — Status, Diagnostik und Konfiguration."""
 
 import logging
 
@@ -125,3 +125,133 @@ def configure_events():
     except Exception as e:
         _LOGGER.error("HA-Modul Events Config fehlgeschlagen: %s", e)
         return jsonify({"status": "error", "message": str(e)}), 500
+
+
+# -- GET /config ----------------------------------------------------------------
+
+@ha_module_bp.route("/config", methods=["GET"])
+def get_config():
+    """Gibt die vollstaendige Modul-Konfiguration zurueck."""
+    try:
+        engine = _get_engine()
+        config = engine.get_config()
+        return jsonify({"status": "ok", "module": "homeassistant", "config": config})
+    except Exception as e:
+        _LOGGER.error("HA-Modul Config Lesen fehlgeschlagen: %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+# -- POST /config ---------------------------------------------------------------
+
+@ha_module_bp.route("/config", methods=["POST"])
+def update_config():
+    """Aktualisiert die Modul-Konfiguration.
+
+    Body: {"forwarded_domains": [...], "webhook_retry_count": 3, ...}
+    """
+    try:
+        data = request.get_json(silent=True) or {}
+        engine = _get_engine()
+        updated = engine.update_config(data)
+
+        # Persist via ModuleRouter if available
+        router = current_app.config.get("COPILOT_SERVICES", {}).get("module_router")
+        if router:
+            router.update_config("homeassistant", updated)
+
+        return jsonify({"status": "ok", "module": "homeassistant", "config": updated})
+    except Exception as e:
+        _LOGGER.error("HA-Modul Config Update fehlgeschlagen: %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+# -- GET /diagnostics -----------------------------------------------------------
+
+@ha_module_bp.route("/diagnostics", methods=["GET"])
+def get_diagnostics():
+    """Gibt vollstaendige Diagnostik-Informationen zurueck.
+
+    Umfasst Connection-Diagnostics, bidirektionale Webhook-Metriken,
+    Pipeline-Health, Event-Forwarding-Details und Konfiguration.
+    """
+    try:
+        engine = _get_engine()
+        diag = engine.get_diagnostics()
+        health = engine.get_pipeline_health()
+        return jsonify({
+            "status": "ok",
+            "module": "homeassistant",
+            "diagnostics": diag,
+            "pipeline_health": health,
+        })
+    except Exception as e:
+        _LOGGER.error("HA-Modul Diagnostics fehlgeschlagen: %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+# -- GET /health ----------------------------------------------------------------
+
+@ha_module_bp.route("/health", methods=["GET"])
+def get_health():
+    """Gibt Pipeline-Health-Summary mit Status-Farben zurueck."""
+    try:
+        engine = _get_engine()
+        health = engine.get_pipeline_health()
+        return jsonify({
+            "status": "ok",
+            "module": "homeassistant",
+            **health,
+        })
+    except Exception as e:
+        _LOGGER.error("HA-Modul Health fehlgeschlagen: %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+# -- POST /webhook-received ----------------------------------------------------
+
+@ha_module_bp.route("/webhook-received", methods=["POST"])
+def webhook_received():
+    """Zeichnet einen empfangenen Webhook (HA -> Core) auf.
+
+    Wird von der HA-Integration aufgerufen um den Empfang zu quittieren.
+
+    Body: {"event_type": "state_changed"}
+    Optionale Felder: {"event_type": "...", "count": 5}
+    """
+    try:
+        data = request.get_json(silent=True) or {}
+        event_type = data.get("event_type", "unknown")
+        if not isinstance(event_type, str) or not event_type.strip():
+            event_type = "unknown"
+
+        engine = _get_engine()
+        engine.record_webhook(event_type.strip())
+
+        return jsonify({
+            "status": "ok",
+            "message": f"Webhook recorded: {event_type}",
+            "webhook_received_count": engine._webhook_received_count,
+        })
+    except Exception as e:
+        _LOGGER.error("HA-Modul Webhook-Received fehlgeschlagen: %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+# -- POST /refresh --------------------------------------------------------------
+
+@ha_module_bp.route("/refresh", methods=["POST"])
+def refresh():
+    """Triggert sofortiges Refresh aller Netzwerk-Module aus HA."""
+    import asyncio
+
+    router = current_app.config.get("COPILOT_SERVICES", {}).get("module_router")
+    if not router:
+        return jsonify({"status": "error", "message": "ModuleRouter not available"}), 503
+
+    try:
+        result = asyncio.run(router.async_refresh_from_ha())
+    except Exception as e:
+        _LOGGER.error("HA-Modul Refresh fehlgeschlagen: %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+    return jsonify({"status": "ok", "module": "homeassistant", **result})
