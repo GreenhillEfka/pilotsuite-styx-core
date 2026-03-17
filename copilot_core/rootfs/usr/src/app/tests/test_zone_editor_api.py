@@ -1,6 +1,7 @@
 """Tests for Zone Editor API endpoints (v12.0.0)."""
 
 import pytest
+from unittest.mock import patch
 from flask import Flask
 
 from copilot_core.api.v1.zone_editor import zone_editor_bp, init_zone_editor_api
@@ -297,3 +298,75 @@ class TestIntegration:
         # Bad has 4 entities, Toilette has 2
         # Note: entity_count is at zone level
         assert zone_data["zone"]["entity_count"] == 6 or zone_data["zone"].get("entity_count", 0) > 0
+
+
+class TestZoneWriteApi:
+    def test_create_zone_modern_success(self, client_with_engine):
+        payload = {
+            "zone_id": "wohnbereich",
+            "name": "Wohnbereich",
+            "rooms": ["wohnzimmer", "kueche"],
+            "icon": "mdi:sofa-outline",
+            "priority": 4,
+        }
+        with patch("copilot_core.api.security.validate_token", return_value=True):
+            response = client_with_engine.post("/api/v1/zone-editor/zones", json=payload)
+        assert response.status_code == 201
+        data = response.get_json()
+        assert data["ok"] is True
+        assert data["zone"]["zone_id"] == "wohnbereich"
+        assert data["zone"]["priority"] == 4
+
+    def test_update_zone_modern_success(self, client_with_engine):
+        payload = {
+            "name": "Bad & Spa",
+            "mode": "away",
+            "enabled": False,
+            "priority": 9,
+            "rooms": ["bad"],
+        }
+        with patch("copilot_core.api.security.validate_token", return_value=True):
+            response = client_with_engine.put("/api/v1/zone-editor/zones/badbereich", json=payload)
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["ok"] is True
+        assert data["zone"]["name"] == "Bad & Spa"
+        assert data["zone"]["mode"] == "away"
+        assert data["zone"]["enabled"] is False
+        assert data["zone"]["priority"] == 9
+        room_ids = [room["room_id"] for room in data["zone"]["rooms"]]
+        assert room_ids == ["bad"]
+
+    def test_add_and_remove_room_modern(self, client_with_engine):
+        with patch("copilot_core.api.security.validate_token", return_value=True):
+            add_response = client_with_engine.post(
+                "/api/v1/zone-editor/zones/badbereich/rooms",
+                json={"room_id": "wohnzimmer"},
+            )
+            remove_response = client_with_engine.delete(
+                "/api/v1/zone-editor/zones/badbereich/rooms/wohnzimmer"
+            )
+        assert add_response.status_code == 200
+        assert remove_response.status_code == 200
+        removed = remove_response.get_json()
+        room_ids = [room["room_id"] for room in removed["zone"]["rooms"]]
+        assert "wohnzimmer" not in room_ids
+
+    def test_delete_zone_modern(self, client_with_engine):
+        with patch("copilot_core.api.security.validate_token", return_value=True):
+            response = client_with_engine.delete("/api/v1/zone-editor/zones/badbereich")
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["ok"] is True
+        assert data["deleted_zone_id"] == "badbereich"
+
+    def test_create_zone_modern_requires_name(self, client_with_engine):
+        with patch("copilot_core.api.security.validate_token", return_value=True):
+            response = client_with_engine.post(
+                "/api/v1/zone-editor/zones",
+                json={"zone_id": "zone:missing_name"},
+            )
+        assert response.status_code == 400
+        data = response.get_json()
+        assert data["ok"] is False
+        assert "name" in data["error"]

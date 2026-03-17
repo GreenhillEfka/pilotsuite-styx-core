@@ -8,6 +8,11 @@ Endpunkte:
   GET    /api/v1/zone-editor/rooms/<room_id>    - Room Details
   GET    /api/v1/zone-editor/overview           - Zone Übersicht
   GET    /api/v1/zone-editor/templates          - Verfügbare Templates
+  POST   /api/v1/zone-editor/zones              - Neue Zone erstellen
+  PUT    /api/v1/zone-editor/zones/<zone_id>    - Zone aktualisieren
+  DELETE /api/v1/zone-editor/zones/<zone_id>    - Zone löschen
+  POST   /api/v1/zone-editor/zones/<zone_id>/rooms - Room zu Zone hinzufügen
+  DELETE /api/v1/zone-editor/zones/<zone_id>/rooms/<room_id> - Room aus Zone entfernen
   POST   /api/v1/zone/editor/create             - Neue Zone erstellen (legacy)
   GET    /api/v1/zone/editor/list               - Alle Zonen auflisten (legacy)
   GET    /api/v1/zone/editor/<zone_id>          - Zone Details (legacy)
@@ -72,6 +77,30 @@ def reset_zone_engine() -> None:
     """Reset the zone engine instance (for testing)."""
     global _zone_engine
     _zone_engine = None
+
+
+def _parse_json_body() -> dict[str, Any] | None:
+    """Parse JSON request body and normalize to dict."""
+    try:
+        data = request.get_json(force=True)
+    except Exception:
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _require_zone(engine: HabitusZoneEngine, zone_id: str):
+    """Return zone or a 404 response tuple."""
+    zone = engine.get_zone(zone_id)
+    if zone:
+        return zone
+    return jsonify({"ok": False, "error": f"Zone {zone_id} not found"}), 404
+
+
+def _zone_payload_response(engine: HabitusZoneEngine, zone_id: str, status: int = 200):
+    zone = engine.get_zone(zone_id)
+    if not zone:
+        return jsonify({"ok": False, "error": f"Zone {zone_id} not found"}), 404
+    return jsonify({"ok": True, "zone": zone}), status
 
 
 # =============================================================================
@@ -237,6 +266,132 @@ def list_modes():
         "ok": True,
         "modes": modes,
     })
+
+
+@zone_editor_bp.route("/zones", methods=["POST"])
+@require_token
+def create_zone():
+    """Create a new zone on the modern /zone-editor API."""
+    data = _parse_json_body()
+    if data is None:
+        return jsonify({"ok": False, "error": "Invalid JSON"}), 400
+    if not data:
+        return jsonify({"ok": False, "error": "Missing request body"}), 400
+
+    zone_id = str(data.get("zone_id") or "").strip()
+    name = str(data.get("name") or "").strip()
+    if not zone_id:
+        return jsonify({"ok": False, "error": "Missing required field: zone_id"}), 400
+    if not name:
+        return jsonify({"ok": False, "error": "Missing required field: name"}), 400
+
+    engine = get_zone_engine()
+    if engine.get_zone(zone_id):
+        return jsonify({"ok": False, "error": f"Zone {zone_id} already exists"}), 409
+
+    room_ids = data.get("rooms") if isinstance(data.get("rooms"), list) else []
+    icon = str(data.get("icon") or "mdi:home-floor-1").strip() or "mdi:home-floor-1"
+    priority = int(data.get("priority") or 0)
+
+    engine.create_zone(zone_id, name, room_ids, icon, priority)
+    _LOGGER.info("Created zone via modern API: %s", zone_id)
+    return _zone_payload_response(engine, zone_id, status=201)
+
+
+@zone_editor_bp.route("/zones/<zone_id>", methods=["PUT", "PATCH"])
+@require_token
+def update_zone(zone_id: str):
+    """Update an existing zone on the modern /zone-editor API."""
+    data = _parse_json_body()
+    if data is None:
+        return jsonify({"ok": False, "error": "Invalid JSON"}), 400
+    if not data:
+        return jsonify({"ok": False, "error": "Missing request body"}), 400
+
+    engine = get_zone_engine()
+    existing = _require_zone(engine, zone_id)
+    if not isinstance(existing, dict):
+        return existing
+
+    if "name" in data and not engine.set_zone_name(zone_id, str(data.get("name") or "")):
+        return jsonify({"ok": False, "error": "Invalid field: name"}), 400
+    if "icon" in data and not engine.set_zone_icon(zone_id, str(data.get("icon") or "")):
+        return jsonify({"ok": False, "error": "Invalid field: icon"}), 400
+    if "mode" in data and not engine.set_zone_mode(zone_id, str(data.get("mode") or "")):
+        return jsonify({"ok": False, "error": f"Invalid mode: {data.get('mode')}"}), 400
+    if "enabled" in data:
+        engine.set_zone_enabled(zone_id, bool(data.get("enabled")))
+    if "priority" in data:
+        engine.set_zone_priority(zone_id, int(data.get("priority") or 0))
+
+    rooms = data.get("rooms")
+    if isinstance(rooms, list):
+        current_rooms = [room.get("room_id") for room in existing.get("rooms", []) if isinstance(room, dict)]
+        target_rooms = [str(room_id).strip() for room_id in rooms if str(room_id).strip()]
+        for room_id in current_rooms:
+            if room_id not in target_rooms:
+                engine.remove_room_from_zone(zone_id, room_id)
+        for room_id in target_rooms:
+            if room_id not in current_rooms:
+                engine.add_room_to_zone(zone_id, room_id)
+
+    _LOGGER.info("Updated zone via modern API: %s", zone_id)
+    return _zone_payload_response(engine, zone_id)
+
+
+@zone_editor_bp.route("/zones/<zone_id>", methods=["DELETE"])
+@require_token
+def delete_zone(zone_id: str):
+    """Delete a zone on the modern /zone-editor API."""
+    engine = get_zone_engine()
+    existing = _require_zone(engine, zone_id)
+    if not isinstance(existing, dict):
+        return existing
+
+    if not engine.delete_zone(zone_id):
+        return jsonify({"ok": False, "error": "Failed to delete zone"}), 500
+
+    _LOGGER.info("Deleted zone via modern API: %s", zone_id)
+    return jsonify({"ok": True, "deleted_zone_id": zone_id})
+
+
+@zone_editor_bp.route("/zones/<zone_id>/rooms", methods=["POST"])
+@require_token
+def add_room(zone_id: str):
+    """Add a room to a zone on the modern /zone-editor API."""
+    data = _parse_json_body()
+    if data is None:
+        return jsonify({"ok": False, "error": "Invalid JSON"}), 400
+    room_id = str(data.get("room_id") or "").strip()
+    if not room_id:
+        return jsonify({"ok": False, "error": "Missing required field: room_id"}), 400
+
+    engine = get_zone_engine()
+    existing = _require_zone(engine, zone_id)
+    if not isinstance(existing, dict):
+        return existing
+
+    if not engine.add_room_to_zone(zone_id, room_id):
+        return jsonify({"ok": False, "error": f"Failed to add room {room_id} to zone {zone_id}"}), 500
+
+    _LOGGER.info("Added room %s to zone %s via modern API", room_id, zone_id)
+    return _zone_payload_response(engine, zone_id)
+
+
+@zone_editor_bp.route("/zones/<zone_id>/rooms/<room_id>", methods=["DELETE"])
+@require_token
+def remove_room(zone_id: str, room_id: str):
+    """Remove a room from a zone on the modern /zone-editor API."""
+    engine = get_zone_engine()
+    existing = _require_zone(engine, zone_id)
+    if not isinstance(existing, dict):
+        return existing
+
+    if not engine.remove_room_from_zone(zone_id, room_id):
+        return jsonify({"ok": False, "error": f"Room {room_id} not found in zone {zone_id}"}), 404
+
+    _LOGGER.info("Removed room %s from zone %s via modern API", room_id, zone_id)
+    return _zone_payload_response(engine, zone_id)
 
 
 # =============================================================================
