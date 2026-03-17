@@ -24,7 +24,13 @@ import time
 from dataclasses import dataclass, field, asdict
 from typing import Any
 
+from copilot_core.hub.zone_modules import ZoneModuleRegistry
+from copilot_core.hub.zone_modules.base import ZoneModuleConfig
+
 logger = logging.getLogger(__name__)
+
+# Ensure all modules are registered
+ZoneModuleRegistry.ensure_loaded()
 
 
 # ── Data models ──────────────────────────────────────────────────────────────
@@ -101,22 +107,39 @@ def get_mood_adjustment(mood_state: str) -> dict[str, float | int]:
 
 @dataclass
 class ZoneAutomationConfig:
-    """Complete automation configuration for a zone."""
+    """Complete automation configuration for a zone.
+
+    Supports both legacy (light/music dataclasses) and new module system.
+    The `modules` dict holds ZoneModuleConfig instances keyed by MODULE_ID.
+    Legacy `light` and `music` properties provide backward compatibility.
+    """
 
     zone_id: str
     zone_name: str = ""
     automation_mode: str = "learning"  # off | learning | autonomy
     light: ZoneLightConfig = field(default_factory=ZoneLightConfig)
     music: ZoneMusicConfig = field(default_factory=ZoneMusicConfig)
+    modules: dict = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if not self.modules:
+            self.modules = ZoneModuleRegistry.create_defaults()
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        result = {
             "zone_id": self.zone_id,
             "zone_name": self.zone_name,
             "automation_mode": self.automation_mode,
+            # Legacy keys for backward compatibility
             "light": asdict(self.light),
             "music": asdict(self.music),
+            # New module system
+            "modules": {
+                mid: mod.to_dict()
+                for mid, mod in self.modules.items()
+            },
         }
+        return result
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "ZoneAutomationConfig":
@@ -125,12 +148,18 @@ class ZoneAutomationConfig:
         mode = data.get("automation_mode", "learning")
         if mode not in AUTOMATION_MODES:
             mode = "learning"
+
+        # Load modules from "modules" dict if present
+        modules_data = data.get("modules", {})
+        modules = ZoneModuleRegistry.from_dict(modules_data)
+
         return cls(
             zone_id=data.get("zone_id", ""),
             zone_name=data.get("zone_name", ""),
             automation_mode=mode,
             light=ZoneLightConfig(**{k: v for k, v in light_data.items() if k in ZoneLightConfig.__dataclass_fields__}),
             music=ZoneMusicConfig(**{k: v for k, v in music_data.items() if k in ZoneMusicConfig.__dataclass_fields__}),
+            modules=modules,
         )
 
 
@@ -373,6 +402,15 @@ class ZoneAutomationController:
             for key, val in mc.items():
                 if hasattr(current.music, key):
                     setattr(current.music, key, val)
+
+        # Update module configs
+        if "modules" in config_data:
+            for mid, mod_data in config_data["modules"].items():
+                if mid in current.modules and isinstance(mod_data, dict):
+                    mod = current.modules[mid]
+                    for spec in mod.get_field_specs():
+                        if spec.key in mod_data:
+                            setattr(mod, spec.key, mod_data[spec.key])
 
         return current
 

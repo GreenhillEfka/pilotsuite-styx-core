@@ -216,6 +216,11 @@ def _register_routes(flask_app: Flask, startup_time: float) -> None:
             dashboard_auth_token=get_auth_token() or "",
         )
 
+    @flask_app.get("/styx")
+    def styx_dashboard():
+        """Serve the Styx 7-tab Dashboard (v17)."""
+        return render_template("styx_dashboard.html")
+
     @flask_app.get("/api/v1/cards/<path:filename>")
     def serve_card(filename):
         cards_dir = os.path.join(STATIC_DIR, 'cards')

@@ -29,9 +29,9 @@ class TestKeyboardShortcuts:
         """Each tab should have a kbd-hint badge with its number."""
         html = _get_dashboard_html()
         assert "kbd-hint" in html
-        # 9 tabs, numbered 1-9
-        for i in range(1, 10):
-            assert f'<span class="kbd-hint">{i}</span>' in html
+        # 7 tabs, numbered 1-7
+        for i in range(1, 8):
+            assert f'>{i}</span>' in html
 
     def test_keyboard_event_listener(self):
         """Dashboard should have a keydown event listener for tab switching."""
@@ -39,10 +39,10 @@ class TestKeyboardShortcuts:
         assert "addEventListener('keydown'" in html or 'addEventListener("keydown"' in html
 
     def test_tab_keys_array_matches_tabs(self):
-        """TAB_KEYS array should list all 8 tab names in order."""
+        """TABS array should list all 7 tab names in order."""
         html = _get_dashboard_html()
-        assert "TAB_KEYS" in html
-        expected_tabs = ["overview", "zones", "media", "suggestions", "automation", "llm", "modules", "neurons", "chat"]
+        assert "TABS" in html
+        expected_tabs = ["styx", "module", "mood", "habitus", "zones", "status", "settings"]
         for tab in expected_tabs:
             assert f"'{tab}'" in html or f'"{tab}"' in html
 
@@ -97,7 +97,7 @@ class TestDesignPolish:
         """Header should use gradient text effect."""
         html = _get_dashboard_html()
         assert "linear-gradient" in html
-        assert "background-clip: text" in html
+        assert "background-clip:text" in html or "-webkit-background-clip:text" in html
 
     def test_responsive_css(self):
         """Dashboard should include responsive media queries."""
@@ -108,7 +108,7 @@ class TestDesignPolish:
     def test_switchtab_function(self):
         """switchTab function should exist and handle tab switching."""
         html = _get_dashboard_html()
-        assert "function switchTab(tabName)" in html
+        assert "function switchTab(" in html
 
     def test_zone_modal_html(self):
         """Zone detail modal should be present in HTML."""

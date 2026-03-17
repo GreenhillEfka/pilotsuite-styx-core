@@ -418,3 +418,90 @@ def ensure_zones():
 
     _LOGGER.info("Ensured %d zone(s), created %d new: %s", len(zone_ids), len(created), created)
     return jsonify({"ok": True, "created": created, **_controller.get_dashboard()})
+
+
+# ── Module Schemas ──────────────────────────────────────────────────────────
+
+
+@zone_automation_bp.route("/module-schemas", methods=["GET"])
+@optional_token
+def get_module_schemas():
+    """Self-describing schemas for all registered zone modules.
+
+    Returns module_id -> {name_de, icon, color, fields: [...]} for each
+    registered module. HA uses this to dynamically create entities.
+    """
+    from copilot_core.hub.zone_modules import ZoneModuleRegistry
+    return jsonify({"ok": True, "schemas": ZoneModuleRegistry.get_all_schemas()})
+
+
+@zone_automation_bp.route("/zones/<zone_id>/modules/<module_id>", methods=["GET"])
+@optional_token
+def get_zone_module_config(zone_id: str, module_id: str):
+    """Get module config for a specific zone."""
+    if _controller is None:
+        return jsonify({"ok": False, "error": "Controller not initialized"}), 503
+
+    config = _controller.get_zone_config(zone_id)
+    mod = config.modules.get(module_id)
+    if mod is None:
+        return jsonify({"ok": False, "error": f"Unknown module '{module_id}'"}), 404
+
+    return jsonify({
+        "ok": True,
+        "zone_id": zone_id,
+        "module_id": module_id,
+        "config": mod.to_dict(),
+    })
+
+
+@zone_automation_bp.route("/zones/<zone_id>/modules/<module_id>", methods=["POST"])
+@require_token
+def set_zone_module_config(zone_id: str, module_id: str):
+    """Update module config for a specific zone.
+
+    Body: {"brightness_target_pct": 70, "enabled": true, ...}
+    Accepts any field keys defined in the module's field_specs.
+    """
+    if _controller is None:
+        return jsonify({"ok": False, "error": "Controller not initialized"}), 503
+
+    data = request.get_json(silent=True) or {}
+    config = _controller.set_zone_config(zone_id, {"modules": {module_id: data}})
+    mod = config.modules.get(module_id)
+    if mod is None:
+        return jsonify({"ok": False, "error": f"Unknown module '{module_id}'"}), 404
+
+    return jsonify({
+        "ok": True,
+        "zone_id": zone_id,
+        "module_id": module_id,
+        "config": mod.to_dict(),
+    })
+
+
+@zone_automation_bp.route("/zones/<zone_id>/modules/<module_id>/entities", methods=["GET"])
+@optional_token
+def get_zone_module_entities(zone_id: str, module_id: str):
+    """Get entities matching this module (via tag/role/domain matching)."""
+    if _controller is None:
+        return jsonify({"ok": False, "error": "Controller not initialized"}), 503
+
+    from copilot_core.hub.zone_modules import ZoneModuleRegistry
+    mod_cls = ZoneModuleRegistry.get(module_id)
+    if mod_cls is None:
+        return jsonify({"ok": False, "error": f"Unknown module '{module_id}'"}), 404
+
+    all_entities = _controller.get_zone_entities(zone_id)
+    matching = [
+        e for e in all_entities
+        if mod_cls.matches_entity(e["entity_id"], e.get("role", ""), e.get("tags", []))
+    ]
+
+    return jsonify({
+        "ok": True,
+        "zone_id": zone_id,
+        "module_id": module_id,
+        "entities": matching,
+        "count": len(matching),
+    })

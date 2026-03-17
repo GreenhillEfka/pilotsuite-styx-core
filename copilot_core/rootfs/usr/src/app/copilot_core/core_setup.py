@@ -1703,8 +1703,7 @@ def register_blueprints(app: Flask, services: dict) -> None:
         ("copilot_core.api.v1.character",           "bp",                   None),
         # Action Attribution API
         ("copilot_core.api.v1.action_attribution",  "bp",                   None),
-        # User Hints NLP API
-        ("copilot_core.api.v1.user_hints",          "bp",                   None),
+        # user_hints: registered via api/v1/blueprint.py — skip
     ]
 
     for module_path, bp_attr, prefix in _EXTRA_BLUEPRINTS:
