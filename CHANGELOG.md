@@ -2,6 +2,35 @@
 
 Alle wesentlichen Aenderungen am PilotSuite Styx Core werden in dieser Datei dokumentiert.
 
+## [v14.7.3] - 2026-03-17
+
+### Module-per-Zone Architektur + Neues Styx Dashboard
+
+#### Added
+- **Zone Modules Package** (`hub/zone_modules/`): Selbstbeschreibende Module mit ZoneModuleConfig ABC, ZoneModuleFieldSpec und Decorator-basierter Registry
+- **7 Zone-Module**: Light, Music (migriert), Climate, Cover, Energy, Scene, Security (neu)
+- **Module-Schemas API**: `GET /api/v1/zone-automation/module-schemas` — Schema-Endpoint fuer dynamische UI-Generierung
+- **Module-Config API**: `GET/POST /zones/<zone_id>/modules/<module_id>` — Per-Zone Modul-Konfiguration
+- **Module-Entities API**: `GET /zones/<zone_id>/modules/<module_id>/entities` — Entity-Matching via Domain/Role/Tag
+- **Neues 7-Tab Styx Dashboard**: Brain+Chat, Module, Stimmung, Habitus, Habituszonen, Status, Einstellungen
+- **Dashboard UX**: localStorage Tab-Persistenz, Auto-Refresh Countdown, Zone-Detail-Modal, Escape/R-Key Shortcuts
+- **24 neue Tests**: test_zone_modules.py (Registry, Configs, API-Endpoints, Round-Trip Serialisierung)
+
+#### Changed
+- **ZoneAutomationConfig**: Refactored mit `modules: dict[str, ZoneModuleConfig]` + rueckwaertskompatible Legacy-Keys
+- **to_dict/from_dict**: Gibt sowohl `light`/`music` Top-Level als auch `modules` Dict zurueck
+
+#### Fixed
+- **CandidateStore** Type-Hint Crash auf Python 3.12+ (`from __future__ import annotations`)
+- **user_hints Blueprint**: Doppelte Registration aus `_EXTRA_BLUEPRINTS` entfernt
+- **Dashboard UX Tests**: Angepasst an neues 7-Tab Layout
+
+### Compatibility
+- Core v14.7.3 <-> HA v14.7.3 (Paired Release)
+- Tests: 4430 passed, 118 skipped
+
+---
+
 ## [v14.6.1] - 2026-03-16
 
 ### Backend-Dashboard Modul-Config-Overhaul
