@@ -4,7 +4,7 @@ Zone-Management API für PilotSuite Styx Core
 Endpoints für Habituszone-Zuordnung, Matching und Review.
 """
 
-from fastapi import APIRouter, HTTPException, Query, Body
+from fastapi import APIRouter, Query, Body
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from typing import Any, List, Dict, Optional
@@ -236,7 +236,60 @@ async def assign_room_to_zone(request: AssignRequest):
     )
 
 
-@router.post("/tag", response_model=MatchedRoomResponse)
+@router.post(
+    "/tag",
+    response_model=MatchedRoomResponse,
+    responses={
+        400: {
+            "model": ErrorResponse,
+            "description": "Invalid zone tag request",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "invalid_zone_tag_format": {
+                            "summary": "Tag prefix missing",
+                            "value": {
+                                "code": "INVALID_ZONE_TAG_FORMAT",
+                                "message": "Tag muss im Format 'zone:<type>' sein (z.B. 'zone:living')",
+                                "field": "tag",
+                                "context": {"expected_prefix": "zone:"},
+                            },
+                        },
+                        "invalid_zone_type": {
+                            "summary": "Unknown zone type in tag",
+                            "value": {
+                                "code": "INVALID_ZONE_TYPE",
+                                "message": "Ungültiger Zone-Typ in Tag: spa.",
+                                "field": "tag",
+                                "context": {
+                                    "allowed_values": _VALID_ZONE_TYPES,
+                                },
+                            },
+                        },
+                    }
+                }
+            },
+        },
+        404: {
+            "model": ErrorResponse,
+            "description": "Zone not found",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "zone_not_found": {
+                            "summary": "Zone missing in registry",
+                            "value": {
+                                "code": "ZONE_NOT_FOUND",
+                                "message": "Zone nicht gefunden: living",
+                                "field": "zone_type",
+                            },
+                        }
+                    }
+                }
+            },
+        },
+    },
+)
 async def add_zone_tag(request: TagRequest):
     """
     Tag für Raum-Korrektur hinzufügen.
@@ -248,9 +301,12 @@ async def add_zone_tag(request: TagRequest):
     
     # Validiere Tag-Format
     if not tag.startswith("zone:"):
-        raise HTTPException(
-            status_code=400,
-            detail="Tag muss im Format 'zone:<type>' sein (z.B. 'zone:living')"
+        return _zones_error_response(
+            400,
+            code="INVALID_ZONE_TAG_FORMAT",
+            message="Tag muss im Format 'zone:<type>' sein (z.B. 'zone:living')",
+            field="tag",
+            context={"expected_prefix": "zone:"},
         )
     
     zone_type_str = tag[5:]  # "zone:" entfernen
@@ -258,15 +314,22 @@ async def add_zone_tag(request: TagRequest):
     try:
         zone_type = ZoneType(zone_type_str)
     except ValueError:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Ungültiger Zone-Typ in Tag: {zone_type_str}. "
-                   f"Gültige Werte: {[zt.value for zt in ZoneType]}"
+        return _zones_error_response(
+            400,
+            code="INVALID_ZONE_TYPE",
+            message=f"Ungültiger Zone-Typ in Tag: {zone_type_str}.",
+            field="tag",
+            context={"allowed_values": _VALID_ZONE_TYPES},
         )
     
     zone = HABITUS_ZONES.get(zone_type)
     if not zone:
-        raise HTTPException(status_code=404, detail=f"Zone nicht gefunden: {zone_type}")
+        return _zones_error_response(
+            404,
+            code="ZONE_NOT_FOUND",
+            message=f"Zone nicht gefunden: {zone_type.value}",
+            field="zone_type",
+        )
     
     # Match mit Tag-Korrektur (simuliert)
     result = MatchResult(
