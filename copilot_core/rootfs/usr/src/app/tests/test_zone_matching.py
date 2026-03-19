@@ -121,10 +121,10 @@ class TestZoneMatcher:
         assert result.confidence >= 70
     
     def test_terrace_match(self, matcher: ZoneMatcher):
-        """Match für Terrasse."""
+        """Terrace-like terms fold into canonical OUTSIDE."""
         result = matcher.match_room_to_zone("Terrasse")
-        assert result.zone.zone_type == ZoneType.TERRACE
-        assert result.confidence >= 70
+        assert result.zone.zone_type == ZoneType.OUTSIDE
+        assert result.confidence >= 90
     
     def test_outside_match(self, matcher: ZoneMatcher):
         """Match für Aussenbereich."""

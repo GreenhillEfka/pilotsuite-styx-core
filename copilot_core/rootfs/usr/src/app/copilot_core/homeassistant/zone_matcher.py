@@ -44,6 +44,7 @@ class ZoneMatcher:
     """
     
     REVIEW_THRESHOLD = 70.0  # Confidence unter diesem Wert → Review
+    CANONICAL_OUTSIDE_TERMS = ("terrasse", "balkon", "loggia", "terra")
     
     def __init__(self):
         self.keyword_map = get_zone_keywords()
@@ -146,6 +147,10 @@ class ZoneMatcher:
             if fuzzy in normalized or normalized in fuzzy:
                 return base
         return None
+
+    def _is_canonical_outside_term(self, normalized: str) -> bool:
+        """Terrace-like names fold into OUTSIDE without changing the public enum."""
+        return any(term in normalized for term in self.CANONICAL_OUTSIDE_TERMS)
     
     def match_room_to_zone(self, room_name: str) -> MatchResult:
         """
@@ -159,6 +164,15 @@ class ZoneMatcher:
         """
         normalized = self._normalize_room_name(room_name)
         best_match: Optional[Tuple[HabitusZone, float, str]] = None
+
+        if self._is_canonical_outside_term(normalized):
+            return MatchResult(
+                room_name=room_name,
+                zone=self.zones[ZoneType.OUTSIDE],
+                confidence=96.0,
+                matched_keyword="aussen",
+                needs_review=False,
+            )
         
         # 1. Fuzzy-Mapping versuchen (für spezifische Namen wie Mira, Paul)
         fuzzy_base = self._apply_fuzzy_mappings(room_name)
