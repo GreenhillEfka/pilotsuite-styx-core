@@ -66,7 +66,25 @@ class ReviewQueueResponse(BaseModel):
     rooms: List[MatchedRoomResponse] = Field(..., description="Räume die Review benötigen")
 
 
+class SecondaryStateRequest(BaseModel):
+    """Request für secondary zone state (dark/sleep/extended)."""
+    zone_type: str = Field(..., description="Zone-Typ (z.B. 'living', 'bedroom')")
+    state: str = Field(..., description="Secondary state: 'dark', 'sleep', 'extended'")
+    timestamp_ms: int = Field(..., description="Unix timestamp in milliseconds")
+
+
+class SecondaryStateResponse(BaseModel):
+    """Response für secondary state operation."""
+    zone_type: str = Field(..., description="Zone-Typ")
+    state: str = Field(..., description="Current secondary state")
+    state_since_ms: Optional[int] = Field(None, description="Timestamp when state was set")
+    supports_dark: bool = Field(..., description="Zone supports dark state")
+    supports_sleep: bool = Field(..., description="Zone supports sleep state")
+    supports_extended: bool = Field(..., description="Zone supports extended state")
+
+
 _VALID_ZONE_TYPES = [zt.value for zt in ZoneType]
+_VALID_SECONDARY_STATES = ["dark", "sleep", "extended"]
 
 
 def _zones_error_response(
@@ -350,6 +368,99 @@ async def add_zone_tag(request: TagRequest):
         confidence=result.confidence,
         matched_keyword=result.matched_keyword,
         needs_review=result.needs_review
+    )
+
+
+@router.post("/state", response_model=SecondaryStateResponse)
+async def set_zone_secondary_state(request: SecondaryStateRequest):
+    """
+    Secondary zone state setzen (dark/sleep/extended).
+    
+    Secondary states sind orthogonal zum Zone-Typ und ermöglichen:
+    - dark: Low light / night mode (Lichtsensor/Sonne)
+    - sleep: User override sleep mode
+    - extended: Exceeded time limit
+    """
+    zone_type_str = request.state.lower()
+    
+    # Validiere state
+    if zone_type_str not in _VALID_SECONDARY_STATES:
+        return _zones_error_response(
+            400,
+            code="INVALID_SECONDARY_STATE",
+            message=f"Ungültiger secondary state: {request.state}.",
+            field="state",
+            context={"allowed_values": _VALID_SECONDARY_STATES},
+        )
+    
+    # Validiere Zone-Type
+    try:
+        zone_type = ZoneType(request.zone_type)
+    except ValueError:
+        return _zones_error_response(
+            400,
+            code="INVALID_ZONE_TYPE",
+            message=f"Ungültiger Zone-Typ: {request.zone_type}.",
+            field="zone_type",
+            context={"allowed_values": _VALID_ZONE_TYPES},
+        )
+    
+    zone = HABITUS_ZONES.get(zone_type)
+    if not zone:
+        return _zones_error_response(
+            404,
+            code="ZONE_NOT_FOUND",
+            message=f"Zone nicht gefunden: {zone_type.value}",
+            field="zone_type",
+        )
+    
+    # Set state
+    zone.set_secondary_state(ZoneState(request.state), request.timestamp_ms)
+    
+    logger.info(f"Secondary state gesetzt: {zone_type.value} → {request.state}")
+    
+    return SecondaryStateResponse(
+        zone_type=zone_type.value,
+        state=zone.current_state.value,
+        state_since_ms=zone.state_since_ms,
+        supports_dark=zone.supports_dark,
+        supports_sleep=zone.supports_sleep,
+        supports_extended=zone.supports_extended,
+    )
+
+
+@router.get("/state/{zone_type}", response_model=SecondaryStateResponse)
+async def get_zone_secondary_state(zone_type: str):
+    """
+    Current secondary state einer Zone abrufen.
+    """
+    try:
+        zone_type_enum = ZoneType(zone_type)
+    except ValueError:
+        return _zones_error_response(
+            400,
+            code="INVALID_ZONE_TYPE",
+            message=f"Ungültiger Zone-Typ: {zone_type}.",
+            field="zone_type",
+            context={"allowed_values": _VALID_ZONE_TYPES},
+        )
+    
+    zone = HABITUS_ZONES.get(zone_type_enum)
+    if not zone:
+        return _zones_error_response(
+            404,
+            code="ZONE_NOT_FOUND",
+            message=f"Zone nicht gefunden: {zone_type}",
+            field="zone_type",
+        )
+    
+    return SecondaryStateResponse(
+        zone_type=zone_type_enum.value,
+        state=zone.current_state.value,
+        state_since_ms=zone.state_since_ms,
+        supports_dark=zone.supports_dark,
+        supports_sleep=zone.supports_sleep,
+        supports_extended=zone.supports_extended,
     )
 
 

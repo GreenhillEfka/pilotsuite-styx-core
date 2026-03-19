@@ -2,10 +2,11 @@
 Habituszone-Definitionen für PilotSuite Styx Core
 
 Definiert 10 standardisierte Habituszonen mit Keywords für ML-basiertes Matching.
+Supports secondary states: dark, sleep, extended.
 """
 
 from dataclasses import dataclass, field
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Set
 from enum import Enum
 
 
@@ -21,6 +22,23 @@ class ZoneType(str, Enum):
     ROOM_PAUL = "room_paul"
     TERRACE = "terrace"
     OUTSIDE = "outside"
+    UNDEFINED = "undefined"  # Fallback for unmatched
+
+
+class ZoneState(str, Enum):
+    """Secondary zone states (orthogonal to zone type)."""
+    IDLE = "idle"
+    ACTIVE = "active"
+    DARK = "dark"  # Low light / night mode
+    SLEEP = "sleep"  # User override sleep mode
+    EXTENDED = "extended"  # Exceeded time limit
+
+
+SECONDARY_STATES: Set[ZoneState] = {
+    ZoneState.DARK,
+    ZoneState.SLEEP,
+    ZoneState.EXTENDED,
+}
 
 
 @dataclass
@@ -33,10 +51,28 @@ class HabitusZone:
     keywords_en: List[str] = field(default_factory=list)  # Englische Keywords
     priority: int = 0  # Höhere Priorität bei Konflikten
     description: str = ""
-
+    
+    # Secondary state support
+    current_state: ZoneState = ZoneState.IDLE
+    state_since_ms: Optional[int] = None
+    supports_dark: bool = True  # Light sensor / sun-based
+    supports_sleep: bool = True  # Switch override
+    supports_extended: bool = True  # Time limit exceeded
+    
     def get_all_keywords(self) -> List[str]:
         """Alle Keywords (DE + EN) zurückgeben."""
         return self.keywords_de + self.keywords_en
+    
+    def set_secondary_state(self, new_state: ZoneState, timestamp_ms: int) -> None:
+        """Set secondary state with timestamp."""
+        if new_state in SECONDARY_STATES:
+            object.__setattr__(self, 'current_state', new_state)
+            object.__setattr__(self, 'state_since_ms', timestamp_ms)
+    
+    def clear_secondary_state(self) -> None:
+        """Reset to idle state."""
+        object.__setattr__(self, 'current_state', ZoneState.IDLE)
+        object.__setattr__(self, 'state_since_ms', None)
 
 
 # Standard-Habituszonen
