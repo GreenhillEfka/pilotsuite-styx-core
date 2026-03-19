@@ -1,4 +1,5 @@
 openapi: 3.0.3
+x-separate_input_output_schemas: false
 info:
   title: PilotSuite Styx Core API
   description: "\n# PilotSuite Styx Core API Documentation\n\nComprehensive REST API\
