@@ -30,12 +30,13 @@ The component expects the following REST API endpoints:
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `GET` | `/api/zone/` | List all zones |
-| `POST` | `/api/zone/` | Create new zone |
-| `GET` | `/api/zone/{id}` | Get zone details |
-| `PUT` | `/api/zone/{id}` | Update zone |
-| `DELETE` | `/api/zone/{id}` | Delete zone |
-| `POST` | `/api/zone/{id}/entities` | Add entity to zone |
+| `GET` | `/api/v1/zone-editor/zones` | List all zones |
+| `POST` | `/api/v1/zone-editor/zones` | Create new zone |
+| `GET` | `/api/v1/zone-editor/zones/{id}` | Get zone details |
+| `PUT` | `/api/v1/zone-editor/zones/{id}` | Update zone |
+| `DELETE` | `/api/v1/zone-editor/zones/{id}` | Delete zone |
+| `GET` | `/api/v1/zone-editor/rooms` | List assignable rooms |
+| `POST` | `/api/v1/zone-editor/zones/{id}/rooms` | Add room to zone |
 
 ## 📝 Data Models
 
@@ -77,7 +78,7 @@ interface ZoneEntity {
 ### With Custom API URL
 
 ```html
-<zone-editor api-base-url="/api/v1/zone"></zone-editor>
+<zone-editor api-base-url="/api/v1/zone-editor/zones"></zone-editor>
 ```
 
 ### With Authentication
@@ -93,7 +94,7 @@ editor.authToken = 'your-bearer-token';
 import { ZoneEditor } from './static/zone/zone_editor.js';
 
 const editor = new ZoneEditor();
-editor.apiBaseUrl = '/api/zone';
+editor.apiBaseUrl = '/api/v1/zone-editor/zones';
 editor.authToken = 'token';
 document.body.appendChild(editor);
 

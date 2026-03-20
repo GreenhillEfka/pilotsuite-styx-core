@@ -24,6 +24,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional
 
+from copilot_core.habitat.homeassistant_adapter import normalize_outbound_payload
 from copilot_core.webhook_delivery import WebhookDeliveryQueue
 from copilot_core.webhook_destination_policy import (
     default_webhook_destination_policy_from_env,
@@ -401,7 +402,7 @@ class WebhookPusher:
         if not self._enabled:
             return
 
-        envelope = {"type": event_type, "data": data}
+        envelope = {"type": event_type, "data": normalize_outbound_payload(event_type, data)}
 
         queue_ref = self._delivery_queue
         if queue_ref is None:

@@ -1,20 +1,13 @@
 /**
  * Zone Editor Component
  * 
- * Lit-based zone management interface for PilotSuite
- * Features: Zone list, Create/Edit/Delete, Entity Drag&Drop, Auto-Save,
- * Validation, Loading States (Skeleton), Error Handling
- * 
- * API Endpoints:
- * - GET    /api/zone/              - Alle Zonen
- * - POST   /api/zone/              - Zone erstellen
- * - GET    /api/zone/{id}          - Zone Details
- * - PUT    /api/zone/{id}          - Zone update
- * - DELETE /api/zone/{id}          - Zone löschen
- * - POST   /api/zone/{id}/entities - Entity hinzufügen
+ * Lit-based zone management interface for PilotSuite.
+ * The component now targets the modern `/api/v1/zone-editor` contract by
+ * default and keeps a light compatibility layer for older success/data
+ * responses while the surrounding UI catches up.
  * 
  * @author Clawdya
- * @version 1.0.0
+ * @version 1.1.0
  */
 
 import { LitElement, html, nothing } from 'lit';
@@ -33,23 +26,36 @@ export interface ZoneEntity {
   state?: string;
 }
 
+export interface ZoneRoom {
+  room_id: string;
+  name: string;
+  zone?: string | null;
+  entity_count?: number;
+}
+
 export interface Zone {
   zone_id: string;
   name: string;
   floor?: number;
   area_sqm?: number;
   entities: ZoneEntity[];
+  rooms?: ZoneRoom[];
   icon?: string;
   mode?: string;
   enabled?: boolean;
   priority?: number;
   status?: string;
   person_count?: number;
+  entity_count?: number;
 }
 
 export interface ZoneApiResponse {
-  success: boolean;
+  success?: boolean;
+  ok?: boolean;
   data?: Zone[] | Zone;
+  zones?: unknown[];
+  zone?: unknown;
+  rooms?: Array<Record<string, unknown>>;
   error?: string;
   message?: string;
 }
@@ -68,7 +74,7 @@ export interface DragItem {
 export class ZoneEditor extends LitElement {
   // API Configuration
   @property({ type: String })
-  apiBaseUrl = '/api/zone';
+  apiBaseUrl = '/api/v1/zone-editor/zones';
 
   @property({ type: String })
   authToken = '';
@@ -125,9 +131,14 @@ export class ZoneEditor extends LitElement {
   // Lifecycle
   // ============================================================================
 
-  override firstUpdated() {
-    this.loadZones();
-    this.loadAvailableEntities();
+  override async firstUpdated() {
+    await this.loadZones();
+    await this.loadAvailableEntities();
+
+    const initialZoneId = this.getInitialZoneId();
+    if (initialZoneId) {
+      await this.loadZoneDetails(initialZoneId);
+    }
   }
 
   // ============================================================================
@@ -149,12 +160,7 @@ export class ZoneEditor extends LitElement {
       }
 
       const result: ZoneApiResponse = await response.json();
-      
-      if (result.success && Array.isArray(result.data)) {
-        this.zones = result.data;
-      } else if (result.error) {
-        throw new Error(result.error);
-      }
+      this.zones = this.extractZones(result);
     } catch (err) {
       this.error = err instanceof Error ? err.message : 'Failed to load zones';
       console.error('Zone load error:', err);
@@ -178,11 +184,15 @@ export class ZoneEditor extends LitElement {
       }
 
       const result: ZoneApiResponse = await response.json();
-      
-      if (result.success && result.data) {
-        this.selectedZone = result.data as Zone;
-        this.editMode = false;
+      const zone = this.extractZone(result);
+      if (!zone) {
+        throw new Error(this.extractError(result) || 'Zone payload missing');
       }
+
+      this.selectedZone = zone;
+      this.showCreateForm = false;
+      this.editMode = false;
+      await this.loadAvailableEntities(zone.zone_id);
     } catch (err) {
       this.error = err instanceof Error ? err.message : 'Failed to load zone details';
       console.error('Zone details load error:', err);
@@ -191,18 +201,26 @@ export class ZoneEditor extends LitElement {
     }
   }
 
-  async loadAvailableEntities(): Promise<void> {
-    // In a real implementation, this would fetch from an entities endpoint
-    // For now, we'll use a mock set of available entities
-    this.availableEntities = [
-      { entity_id: 'light.living_room_main', name: 'Living Room Light', domain: 'light' },
-      { entity_id: 'light.kitchen_main', name: 'Kitchen Light', domain: 'light' },
-      { entity_id: 'climate.living_room', name: 'Living Room Thermostat', domain: 'climate' },
-      { entity_id: 'sensor.living_room_temp', name: 'Living Room Temperature', domain: 'sensor' },
-      { entity_id: 'binary_sensor.motion_living', name: 'Motion Sensor', domain: 'binary_sensor' },
-      { entity_id: 'media_player.living_room', name: 'Living Room TV', domain: 'media_player' },
-      { entity_id: 'switch.coffee_machine', name: 'Coffee Machine', domain: 'switch' },
-    ];
+  async loadAvailableEntities(zoneId?: string): Promise<void> {
+    try {
+      const response = await fetch(this.getRoomsBaseUrl(), {
+        method: 'GET',
+        headers: this.getHeaders(),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to load rooms: ${response.status}`);
+      }
+
+      const result: ZoneApiResponse = await response.json();
+      const rooms = Array.isArray(result.rooms) ? result.rooms : [];
+      this.availableEntities = rooms
+        .filter(room => this.isAssignableRoom(room, zoneId))
+        .map(room => this.roomToEntity(room));
+    } catch (err) {
+      console.error('Available rooms load error:', err);
+      this.availableEntities = [];
+    }
   }
 
   // ============================================================================
@@ -221,21 +239,20 @@ export class ZoneEditor extends LitElement {
       const response = await fetch(this.apiBaseUrl, {
         method: 'POST',
         headers: this.getHeaders(),
-        body: JSON.stringify(this.formData),
+        body: JSON.stringify(this.buildCreatePayload()),
       });
 
+      const result: ZoneApiResponse = await response.json().catch(() => ({}));
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `Failed to create zone: ${response.status}`);
+        throw new Error(this.extractError(result) || `Failed to create zone: ${response.status}`);
       }
 
-      const result: ZoneApiResponse = await response.json();
-      
-      if (result.success) {
+      if (this.isSuccessResponse(result)) {
         this.successMessage = 'Zone created successfully';
         this.showCreateForm = false;
         this.resetForm();
         await this.loadZones();
+        await this.loadAvailableEntities();
         this.clearSuccessMessage();
       }
     } catch (err) {
@@ -258,17 +275,15 @@ export class ZoneEditor extends LitElement {
       const response = await fetch(`${this.apiBaseUrl}/${this.selectedZone.zone_id}`, {
         method: 'PUT',
         headers: this.getHeaders(),
-        body: JSON.stringify(this.formData),
+        body: JSON.stringify(this.buildUpdatePayload()),
       });
 
+      const result: ZoneApiResponse = await response.json().catch(() => ({}));
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `Failed to update zone: ${response.status}`);
+        throw new Error(this.extractError(result) || `Failed to update zone: ${response.status}`);
       }
 
-      const result: ZoneApiResponse = await response.json();
-      
-      if (result.success) {
+      if (this.isSuccessResponse(result)) {
         this.successMessage = 'Zone updated successfully';
         this.editMode = false;
         await this.loadZones();
@@ -297,16 +312,16 @@ export class ZoneEditor extends LitElement {
         headers: this.getHeaders(),
       });
 
+      const result: ZoneApiResponse = await response.json().catch(() => ({}));
       if (!response.ok) {
-        throw new Error(`Failed to delete zone: ${response.status}`);
+        throw new Error(this.extractError(result) || `Failed to delete zone: ${response.status}`);
       }
 
-      const result: ZoneApiResponse = await response.json();
-      
-      if (result.success) {
+      if (this.isSuccessResponse(result)) {
         this.successMessage = 'Zone deleted successfully';
         this.selectedZone = null;
         await this.loadZones();
+        await this.loadAvailableEntities();
         this.clearSuccessMessage();
       }
     } catch (err) {
@@ -322,20 +337,18 @@ export class ZoneEditor extends LitElement {
     this.error = null;
 
     try {
-      const response = await fetch(`${this.apiBaseUrl}/${zoneId}/entities`, {
+      const response = await fetch(`${this.apiBaseUrl}/${zoneId}/rooms`, {
         method: 'POST',
         headers: this.getHeaders(),
-        body: JSON.stringify({ entity_id: entity.entity_id }),
+        body: JSON.stringify({ room_id: entity.entity_id }),
       });
 
+      const result: ZoneApiResponse = await response.json().catch(() => ({}));
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `Failed to add entity: ${response.status}`);
+        throw new Error(this.extractError(result) || `Failed to add entity: ${response.status}`);
       }
 
-      const result: ZoneApiResponse = await response.json();
-      
-      if (result.success) {
+      if (this.isSuccessResponse(result)) {
         this.successMessage = 'Entity added successfully';
         await this.loadZoneDetails(zoneId);
         this.clearSuccessMessage();
@@ -413,6 +426,7 @@ export class ZoneEditor extends LitElement {
     this.editMode = false;
     this.selectedZone = null;
     this.validationErrors = {};
+    void this.loadAvailableEntities();
   }
 
   startEditMode(): void {
@@ -512,6 +526,115 @@ export class ZoneEditor extends LitElement {
   // ============================================================================
   // Utilities
   // ============================================================================
+
+  private getInitialZoneId(): string | null {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('zone_id') || params.get('zone') || params.get('zoneId');
+  }
+
+  private getRoomsBaseUrl(): string {
+    if (this.apiBaseUrl.includes('/zone-editor/zones')) {
+      return this.apiBaseUrl.replace(/\/zones\/?$/, '/rooms');
+    }
+    return '/api/v1/zone-editor/rooms';
+  }
+
+  private isSuccessResponse(result: ZoneApiResponse): boolean {
+    return Boolean(result?.success || result?.ok);
+  }
+
+  private extractError(result: ZoneApiResponse): string | undefined {
+    return result?.error || result?.message;
+  }
+
+  private roomToEntity(room: Record<string, unknown>): ZoneEntity {
+    return {
+      entity_id: String(room.room_id || ''),
+      name: String(room.name || room.room_id || 'Room'),
+      domain: 'room',
+      state: room.zone ? `zone:${String(room.zone)}` : 'unassigned',
+    };
+  }
+
+  private normalizeZone(rawZone: unknown): Zone | null {
+    if (!rawZone || typeof rawZone !== 'object') {
+      return null;
+    }
+
+    const zone = rawZone as Record<string, unknown>;
+    const rooms = Array.isArray(zone.rooms)
+      ? (zone.rooms as Array<Record<string, unknown>>).map(room => ({
+          room_id: String(room.room_id || ''),
+          name: String(room.name || room.room_id || 'Room'),
+          zone: room.zone ? String(room.zone) : null,
+          entity_count: typeof room.entity_count === 'number' ? room.entity_count : undefined,
+        }))
+      : [];
+
+    const entities = Array.isArray(zone.entities) && zone.entities.length > 0
+      ? (zone.entities as ZoneEntity[])
+      : rooms.map(room => this.roomToEntity(room as unknown as Record<string, unknown>));
+
+    return {
+      zone_id: String(zone.zone_id || ''),
+      name: String(zone.name || ''),
+      floor: typeof zone.floor === 'number' ? zone.floor : undefined,
+      area_sqm: typeof zone.area_sqm === 'number' ? zone.area_sqm : undefined,
+      entities,
+      rooms,
+      icon: typeof zone.icon === 'string' ? zone.icon : undefined,
+      mode: typeof zone.mode === 'string' ? zone.mode : undefined,
+      enabled: typeof zone.enabled === 'boolean' ? zone.enabled : undefined,
+      priority: typeof zone.priority === 'number' ? zone.priority : undefined,
+      status: typeof zone.status === 'string' ? zone.status : undefined,
+      person_count: typeof zone.person_count === 'number' ? zone.person_count : undefined,
+      entity_count: typeof zone.entity_count === 'number' ? zone.entity_count : entities.length,
+    };
+  }
+
+  private extractZones(result: ZoneApiResponse): Zone[] {
+    const rawZones = Array.isArray(result?.data)
+      ? result.data
+      : Array.isArray(result?.zones)
+        ? result.zones
+        : [];
+
+    return rawZones
+      .map(zone => this.normalizeZone(zone))
+      .filter((zone): zone is Zone => Boolean(zone));
+  }
+
+  private extractZone(result: ZoneApiResponse): Zone | null {
+    if (result?.data && !Array.isArray(result.data)) {
+      return this.normalizeZone(result.data);
+    }
+    if (result?.zone) {
+      return this.normalizeZone(result.zone);
+    }
+    return null;
+  }
+
+  private isAssignableRoom(room: Record<string, unknown>, zoneId?: string): boolean {
+    const assignedZone = typeof room.zone === 'string' ? room.zone : null;
+    return !assignedZone || (zoneId ? assignedZone === zoneId : false);
+  }
+
+  private buildCreatePayload(): Record<string, unknown> {
+    return {
+      zone_id: this.formData.zone_id,
+      name: this.formData.name,
+      icon: this.formData.icon,
+      rooms: this.formData.entities.map(entity => entity.entity_id),
+    };
+  }
+
+  private buildUpdatePayload(): Record<string, unknown> {
+    return {
+      name: this.formData.name,
+      icon: this.formData.icon,
+      rooms: this.formData.entities.map(entity => entity.entity_id),
+    };
+  }
 
   private getHeaders(): HeadersInit {
     const headers: HeadersInit = {

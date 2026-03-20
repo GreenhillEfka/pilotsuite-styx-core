@@ -36,6 +36,7 @@ from .base import (
     BaseNeuron, NeuronConfig, NeuronState, NeuronType, MoodType,
     ContextNeuron, StateNeuron, MoodNeuron
 )
+from .input_validator import NeuronInputValidator
 from .mood_history import get_mood_history_store
 from .context import (
     PresenceNeuron, TimeOfDayNeuron, LightLevelNeuron, WeatherNeuron,
@@ -453,14 +454,16 @@ class NeuronManager:
         """
         timestamp = datetime.now(timezone.utc).isoformat()
         
+        # Validiere und normalisiere den Evaluierungskontext
+        validator = NeuronInputValidator()
+        
         # Anwesende Personen aus HA-States ableiten
         present_persons: List[str] = []
         for eid, state_val in self._ha_states.items():
             if eid.startswith("person."):
-                st = state_val if isinstance(state_val, str) else (
-                    state_val.get("state", "") if isinstance(state_val, dict) else ""
-                )
-                if st == "home":
+                # Validiere und normalisiere den State
+                normalized_state = validator.validate_ha_state(state_val, eid)
+                if normalized_state["state"] == "home":
                     present_persons.append(eid)
 
         # Haushaltszusammenfassung erstellen, falls Profil gesetzt
@@ -468,8 +471,8 @@ class NeuronManager:
         if self._household:
             household_summary = self._household.presence_summary(present_persons)
 
-        # Evaluierungskontext aufbauen
-        eval_context = {
+        # Evaluierungskontext aufbauen und validieren
+        raw_context = {
             "states": self._ha_states,
             "now": self._context.get("now", datetime.now(timezone.utc)),
             "presence": self._context.get("presence", {}),
@@ -481,6 +484,9 @@ class NeuronManager:
             "present_persons": present_persons,
         }
         
+        # Validiere und normalisiere den Kontext
+        eval_context = validator.validate_context(raw_context)
+        
         # 1. Kontext-Neuronen auswerten
         context_values = {}
         for name, neuron in self._context_neurons.items():
@@ -491,7 +497,8 @@ class NeuronManager:
                 eval_context["neurons"][f"context.{name}"] = neuron.state.to_dict()
             except Exception as e:
                 _LOGGER.error("Error evaluating context neuron %s: %s", name, e)
-                context_values[name] = 0.5
+                # Use previous value if available, otherwise default to 0.5
+                context_values[name] = getattr(neuron, '_previous_value', 0.5) or 0.5
         
         # 2. Zustands-Neuronen auswerten (nutzt Kontext-Werte)
         eval_context["context_values"] = context_values

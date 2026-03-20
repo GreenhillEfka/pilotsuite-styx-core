@@ -290,6 +290,18 @@ class EventStore:
 
         normalized["trigger"] = event.get("trigger", "unknown")
 
+        adapter = event.get("adapter")
+        if isinstance(adapter, dict):
+            normalized["adapter"] = dict(adapter)
+
+        habitat_event = event.get("habitat_event")
+        if isinstance(habitat_event, dict):
+            normalized["habitat_event"] = dict(habitat_event)
+
+        neuron_input = event.get("neuron_input")
+        if isinstance(neuron_input, dict):
+            normalized["neuron_input"] = dict(neuron_input)
+
         return normalized
 
     def _append_jsonl(self, event: dict[str, Any]) -> None:
