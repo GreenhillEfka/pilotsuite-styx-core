@@ -1,13 +1,20 @@
 ## Summary
+- Changed:
+- Why:
 
-## Why
+## Checks
+- [ ] python compile passed
+- [ ] pytest passed (or explicitly blocked with reason)
+- [ ] Core↔HA compatibility reviewed where relevant
+- [ ] known gaps listed honestly
 
-## Checklist
-- [ ] Changelog updated (if user-visible)
-- [ ] Docs updated (if applicable)
-- [ ] Privacy-first (no secrets, no personal defaults)
-- [ ] Safe defaults (caps/limits; persistence off by default)
-- [ ] Governance-first (no silent actions)
+## Changed files
+-
 
-## Policy changes?
-If any maxim/principle changes: rationale + safeguards + docs updated.
+## Not clean / open
+-
+
+## Release impact
+- [ ] changelog updated
+- [ ] release notes drafted
+- [ ] no API/schema drift introduced (or explicitly documented)

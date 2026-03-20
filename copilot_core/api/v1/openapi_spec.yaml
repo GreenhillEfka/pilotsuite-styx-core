@@ -1,0 +1,321 @@
+openapi: 3.0.0
+info:
+  title: Module Configuration API
+  description: API for managing module configurations with triggers, actions, zone overrides, and priority rules
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8000/api/v1
+    description: Development server
+
+paths:
+  /module-config/schema:
+    get:
+      summary: Get module configuration schema
+      description: Retrieve the current module configuration schema including all module types
+      operationId: getModuleSchema
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModuleConfigResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+
+  /module-config/{module_id}:
+    get:
+      summary: Get module configuration
+      description: Retrieve configuration for a specific module by ID
+      operationId: getModuleConfig
+      parameters:
+        - name: module_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Unique identifier of the module
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModuleConfig'
+        '404':
+          description: Module not found
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    
+    put:
+      summary: Update module configuration
+      description: Update an existing module configuration
+      operationId: updateModuleConfig
+      parameters:
+        - name: module_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Unique identifier of the module
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ModuleConfig'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModuleConfig'
+        '400':
+          description: Module ID mismatch
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    
+    delete:
+      summary: Delete module configuration
+      description: Delete a module configuration by ID
+      operationId: deleteModuleConfig
+      parameters:
+        - name: module_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Unique identifier of the module
+      responses:
+        '200':
+          description: Successful deletion
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Module configuration deleted"
+        '404':
+          description: Module not found
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+
+  /module-config/:
+    post:
+      summary: Create module configuration
+      description: Create a new module configuration
+      operationId: createModuleConfig
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ModuleConfig'
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModuleConfig'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+
+components:
+  schemas:
+    ModuleConfigResponse:
+      type: object
+      properties:
+        modules:
+          type: array
+          items:
+            $ref: '#/components/schemas/ModuleConfig'
+      required:
+        - modules
+    
+    ModuleConfig:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique identifier for the module
+        name:
+          type: string
+          description: Human-readable name of the module
+        type:
+          $ref: '#/components/schemas/ModuleType'
+        enabled:
+          type: boolean
+          description: Whether the module is enabled
+          default: true
+        triggers:
+          type: array
+          items:
+            $ref: '#/components/schemas/Trigger'
+          description: List of triggers for this module
+        actions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Action'
+          description: List of actions for this module
+        zone_overrides:
+          type: array
+          items:
+            $ref: '#/components/schemas/ZoneOverride'
+          description: Zone-specific overrides
+        priority_rules:
+          type: array
+          items:
+            $ref: '#/components/schemas/PriorityRule'
+          description: Priority rules for conflict resolution
+      required:
+        - id
+        - name
+        - type
+    
+    ModuleType:
+      type: string
+      description: Supported module types
+      enum:
+        - LIGHT
+        - AUDIO
+        - CLIMATE
+        - COVER
+        - ENERGY
+        - SCENE
+        - SECURITY
+    
+    Trigger:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique identifier for the trigger
+        name:
+          type: string
+          description: Human-readable name of the trigger
+        description:
+          type: string
+          description: Description of what the trigger does
+        conditions:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+          description: List of conditions that must be met for the trigger
+      required:
+        - id
+        - name
+        - conditions
+    
+    Action:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique identifier for the action
+        name:
+          type: string
+          description: Human-readable name of the action
+        description:
+          type: string
+          description: Description of what the action does
+        parameters:
+          type: object
+          additionalProperties: true
+          description: Parameters for the action
+      required:
+        - id
+        - name
+        - parameters
+    
+    ZoneOverride:
+      type: object
+      properties:
+        zone_id:
+          type: string
+          description: Identifier of the zone to override
+        enabled:
+          type: boolean
+          description: Whether this override is active
+        settings:
+          type: object
+          additionalProperties: true
+          description: Zone-specific settings
+      required:
+        - zone_id
+        - enabled
+        - settings
+    
+    PriorityRule:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique identifier for the priority rule
+        name:
+          type: string
+          description: Human-readable name of the rule
+        condition:
+          type: string
+          description: Condition under which this rule applies
+        priority:
+          type: integer
+          description: Priority level (higher number = higher priority)
+        action:
+          type: string
+          description: Action to take when rule applies
+      required:
+        - id
+        - name
+        - condition
+        - priority
+        - action
+    
+    HTTPValidationError:
+      type: object
+      properties:
+        detail:
+          type: array
+          items:
+            $ref: '#/components/schemas/ValidationError'
+    
+    ValidationError:
+      type: object
+      properties:
+        loc:
+          type: array
+          items:
+            type: string
+        msg:
+          type: string
+        type:
+          type: string
+      required:
+        - loc
+        - msg
+        - type
