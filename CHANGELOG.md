@@ -2,6 +2,32 @@
 
 Alle wesentlichen Aenderungen am PilotSuite Styx Core werden in dieser Datei dokumentiert.
 
+## [v14.7.5] - 2026-03-20
+
+### Zone-Proposals & Configuration
+
+#### Added
+- **ErrorResponse Library**: `ErrorResponse` + `error_response_payload()` als neue Shared Library
+- **Zone-Proposals API**: `GET/POST /zone-proposals` + `POST /zone-proposals/accept` mit Modul-Policy
+- **ZoneResponse Erweiterung**: `/zones/assign` mit ErrorResponse-Examples (400/404)
+- **module_overrides**: ZoneType-basierte Module-Overrides (`light/motion/music/volume/tv/climate/camera`)
+- **Outdoor Aliases**: Terrasse/Balkon/Loggia kanonisch → OUTSIDE
+
+### Presence v3.4
+
+#### Added
+- **Multi-Source Aggregation**: `any-on`-Regel mit hold/override und sources-Tracking
+- **Numeric Bucketing**: Lux→dark/bright, Temp→cold/warm
+- **ZoneBasedMiner**: Semantic bucketing, confidence/lift scoring
+
+### Zone-Editor & API
+
+#### Added
+- **zone_editor.ts**: API v1 mit `domain` optional, `rooms[]`, `entity_count`
+
+#### Changed
+- **OpenAPI Sync**: `/zones/assign` Pilot, Version → 14.7.3
+
 ## [v14.7.3] - 2026-03-17
 
 ### Module-per-Zone Architektur + Neues Styx Dashboard
@@ -375,7 +401,7 @@ Dies ist das konsolidierte offizielle Release, das alle Entwicklungen seit dem l
 
 ### Changed
 - Legacy Endpoint deprecated (`/api/v1/legacy/health`)
-- OpenAPI synced (551/551 aligned)
+- OpenAPI synced (572/572 aligned)
 
 ### Closed
 - Drift-A: 5 zone/mood paths
