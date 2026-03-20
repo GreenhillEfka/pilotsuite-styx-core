@@ -318,7 +318,7 @@ describe('ZoneEditor Component', () => {
     expect((element as any).validationErrors.name).to.exist;
   });
 
-  it('21. should validate that at least one entity is required', () => {
+  it('21. should validate that at least one room is required', () => {
     (element as any).formData = {
       zone_id: 'zone:test',
       name: 'Test Zone',
@@ -331,7 +331,7 @@ describe('ZoneEditor Component', () => {
     const isValid = element.validateForm();
     expect(isValid).to.be.false;
     expect((element as any).validationErrors.entities).to.exist;
-    expect((element as any).validationErrors.entities).to.include('at least one entity');
+    expect((element as any).validationErrors.entities).to.include('at least one room');
   });
 
   it('22. should validate zone_id is required for creation', () => {
@@ -665,10 +665,10 @@ describe('ZoneEditor API Integration', () => {
 
   it('41. should load zones from API on firstUpdated', async () => {
     const mockResponse = {
-      success: true,
-      data: [
-        { zone_id: 'zone:1', name: 'Zone 1', entities: [] },
-        { zone_id: 'zone:2', name: 'Zone 2', entities: [] },
+      ok: true,
+      zones: [
+        { zone_id: 'zone:1', name: 'Zone 1', rooms: [] },
+        { zone_id: 'zone:2', name: 'Zone 2', rooms: [] },
       ],
     };
 
@@ -682,7 +682,7 @@ describe('ZoneEditor API Integration', () => {
     // Wait for firstUpdated to complete
     await new Promise(resolve => setTimeout(resolve, 100));
 
-    expect(fetchStub.calledWith('/api/zone', {
+    expect(fetchStub.calledWith('/api/v1/zone-editor/zones', {
       method: 'GET',
       headers: { 'Content-Type': 'application/json' },
     })).to.be.true;
@@ -704,7 +704,7 @@ describe('ZoneEditor API Integration', () => {
   it('43. should create zone via API', async () => {
     fetchStub.resolves({
       ok: true,
-      json: async () => ({ success: true }),
+      json: async () => ({ ok: true }),
     });
 
     element = await fixture<ZoneEditor>(html`<zone-editor></zone-editor>`);
@@ -720,19 +720,22 @@ describe('ZoneEditor API Integration', () => {
 
     await (element as any).createZone();
 
-    expect(fetchStub.calledWith('/api/zone', {
+    expect(fetchStub.calledWith('/api/v1/zone-editor/zones', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify((element as any).formData),
+      body: JSON.stringify({
+        ...((element as any).formData),
+        rooms: ['light.1'],
+      }),
     })).to.be.true;
   });
 
   it('44. should update zone via API', async () => {
     fetchStub.resolves({
       ok: true,
-      json: async () => ({ success: true }),
+      json: async () => ({ ok: true }),
     });
 
     element = await fixture<ZoneEditor>(html`<zone-editor></zone-editor>`);
@@ -749,19 +752,22 @@ describe('ZoneEditor API Integration', () => {
 
     await (element as any).updateZone();
 
-    expect(fetchStub.calledWith('/api/zone/zone:update', {
+    expect(fetchStub.calledWith('/api/v1/zone-editor/zones/zone:update', {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify((element as any).formData),
+      body: JSON.stringify({
+        ...((element as any).formData),
+        rooms: ['light.1'],
+      }),
     })).to.be.true;
   });
 
   it('45. should delete zone via API', async () => {
     fetchStub.resolves({
       ok: true,
-      json: async () => ({ success: true }),
+      json: async () => ({ ok: true }),
     });
 
     // Stub confirm dialog
@@ -771,7 +777,7 @@ describe('ZoneEditor API Integration', () => {
     
     await (element as any).deleteZone('zone:delete');
 
-    expect(fetchStub.calledWith('/api/zone/zone:delete', {
+    expect(fetchStub.calledWith('/api/v1/zone-editor/zones/zone:delete', {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
     })).to.be.true;
@@ -782,7 +788,7 @@ describe('ZoneEditor API Integration', () => {
   it('46. should add entity to zone via API', async () => {
     fetchStub.resolves({
       ok: true,
-      json: async () => ({ success: true }),
+      json: async () => ({ ok: true }),
     });
 
     element = await fixture<ZoneEditor>(html`<zone-editor></zone-editor>`);
@@ -795,7 +801,7 @@ describe('ZoneEditor API Integration', () => {
 
     await (element as any).addEntityToZone('zone:test', testEntity);
 
-    expect(fetchStub.calledWith('/api/zone/zone:test/entities', {
+    expect(fetchStub.calledWith('/api/v1/zone-editor/zones/zone:test/rooms', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -832,18 +838,21 @@ describe('ZoneEditor API Integration', () => {
 
     fetchStub.resolves({
       ok: true,
-      json: async () => ({ success: true, data: mockZone }),
+      json: async () => ({ ok: true, zone: mockZone }),
     });
 
     element = await fixture<ZoneEditor>(html`<zone-editor></zone-editor>`);
     
     await (element as any).loadZoneDetails('zone:detail');
 
-    expect(fetchStub.calledWith('/api/zone/zone:detail', {
+    expect(fetchStub.calledWith('/api/v1/zone-editor/zones/zone:detail', {
       method: 'GET',
       headers: { 'Content-Type': 'application/json' },
     })).to.be.true;
-    expect((element as any).selectedZone).to.deep.equal(mockZone);
+    expect((element as any).selectedZone).to.deep.equal({
+      ...mockZone,
+      rooms: [],
+    });
   });
 
   it('49. should handle API error on create', async () => {
@@ -872,7 +881,7 @@ describe('ZoneEditor API Integration', () => {
   it('50. should show success message after successful create', async () => {
     fetchStub.resolves({
       ok: true,
-      json: async () => ({ success: true }),
+      json: async () => ({ ok: true }),
     });
 
     element = await fixture<ZoneEditor>(html`<zone-editor></zone-editor>`);
