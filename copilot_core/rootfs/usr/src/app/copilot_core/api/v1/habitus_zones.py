@@ -19,10 +19,16 @@ from flask import Blueprint, jsonify, request
 
 from copilot_core.api.security import validate_token
 from copilot_core.homeassistant.habitus_zones import (
-    HABITUS_ZONES, ZoneType, HabitusZone, get_all_zones, get_zone_by_type
+    HABITUS_ZONES,
+    ZoneType,
+    HabitusZone,
+    get_all_zones,
+    get_zone_by_type,
+    get_default_module_overrides,
+    resolve_module_overrides,
 )
 from copilot_core.homeassistant.zone_matcher import (
-    ZoneMatcher, get_matcher, match_room, match_rooms
+    ZoneMatcher, get_matcher, map_homeassistant_topology, match_room, match_rooms
 )
 from copilot_core.hub.habitus_zones import HabitusZoneEngine
 
@@ -109,6 +115,7 @@ def get_all_habitus_zones():
                 "keywords_en": zone.keywords_en,
                 "priority": zone.priority,
                 "icon": _get_icon_for_zone(zone.zone_type),
+                "module_overrides": zone.get_module_overrides() or get_default_module_overrides(zone.zone_type),
             }
             
             # Include metrics if requested
@@ -155,6 +162,7 @@ def configure_zone(zone_id: str):
         keywords_en (list): English keywords (optional)
         entities (dict): Entity assignments (optional)
         settings (dict): Zone-specific settings (optional)
+        module_overrides (dict): Per-module policy overrides (optional)
     
     Returns:
         JSON object with updated zone configuration
@@ -180,6 +188,8 @@ def configure_zone(zone_id: str):
         # Parse request body
         data = request.get_json() or {}
         
+        module_overrides = resolve_module_overrides(zone_type, data.get("module_overrides"))
+
         # Update zone configuration (in a real implementation, this would persist)
         updated_config = {
             "id": zone_id,
@@ -191,6 +201,7 @@ def configure_zone(zone_id: str):
             "keywords_en": data.get("keywords_en", zone.keywords_en),
             "priority": data.get("priority", zone.priority),
             "icon": _get_icon_for_zone(zone_type),
+            "module_overrides": module_overrides,
         }
         
         # Add entity assignments if provided
@@ -275,6 +286,33 @@ def get_zone_metrics(zone_id: str):
 # =============================================================================
 # Additional Helper Endpoints
 # =============================================================================
+
+@bp.route("/map-homeassistant", methods=["POST"])
+def map_homeassistant_areas_and_entities():
+    """Home-Assistant-Bereiche und Entitäten in aggregierte Habituszonen mappen."""
+    try:
+        data = request.get_json() or {}
+        areas = data.get("areas", [])
+        entities = data.get("entities", [])
+
+        if not isinstance(areas, list) or not isinstance(entities, list):
+            return jsonify({
+                "error": "invalid_format",
+                "message": "'areas' und 'entities' müssen Arrays sein"
+            }), 400
+
+        return jsonify({
+            "status": "ok",
+            **map_homeassistant_topology(areas, entities),
+        })
+
+    except Exception as e:
+        _LOGGER.error("Failed to map Home Assistant topology: %s", e)
+        return jsonify({
+            "status": "error",
+            "message": str(e)
+        }), 500
+
 
 @bp.route("/match", methods=["POST"])
 def match_rooms_to_zones():
