@@ -146,6 +146,24 @@ class ZoneMatcher:
             if fuzzy in normalized or normalized in fuzzy:
                 return base
         return None
+
+    def _match_outdoor_canonical_alias(self, room_name: str) -> Optional[Tuple[HabitusZone, float, str]]:
+        """Kanonisiert Terrassen-/Outdoor-Aliase deterministisch auf OUTSIDE."""
+        normalized = self._normalize_room_name(room_name)
+        outdoor_aliases = ("terrasse", "terrass", "balkon", "loggia")
+
+        for alias in outdoor_aliases:
+            if alias in normalized:
+                return self.zones[ZoneType.OUTSIDE], 98.0, alias
+
+        return None
+
+    def _match_kitchen_canonical_alias(self, room_name: str) -> Optional[Tuple[HabitusZone, float, str]]:
+        """Kanonisiert kuechenbereich deterministisch auf KITCHEN."""
+        normalized = self._normalize_room_name(room_name)
+        if "kuechenbereich" in normalized:
+            return self.zones[ZoneType.KITCHEN], 98.0, "kuechenbereich"
+        return None
     
     def match_room_to_zone(self, room_name: str) -> MatchResult:
         """
@@ -159,6 +177,30 @@ class ZoneMatcher:
         """
         normalized = self._normalize_room_name(room_name)
         best_match: Optional[Tuple[HabitusZone, float, str]] = None
+
+        # 0. Outdoor-Kanonisierung vor generischem Fuzzy-/Keyword-Matching.
+        outdoor_match = self._match_outdoor_canonical_alias(room_name)
+        if outdoor_match is not None:
+            zone, confidence, matched_keyword = outdoor_match
+            return MatchResult(
+                room_name=room_name,
+                zone=zone,
+                confidence=confidence,
+                matched_keyword=matched_keyword,
+                needs_review=confidence < self.REVIEW_THRESHOLD,
+            )
+
+        # 0b. Kuechenbereich-Kanonisierung vor generischem Fuzzy-/Keyword-Matching.
+        kitchen_match = self._match_kitchen_canonical_alias(room_name)
+        if kitchen_match is not None:
+            zone, confidence, matched_keyword = kitchen_match
+            return MatchResult(
+                room_name=room_name,
+                zone=zone,
+                confidence=confidence,
+                matched_keyword=matched_keyword,
+                needs_review=confidence < self.REVIEW_THRESHOLD,
+            )
         
         # 1. Fuzzy-Mapping versuchen (für spezifische Namen wie Mira, Paul)
         fuzzy_base = self._apply_fuzzy_mappings(room_name)
