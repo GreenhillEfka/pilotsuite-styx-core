@@ -22,7 +22,7 @@ info:
 
     ## Idempotency
     Event endpoints support `Idempotency-Key` header for deduplication.
-  version: 14.7.0
+  version: 14.7.3
   contact:
     name: PilotSuite
     url: https://github.com/GreenhillEfka/pilotsuite-styx-core

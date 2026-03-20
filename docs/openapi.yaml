@@ -19633,6 +19633,96 @@ paths:
       security:
       - apiKeyAuth: []
 
+  /api/v1/zones/assign:
+    post:
+      summary: Zones pilot: Assign room to zone
+      description: Minimal PS-133 pilot for standardized zone-assignment errors.
+      operationId: zones_assign_room_to_zone
+      tags:
+      - Zones
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - room_name
+              - zone_type
+              properties:
+                room_name:
+                  type: string
+                  example: Wohnzimmer
+                zone_type:
+                  type: string
+                  example: living
+                override_existing:
+                  type: boolean
+                  default: false
+      responses:
+        '200':
+          description: Room assigned to zone
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - room_name
+                - zone_type
+                - zone_name_de
+                - zone_name_en
+                - confidence
+                - needs_review
+                properties:
+                  room_name:
+                    type: string
+                  zone_type:
+                    type: string
+                  zone_name_de:
+                    type: string
+                  zone_name_en:
+                    type: string
+                  confidence:
+                    type: number
+                  matched_keyword:
+                    type: string
+                    nullable: true
+                  needs_review:
+                    type: boolean
+        '400':
+          description: Invalid zone type
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalid_zone_type:
+                  summary: Unknown zone type in request
+                  value:
+                    code: INVALID_ZONE_TYPE
+                    message: Ungültiger Zone-Typ: spa.
+                    field: zone_type
+                    context:
+                      allowed_values:
+                      - living
+                      - bath
+                      - kitchen
+        '404':
+          description: Zone not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                zone_not_found:
+                  summary: Zone missing in registry
+                  value:
+                    code: ZONE_NOT_FOUND
+                    message: Zone nicht gefunden: living
+                    field: zone_type
+      security:
+      - apiKeyAuth: []
+
 components:
   schemas:
     Candidate:
@@ -19782,6 +19872,35 @@ components:
           type: string
         details:
           type: object
+    ErrorResponse:
+      type: object
+      required:
+      - code
+      - message
+      properties:
+        code:
+          type: string
+          description: Stable machine-readable error code
+          example: INVALID_ZONE_TYPE
+        message:
+          type: string
+          description: Human-readable error message
+          example: Ungültiger Zone-Typ: spa.
+        field:
+          type: string
+          nullable: true
+          description: Optional field tied to the error
+          example: zone_type
+        context:
+          type: object
+          nullable: true
+          description: Optional structured error context
+          additionalProperties: true
+          example:
+            allowed_values:
+            - living
+            - bath
+            - kitchen
     WebhookEnvelope:
       type: object
       additionalProperties: false
