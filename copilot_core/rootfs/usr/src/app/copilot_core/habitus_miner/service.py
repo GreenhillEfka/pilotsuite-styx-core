@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import time
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -12,6 +13,7 @@ from .model import NormEvent, Rule, MiningConfig, EventStreamType, RulesType
 from .store import HabitusMinerStore
 from .mining import mine_ab_rules, mine_with_context_stratification
 from .feedback_store import HabitusFeedbackStore
+from .zone_mining import ZoneBasedMiner
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -34,6 +36,63 @@ class HabitusMinerService:
         self._vector_store = vector_store
         self._embedding_engine = embedding_engine
         self._integration_bus = integration_bus
+
+    def _bucket_numeric_sensor_state(self, entity_id: str, value: str) -> str | None:
+        """Bucket noisy numeric sensor values into semantic states.
+
+        This creates reusable mining tokens such as ``dark`` or ``cool`` so
+        proposals can be learned from sensor/media/presence correlations rather
+        than from exact numeric values.
+        """
+        try:
+            numeric = float(value)
+        except (TypeError, ValueError):
+            return None
+
+        entity_lower = entity_id.lower()
+        if any(token in entity_lower for token in ("illuminance", "brightness", "lux", "light_level")):
+            if numeric < 10:
+                return "very_dark"
+            if numeric < 50:
+                return "dark"
+            if numeric < 150:
+                return "dim"
+            if numeric < 500:
+                return "bright"
+            return "very_bright"
+
+        if any(token in entity_lower for token in ("temperature", "temp")):
+            if numeric < 18:
+                return "cold"
+            if numeric < 21:
+                return "cool"
+            if numeric < 24:
+                return "comfortable"
+            if numeric < 27:
+                return "warm"
+            return "hot"
+
+        if any(token in entity_lower for token in ("humidity", "feuchtigkeit")):
+            if numeric < 30:
+                return "dry"
+            if numeric < 60:
+                return "normal"
+            if numeric < 75:
+                return "humid"
+            return "very_humid"
+
+        return None
+
+    def _normalize_state_value(self, entity_id: str, domain: str, state: Any) -> str | None:
+        if state in (None, "", "unknown", "unavailable"):
+            return None
+
+        normalized = str(state).strip().lower()
+        if domain == "sensor":
+            bucket = self._bucket_numeric_sensor_state(entity_id, normalized)
+            if bucket:
+                return bucket
+        return normalized
     
     def normalize_ha_event(self, ha_event: dict[str, Any]) -> NormEvent | None:
         """Convert Home Assistant event to normalized event.
@@ -68,34 +127,36 @@ class HabitusMinerService:
             if not new_state or not isinstance(new_state, dict):
                 return None
             
-            old_val = old_state.get("state") if old_state else None
-            new_val = new_state.get("state")
-            
-            # Only process actual state transitions
+            raw_old_val = old_state.get("state") if old_state else None
+            raw_new_val = new_state.get("state")
+
+            # Extract domain early because normalization may depend on it
+            domain = entity_id.split('.', 1)[0] if '.' in entity_id else ""
+            old_val = self._normalize_state_value(entity_id, domain, raw_old_val)
+            new_val = self._normalize_state_value(entity_id, domain, raw_new_val)
+
+            # Only process meaningful state transitions after normalization
             if old_val == new_val:
                 return None
-            
+
             # Skip unavailable/unknown states
-            if new_val in ("unavailable", "unknown", ""):
+            if new_val is None:
                 return None
-            
+
             # Parse timestamp
             time_fired = ha_event.get("time_fired")
             if isinstance(time_fired, str):
                 # Parse ISO timestamp
                 from datetime import datetime
-                dt = datetime.fromisoformat(time_fired.replace('Z', '+00:00'))
-                ts_ms = int(dt.timestamp() * 1000)
+                parsed_dt = datetime.fromisoformat(time_fired.replace('Z', '+00:00'))
+                ts_ms = int(parsed_dt.timestamp() * 1000)
             elif isinstance(time_fired, (int, float)):
                 ts_ms = int(time_fired * 1000)
             else:
                 ts_ms = int(time.time() * 1000)
-            
-            # Extract domain
-            domain = entity_id.split('.', 1)[0] if '.' in entity_id else ""
-            
+
             # Create normalized transition (without colon prefix)
-            transition = new_val  # e.g., "on", "off", "heat"
+            transition = new_val  # e.g., "on", "dark", "comfortable"
 
             # Extract context (privacy-aware)
             context = {}
@@ -448,6 +509,51 @@ class HabitusMinerService:
             "storage_stats": self.store.get_stats(),
         }
     
+    def get_zone_proposals(
+        self,
+        *,
+        tag_zone_integration: Any,
+        events: EventStreamType | None = None,
+        zone_id: str | None = None,
+        limit: int = 10,
+        min_confidence: float = 0.55,
+        zone_configs: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Generate explainable automation proposals for habitus zones."""
+        if tag_zone_integration is None:
+            raise ValueError("tag_zone_integration is required")
+
+        event_stream = events if events is not None else self.store.load_cached_events()
+        miner = ZoneBasedMiner(tag_zone_integration, self.config)
+
+        if zone_configs:
+            for current_zone_id, config in zone_configs.items():
+                miner.set_zone_config(current_zone_id, config)
+
+        results = miner.mine_all_zones(event_stream)
+        if zone_id:
+            zone_result = results.get(zone_id)
+            if zone_result is None:
+                zone_result = miner.mine_zone(event_stream, zone_id)
+            results = {zone_id: zone_result}
+
+        return {
+            "status": "ok",
+            "zone_id": zone_id,
+            "events": len(event_stream),
+            "proposals": miner.build_zone_proposals(
+                results,
+                limit=limit,
+                min_confidence=min_confidence,
+                zone_id=zone_id,
+            ),
+            "results": miner.export_results(
+                results,
+                proposal_limit=limit,
+                proposal_min_confidence=min_confidence,
+            ),
+        }
+
     def update_config(self, **kwargs) -> None:
         """Update mining configuration."""
         for key, value in kwargs.items():
