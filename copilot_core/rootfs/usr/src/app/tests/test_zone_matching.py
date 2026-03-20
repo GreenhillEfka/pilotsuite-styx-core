@@ -121,16 +121,30 @@ class TestZoneMatcher:
         assert result.confidence >= 70
     
     def test_terrace_match(self, matcher: ZoneMatcher):
-        """Match für Terrasse."""
+        """Terrasse wird kanonisch als OUTSIDE gemappt."""
         result = matcher.match_room_to_zone("Terrasse")
-        assert result.zone.zone_type == ZoneType.TERRACE
+        assert result.zone.zone_type == ZoneType.OUTSIDE
         assert result.confidence >= 70
-    
+
+    def test_outdoor_aliases_match_outside(self, matcher: ZoneMatcher):
+        """Outdoor-Aliase folgen dem OUTSIDE-Kanon."""
+        for room in ("Terrassentuer", "Balkon", "Loggia"):
+            result = matcher.match_room_to_zone(room)
+            assert result.zone.zone_type == ZoneType.OUTSIDE
+            assert result.confidence >= 70
+
     def test_outside_match(self, matcher: ZoneMatcher):
         """Match für Aussenbereich."""
         result = matcher.match_room_to_zone("Garten")
         assert result.zone.zone_type == ZoneType.OUTSIDE
         assert result.confidence >= 70
+
+    def test_kuechenbereich_alias_is_deterministic(self, matcher: ZoneMatcher):
+        """kuechenbereich wird deterministisch auf KITCHEN kanonisiert."""
+        result = matcher.match_room_to_zone("Kuechenbereich")
+        assert result.zone.zone_type == ZoneType.KITCHEN
+        assert result.confidence >= 95
+        assert result.matched_keyword == "kuechenbereich"
     
     def test_fuzzy_match_variation(self, matcher: ZoneMatcher):
         """Fuzzy-Match für Variationen."""

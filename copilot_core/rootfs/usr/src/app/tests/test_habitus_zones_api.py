@@ -54,6 +54,10 @@ class TestGetAllHabitusZones:
         assert "keywords_de" in zone
         assert "keywords_en" in zone
         assert "priority" in zone
+        assert "module_overrides" in zone
+        assert set(zone["module_overrides"].keys()) == {
+            "light", "motion", "music", "volume", "tv", "climate", "camera"
+        }
     
     def test_get_zones_with_metrics(self, client, auth_headers):
         """Test zones retrieval with metrics included."""
@@ -69,6 +73,18 @@ class TestGetAllHabitusZones:
         zone = data["zones"][0]
         assert "metrics" in zone
         assert "entity_count" in zone["metrics"]
+
+    def test_default_module_overrides_are_suggestion_first(self, client, auth_headers):
+        """All default module overrides should disable direct execution."""
+        response = client.get("/api/v1/habitus/zones", headers=auth_headers)
+
+        assert response.status_code == 200
+        zone = response.get_json()["zones"][0]
+        for override in zone["module_overrides"].values():
+            assert override["suggestion_mode"] == "explainable_manual"
+            assert override["direct_execution_enabled"] is False
+            assert override["approval_required"] is True
+            assert override["explanation_required"] is True
     
     def test_get_zones_without_metrics(self, client, auth_headers):
         """Test zones retrieval without metrics."""
@@ -133,7 +149,14 @@ class TestConfigureZone:
             },
             "settings": {
                 "min_temp": 20
-            }
+            },
+            "module_overrides": {
+                "light": {
+                    "enabled": True,
+                    "direct_execution_enabled": True,
+                    "notes": "Operator explicitly enabled direct light execution."
+                }
+            },
         }
         
         response = client.post(
@@ -150,6 +173,8 @@ class TestConfigureZone:
         assert "zone" in data
         assert data["zone"]["name_de"] == "Test Bereich"
         assert data["zone"]["priority"] == 15
+        assert data["zone"]["module_overrides"]["light"]["direct_execution_enabled"] is True
+        assert data["zone"]["module_overrides"]["tv"]["direct_execution_enabled"] is False
     
     def test_configure_zone_invalid_id(self, client, auth_headers):
         """Test configuration with invalid zone ID."""
@@ -191,6 +216,8 @@ class TestConfigureZone:
         
         assert data["status"] == "ok"
         assert "zone" in data
+        assert data["zone"]["module_overrides"]["light"]["direct_execution_enabled"] is False
+        assert data["zone"]["module_overrides"]["light"]["suggestion_mode"] == "explainable_manual"
 
 
 class TestGetZoneMetrics:
@@ -303,6 +330,55 @@ class TestMatchRoomsToZones:
             content_type="application/json"
         )
         
+        assert response.status_code == 400
+        data = response.get_json()
+        assert data["error"] == "invalid_format"
+
+
+class TestMapHomeAssistantTopology:
+    """Tests for POST /api/v1/habitus/zones/map-homeassistant endpoint."""
+
+    def test_map_homeassistant_topology_success(self, client, auth_headers):
+        payload = {
+            "areas": [
+                {"area_id": "wohnzimmer", "name": "Wohnzimmer"},
+                {"area_id": "atelier", "name": "Atelier Nord"},
+            ],
+            "entities": [
+                {
+                    "entity_id": "light.wohnzimmer_decke",
+                    "attributes": {"friendly_name": "Wohnzimmer Decke", "area_id": "wohnzimmer"},
+                },
+                {
+                    "entity_id": "sensor.mystery_probe",
+                    "attributes": {"friendly_name": "ZX Probe 9", "area_id": "atelier"},
+                },
+            ],
+        }
+
+        response = client.post(
+            "/api/v1/habitus/zones/map-homeassistant",
+            headers=auth_headers,
+            data=json.dumps(payload),
+            content_type="application/json"
+        )
+
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["status"] == "ok"
+        assert data["summary"]["area_count"] == 2
+        assert data["summary"]["entity_count"] == 2
+        assert data["ungeordnet"]["entity_count"] == 1
+        assert any(zone["zone_type"] == "living" for zone in data["zones"])
+
+    def test_map_homeassistant_topology_invalid_format(self, client, auth_headers):
+        response = client.post(
+            "/api/v1/habitus/zones/map-homeassistant",
+            headers=auth_headers,
+            data=json.dumps({"areas": {}, "entities": []}),
+            content_type="application/json"
+        )
+
         assert response.status_code == 400
         data = response.get_json()
         assert data["error"] == "invalid_format"
