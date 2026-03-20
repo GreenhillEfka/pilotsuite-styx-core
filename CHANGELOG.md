@@ -2,6 +2,20 @@
 
 Alle wesentlichen Aenderungen am PilotSuite Styx Core werden in dieser Datei dokumentiert.
 
+## [v14.7.4] - 2026-03-20
+
+### Core-Alignment v14.7.4
+
+#### Fixed
+- **Version-Sync**: Core und HA auf 14.7.4 synchronisiert
+- **OpenAPI**: Path-Count verifiziert (572 Paths in Core und HA)
+- **API-Path Alignment**: Alle 572 Paths zwischen Core und HA synchron
+
+### Compatibility
+- Core v14.7.4 <-> HA v14.7.4 (Paired Release)
+
+---
+
 ## [v14.7.3] - 2026-03-17
 
 ### Module-per-Zone Architektur + Neues Styx Dashboard
