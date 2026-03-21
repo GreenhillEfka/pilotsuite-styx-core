@@ -1,6 +1,10 @@
 # PilotSuite Styx Core API Reference
 
-**Version:** 13.9.0  
+> **Status:** LEGACY / PARTIALLY OUTDATED — do not use as contract truth
+> **Current published versions (2026-03-21):** HA/HACS **15.0.3** · Core/Add-on **15.0.3**
+> **Canonical API truth:** current OpenAPI / live contract checks in the active repos and release gates
+
+**Historical reference version in this file:** 13.9.0  
 **Base URL:** `http://localhost:8909`  
 **Docs:** `/docs` (Swagger UI)
 

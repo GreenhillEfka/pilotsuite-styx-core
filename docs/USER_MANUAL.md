@@ -1,7 +1,10 @@
 # USER_MANUAL.md - PilotSuite User Guide
 
-> **Version:** 13.9.0 (HA Integration) + 13.9.0 (Core Add-on)
-> **Last Updated:** 2026-03-07
+> **Status:** LEGACY / PARTIALLY OUTDATED — do not use as release truth
+> **Current published versions (2026-03-21):** HA/HACS **15.0.3** · Core/Add-on **15.0.3**
+> **Last Reviewed:** 2026-03-21
+>
+> This manual still contains older migration/setup text from earlier PilotSuite generations. It may help with concepts, but **must not** be treated as authoritative for current release truth, current API surface, or paired-version decisions.
 
 ---
 
