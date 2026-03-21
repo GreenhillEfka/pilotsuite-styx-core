@@ -1,4 +1,4 @@
-"""Presence Tracking API — v3.4.0 (Presence Aggregation Pattern).
+"""Presence Tracking API — v3.5.0 (Presence Aggregation Pattern).
 
 Tracks who is home and where, receives updates from HACS integration.
 
@@ -14,6 +14,8 @@ GET  /api/v1/presence/history — recent arrivals/departures
 POST /api/v1/presence/hold    — set hold (manual override)
 DELETE /api/v1/presence/hold   — clear hold
 GET  /api/v1/presence/sources  — get sources for a person
+POST /api/v1/presence/zone/presence/<zone_id>/hold  — set zone-level hold (HA -> Core)
+POST /api/v1/presence/zone/presence/<zone_id>/state — report aggregated zone presence (HA -> Core)
 
 Blueprint prefix: /api/v1/presence
 
@@ -58,6 +60,10 @@ _presence_map: dict[str, dict[str, Any]] = {}
 
 # Ring buffer of recent state-change events (newest first).
 _presence_history: deque[dict[str, Any]] = deque(maxlen=200)
+
+# Zone-level presence hold: keyed by zone_id -> hold state
+# hold state: "auto" (normal), "force_on" (always occupied), "force_off" (always empty)
+_ZONE_HOLD_MAP: dict[str, str] = {}
 
 
 # ===================================================================
@@ -375,6 +381,132 @@ def presence_hold_clear():
         "current_state": aggregated_state,
     })
 
+
+# =============================================================================
+# Zone-level presence hold (HA -> Core, for AreaPresenceSensor)
+# =============================================================================
+
+@presence_bp.route("/zone/presence/<zone_id>/hold", methods=["POST"])
+@require_token
+def zone_presence_hold(zone_id: str):
+    """Set zone-level presence hold state from HA AreaPresenceSensor.
+
+    HA calls this when user toggles hold switch in dashboard:
+    - auto: normal any-on aggregation
+    - force_on: zone always occupied
+    - force_off: zone always empty
+
+    Body::
+
+        {"hold": "auto" | "force_on" | "force_off"}
+
+    Response::
+
+        {"ok": true, "zone_id": "zone:living", "hold": "force_on"}
+    """
+    VALID_HOLD_STATES = {"auto", "force_on", "force_off"}
+    data = request.get_json(silent=True) or {}
+    hold = str(data.get("hold", "auto")).strip()
+
+    if hold not in VALID_HOLD_STATES:
+        return jsonify({
+            "ok": False,
+            "error": f"Invalid hold state: {hold}. Must be one of: {VALID_HOLD_STATES}"
+        }), 400
+
+    # Store zone-level hold in a separate dict (not per-person)
+    if not hasattr(presence_bp, "_zone_hold_map"):
+        presence_bp._zone_hold_map = {}
+
+    old_hold = presence_bp._zone_hold_map.get(zone_id, "auto")
+    presence_bp._zone_hold_map[zone_id] = hold
+
+    _LOGGER.info(
+        "Zone presence hold: %s %s -> %s",
+        zone_id, old_hold, hold
+    )
+
+    return jsonify({
+        "ok": True,
+        "zone_id": zone_id,
+        "hold": hold,
+    })
+
+
+@presence_bp.route("/zone/presence/<zone_id>/state", methods=["POST"])
+@require_token
+def zone_presence_state(zone_id: str):
+    """Receive aggregated presence state from HA AreaPresenceSensor.
+
+    HA's any-on aggregation (all persons in zone) is authoritative when
+    Core is unreachable. Called at most once per 30 s per zone (throttled by HA).
+
+    Body::
+
+        {
+            "occupied": true | false,
+            "primary_source": "person.alice",
+            "confidence": 0.95,
+            "hold_state": "auto" | "force_on" | "force_off"
+        }
+
+    Response::
+
+        {"ok": true, "zone_id": "zone:living", "stored": true}
+    """
+    data = request.get_json(silent=True) or {}
+    occupied = bool(data.get("occupied", False))
+    primary_source = data.get("primary_source")
+    confidence = float(data.get("confidence", 0.0))
+    hold_state = str(data.get("hold_state", "auto")).strip()
+
+    # Validate zone_id format
+    if not zone_id.startswith("zone:"):
+        zone_id = f"zone:{zone_id}"
+
+    # Store in zone presence state map (used by Brain/Neurons)
+    if not hasattr(presence_bp, "_zone_presence_state"):
+        presence_bp._zone_presence_state = {}
+
+    now = time.time()
+    presence_bp._zone_presence_state[zone_id] = {
+        "occupied": occupied,
+        "primary_source": primary_source,
+        "confidence": confidence,
+        "hold_state": hold_state,
+        "updated_at": now,
+    }
+
+    _LOGGER.debug(
+        "Zone presence state: %s occupied=%s source=%s",
+        zone_id, occupied, primary_source
+    )
+
+    return jsonify({
+        "ok": True,
+        "zone_id": zone_id,
+        "occupied": occupied,
+        "stored": True,
+    })
+
+
+def get_zone_presence_state(zone_id: str) -> dict[str, Any] | None:
+    """Return stored zone presence state (for Neurons/Brain access)."""
+    if not hasattr(presence_bp, "_zone_presence_state"):
+        return None
+    return presence_bp._zone_presence_state.get(zone_id)
+
+
+def get_zone_hold_state(zone_id: str) -> str:
+    """Return zone-level hold state (defaults to 'auto')."""
+    if not hasattr(presence_bp, "_zone_hold_map"):
+        return "auto"
+    return presence_bp._zone_hold_map.get(zone_id, "auto")
+
+
+# =============================================================================
+# Sources
+# =============================================================================
 
 @presence_bp.route("/sources", methods=["GET"])
 @require_token
