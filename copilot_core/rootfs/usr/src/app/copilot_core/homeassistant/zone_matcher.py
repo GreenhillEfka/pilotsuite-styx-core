@@ -2,12 +2,13 @@
 ML-basiertes Zone-Matching für PilotSuite Styx Core
 
 Matcht Raum-Namen zu Habituszonen mit Fuzzy-Matching und Confidence-Scores.
+Erweitert um Unterstützung für sekundäre Zustände: dark, sleep, extended.
 """
 
 import re
 from typing import Dict, List, Tuple, Optional
-from dataclasses import dataclass
-from .habitus_zones import HabitusZone, ZoneType, HABITUS_ZONES, get_zone_keywords
+from dataclasses import dataclass, field
+from .habitus_zones import HabitusZone, ZoneType, HABITUS_ZONES, get_zone_keywords, get_secondary_states
 
 
 @dataclass
@@ -18,6 +19,7 @@ class MatchResult:
     confidence: float  # 0-100
     matched_keyword: Optional[str] = None
     needs_review: bool = False  # True wenn Confidence < 70%
+    secondary_states: List[str] = field(default_factory=list)  # Sekundäre Zustände
     
     def to_dict(self) -> Dict:
         """Als Dictionary für API-Responses."""
@@ -28,7 +30,8 @@ class MatchResult:
             "zone_name_en": self.zone.name_en,
             "confidence": self.confidence,
             "matched_keyword": self.matched_keyword,
-            "needs_review": self.needs_review
+            "needs_review": self.needs_review,
+            "secondary_states": self.secondary_states
         }
 
 
@@ -41,6 +44,7 @@ class ZoneMatcher:
     - Fuzzy-Matching für ähnliche Begriffe
     - Confidence-Score Berechnung
     - Review-Queue für unsichere Zuordnungen
+    - Unterstützung für sekundäre Zustände (dark, sleep, extended)
     """
     
     REVIEW_THRESHOLD = 70.0  # Confidence unter diesem Wert → Review
@@ -49,6 +53,7 @@ class ZoneMatcher:
     def __init__(self):
         self.keyword_map = get_zone_keywords()
         self.zones = HABITUS_ZONES
+        self.secondary_states = get_secondary_states()
         
         # Fuzzy-Mapping für häufige Variationen
         self.fuzzy_mappings = {
@@ -78,6 +83,19 @@ class ZoneMatcher:
             "zimmer mira": "mira",
             "paul": "paul",
             "zimmer paul": "paul",
+            # Sekundäre Zustände
+            "dunkel": "dark",
+            "nacht": "dark",
+            "schlaf": "sleep",
+            "erweitert": "extended",
+            "lang": "extended",
+        }
+        
+        # Keywords für sekundäre Zustände
+        self.secondary_keywords = {
+            "dark": ["dunkel", "nacht", "finster", "schwarz", "lux", "lichtsensor"],
+            "sleep": ["schlaf", "ruhe", "ausschlafen", "schlafenszeit", "bettruhe"],
+            "extended": ["erweitert", "lang", "verlängert", "überschritten", "zeitlimit"]
         }
     
     def _normalize_room_name(self, room_name: str) -> str:
@@ -152,6 +170,19 @@ class ZoneMatcher:
         """Terrace-like names fold into OUTSIDE without changing the public enum."""
         return any(term in normalized for term in self.CANONICAL_OUTSIDE_TERMS)
     
+    def _detect_secondary_states(self, room_name: str) -> List[str]:
+        """Erkennt sekundäre Zustände im Raumnamen."""
+        normalized = self._normalize_room_name(room_name)
+        detected_states = []
+        
+        for state, keywords in self.secondary_keywords.items():
+            for keyword in keywords:
+                if keyword in normalized:
+                    detected_states.append(state)
+                    break  # Nur einmal pro Zustand
+        
+        return detected_states
+    
     def match_room_to_zone(self, room_name: str) -> MatchResult:
         """
         Matcht einen Raum-Namen zu einer Habituszone.
@@ -166,12 +197,14 @@ class ZoneMatcher:
         best_match: Optional[Tuple[HabitusZone, float, str]] = None
 
         if self._is_canonical_outside_term(normalized):
+            secondary_states = self._detect_secondary_states(room_name)
             return MatchResult(
                 room_name=room_name,
                 zone=self.zones[ZoneType.OUTSIDE],
                 confidence=96.0,
                 matched_keyword="aussen",
                 needs_review=False,
+                secondary_states=secondary_states
             )
         
         # 1. Fuzzy-Mapping versuchen (für spezifische Namen wie Mira, Paul)
@@ -218,13 +251,15 @@ class ZoneMatcher:
             )
         
         zone, confidence, matched_keyword = best_match
+        secondary_states = self._detect_secondary_states(room_name)
         
         return MatchResult(
             room_name=room_name,
             zone=zone,
             confidence=confidence,
             matched_keyword=matched_keyword,
-            needs_review=confidence < self.REVIEW_THRESHOLD
+            needs_review=confidence < self.REVIEW_THRESHOLD,
+            secondary_states=secondary_states
         )
     
     def match_multiple_rooms(self, room_names: List[str]) -> List[MatchResult]:

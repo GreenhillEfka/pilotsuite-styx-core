@@ -2,7 +2,41 @@
 
 Alle wesentlichen Aenderungen am PilotSuite Styx Core werden in dieser Datei dokumentiert.
 
+## [v14.7.5] - 2026-03-21
+
+### Multi-Source Presence Aggregation (PS-135 + PS-137)
+
+#### Added
+- **DeviceTrackerPresenceNeuron**: BLE/WiFi/GPS-based presence detection
+- **SECONDARY_STATES**: dark, sleep, extended zone states (PS-137)
+- **Enhanced CombinedPresenceNeuron**: Multi-source fusion with device tracker fallback
+
+#### Changed
+- **NeuronConfig**: Unified `weights` + `entity_ids` pattern (replaces `extra`)
+- **ZoneMatcher**: Secondary states support
+- **HabitusZone/RoomConfig**: `secondary_states` field added
+
+#### Fixed
+- **Presence Detection**: Robustness improved via device tracker fallback
+
 ## [v14.7.3] - 2026-03-17
+
+### Multi-Source Presence Aggregation Pattern (PS-135)
+
+#### Added
+- **DeviceTrackerPresenceNeuron**: Neue Presence-Neuron-Klasse fuer BLE/WiFi/GPS-basierte Anwesenheitserkennung
+- **Enhanced CombinedPresenceNeuron**: Erweitert um Device-Tracker-Unterstuetzung mit Gewichtung und Fallback-Logik
+- **Multi-Source Fusion Strategy**: Prioritaeten-basierte Kombination von mmWave > Motion > Device Tracker
+- **Factory Functions**: Neue Hilfsfunktionen fuer Device-Tracker-Neuronen
+
+#### Changed
+- **Presence Neurons Architecture**: Umstellung auf Multi-Source Aggregation Pattern mit Fallback-Mechanismen
+- **Neuron Configuration**: Angepasst an neue Config-Struktur mit weights/entity_ids
+
+#### Fixed
+- **Presence Detection Robustness**: Verbesserte Zuverlaessigkeit durch Device-Tracker-Fallback bei Sensorausfaellen
+
+### Module-per-Zone Architektur + Neues Styx Dashboard
 
 ### Module-per-Zone Architektur + Neues Styx Dashboard
 

@@ -7,6 +7,7 @@ Features:
 - Zone states: active, idle, sleeping, party, away
 - Quick zone mode switching (Party, Schlafmodus, etc.)
 - Optional dashboard per zone
+- Support for secondary states: dark, sleep, extended
 """
 
 from __future__ import annotations
@@ -33,6 +34,7 @@ class RoomConfig:
     entities: list[str] = field(default_factory=list)
     floor: str = ""
     icon: str = "mdi:door"
+    secondary_states: list[str] = field(default_factory=list)  # dark, sleep, extended
 
 
 @dataclass
@@ -48,6 +50,7 @@ class HabitusZone:
     enabled: bool = True
     priority: int = 0  # higher = more important
     settings: dict[str, Any] = field(default_factory=dict)
+    secondary_states: dict[str, Any] = field(default_factory=dict)  # state_id -> state_data
 
 
 @dataclass
@@ -66,6 +69,7 @@ class ZoneState:
     light_on_count: int = 0
     active_devices: int = 0
     last_activity: datetime | None = None
+    secondary_states: dict[str, Any] = field(default_factory=dict)  # dark, sleep, extended
 
 
 @dataclass
@@ -79,6 +83,7 @@ class ZoneOverview:
     zones: list[dict[str, Any]] = field(default_factory=list)
     modes: dict[str, int] = field(default_factory=dict)
     unassigned_rooms: list[str] = field(default_factory=list)
+    secondary_states_summary: dict[str, int] = field(default_factory=dict)
 
 
 # ── Predefined zone templates ──────────────────────────────────────────────
@@ -131,6 +136,34 @@ _ZONE_MODES = {
     "custom": {"name": "Benutzerdefiniert", "icon": "mdi:cog", "automations": True},
 }
 
+# Secondary states definitions
+_SECONDARY_STATES = {
+    "dark": {
+        "name_de": "Dunkel",
+        "name_en": "Dark",
+        "description_de": "Zone ist dunkel (Lichtsensor/Wetter)",
+        "description_en": "Zone is dark (light sensor/weather)",
+        "icon": "mdi:weather-night",
+        "triggers": ["lux_sensor", "sun_position", "weather_condition"]
+    },
+    "sleep": {
+        "name_de": "Schlafmodus",
+        "name_en": "Sleep Mode",
+        "description_de": "Zone ist im Schlafmodus (Switch-Override)",
+        "description_en": "Zone is in sleep mode (switch override)",
+        "icon": "mdi:sleep",
+        "triggers": ["sleep_switch", "schedule", "manual_override"]
+    },
+    "extended": {
+        "name_de": "Erweitert",
+        "name_en": "Extended",
+        "description_de": "Zone überschreitet Zeitlimit (Verweildauer)",
+        "description_en": "Zone exceeds time limit (dwell time)",
+        "icon": "mdi:timer-plus",
+        "triggers": ["time_limit_exceeded", "occupancy_duration", "schedule_override"]
+    }
+}
+
 
 # ── Engine ──────────────────────────────────────────────────────────────────
 
@@ -148,7 +181,8 @@ class HabitusZoneEngine:
 
     def register_room(self, room_id: str, name: str, area_id: str = "",
                       entities: list[str] | None = None,
-                      floor: str = "", icon: str = "mdi:door") -> RoomConfig:
+                      floor: str = "", icon: str = "mdi:door",
+                      secondary_states: list[str] | None = None) -> RoomConfig:
         """Register a room (from HA area)."""
         room = RoomConfig(
             room_id=room_id,
@@ -157,6 +191,7 @@ class HabitusZoneEngine:
             entities=entities or [],
             floor=floor,
             icon=icon,
+            secondary_states=secondary_states or [],
         )
         self._rooms[room_id] = room
 
@@ -184,6 +219,14 @@ class HabitusZoneEngine:
                 self._refresh_zone_entities(zone)
         return True
 
+    def set_room_secondary_states(self, room_id: str, states: list[str]) -> bool:
+        """Set secondary states for a room."""
+        room = self._rooms.get(room_id)
+        if not room:
+            return False
+        room.secondary_states = states
+        return True
+
     def get_room(self, room_id: str) -> dict[str, Any] | None:
         """Get room details."""
         room = self._rooms.get(room_id)
@@ -198,6 +241,7 @@ class HabitusZoneEngine:
             "floor": room.floor,
             "icon": room.icon,
             "zone": self._find_zone_for_room(room_id),
+            "secondary_states": room.secondary_states,
         }
 
     def get_rooms(self) -> list[dict[str, Any]]:
@@ -321,6 +365,21 @@ class HabitusZoneEngine:
         zone.priority = int(priority)
         return True
 
+    def set_zone_secondary_state(self, zone_id: str, state_id: str, state_data: Any) -> bool:
+        """Set a secondary state for a zone."""
+        zone = self._zones.get(zone_id)
+        if not zone or state_id not in _SECONDARY_STATES:
+            return False
+        zone.secondary_states[state_id] = state_data
+        return True
+
+    def get_zone_secondary_states(self, zone_id: str) -> dict[str, Any]:
+        """Get all secondary states for a zone."""
+        zone = self._zones.get(zone_id)
+        if not zone:
+            return {}
+        return zone.secondary_states.copy()
+
     # ── Entity state tracking ───────────────────────────────────────────
 
     def update_entity_state(self, entity_id: str, value: Any) -> None:
@@ -381,6 +440,15 @@ class HabitusZoneEngine:
             if value not in (None, "off", False, "False", "unavailable", "unknown"):
                 active += 1
 
+        # Collect secondary states from rooms in this zone
+        zone_secondary_states = {}
+        for room_id in zone.rooms:
+            room = self._rooms.get(room_id)
+            if room and room.secondary_states:
+                for state in room.secondary_states:
+                    if state in _SECONDARY_STATES:
+                        zone_secondary_states[state] = zone_secondary_states.get(state, 0) + 1
+
         return ZoneState(
             zone_id=zone.zone_id,
             name=zone.name,
@@ -394,6 +462,7 @@ class HabitusZoneEngine:
             light_on_count=light_on,
             active_devices=active,
             last_activity=datetime.now(tz=timezone.utc) if occupancy else None,
+            secondary_states=zone_secondary_states,
         )
 
     def get_zone(self, zone_id: str) -> dict[str, Any] | None:
@@ -407,7 +476,12 @@ class HabitusZoneEngine:
         for rid in zone.rooms:
             room = self._rooms.get(rid)
             if room:
-                rooms.append({"room_id": rid, "name": room.name, "entities": len(room.entities)})
+                rooms.append({
+                    "room_id": rid, 
+                    "name": room.name, 
+                    "entities": len(room.entities),
+                    "secondary_states": room.secondary_states,
+                })
 
         return {
             "zone_id": zone.zone_id,
@@ -422,12 +496,14 @@ class HabitusZoneEngine:
             "entity_count": len(zone.entities),
             "entities": zone.entities,
             "settings": zone.settings,
+            "secondary_states": zone.secondary_states,
             "state": {
                 "avg_temperature": state.avg_temperature if state else None,
                 "avg_humidity": state.avg_humidity if state else None,
                 "occupancy": state.occupancy if state else False,
                 "light_on_count": state.light_on_count if state else 0,
                 "active_devices": state.active_devices if state else 0,
+                "secondary_states": state.secondary_states if state else {},
             },
         }
 
@@ -436,10 +512,19 @@ class HabitusZoneEngine:
         assigned_rooms = set()
         modes: dict[str, int] = defaultdict(int)
         zone_list = []
+        secondary_states_summary: dict[str, int] = defaultdict(int)
 
         for zone in self._zones.values():
             assigned_rooms.update(zone.rooms)
             modes[zone.mode] += 1
+            
+            # Count secondary states across all rooms in zones
+            for rid in zone.rooms:
+                room = self._rooms.get(rid)
+                if room and room.secondary_states:
+                    for state in room.secondary_states:
+                        secondary_states_summary[state] += 1
+            
             zone_list.append({
                 "zone_id": zone.zone_id,
                 "name": zone.name,
@@ -448,6 +533,7 @@ class HabitusZoneEngine:
                 "enabled": zone.enabled,
                 "room_count": len(zone.rooms),
                 "entity_count": len(zone.entities),
+                "secondary_states": self.get_zone_secondary_states(zone.zone_id),
             })
 
         unassigned = [rid for rid in self._rooms if rid not in assigned_rooms]
@@ -460,6 +546,7 @@ class HabitusZoneEngine:
             zones=zone_list,
             modes=dict(modes),
             unassigned_rooms=unassigned,
+            secondary_states_summary=dict(secondary_states_summary),
         )
 
     def get_templates(self) -> list[dict[str, Any]]:
@@ -476,6 +563,15 @@ class HabitusZoneEngine:
             {"mode_id": mid, "name": m["name"], "icon": m["icon"],
              "automations_enabled": m["automations"]}
             for mid, m in _ZONE_MODES.items()
+        ]
+
+    def get_secondary_states(self) -> list[dict[str, Any]]:
+        """Get available secondary states."""
+        return [
+            {"state_id": sid, "name_de": s["name_de"], "name_en": s["name_en"],
+             "description_de": s["description_de"], "description_en": s["description_en"],
+             "icon": s["icon"], "triggers": s["triggers"]}
+            for sid, s in _SECONDARY_STATES.items()
         ]
 
     # ── Helpers ─────────────────────────────────────────────────────────

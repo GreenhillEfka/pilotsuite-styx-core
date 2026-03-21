@@ -1,29 +1,15 @@
-"""Presence Neurons for multi-source presence detection.
+"""Presence Neurons for mmWave and motion detection.
 
-Implements context neurons for presence detection using a multi-source aggregation pattern:
+Implements context neurons for presence detection:
 - mmWavePresenceNeuron: High-precision presence via mmWave radar
 - MotionPresenceNeuron: Traditional PIR/motion sensor presence
-- DeviceTrackerPresenceNeuron: BLE/WiFi/GPS device tracker presence
-- CombinedPresenceNeuron: Multi-sensor fusion with fallback mechanisms
-
-Multi-Source Aggregation Pattern (PS-135):
-- Primary sources: mmWave radar sensors (highest accuracy for static presence)
-- Secondary sources: Motion/PIR sensors (activity detection)
-- Fallback sources: Device trackers (BLE/WiFi/GPS) for when primary sensors fail
-- Fusion strategy: Weighted confidence combining all sources with priority order
-- Timeout handling: Grace periods for each sensor type with appropriate durations
+- CombinedPresenceNeuron: Multi-sensor fusion for robust presence
 
 mmWave advantages:
 - Detects presence without movement (breathing, micro-movements)
 - No cameras needed (privacy-friendly)
 - Works through light blankets/clothing
 - Industry trend for smart homes 2026
-
-Device Tracker advantages:
-- Works when people are stationary for long periods
-- Provides person-level tracking
-- Functions as backup when other sensors are offline
-- Available from mobile phones, wearables, asset tags
 
 See: Industry research from Perplexity audit (2026-02-15)
 """
@@ -46,9 +32,8 @@ class PresenceState:
     confidence: float = 0.0
     last_motion: Optional[datetime] = None
     last_mmwave: Optional[datetime] = None
-    last_device_tracker: Optional[datetime] = None
     entity_count: int = 0
-    source: str = "none"  # "mmwave", "motion", "device_tracker", "combined"
+    source: str = "none"  # "mmwave", "motion", "combined"
 
 
 class mmWavePresenceNeuron(ContextNeuron):
@@ -68,12 +53,12 @@ class mmWavePresenceNeuron(ContextNeuron):
     """
     
     def __init__(self, config: NeuronConfig):
-        super().__init__(config)
+        super().__init__(config, NeuronType.CONTEXT)
         
         # mmWave-specific config
-        self.mmwave_entities: List[str] = config.weights.get("mmwave_entities", config.entity_ids)
-        self.presence_timeout_seconds: int = config.weights.get("presence_timeout", 60)
-        self.confidence_threshold: float = config.weights.get("confidence_threshold", 0.7)
+        self.mmwave_entities: List[str] = config.extra.get("mmwave_entities", [])
+        self.presence_timeout_seconds: int = config.extra.get("presence_timeout", 60)
+        self.confidence_threshold: float = config.extra.get("confidence_threshold", 0.7)
         
         # State
         self._presence_state = PresenceState()
@@ -190,10 +175,10 @@ class MotionPresenceNeuron(ContextNeuron):
     """
     
     def __init__(self, config: NeuronConfig):
-        super().__init__(config)
+        super().__init__(config, NeuronType.CONTEXT)
         
-        self.motion_entities: List[str] = config.weights.get("motion_entities", config.entity_ids)
-        self.presence_timeout_seconds: int = config.weights.get("presence_timeout", 120)
+        self.motion_entities: List[str] = config.extra.get("motion_entities", [])
+        self.presence_timeout_seconds: int = config.extra.get("presence_timeout", 120)
         
         self._presence_state = PresenceState()
         self._last_update: Optional[datetime] = None
@@ -262,154 +247,41 @@ class MotionPresenceNeuron(ContextNeuron):
         }
 
 
-class DeviceTrackerPresenceNeuron(ContextNeuron):
-    """Presence neuron using device trackers (BLE, WiFi, GPS).
-    
-    Works with:
-    - Mobile device trackers (BLE, WiFi)
-    - GPS/person trackers
-    - Network presence detection
-    
-    Fallback mechanism when mmWave and motion sensors are unavailable.
-    """
-    
-    def __init__(self, config: NeuronConfig):
-        super().__init__(config)
-        
-        self.tracker_entities: List[str] = config.weights.get("tracker_entities", config.entity_ids)
-        self.presence_timeout_seconds: int = config.weights.get("presence_timeout", 300)  # Longer timeout for device trackers
-        self.home_states: List[str] = config.weights.get("home_states", ["home", "on", "connected"])
-        self.away_states: List[str] = config.weights.get("away_states", ["not_home", "off", "disconnected", "unknown"])
-        
-        self._presence_state = PresenceState()
-        self._last_update: Optional[datetime] = None
-    
-    @property
-    def presence_state(self) -> PresenceState:
-        return self._presence_state
-    
-    def evaluate(self, context: Dict[str, Any]) -> float:
-        """Evaluate device-tracker based presence."""
-        ha_states = context.get("ha_states", {})
-        now = datetime.now(timezone.utc)
-        
-        latest_detection = None
-        tracker_count = 0
-        present_count = 0
-        
-        for entity_id in self.tracker_entities:
-            state = ha_states.get(entity_id)
-            if not state:
-                continue
-            
-            tracker_count += 1
-            state_value = str(state.state).lower()
-            
-            # Check if device is present/home
-            is_present = state_value in self.home_states
-            
-            if is_present:
-                present_count += 1
-                last_changed = state.last_changed
-                if last_changed:
-                    if isinstance(last_changed, str):
-                        try:
-                            last_changed = datetime.fromisoformat(last_changed.replace("Z", "+00:00"))
-                        except Exception:
-                            last_changed = now
-                    if latest_detection is None or last_changed > latest_detection:
-                        latest_detection = last_changed
-        
-        # If we have trackers but none are present
-        if tracker_count > 0 and present_count == 0:
-            # Check for recent presence within timeout
-            if self._presence_state.last_device_tracker:
-                elapsed = (now - self._presence_state.last_device_tracker).total_seconds()
-                if elapsed < self.presence_timeout_seconds:
-                    # Grace period - still considered present
-                    grace_factor = 1.0 - (elapsed / self.presence_timeout_seconds)
-                    self._presence_state.confidence = grace_factor * 0.6  # Lower confidence for fallback
-                    return self._presence_state.confidence
-            
-            self._presence_state.detected = False
-            self._presence_state.confidence = 0.0
-            self._presence_state.source = "device_tracker"
-            return 0.0
-        
-        # If we have present devices
-        if present_count > 0:
-            # Confidence based on number of devices present
-            confidence = min(1.0, present_count / max(1, tracker_count)) * 0.8  # Max 80% confidence for device trackers
-            
-            self._presence_state.detected = True
-            self._presence_state.confidence = confidence
-            self._presence_state.entity_count = present_count
-            self._presence_state.last_device_tracker = latest_detection or now
-            self._presence_state.source = "device_tracker"
-            self._last_update = now
-            
-            return confidence
-        
-        # No trackers configured or found
-        self._presence_state.detected = False
-        self._presence_state.confidence = 0.0
-        self._presence_state.source = "device_tracker"
-        return 0.0
-    
-    @classmethod
-    def from_config(cls, config: NeuronConfig) -> "DeviceTrackerPresenceNeuron":
-        return cls(config)
-    
-    def get_state(self) -> Dict[str, Any]:
-        return {
-            "detected": self._presence_state.detected,
-            "confidence": self._presence_state.confidence,
-            "source": self._presence_state.source,
-            "entity_count": self._presence_state.entity_count,
-            "last_detection": self._presence_state.last_device_tracker.isoformat() if self._presence_state.last_device_tracker else None,
-        }
-
-
 class CombinedPresenceNeuron(ContextNeuron):
-    """Presence neuron combining mmWave, motion sensors, and device trackers.
+    """Presence neuron combining mmWave and motion sensors.
     
     Uses sensor fusion for robust presence detection:
     - mmWave provides breathing detection (static presence)
     - Motion provides activity detection
-    - Device trackers provide fallback when other sensors fail
     
     Fusion strategy:
-    - Priority order: mmWave > Motion > Device Tracker
-    - Confidence weighted by sensor reliability
-    - Fallback mechanisms for sensor failure
+    - OR logic: present if EITHER detects presence
+    - Confidence weighted by sensor type
+    - mmWave has higher weight for static presence
     """
     
     def __init__(self, config: NeuronConfig):
-        super().__init__(config)
+        super().__init__(config, NeuronType.CONTEXT)
         
-        self.mmwave_entities: List[str] = config.weights.get("mmwave_entities", [])
-        self.motion_entities: List[str] = config.weights.get("motion_entities", [])
-        self.tracker_entities: List[str] = config.weights.get("tracker_entities", [])
-        self.presence_timeout_seconds: int = config.weights.get("presence_timeout", 120)
+        self.mmwave_entities: List[str] = config.extra.get("mmwave_entities", [])
+        self.motion_entities: List[str] = config.extra.get("motion_entities", [])
+        self.presence_timeout_seconds: int = config.extra.get("presence_timeout", 120)
         
-        # Weights for fusion (higher = more importance)
-        self.mmwave_weight: float = config.weights.get("mmwave_weight", 0.7)
-        self.motion_weight: float = config.weights.get("motion_weight", 0.3)
-        self.tracker_weight: float = config.weights.get("tracker_weight", 0.2)
+        # Weights for fusion
+        self.mmwave_weight: float = config.extra.get("mmwave_weight", 0.7)
+        self.motion_weight: float = config.extra.get("motion_weight", 0.3)
         
         self._presence_state = PresenceState()
         self._mmwave_neuron: Optional[mmWavePresenceNeuron] = None
         self._motion_neuron: Optional[MotionPresenceNeuron] = None
-        self._tracker_neuron: Optional[DeviceTrackerPresenceNeuron] = None
     
     def _ensure_neurons(self):
         """Create sub-neurons if needed."""
         if self._mmwave_neuron is None and self.mmwave_entities:
             mmwave_config = NeuronConfig(
+                id=f"{self.config.id}_mmwave",
                 name=f"{self.config.name} (mmWave)",
-                neuron_type=NeuronType.CONTEXT,
-                entity_ids=self.mmwave_entities,
-                weights={
+                extra={
                     "mmwave_entities": self.mmwave_entities,
                     "presence_timeout": self.presence_timeout_seconds,
                 },
@@ -418,27 +290,14 @@ class CombinedPresenceNeuron(ContextNeuron):
         
         if self._motion_neuron is None and self.motion_entities:
             motion_config = NeuronConfig(
+                id=f"{self.config.id}_motion",
                 name=f"{self.config.name} (Motion)",
-                neuron_type=NeuronType.CONTEXT,
-                entity_ids=self.motion_entities,
-                weights={
+                extra={
                     "motion_entities": self.motion_entities,
                     "presence_timeout": self.presence_timeout_seconds,
                 },
             )
             self._motion_neuron = MotionPresenceNeuron(motion_config)
-        
-        if self._tracker_neuron is None and self.tracker_entities:
-            tracker_config = NeuronConfig(
-                name=f"{self.config.name} (Device Tracker)",
-                neuron_type=NeuronType.CONTEXT,
-                entity_ids=self.tracker_entities,
-                weights={
-                    "tracker_entities": self.tracker_entities,
-                    "presence_timeout": self.presence_timeout_seconds,
-                },
-            )
-            self._tracker_neuron = DeviceTrackerPresenceNeuron(tracker_config)
     
     def evaluate(self, context: Dict[str, Any]) -> float:
         """Evaluate combined presence using sensor fusion."""
@@ -446,57 +305,33 @@ class CombinedPresenceNeuron(ContextNeuron):
         
         mmwave_confidence = 0.0
         motion_confidence = 0.0
-        tracker_confidence = 0.0
         
-        # Evaluate all available neurons
         if self._mmwave_neuron:
             mmwave_confidence = self._mmwave_neuron.evaluate(context)
         
         if self._motion_neuron:
             motion_confidence = self._motion_neuron.evaluate(context)
         
-        if self._tracker_neuron:
-            tracker_confidence = self._tracker_neuron.evaluate(context)
+        # Weighted fusion
+        combined = (mmwave_confidence * self.mmwave_weight + 
+                   motion_confidence * self.motion_weight)
         
-        # Determine primary source based on confidence
-        confidences = [
-            (mmwave_confidence, "mmwave"),
-            (motion_confidence, "motion"),
-            (tracker_confidence, "device_tracker")
-        ]
-        
-        # Sort by confidence (highest first)
-        confidences.sort(reverse=True)
-        primary_source = confidences[0][1] if confidences and confidences[0][0] > 0 else "none"
-        
-        # Weighted fusion for overall confidence
-        total_weighted_confidence = (
-            mmwave_confidence * self.mmwave_weight + 
-            motion_confidence * self.motion_weight + 
-            tracker_confidence * self.tracker_weight
-        )
-        
-        # Normalize weights
-        total_weight = self.mmwave_weight + self.motion_weight + self.tracker_weight
+        # Normalize
+        total_weight = self.mmwave_weight + self.motion_weight
         if total_weight > 0:
-            combined_confidence = total_weighted_confidence / total_weight
-        else:
-            combined_confidence = 0.0
+            combined /= total_weight
         
-        # Update state with highest confidence source
-        self._presence_state.detected = combined_confidence > 0.1  # Minimum threshold
-        self._presence_state.confidence = combined_confidence
-        self._presence_state.source = primary_source if primary_source != "none" else "combined"
+        # Update state
+        self._presence_state.detected = combined > 0.3
+        self._presence_state.confidence = combined
+        self._presence_state.source = "combined"
         
-        # Update timestamps from individual neurons
         if self._mmwave_neuron:
             self._presence_state.last_mmwave = self._mmwave_neuron.presence_state.last_mmwave
         if self._motion_neuron:
             self._presence_state.last_motion = self._motion_neuron.presence_state.last_motion
-        if self._tracker_neuron:
-            self._presence_state.last_device_tracker = self._tracker_neuron.presence_state.last_device_tracker
         
-        return combined_confidence
+        return combined
     
     @classmethod
     def from_config(cls, config: NeuronConfig) -> "CombinedPresenceNeuron":
@@ -513,8 +348,6 @@ class CombinedPresenceNeuron(ContextNeuron):
             state["mmwave"] = self._mmwave_neuron.get_state()
         if self._motion_neuron:
             state["motion"] = self._motion_neuron.get_state()
-        if self._tracker_neuron:
-            state["device_tracker"] = self._tracker_neuron.get_state()
         
         return state
 
@@ -527,10 +360,10 @@ def create_mmwave_presence_neuron(
 ) -> mmWavePresenceNeuron:
     """Create mmWave presence neuron."""
     config = NeuronConfig(
+        id="presence_mmwave",
         name=name,
-        neuron_type=NeuronType.CONTEXT,
-        entity_ids=entity_ids,
-        weights={
+        extra={
+            "mmwave_entities": entity_ids,
             "presence_timeout": timeout,
         },
     )
@@ -544,72 +377,34 @@ def create_motion_presence_neuron(
 ) -> MotionPresenceNeuron:
     """Create motion presence neuron."""
     config = NeuronConfig(
+        id="presence_motion",
         name=name,
-        neuron_type=NeuronType.CONTEXT,
-        entity_ids=entity_ids,
-        weights={
+        extra={
+            "motion_entities": entity_ids,
             "presence_timeout": timeout,
         },
     )
     return MotionPresenceNeuron(config)
 
 
-def create_device_tracker_presence_neuron(
-    entity_ids: List[str],
-    timeout: int = 300,
-    home_states: List[str] = None,
-    away_states: List[str] = None,
-    name: str = "Device Tracker Presence",
-) -> DeviceTrackerPresenceNeuron:
-    """Create device tracker presence neuron."""
-    if home_states is None:
-        home_states = ["home", "on", "connected"]
-    if away_states is None:
-        away_states = ["not_home", "off", "disconnected", "unknown"]
-        
-    config = NeuronConfig(
-        name=name,
-        neuron_type=NeuronType.CONTEXT,
-        entity_ids=entity_ids,
-        weights={
-            "presence_timeout": timeout,
-            "home_states": home_states,
-            "away_states": away_states,
-        },
-    )
-    return DeviceTrackerPresenceNeuron(config)
-
-
 def create_combined_presence_neuron(
-    mmwave_entities: List[str] = None,
-    motion_entities: List[str] = None,
-    tracker_entities: List[str] = None,
+    mmwave_entities: List[str],
+    motion_entities: List[str],
     timeout: int = 120,
     mmwave_weight: float = 0.7,
     motion_weight: float = 0.3,
-    tracker_weight: float = 0.2,
     name: str = "Combined Presence",
 ) -> CombinedPresenceNeuron:
     """Create combined presence neuron."""
-    if mmwave_entities is None:
-        mmwave_entities = []
-    if motion_entities is None:
-        motion_entities = []
-    if tracker_entities is None:
-        tracker_entities = []
-        
     config = NeuronConfig(
+        id="presence_combined",
         name=name,
-        neuron_type=NeuronType.CONTEXT,
-        entity_ids=mmwave_entities + motion_entities + tracker_entities,
-        weights={
+        extra={
             "mmwave_entities": mmwave_entities,
             "motion_entities": motion_entities,
-            "tracker_entities": tracker_entities,
             "presence_timeout": timeout,
             "mmwave_weight": mmwave_weight,
             "motion_weight": motion_weight,
-            "tracker_weight": tracker_weight,
         },
     )
     return CombinedPresenceNeuron(config)
@@ -619,6 +414,5 @@ def create_combined_presence_neuron(
 PRESENCE_NEURON_CLASSES = {
     "mmwave_presence": mmWavePresenceNeuron,
     "motion_presence": MotionPresenceNeuron,
-    "device_tracker_presence": DeviceTrackerPresenceNeuron,
     "combined_presence": CombinedPresenceNeuron,
 }

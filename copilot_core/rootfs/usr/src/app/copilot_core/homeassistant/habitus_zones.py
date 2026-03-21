@@ -2,6 +2,7 @@
 Habituszone-Definitionen für PilotSuite Styx Core
 
 Definiert 10 standardisierte Habituszonen mit Keywords für ML-basiertes Matching.
+Erweitert um sekundäre Zustände: dark (Lichtsensor/Sonne), sleep (Switch-Override), extended (Überschreitung Zeitlimit).
 """
 
 from dataclasses import dataclass, field
@@ -143,6 +144,35 @@ HABITUS_ZONES: Dict[ZoneType, HabitusZone] = {
 }
 
 
+# Sekundäre Zustände für erweiterte Zone-Logik
+SECONDARY_STATES = {
+    "dark": {
+        "name_de": "Dunkel",
+        "name_en": "Dark",
+        "description_de": "Zone ist dunkel (Lichtsensor/Wetter)",
+        "description_en": "Zone is dark (light sensor/weather)",
+        "icon": "mdi:weather-night",
+        "triggers": ["lux_sensor", "sun_position", "weather_condition"]
+    },
+    "sleep": {
+        "name_de": "Schlafmodus",
+        "name_en": "Sleep Mode",
+        "description_de": "Zone ist im Schlafmodus (Switch-Override)",
+        "description_en": "Zone is in sleep mode (switch override)",
+        "icon": "mdi:sleep",
+        "triggers": ["sleep_switch", "schedule", "manual_override"]
+    },
+    "extended": {
+        "name_de": "Erweitert",
+        "name_en": "Extended",
+        "description_de": "Zone überschreitet Zeitlimit (Verweildauer)",
+        "description_en": "Zone exceeds time limit (dwell time)",
+        "icon": "mdi:timer-plus",
+        "triggers": ["time_limit_exceeded", "occupancy_duration", "schedule_override"]
+    }
+}
+
+
 def get_all_zones() -> List[HabitusZone]:
     """Alle Habituszonen als Liste zurückgeben."""
     return list(HABITUS_ZONES.values())
@@ -163,3 +193,8 @@ def get_zone_keywords() -> Dict[str, ZoneType]:
         for keyword in zone.get_all_keywords():
             keyword_map[keyword.lower()] = zone.zone_type
     return keyword_map
+
+
+def get_secondary_states() -> Dict[str, Dict]:
+    """Sekundäre Zustände für erweiterte Zone-Logik zurückgeben."""
+    return SECONDARY_STATES.copy()
