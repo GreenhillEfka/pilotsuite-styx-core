@@ -386,6 +386,7 @@ def presence_hold_clear():
 # Zone-level presence hold (HA -> Core, for AreaPresenceSensor)
 # =============================================================================
 
+@presence_bp.route("/presence/zone/presence/<zone_id>/hold", methods=["POST"])
 @presence_bp.route("/zone/presence/<zone_id>/hold", methods=["POST"])
 @require_token
 def zone_presence_hold(zone_id: str):
@@ -433,6 +434,7 @@ def zone_presence_hold(zone_id: str):
     })
 
 
+@presence_bp.route("/presence/zone/presence/<zone_id>/state", methods=["POST"])
 @presence_bp.route("/zone/presence/<zone_id>/state", methods=["POST"])
 @require_token
 def zone_presence_state(zone_id: str):
