@@ -2,6 +2,19 @@
 
 Alle wesentlichen Aenderungen am PilotSuite Styx Core werden in dieser Datei dokumentiert.
 
+## [v15.0.3] - 2026-03-21
+
+### Release Metadata + Zone Sync Cleanup
+
+**Paired mit:** HA v15.0.1
+
+#### Fixed
+- **Release-Wahrheit harmonisiert:** `VERSION`, `copilot_core/VERSION`, `copilot_core/config.yaml`, `copilot_core/manifest.json`, README und Release-Dokumentation auf `15.0.3` zusammengezogen.
+- **Zone-Definition-Sync sauber releast:** der bereits auf `main` vorhandene `/api/v1/zone-automation/sync-definitions` Contract wird jetzt nicht mehr von veralteten Release-Metadaten verdeckt.
+- **Paired Reporting Cleanup:** Core-Release wieder klar von HA/HACS `v15.0.1` und Live-Stand getrennt dokumentiert.
+
+---
+
 ## [v15.0.0] - 2026-03-21
 
 ### Phase 7 Production Readiness Foundation

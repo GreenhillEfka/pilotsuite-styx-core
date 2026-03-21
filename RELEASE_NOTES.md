@@ -1,16 +1,16 @@
-# PilotSuite Core — Release Notes v15.0.0
+# PilotSuite Core — Release Notes v15.0.3
 
 **Datum:** 2026-03-21
-**Version:** 15.0.0
-**Gepaart mit:** HA v15.0.0
+**Version:** 15.0.3
+**Gepaart mit:** HA v15.0.1
 
 ---
 
 ## In Kuerze
 
-v15.0.0 ist der Phase-7-Foundation-Release: Production-Ready. Zone-Presence Hold funktioniert bidirektional HA↔Core. Multi-Source Aggregation macht Presence-Korrelation genauer. Zone-Proposals mit Confidence/Lift Scoring.
+v15.0.3 ist der saubere Core-Release fuer den bereits auf `main` gelandeten Zone-Sync-/Contract-Fix. Der Core kann jetzt HA-Zonendefinitionen ueber `/api/v1/zone-automation/sync-definitions` annehmen; zugleich sind die Release-Metadaten wieder konsistent statt zwischen 15.0.1/15.0.2/15.0.0 zu driften.
 
-**Paired mit:** Home Assistant Add-on v15.0.0
+**Paired mit:** Home Assistant Add-on v15.0.1
 
 ---
 
@@ -44,8 +44,8 @@ v15.0.0 ist der Phase-7-Foundation-Release: Production-Ready. Zone-Presence Hold
 
 | Komponente | Version |
 |---|---|
-| PilotSuite Core | **15.0.0** |
-| PilotSuite HA Add-on | **15.0.0** (Paired) |
+| PilotSuite Core | **15.0.3** |
+| PilotSuite HA Add-on | **15.0.1** (Paired) |
 | Home Assistant | **2024.4.0+** |
 | Python | **3.11+** |
 
@@ -75,4 +75,4 @@ PilotSuite Vision (v14.6.5):
 
 ---
 
-*PilotSuite Core v15.0.0 — Lokal. Lernend. Lebenslang.*
+*PilotSuite Core v15.0.3 — Lokal. Lernend. Lebenslang.*
