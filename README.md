@@ -2,7 +2,7 @@
 
 [![Release](https://img.shields.io/github/v/release/GreenhillEfka/pilotsuite-styx-core)](https://github.com/GreenhillEfka/pilotsuite-styx-core/releases)
 
-**PilotSuite Core** — Das Gehirn + Stimme der PilotSuite-Plattform. Home Assistant Add-on mit Brain Graph, RAG Chat, Mood Engine, Zone Automation und bundled Ollama LLM. Aktuelle Release-Linie: **v14.2.0**.
+**PilotSuite Core** — Das Gehirn + Stimme der PilotSuite-Plattform. Home Assistant Add-on mit Brain Graph, RAG Chat, Mood Engine, Zone Automation und bundled Ollama LLM. Aktuelle Release-Linie: **v15.0.0**.
 
 ---
 
@@ -81,7 +81,7 @@ PilotSuite Core benötigt die **PilotSuite HACS Integration** (Sinne + Hände):
 - **Open-Meteo Weather** — Lokale Wetterdaten
 - **Wecker Module** — Alarm/Wecker-Steuerung
 
-### **v14.2.0: Autonomie-Execution + Sammelentitaeten + Zone Health**
+### **v15.0.0: Autonomie-Execution + Sammelentitaeten + Zone Health**
 
 - **AutonomyExecutor** — Mood-getriebene Auto-Execution mit Double-Safety Governance
 - **MoodActionMapper** — Stimmung-zu-Aktion-Tabellen (Licht-Szenen, Musik, Wetter)

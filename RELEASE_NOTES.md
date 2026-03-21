@@ -1,118 +1,78 @@
-# Release v13.9.0 — Offizielles Release mit allen Beitraegen
+# PilotSuite Core — Release Notes v15.0.0
 
-**Datum:** 2026-03-13
-**Branch:** main
-**Tag:** `v13.9.0`
-**HA hassfest:** compliant
-**Paired Release:** Core v13.9.0 <-> HA v13.9.0
+**Datum:** 2026-03-21
+**Version:** 15.0.0
+**Gepaart mit:** HA v15.0.0
 
 ---
 
-## Ueberblick
+## In Kuerze
 
-PilotSuite v13.9.0 ist das konsolidierte offizielle Release, das **alle Entwicklungen seit v13.5.8** zusammenfasst. Es umfasst 6 Major-Feature-Bereiche, umfangreiche Code-Qualitaet-Verbesserungen und kritische Bugfixes.
+v15.0.0 ist der Phase-7-Foundation-Release: Production-Ready. Zone-Presence Hold funktioniert bidirektional HA↔Core. Multi-Source Aggregation macht Presence-Korrelation genauer. Zone-Proposals mit Confidence/Lift Scoring.
 
----
-
-## Highlights
-
-### 1. RAG Hybrid Search & Wetter-Integration
-- **Reciprocal Rank Fusion (RRF)**: BM25 + Semantic Search kombiniert fuer praezisere Chat-Antworten
-- **Open-Meteo Wetter**: Echtzeit-Wetterdaten direkt im Chat abrufbar
-- **Wecker-Modul**: Neues Hub-Modul fuer Alarm- und Weckfunktionalitaet
-
-### 2. Zone Dashboard v3 (11 Hub-Engines)
-- Zonenzentriertes Dashboard mit vollstaendiger Modulintegration
-- Controls, Musik, Playlists, Notifications, Birthdays, Todos pro Zone
-- Refactored fuer Effizienz und Failsafety
-- Styx Dashboard SPA mit 9 Tabs und Keyboard Shortcuts
-
-### 3. 5 PilotSuite Smart Home Module
-| Modul | Beschreibung |
-|-------|-------------|
-| `licht_module.py` | Lichtsteuerung mit Szenen und Dimming |
-| `helligkeit_module.py` | Helligkeitssensor-Auswertung und Lux-Management |
-| `heiz_module.py` | Heizungssteuerung mit Zieltemperatur und Zeitplaenen |
-| `bewegung_module.py` | Bewegungsmelder-Aggregation und Raumaktivitaet |
-| `praesenz_module.py` | Praesenz-Tracking und Aufenthaltsanalyse |
-
-### 4. Musikwolke Bridge — End-to-End Sonos-Integration
-- MusikwolkeBridge verbindet ZoneAutomationController mit SonosCloudClient
-- Zone-Speaker-Mapping (automatisch und manuell)
-- Follow-Mode: Musik folgt dem Nutzer zwischen Raeumen
-- 8 REST-Endpoints unter `/api/v1/musikwolke/`
-- Sonos jishi API Integration (Port 5005)
-
-### 5. Zone Automation Controller
-- Praesenzabhaengige Licht- und Musiksteuerung
-- 3-Stufen-Modus pro Zone (off/learning/autonomy)
-- Entity-Management mit Auto-Rollenerkennung (11 Rollen, 13 Tags)
-- 16 API-Endpoints unter `/api/v1/zone-automation/`
-- Hysterese/Daempfung gegen Flackern bei Wolkendurchzug
-
-### 6. Code-Qualitaet & Hardening
-- Thread-Safety Verbesserungen (Double-Checked Locking)
-- Resource Leaks geschlossen
-- Silent `except: pass` Bloecke durch Debug-Logging ersetzt
-- App Factory verbessert mit Shared Brightness Filter
-- Automation Hardening mit From-State Guards
+**Paired mit:** Home Assistant Add-on v15.0.0
 
 ---
 
-## API-Endpunkte (neu seit v13.5.8)
+## Was ist neu
 
-| API Pfad | Beschreibung |
-|----------|-------------|
-| `POST /api/v1/musikwolke/create` | Musikwolke-Gruppe erstellen |
-| `POST /api/v1/musikwolke/dissolve` | Musikwolke-Gruppe aufloesen |
-| `POST /api/v1/musikwolke/volume/<zone_id>` | Lautstaerke setzen |
-| `POST /api/v1/media/zones/<id>/play` | Wiedergabe starten |
-| `POST /api/v1/media/zones/<id>/pause` | Wiedergabe pausieren |
-| `POST /api/v1/media/musikwolke/start` | Follow-Session starten |
-| `POST /api/v1/media/musikwolke/<id>/stop` | Follow-Session beenden |
-| `GET/POST /api/v1/zone-automation/zones/<id>/mode` | Automation-Modus |
-| `GET/POST /api/v1/zone-automation/zones/<id>/config` | Zone Config |
-| `GET/POST/DELETE /api/v1/zone-automation/zones/<id>/entities` | Entity CRUD |
-| `POST /api/v1/zone-automation/zones/<id>/presence` | Praesenz-Event |
-| `POST /api/v1/zone-automation/zones/<id>/brightness` | Helligkeit-Update |
-| `GET /api/v1/zone-automation/dashboard` | Automation Dashboard |
-| `POST /api/v1/tag-system/tags/sync` | Tag-Synchronisierung |
-| `GET /api/v1/suggestions` | KI-Vorschlaege |
-| `GET /api/v1/modules/dashboard` | Aggregiertes Modul-Dashboard |
+### Zone Presence — Bidirektionale Hold-Steuerung
 
----
+- **Hold API**: `POST /api/v1/presence/zone/presence/<zone_id>/hold` — HA kann Core ueber Presence-Status informieren
+- **State API**: `POST /api/v1/presence/zone/presence/<zone_id>/state` — aggregierte Presence an Core Neurons
+- **Legacy Aliases**: Alte API-Pfade bleiben funktional
 
-## Kritische Bug Fixes
+### Zone Proposals — Automatische Zone-Entdeckung
 
-- `async init_services()` ohne `await` aufgerufen
-- Voice zone aliases Bug
-- Deprecated asyncio event loop patterns in 11 Dateien
-- Illumination ratio negative Werte
-- Fehlende Engine-Referenzen und async init
-- Musikwolke Pipeline Error handling
+- `GET/POST /zone-proposals` — neue Proposals abrufen und evaluieren
+- `POST /zone-proposals/accept` — Proposal mit Modul-Policy akzeptieren
+- **Confidence + Lift**: Automatische Scorings zeigenraeumen wie sicher ein Vorschlag ist
+
+### Presence v3.4 — Praezisere Anwesenheit
+
+- **Multi-Source Aggregation**: any-on Regel mit hold/override und sources-Tracking
+- **Numeric Bucketing**: Lux→dark/bright, Temp→cold/warm
+- **ZoneBased Miner**: Semantic bucketing fuer automatische Korrelationserkennung
+
+### Zone-Editor — Moderne CRUD-API
+
+- `/api/v1/zone-editor` — vollstaendige Zone-CRUD mit Domain, Rooms, Entity-Count
 
 ---
 
-## Upgrade-Hinweise
+## Kompatibilitaet
 
-- **Breaking Changes:** Keine
-- **Migration:** `ha addons update pilotsuite_core`
-- **Neue Dependencies:** Keine
-- **Mindestversion Core:** v13.9.0
-
----
-
-## Statistiken
-
-| Metrik | Wert |
-|--------|------|
-| Commits seit v13.5.8 | 30+ |
-| Neue Dateien | 25+ |
-| Tests | 3720+ passed, 0 failed |
-| API-Endpoints (gesamt) | 130+ |
-| Hub-Engines | 17+ |
-| Smart Home Module | 5 |
+| Komponente | Version |
+|---|---|
+| PilotSuite Core | **15.0.0** |
+| PilotSuite HA Add-on | **15.0.0** (Paired) |
+| Home Assistant | **2024.4.0+** |
+| Python | **3.11+** |
 
 ---
 
-**PilotSuite v13.9.0** — Local-first, Privacy-first, Governance-first.
+## VISION-Bezug
+
+PilotSuite Vision (v14.6.5):
+
+> "Das Haus soll sich Ihnen anpassen — nicht Sie sich Ihrem Zuhause."
+
+- **Lebenslanger Begleiter:** Zone Miner lernt automatisch neue Zonen
+- **Governance-first:** Hold = Nutzer entscheidet, System setzt um
+- **Privacy-first:** Alles lokal. Kein Cloud.
+- **Erklaerbar:** Zone-Proposals mit Confidence + Lift, Rueckverfolgbarkeit
+
+---
+
+## Getestet
+
+| Check | Ergebnis |
+|---|---|
+| API Tests | ✅ |
+| Zone-Editor CRUD | ✅ |
+| Presence Hold API | ✅ |
+| Zone-Proposals Pipeline | ✅ |
+
+---
+
+*PilotSuite Core v15.0.0 — Lokal. Lernend. Lebenslang.*

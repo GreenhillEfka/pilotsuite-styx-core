@@ -4,11 +4,48 @@ Alle wesentlichen Aenderungen am PilotSuite Styx Core werden in dieser Datei dok
 
 ## [v15.0.0] - 2026-03-21
 
-### Release Metadata Konsolidierung
+### Phase 7 Production Readiness Foundation
+
+**Paired mit:** HA v15.0.0
+
+#### Paired HA→Core Features
+
+- **Zone-Presence Hold API**: `POST /api/v1/presence/zone/presence/<zone_id>/hold` — auto/force_on/force_off persistence
+- **Zone-Presence State API**: `POST /api/v1/presence/zone/presence/<zone_id>/state` — aggregate presence to Core Neurons
+- **Legacy Path Aliases**: `/api/v1/zone/presence/<zone_id>/hold` maintained for backwards compatibility
+- **Paired Release Gate**: VERSION + CHANGELOG harmonisiert
+
+#### Architecture
+
+- **Module Lazy-Loading** (HA-side): Tiered loading — EAGER (3), DEFERRED (4), ON_DEMAND (26) modules
+- **Schema TTL Cache** (HA-side): 1h refresh instead of single-fetch
+
+#### Metadata
+
+- **Core Add-on Sichtbarkeit**: `copilot_core/config.yaml` und `copilot_core/manifest.json` auf `15.0.0` harmonisiert
+
+---
+
+## [v14.9.0] - 2026-03-21
+
+### Phase 7 — Production Foundation
+
+#### Added
+- **Zone-Presence Hold API**: `POST /api/v1/presence/zone/presence/<zone_id>/hold` mit auto/force_on/force_off states
+- **Zone-Presence State API**: `POST /api/v1/presence/zone/presence/<zone_id>/state` fuer persistente Presence-Signale
+- **Legacy Path Aliases**: `/api/v1/zone/presence/<zone_id>/hold` bleibt funktional (Rueckwaertskompatibilitaet)
+
+#### Changed
+- **Presence v3.4**: Multi-Source Aggregation mit any-on Regel, hold/override, source-tracking
+- **Zone-Based Miner**: Semantic bucketing, confidence/lift scoring fuer automatische Zone-Proposals
+- **Zone-Proposals API**: `GET/POST /zone-proposals` + `POST /zone-proposals/accept` mit Modul-Policy
+- **Module-Overrides**: ZoneType-basierte Overrides (light/motion/music/volume/tv/climate/camera)
 
 #### Fixed
-- **Core Add-on Sichtbarkeit**: `copilot_core/config.yaml` und `copilot_core/manifest.json` auf `15.0.0` harmonisiert, damit Supervisor/Add-on-Repo denselben sichtbaren Release-Stand auswertet wie `VERSION` und `copilot_core/VERSION`.
-- **Paired Release Truth**: Core-Metadaten auf denselben Release-Stand wie das bereits vorhandene `v15.0.0`-Release gebracht.
+- **Dashboard ZONE_CONFIG**: German Slugs (`wohnbereich`, `schlafzimmer`, `kueche`, `badezimmer`, `kinderzimmer`, `buero`, `aussenbereich`) harmonisiert
+- **Outdoor Aliases**: Terrasse/Balkon/Loggia kanonisch → OUTSIDE
+
+---
 
 ## [v14.8.1] - 2026-03-21
 
