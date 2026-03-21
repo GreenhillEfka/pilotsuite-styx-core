@@ -420,6 +420,59 @@ def ensure_zones():
     return jsonify({"ok": True, "created": created, **_controller.get_dashboard()})
 
 
+# ── Sync Zone Definitions (HA → Core) ──────────────────────────────────────
+
+
+@zone_automation_bp.route("/sync-definitions", methods=["POST"])
+@require_token
+def sync_zone_definitions():
+    """Receive full zone definitions from HA.
+
+    HA pushes entity assignments, zone metadata, and HA context so Core's
+    Brain/Neuron system has the full zone topology for categorization,
+    habit learning, and suggestion generation.
+
+    Body: {"source": "ha", "zones": [{"zone_id": "...", "name_de": "...",
+                                       "entities": [...], "zone_type": "..."}]}
+    """
+    if _controller is None:
+        return jsonify({"ok": False, "error": "Controller not initialized"}), 503
+
+    data = request.get_json(silent=True) or {}
+    source = data.get("source", "ha")
+    zones = data.get("zones", [])
+
+    if not isinstance(zones, list):
+        return jsonify({"ok": False, "error": "'zones' must be a list"}), 400
+
+    synced = []
+    for zone in zones:
+        if not isinstance(zone, dict):
+            continue
+        zone_id = str(zone.get("zone_id", "")).strip()
+        if not zone_id:
+            continue
+
+        # Ensure zone config exists
+        if zone_id not in _controller._configs:
+            _controller.get_zone_config(zone_id)  # auto-creates default
+
+        cfg = _controller._configs.get(zone_id)
+        if cfg:
+            # Store HA entity definitions + zone metadata on the config
+            cfg.zone_name = zone.get("name_de", zone_id)
+            cfg.zone_type = zone.get("zone_type", cfg.zone_type or "room")
+            if "entities" in zone:
+                cfg._ha_entities = zone["entities"]  # HA context for Brain
+            synced.append(zone_id)
+
+    _LOGGER.info(
+        "[sync-definitions] Received %d zone definitions from %s, synced: %s",
+        len(zones), source, synced,
+    )
+    return jsonify({"ok": True, "synced": synced, "count": len(synced)})
+
+
 # ── Module Schemas ──────────────────────────────────────────────────────────
 
 
