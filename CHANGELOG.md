@@ -2,6 +2,14 @@
 
 Alle wesentlichen Aenderungen am PilotSuite Styx Core werden in dieser Datei dokumentiert.
 
+## [v15.0.0] - 2026-03-21
+
+### Release Metadata Konsolidierung
+
+#### Fixed
+- **Core Add-on Sichtbarkeit**: `copilot_core/config.yaml` und `copilot_core/manifest.json` auf `15.0.0` harmonisiert, damit Supervisor/Add-on-Repo denselben sichtbaren Release-Stand auswertet wie `VERSION` und `copilot_core/VERSION`.
+- **Paired Release Truth**: Core-Metadaten auf denselben Release-Stand wie das bereits vorhandene `v15.0.0`-Release gebracht.
+
 ## [v14.8.1] - 2026-03-21
 
 ### Release Candidate fuer Live-HA-Test
