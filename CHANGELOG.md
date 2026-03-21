@@ -2,6 +2,17 @@
 
 Alle wesentlichen Aenderungen am PilotSuite Styx Core werden in dieser Datei dokumentiert.
 
+## [v14.8.1] - 2026-03-21
+
+### Release Candidate fuer Live-HA-Test
+
+#### Added
+- **Zone-Presence API**: `POST /api/v1/presence/zone/presence/<zone_id>/hold` und `POST /api/v1/presence/zone/presence/<zone_id>/state` fuer persistente HA-Area-Presence-Signale.
+- **Zone-Summary Alignment**: Dashboard-Zonen auf HA-Habitus-Slugs (`wohnbereich`, `schlafzimmer`, `kueche`, `badezimmer`, `kinderzimmer`, `buero`, `aussenbereich`) harmonisiert, inkl. `presence`, `media_playing`, `lights_on`, `presence_hold`.
+
+#### Fixed
+- **Paired Release Gate**: Versionsdateien (`VERSION`, `copilot_core/VERSION`, `manifest.json`) auf `14.8.1` harmonisiert fuer den gemeinsamen Test-Release mit HA.
+
 ## [v14.7.5] - 2026-03-20
 
 ### Zone-Proposals & Configuration
