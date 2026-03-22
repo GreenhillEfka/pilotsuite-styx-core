@@ -1,7 +1,7 @@
 # USER_MANUAL.md - PilotSuite User Guide
 
 > **Status:** LEGACY / PARTIALLY OUTDATED — do not use as release truth
-> **Current published versions (2026-03-21):** HA/HACS **15.0.3** · Core/Add-on **15.0.3**
+> **Versioning rule:** This manual is authoritative for the **Core/Add-on** lane only. Do **not** infer the current **HA/HACS** release from this file. Verify HA/HACS truth in `pilotsuite-styx-ha` manifests/tags/releases. Current Core/Add-on release line here: **15.0.4**.
 > **Last Reviewed:** 2026-03-21
 >
 > This manual still contains older migration/setup text from earlier PilotSuite generations. It may help with concepts, but **must not** be treated as authoritative for current release truth, current API surface, or paired-version decisions.
