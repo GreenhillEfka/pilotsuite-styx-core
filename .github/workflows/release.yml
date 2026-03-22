@@ -23,10 +23,17 @@ jobs:
             exit 1
           fi
 
-      - name: Bump VERSION file
+      - name: Bump ALL version files
         run: |
-          echo "${{ github.event.inputs.version }}" > VERSION
-          echo "VERSION: $(cat VERSION)"
+          VERSION="${{ github.event.inputs.version }}"
+          echo "Bumping to: $VERSION"
+          echo "$VERSION" > VERSION
+          echo "$VERSION" > copilot_core/VERSION
+          echo "$VERSION" > copilot_core/rootfs/usr/src/app/VERSION
+          echo "VERSION files updated:"
+          cat VERSION
+          cat copilot_core/VERSION
+          cat copilot_core/rootfs/usr/src/app/VERSION
 
       - name: Bump manifest version
         run: |
@@ -36,23 +43,29 @@ import json
 with open('copilot_core/manifest.json', 'r+') as f:
     data = json.load(f)
     old = data.get('version', '?')
-    data['version'] = '$VERSION'
+    data['version'] = '\$VERSION'
     f.seek(0)
     json.dump(data, f, indent=2)
     f.truncate()
-print(f'manifest: {old} → $VERSION')
+print(f'manifest: {old} → \$VERSION')
 "
 
-      - name: Verify version consistency
+      - name: Verify ALL version files match
         run: |
           VERSION="${{ github.event.inputs.version }}"
-          V_VERSION=$(cat VERSION)
-          V_MANIFEST=$(python3 -c "import json; print(json.load(open('copilot_core/manifest.json'))['version'])")
-          if [ "$V_VERSION" != "$VERSION" ] || [ "$V_MANIFEST" != "$VERSION" ]; then
-            echo "ERROR: VERSION=$V_VERSION manifest=$V_MANIFEST — expected $VERSION"
+          V_ROOT=\$(cat VERSION)
+          V_CORE=\$(cat copilot_core/VERSION)
+          V_ADDON=\$(cat copilot_core/rootfs/usr/src/app/VERSION)
+          V_MANIFEST=\$(python3 -c "import json; print(json.load(open('copilot_core/manifest.json'))['version'])")
+          echo "root VERSION:      \$V_ROOT"
+          echo "copilot_core/VER:  \$V_CORE"
+          echo "addon VERSION:     \$V_ADDON"
+          echo "manifest version: \$V_MANIFEST"
+          if [ "\$V_ROOT" != "$VERSION" ] || [ "\$V_CORE" != "$VERSION" ] || [ "\$V_ADDON" != "$VERSION" ] || [ "\$V_MANIFEST" != "$VERSION" ]; then
+            echo "ERROR: At least one version file does not match $VERSION"
             exit 1
           fi
-          echo "VERSION=$VERSION ✓"
+          echo "ALL VERSION FILES CONSISTENT ✓"
 
       - name: Commit version bump
         run: |
@@ -78,4 +91,6 @@ print(f'manifest: {old} → $VERSION')
       - name: Verify ZIP contents
         run: |
           unzip -p "v${{ github.event.inputs.version }}.zip" pilotsuite-styx-core/VERSION
+          unzip -p "v${{ github.event.inputs.version }}.zip" pilotsuite-styx-core/copilot_core/VERSION
+          unzip -p "v${{ github.event.inputs.version }}.zip" pilotsuite-styx-core/copilot_core/rootfs/usr/src/app/VERSION
           unzip -p "v${{ github.event.inputs.version }}.zip" pilotsuite-styx-core/copilot_core/manifest.json | python3 -c "import json,sys; print('manifest:', json.load(sys.stdin)['version'])"
