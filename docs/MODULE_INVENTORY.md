@@ -1,84 +1,118 @@
-# PilotSuite Module Inventory (2026-02-22)
+# PilotSuite Module Inventory (2026-03-22)
 
-This inventory reflects the production-ready dual-repo baseline at `v7.7.13`.
+This inventory reflects the production-ready baseline at `v15.0.x`.
 
 ## Scope
 - Core add-on backend: `pilotsuite-styx-core`
 - HA integration frontend/runtime: `pilotsuite-styx-ha`
 
-## Runtime module counts
-- HA runtime modules loaded by default: `31`
-- HA sensor implementation files: `54` (multiple entities per file)
-- Core package domains under `copilot_core/`: `30`
+## Module System Architecture
 
-## Core subsystem inventory
-- Event ingest and store: receives N3 envelopes and applies idempotency.
-- Brain graph: node/edge model, pruning, neighborhood and state APIs.
-- Habitus mining: pattern discovery and candidate creation.
-- Candidate store: lifecycle states (`pending/offered/accepted/dismissed/deferred`).
-- Mood + neurons: contextual scoring and recommendation weighting.
-- Knowledge/vector/memory: semantic retrieval and long-context support.
-- Conversation layer: OpenAI-compatible endpoints plus local model runtime.
-- Hub engines: domain-specific advanced orchestration APIs.
+### Registry (module_registry.py)
+- **States**: `active` | `learning` | `off`
+- **Default**: `active` (global default)
+- **Zone-level overrides**: per-zone module state via `set_zone_state()`
+- **Persistence**: SQLite at `/data/module_states.db`
 
-## HA runtime module inventory (loaded set)
-- `legacy`
-- `performance_scaling`
-- `events_forwarder`
-- `history_backfill`
-- `dev_surface`
-- `habitus_miner`
-- `ops_runbook`
-- `unifi_module`
-- `brain_graph_sync`
-- `candidate_poller`
-- `media_zones`
-- `mood`
-- `mood_context`
-- `energy_context`
-- `network`
-- `weather_context`
-- `knowledge_graph_sync`
-- `ml_context`
-- `camera_context`
-- `quick_search`
-- `voice_context`
-- `home_alerts`
-- `character_module`
-- `waste_reminder`
-- `birthday_reminder`
-- `entity_tags`
-- `person_tracking`
-- `frigate_bridge`
-- `scene_module`
-- `homekit_bridge`
-- `calendar_module`
+### Hub Module Inventory (hub/ — 30+ modules)
 
-## Communication pipeline map
-Forward path:
-- HA state/service events -> N3 forwarder -> `POST /api/v1/events` -> Core processor/graph/miner.
+| Module | Domain | Description |
+|---|---|---|
+| alarm | Alarm | Alarm panel integration |
+| anomaly_detection | Monitoring | Unusual pattern detection |
+| automation_templates | Automation | Reusable automation patterns |
+| bewgung_module | Movement | Motion-based triggers |
+| brain_activity | Brain | Brain graph activity tracking |
+| brain_architecture | Brain | Brain graph structure |
+| brightness_filter | Light | Ambient brightness filtering |
+| dashboard | UI | Styx dashboard endpoints |
+| energy_advisor | Energy | Energy optimization suggestions |
+| habitus_zones | Zones | Zone habitus management |
+| heiz_module | Climate | Heating control |
+| helligkeit_module | Light | Brightness automation |
+| homeassistant_module | HA | HA integration bridge |
+| licht_module | Light | Light control |
+| light_intelligence | Light | Smart light orchestration |
+| media_follow | Media | Media-based presence |
+| module_router | Routing | Module request routing |
+| multi_home | Household | Multi-home support |
+| musikwolke_bridge | Media | Musikwolke integration |
+| notification_intelligence | Notifications | Smart notification routing |
+| plugin_manager | Plugins | Plugin lifecycle |
+| praesenz_module | Presence | Presence detection |
+| predictive_maintenance | Predictive | Maintenance predictions |
+| presence_intelligence | Presence | Advanced presence |
+| scene_intelligence | Scenes | Scene automation |
+| sonos_client | Media | Sonos integration |
+| system_integration | System | System-level integration |
+| thread_module | Network | Thread/Zigbee |
+| wecker | Alarm | Alarm clock |
+| zigbee_module | Zigbee | Zigbee devices |
+| zone_automation | Zones | Zone automation engine |
+| zone_modes | Zones | Zone mode management |
+| zone_modules | Zones | Per-zone module config |
+| zwave_module | Z-Wave | Z-Wave devices |
 
-Return path:
-- `GET /api/v1/candidates` -> Candidate poller -> Repairs workflow -> user decision -> `PUT /api/v1/candidates/:id`.
+### Core Package Domains (copilot_core/)
 
-Realtime path:
-- Core webhook -> HA coordinator merge -> entities/cards refresh.
+| Domain | State | Description |
+|---|---|---|
+| api | Active | REST API v1 endpoints |
+| automation | Active | Automation execution |
+| autonomy | Active | Autonomous decision engine |
+| brain_graph | Active | Neural graph (nodes/edges) |
+| candidates | Active | Habit candidate lifecycle |
+| collective_intelligence | Active | Group decision making |
+| energy | Active | Energy management |
+| habitus_miner | Active | Pattern discovery |
+| homeassistant | Active | HA integration layer |
+| ingest | Active | Event ingestion + N3 |
+| knowledge_graph | Active | Semantic knowledge base |
+| ml | Active | Machine learning models |
+| monitoring | Active | Health + diagnostics |
+| mood | Active | Mood tracking + scoring |
+| neurons | Active | Neuron management |
+| notifications | Active | Push notifications |
+| proactive_engine | Active | Proactive suggestions |
+| rag | Active | Retrieval-augmented generation |
+| synapses | Active | Module interconnectivity |
+| system_health | Active | System health checks |
+| vector_store | Active | Embedding storage |
+| voice | Active | Voice processing |
+| web_search | Active | Web search integration |
 
-## Test-backed verification
-Core critical tests:
-- `test_app_smoke.py`
-- `test_status_endpoint.py`
-- `test_auth_security.py`
-- `test_events_endpoint.py`
-- `test_full_flow.py`
-- `test_e2e_pipeline.py`
+### HA Integration Modules (ha/)
 
-HA critical tests:
-- `tests/integration/test_full_flow.py`
-- `tests/test_forwarder_n3.py`
-- `tests/test_candidate_poller_integration.py`
-- `tests/test_repairs_workflow.py`
-- `tests/test_core_api_v1_v2.py`
+| HA Module | State | Description |
+|---|---|---|
+| events_forwarder | Learning | HA → Core event streaming |
+| habitus_miner | Learning | HA-side habit mining |
+| history_backfill | Learning | Historical data backfill |
+| dev_surface | Off | Developer surface |
+| performance_scaling | Active | Dynamic scaling |
+| legacy | Off | Legacy compatibility |
 
-## Continuous guardrail
-A scheduled production guard workflow runs every 15 minutes in both repos to continuously verify these critical paths.
+### API Endpoints (v1)
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/api/v1/modules` | GET | List all module states |
+| `/api/v1/modules/<id>` | GET | Get single module state |
+| `/api/v1/modules` | POST | Create module state |
+| `/api/v1/modules/<id>` | PUT | Update module state |
+| `/api/v1/modules/<id>/configure` | POST | Patch module state |
+| `/api/v1/zone-automation/zones` | GET | List zone configs |
+| `/api/v1/zone-automation/ensure-zones` | POST | Bulk-create zones (IDs only) |
+| `/api/v1/zone-automation/sync-definitions` | POST | Sync full zone definitions from HA |
+| `/api/v1/zone-automation/module-schemas` | GET | Get schemas for zone modules |
+| `/api/v1/zone-automation/zones/<zone_id>/modules/<module_id>` | GET/POST | Per-zone module config |
+| `/api/v1/zone-automation/zones/<zone_id>/mode` | PUT | Set zone automation mode |
+| `/api/v1/autonomy/execute` | POST | Execute autonomous action |
+| `/api/v1/brain/graph` | GET | Brain graph state |
+| `/api/v1/candidates` | GET/POST | Habit candidates |
+| `/api/v1/mood` | GET | Current mood state |
+| `/api/v1/notifications` | GET/POST | Notification management |
+
+## Source of Truth
+- HA: `/config/clawd/team/repos/pilotsuite-styx-ha` (origin/main)
+- Core: `/config/clawd/team/repos/pilotsuite-styx-core` (origin/main)

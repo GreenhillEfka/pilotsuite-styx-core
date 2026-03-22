@@ -1,6 +1,6 @@
 # Zone Editor API Documentation
 
-**Phase 6 Feature** | **Version:** 1.0.0 | **Last Updated:** 2026-03-01
+**Core v15.0 Zone Automation** | **Version:** 15.0 | **Last Updated:** 2026-03-22
 
 Comprehensive API documentation for the Zone Editor system enabling bidirectional synchronization of habitus zones between Home Assistant and PilotSuite Core.
 
@@ -1055,3 +1055,22 @@ Zones are persisted to:
 **Documentation Version:** 1.0.0  
 **Last Updated:** 2026-03-01  
 **Maintained By:** PilotSuite Core Team
+
+---
+
+## ⚠️ Deprecation Notice (2026-03-22)
+
+This document describes the legacy `/api/v1/habitus/zones/` endpoints which are **deprecated**.
+
+**Current Zone Automation endpoints are at `/api/v1/zone-automation/`:**
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/api/v1/zone-automation/zones` | GET | List all zone configs |
+| `/api/v1/zone-automation/ensure-zones` | POST | Bulk-create zone configs (IDs only) |
+| `/api/v1/zone-automation/sync-definitions` | POST | Sync full zone definitions from HA |
+| `/api/v1/zone-automation/module-schemas` | GET | Get schemas for zone modules |
+| `/api/v1/zone-automation/zones/<zone_id>/modules/<module_id>` | GET/POST | Per-zone module config |
+| `/api/v1/zone-automation/zones/<zone_id>/mode` | PUT | Set automation mode |
+
+See **API_REFERENCE.md** for the complete current endpoint documentation.
