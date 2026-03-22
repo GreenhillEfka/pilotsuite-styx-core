@@ -1,0 +1,81 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g. 15.0.9)'
+        required: true
+        type: string
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate version input
+        run: |
+          if ! echo "${{ github.event.inputs.version }}" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "Error: Version must match X.Y.Z format"
+            exit 1
+          fi
+
+      - name: Bump VERSION file
+        run: |
+          echo "${{ github.event.inputs.version }}" > VERSION
+          echo "VERSION: $(cat VERSION)"
+
+      - name: Bump manifest version
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          python3 -c "
+import json
+with open('copilot_core/manifest.json', 'r+') as f:
+    data = json.load(f)
+    old = data.get('version', '?')
+    data['version'] = '$VERSION'
+    f.seek(0)
+    json.dump(data, f, indent=2)
+    f.truncate()
+print(f'manifest: {old} → $VERSION')
+"
+
+      - name: Verify version consistency
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          V_VERSION=$(cat VERSION)
+          V_MANIFEST=$(python3 -c "import json; print(json.load(open('copilot_core/manifest.json'))['version'])")
+          if [ "$V_VERSION" != "$VERSION" ] || [ "$V_MANIFEST" != "$VERSION" ]; then
+            echo "ERROR: VERSION=$V_VERSION manifest=$V_MANIFEST — expected $VERSION"
+            exit 1
+          fi
+          echo "VERSION=$VERSION ✓"
+
+      - name: Commit version bump
+        run: |
+          git config --global user.email "pilotclaw@pilotsuite.dev"
+          git config --global user.name "PilotClaw"
+          git add -A
+          git commit -m "chore: bump to v${{ github.event.inputs.version }}"
+          git tag "v${{ github.event.inputs.version }}"
+          git push origin main --tags
+
+      - name: Create GitHub Release
+        run: |
+          gh release create "v${{ github.event.inputs.version }}" \
+            --title "PilotSuite Core v${{ github.event.inputs.version }}" \
+            --notes "Release v${{ github.event.inputs.version }}" \
+            --clobber
+
+      - name: Build and upload ZIP asset
+        run: |
+          git archive --format=zip --prefix=pilotsuite-styx-core/ -o "v${{ github.event.inputs.version }}.zip" HEAD
+          gh release upload "${{ github.event.inputs.version }}" "v${{ github.event.inputs.version }}.zip" --clobber
+
+      - name: Verify ZIP contents
+        run: |
+          unzip -p "v${{ github.event.inputs.version }}.zip" pilotsuite-styx-core/VERSION
+          unzip -p "v${{ github.event.inputs.version }}.zip" pilotsuite-styx-core/copilot_core/manifest.json | python3 -c "import json,sys; print('manifest:', json.load(sys.stdin)['version'])"
