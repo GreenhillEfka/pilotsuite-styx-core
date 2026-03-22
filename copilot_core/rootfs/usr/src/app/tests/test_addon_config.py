@@ -20,6 +20,7 @@ from pathlib import Path
 ADDON_ROOT = Path(__file__).parent.parent.parent.parent.parent.parent  # Go up to copilot_core/
 CONFIG_YAML_PATH = ADDON_ROOT / "config.yaml"
 MANIFEST_JSON_PATH = ADDON_ROOT / "manifest.json"
+PACKAGED_VERSION_PATH = ADDON_ROOT / "rootfs/usr/src/app/VERSION"
 
 
 class TestHAAddonConfig:
@@ -131,6 +132,14 @@ class TestHAAddonConfig:
         manifest_opts = set(manifest.get('options', {}).keys())
         assert config_opts == manifest_opts, \
             f"Options mismatch: config={config_opts}, manifest={manifest_opts}"
+
+    def test_packaged_runtime_version_sync(self, manifest):
+        """Test packaged /usr/src/app/VERSION matches add-on release metadata."""
+        assert PACKAGED_VERSION_PATH.exists(), f"Packaged VERSION missing: {PACKAGED_VERSION_PATH}"
+        with open(PACKAGED_VERSION_PATH, 'r') as f:
+            packaged_version = f.read().strip()
+        assert packaged_version == manifest.get('version'), \
+            f"Packaged runtime VERSION mismatch: packaged={packaged_version}, manifest={manifest.get('version')}"
 
     def test_ports_format(self, manifest):
         """Test ports definition format."""

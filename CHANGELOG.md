@@ -2,6 +2,19 @@
 
 Alle wesentlichen Aenderungen am PilotSuite Styx Core werden in dieser Datei dokumentiert.
 
+## [v15.0.4] - 2026-03-22
+
+### Runtime Version Truth Repair
+
+**Paired mit:** HA v15.0.4
+
+#### Fixed
+- **Packaged Runtime Version**: `copilot_core/rootfs/usr/src/app/VERSION` von veraltetem `14.7.3` auf `15.0.4` gehoben, sodass `/version` und `/health` nicht mehr auf den alten Fallback zurueckfallen.
+- **Release-Metadata Sync**: `VERSION`, `copilot_core/VERSION`, `copilot_core/config.yaml`, `copilot_core/manifest.json` und die verpackte Runtime-Version wieder auf einen Stand harmonisiert.
+- **Regression Guard**: Test ergaenzt, der `rootfs/usr/src/app/VERSION` gegen `manifest.json` prueft, damit dieser Drift nicht erneut released wird.
+
+---
+
 ## [v15.0.3] - 2026-03-21
 
 ### Release Metadata + Zone Sync Cleanup
