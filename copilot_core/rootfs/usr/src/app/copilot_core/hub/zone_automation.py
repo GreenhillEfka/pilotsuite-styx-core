@@ -418,6 +418,138 @@ class ZoneAutomationController:
         """Get all zone configurations."""
         return {zid: cfg.to_dict() for zid, cfg in self._configs.items()}
 
+    def sync_habitus_zones(self, zones: list[dict[str, Any]],
+                           clear_missing: bool = False) -> dict[str, Any]:
+        """Sync HA area/zone topology into HubZoneEngine and ZoneAutomationController.
+
+        This is the canonical HA→Core zone sync point.  It:
+        1. Registers each zone as a Room (using area_id) + Zone in HubZoneEngine
+           so zone_editor and habitus_zones APIs return them immediately.
+        2. Creates ZoneAutomationConfig entries for any new zones.
+        3. Optionally removes zones not present in the payload.
+
+        Args:
+            zones: list of zone specs from HA. Each dict may contain:
+                - zone_id (str): unique zone/area identifier
+                - name (str): display name
+                - area_id (str): HA area id (used as room_id)
+                - entities (list[str]): entity_ids belonging to this zone
+                - icon (str): Material Design icon
+                - priority (int): matching priority
+            clear_missing: if True, delete zones not in the payload.
+
+        Returns:
+            dict with keys: synced, created, deleted, habitus_zones,
+                            ha_zones, entity_zone_map
+        """
+        result = {
+            "synced": 0,
+            "created": 0,
+            "deleted": 0,
+            "habitus_zones": [],
+            "ha_zones": [],
+            "entity_zone_map": {},
+        }
+
+        # Lazy-import HubZoneEngine only when called
+        try:
+            from copilot_core.hub.habitus_zones import HabitusZoneEngine
+        except ImportError:
+            logger.warning("HubZoneEngine not available — skipping habitus sync")
+            return result
+
+        # Get or create singleton HubZoneEngine
+        # We store a reference on self so it survives across calls in the same process
+        if not hasattr(self, "_hub_zones"):
+            self._hub_zones = HabitusZoneEngine()
+            logger.info("Created HubZoneEngine singleton for zone sync")
+
+        hub = self._hub_zones
+        seen_ids = set()
+
+        for spec in zones:
+            zid = str(spec.get("zone_id") or spec.get("area_id") or "").strip()
+            if not zid:
+                continue
+            seen_ids.add(zid)
+
+            name = str(spec.get("name") or zid).strip()
+            area_id = str(spec.get("area_id") or zid).strip()
+            entities = spec.get("entities") or []
+            icon = str(spec.get("icon") or "mdi:home-floor-1").strip()
+            priority = int(spec.get("priority") or 0)
+
+            is_new_config = zid not in self._configs
+            if is_new_config:
+                self.get_zone_config(zid)  # creates default ZoneAutomationConfig
+                result["created"] += 1
+
+            # ── Register in HubZoneEngine ─────────────────────────────
+            room = hub._rooms.get(area_id)
+            if room is None:
+                hub.register_room(
+                    room_id=area_id,
+                    name=name,
+                    area_id=area_id,
+                    entities=list(entities),
+                    icon=icon or "mdi:door",
+                )
+                logger.debug("Registered room %s in HubZoneEngine", area_id)
+
+            zone = hub._zones.get(zid)
+            if zone is None:
+                hub.create_zone(
+                    zone_id=zid,
+                    name=name,
+                    room_ids=[area_id],
+                    icon=icon or "mdi:home-floor-1",
+                    priority=priority,
+                )
+                logger.info("Created HubZone '%s' via sync", zid)
+
+            # Update room entities from HA payload
+            hub.update_room_entities(area_id, list(entities))
+
+            # Build entity→zone map for HA response
+            for eid in entities:
+                result["entity_zone_map"][eid] = zid
+
+            # Build ha_zones response entry
+            result["ha_zones"].append({
+                "zone_id": zid,
+                "name": name,
+                "area_id": area_id,
+                "icon": icon,
+                "priority": priority,
+                "entity_count": len(entities),
+            })
+
+            result["synced"] += 1
+
+        # ── Clear missing zones ─────────────────────────────────────
+        if clear_missing:
+            all_habitus_ids = set(hub._zones.keys())
+            to_delete = all_habitus_ids - seen_ids
+            for zid in to_delete:
+                try:
+                    hub.delete_zone(zid)
+                    result["deleted"] += 1
+                    logger.info("Deleted missing HubZone '%s'", zid)
+                except Exception:
+                    pass
+
+        # Return HubZoneEngine overview
+        try:
+            overview = hub.get_overview()
+            result["habitus_zones"] = overview.zones if overview else []
+        except Exception:
+            logger.debug("Could not get hub overview (may be empty)")
+
+        logger.info("sync_habitus_zones: synced=%d created=%d deleted=%d",
+                    result["synced"], result["created"], result["deleted"])
+        return result
+
+
     # ── Presence events ──────────────────────────────────────────────────
 
     def _get_state(self, zone_id: str) -> ZonePresenceState:
