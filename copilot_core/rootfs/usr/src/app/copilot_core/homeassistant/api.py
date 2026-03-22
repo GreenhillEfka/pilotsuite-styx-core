@@ -243,6 +243,87 @@ async def get_areas():
         }), 500
 
 
+@ha_discovery_bp.route("/ha/zones", methods=["GET"])
+@require_token
+async def get_ha_zones():
+    """Get all HA areas as zones for the Core zone registry.
+    
+    This endpoint provides HA area definitions to the Core zone system,
+    enabling HA→Core zone synchronization via the zone sync automation.
+    
+    Response:
+    {
+        "ok": true,
+        "count": 5,
+        "zones": [
+            {
+                "area_id": "living_room",
+                "name": "Living Room",
+                "name_de": "Wohnzimmer",
+                "picture": null,
+                "metadata": {}
+            }
+        ]
+    }
+    """
+    if _active_client is None:
+        return jsonify({
+            "ok": False,
+            "error": "Not connected to HomeAssistant"
+        }), 503
+    
+    try:
+        areas = await _active_client.get_areas()
+        
+        # Convert areas to zone-compatible format
+        zones = []
+        for area in areas:
+            zones.append({
+                "area_id": area.get("area_id", area.get("id", "")),
+                "name": area.get("name", ""),
+                "name_de": _area_to_name_de(area.get("name", "")),
+                "picture": area.get("picture"),
+                "metadata": {}
+            })
+        
+        return jsonify({
+            "ok": True,
+            "count": len(zones),
+            "zones": zones
+        })
+    
+    except Exception as e:
+        logger.error(f"Failed to get HA zones: {e}")
+        return jsonify({
+            "ok": False,
+            "error": str(e)
+        }), 500
+
+
+def _area_to_name_de(name: str) -> str:
+    """Convert HA area name to German name.
+    
+    Simple mapping for common room names.
+    Override in options flow or tag system.
+    """
+    mapping = {
+        "living room": "Wohnzimmer",
+        "bedroom": "Schlafzimmer",
+        "bathroom": "Badezimmer",
+        "kitchen": "Küche",
+        "office": "Büro",
+        "hallway": "Flur",
+        "terrace": "Terrasse",
+        "garden": "Garten",
+        "garage": "Garage",
+        "dining room": "Esszimmer",
+        "child's bedroom": "Kinderzimmer",
+        "guest room": "Gästezimmer",
+    }
+    name_lower = name.lower()
+    return mapping.get(name_lower, name)
+
+
 @ha_discovery_bp.route("/ha/entities", methods=["GET"])
 @require_token
 async def get_entities():
