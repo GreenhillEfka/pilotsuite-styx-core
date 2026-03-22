@@ -18,8 +18,8 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install -r copilot_core/rootfs/usr/src/app/requirements-test.txt 2>/dev/null || true
-          pip install flask waitress pydantic pytest pytest-asyncio aiohttp websockets numpy
+          pip install -r copilot_core/requirements.txt
+          pip install pytest pytest-asyncio
 
       - name: Run tests
         env:
