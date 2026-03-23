@@ -249,6 +249,73 @@ class TestEventStoreNormalization(unittest.TestCase):
         self.assertEqual(stored["kind"], "call_service")
         self.assertEqual(stored["service"]["service"], "turn_on")
         self.assertEqual(stored["zone_ids"], ["living_room"])
+        self.assertEqual(stored["zone_id"], "living_room")
+
+    def test_service_call_alias_and_home_assistant_source_canonicalized(self):
+        ev = {
+            "ts": "2026-02-10T03:00:00Z",
+            "kind": "service_call",
+            "src": "home_assistant",
+            "entity_id": "switch.pump",
+            "domain": "switch",
+            "service": {
+                "domain": "switch",
+                "service": "turn_on",
+                "entity_ids": ["switch.pump", "switch.filter"],
+            },
+            "zone_ids": ["utility"],
+        }
+        self.store.ingest_batch([ev])
+        stored = self.store.query()[0]
+
+        self.assertEqual(stored["kind"], "call_service")
+        self.assertEqual(stored["src"], "ha")
+        self.assertEqual(stored["service"]["entity_ids"], ["switch.pump", "switch.filter"])
+        self.assertEqual(stored["zone_id"], "utility")
+
+    def test_call_service_without_top_level_entity_id_is_accepted(self):
+        ev = {
+            "ts": "2026-02-10T03:00:00Z",
+            "kind": "call_service",
+            "src": "ha",
+            "service": {
+                "domain": "light",
+                "service": "turn_off",
+                "entity_ids": ["light.kitchen", "light.office"],
+            },
+        }
+        result = self.store.ingest_batch([ev])
+        self.assertEqual(result["accepted"], 1)
+        self.assertEqual(result["rejected"], 0)
+
+        stored = self.store.query()[0]
+        self.assertEqual(stored["kind"], "call_service")
+        self.assertEqual(stored["entity_id"], "")
+        self.assertEqual(stored["service"]["entity_ids"], ["light.kitchen", "light.office"])
+
+    def test_context_fields_are_structured_and_truncated(self):
+        ev = {
+            "v": 1,
+            "ts": "2026-02-10T03:00:00Z",
+            "kind": "state_changed",
+            "src": "ha",
+            "entity_id": "light.test",
+            "domain": "light",
+            "old": {"state": "off", "attrs": {}},
+            "new": {"state": "on", "attrs": {}},
+            "context": {
+                "id": "abcdef123456789",
+                "parent_id": "parent123456789",
+                "user_id": "user123456789",
+            },
+        }
+        self.store.ingest_batch([ev])
+        stored = self.store.query()[0]
+
+        self.assertEqual(stored["context_id"], "abcdef123456")
+        self.assertEqual(stored["context_parent_id"], "parent123456")
+        self.assertEqual(stored["context_user_id"], "user12345678")
+        self.assertEqual(stored["context"]["parent_id"], "parent123456")
 
 
 if __name__ == "__main__":

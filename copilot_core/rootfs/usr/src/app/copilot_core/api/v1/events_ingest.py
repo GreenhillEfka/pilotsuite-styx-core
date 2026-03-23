@@ -68,7 +68,8 @@ def ingest_events(body: BatchEventPayload):
         return jsonify({"accepted": 0, "rejected": 0, "deduped": 0}), 200
 
     store = get_store()
-    result = store.ingest_batch(body.items)
+    items = [item.model_dump(exclude_none=True) for item in body.items]
+    result = store.ingest_batch(items)
 
     # Fire post-ingest callback (e.g. EventProcessor → Brain Graph)
     accepted_events = result.pop("accepted_events", [])

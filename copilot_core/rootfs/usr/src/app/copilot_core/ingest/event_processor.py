@@ -166,17 +166,21 @@ class EventProcessor:
             if not isinstance(evt, dict):
                 continue
             entity_id = evt.get("entity_id", "")
-            attrs = evt.get("attributes", {})
+            attrs = evt.get("attributes") if isinstance(evt.get("attributes"), dict) else {}
             old_state = attrs.get("old_state", "")
             new_state = attrs.get("new_state", "")
-            # Also check top-level "new" dict (brain-graph format)
+
+            # Also check canonical normalized snapshots.
+            if not old_state and isinstance(evt.get("old"), dict):
+                old_state = evt["old"].get("state", "")
             if not new_state and isinstance(evt.get("new"), dict):
                 new_state = evt["new"].get("state", "")
+
             if not entity_id or not new_state:
                 continue
             ha_events.append({
                 "event_type": "state_changed",
-                "time_fired": evt.get("timestamp", ""),
+                "time_fired": evt.get("ts") or evt.get("timestamp", ""),
                 "data": {
                     "entity_id": entity_id,
                     "old_state": {"state": old_state} if old_state else None,
@@ -247,6 +251,43 @@ class EventProcessor:
 
     # ── Brain graph processors ───────────────────────────────────────
 
+    @staticmethod
+    def _primary_zone_id(event: Dict[str, Any]) -> str:
+        zone_id = str(event.get("zone_id") or "").strip()
+        if zone_id:
+            return zone_id
+        zone_ids = event.get("zone_ids")
+        if isinstance(zone_ids, list):
+            for candidate in zone_ids:
+                candidate = str(candidate).strip()
+                if candidate:
+                    return candidate
+        return ""
+
+    @staticmethod
+    def _service_details(event: Dict[str, Any]) -> tuple[str, str, list[str]]:
+        service_payload = event.get("service") if isinstance(event.get("service"), dict) else {}
+        domain = str(service_payload.get("domain") or event.get("domain") or "").strip()
+        service = str(service_payload.get("service") or event.get("service") or "").strip()
+
+        entity_ids = service_payload.get("entity_ids")
+        if isinstance(entity_ids, str):
+            entity_ids = [entity_ids]
+        elif not isinstance(entity_ids, list):
+            entity_ids = []
+
+        normalized_entity_ids: list[str] = []
+        for entity_id in entity_ids:
+            entity_id = str(entity_id).strip()
+            if entity_id and entity_id not in normalized_entity_ids:
+                normalized_entity_ids.append(entity_id)
+
+        fallback_entity_id = str(event.get("entity_id") or "").strip()
+        if fallback_entity_id and fallback_entity_id not in normalized_entity_ids:
+            normalized_entity_ids.append(fallback_entity_id)
+
+        return domain, service, normalized_entity_ids
+
     def _process_for_brain_graph(self, event: Dict[str, Any]):
         """Process event for brain graph updates."""
         if not self.brain_graph_service:
@@ -267,7 +308,7 @@ class EventProcessor:
         """Process state_changed events for brain graph."""
         entity_id = event.get("entity_id", "")
         domain = event.get("domain", "")
-        zone_id = event.get("zone_id")
+        zone_id = self._primary_zone_id(event)
 
         if not entity_id or not domain:
             return
@@ -318,9 +359,7 @@ class EventProcessor:
 
     def _process_service_call_for_graph(self, event: Dict[str, Any]):
         """Process call_service events for brain graph."""
-        domain = event.get("domain", "")
-        service = event.get("service", "")
-        entity_id = event.get("entity_id", "")
+        domain, service, entity_ids = self._service_details(event)
 
         if not domain or not service:
             return
@@ -337,8 +376,7 @@ class EventProcessor:
             tags=[f"domain:{domain}", f"service:{service}"]
         )
 
-        # Link to target entity if specified
-        if entity_id:
+        for entity_id in entity_ids:
             entity_domain = entity_id.split(".")[0] if "." in entity_id else "unknown"
             entity_label = entity_id.split(".")[-1].replace("_", " ").title() if "." in entity_id else entity_id
             entity_node = self.brain_graph_service.touch_node(

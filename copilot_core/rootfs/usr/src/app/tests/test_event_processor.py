@@ -8,6 +8,7 @@ import unittest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from copilot_core.ingest.event_processor import EventProcessor
+from copilot_core.ingest.event_store import EventStore
 from copilot_core.brain_graph.service import BrainGraphService
 from copilot_core.brain_graph.store import GraphStore
 
@@ -182,6 +183,78 @@ class TestEventProcessor(unittest.TestCase):
         ])
         self.assertEqual(stats["processed"], 2)
         self.assertEqual(stats["errors"], 1)
+
+    def test_normalized_state_changed_uses_zone_ids_from_store(self):
+        store = EventStore(store_path=tempfile.NamedTemporaryFile(delete=False).name, max_events=10, dedup_ttl=0)
+        result = store.ingest_batch([{
+            "ts": "2026-02-10T03:00:00Z",
+            "type": "state_changed",
+            "source": "ha",
+            "entity_id": "binary_sensor.motion_living",
+            "attributes": {
+                "domain": "binary_sensor",
+                "old_state": "off",
+                "new_state": "on",
+                "zone_ids": ["living_room"],
+                "state_attributes": {},
+            },
+        }])
+
+        stats = self.proc.process_events(result["accepted_events"])
+        self.assertEqual(stats["processed"], 1)
+
+        entity = self.bg.store.get_node("ha.entity:binary_sensor.motion_living")
+        self.assertIsNotNone(entity)
+        self.assertEqual(entity.meta.get("zone_id"), "living_room")
+
+        edges = self.bg.store.get_edges(from_node="ha.entity:binary_sensor.motion_living")
+        located_in = [e for e in edges if e.edge_type == "located_in"]
+        self.assertEqual(len(located_in), 1)
+        self.assertEqual(located_in[0].to_node, "ha.zone:living_room")
+
+    def test_normalized_call_service_links_all_target_entities(self):
+        store = EventStore(store_path=tempfile.NamedTemporaryFile(delete=False).name, max_events=10, dedup_ttl=0)
+        result = store.ingest_batch([{
+            "ts": "2026-02-10T03:00:00Z",
+            "kind": "service_call",
+            "src": "home_assistant",
+            "entity_id": "light.kitchen",
+            "service": {
+                "domain": "light",
+                "service": "turn_on",
+                "entity_ids": ["light.kitchen", "light.living_room"],
+            },
+            "zone_ids": ["downstairs"],
+        }])
+
+        stats = self.proc.process_events(result["accepted_events"])
+        self.assertEqual(stats["processed"], 1)
+
+        service_node = self.bg.store.get_node("ha.service:light.turn_on")
+        self.assertIsNotNone(service_node)
+
+        kitchen = self.bg.store.get_node("ha.entity:light.kitchen")
+        living = self.bg.store.get_node("ha.entity:light.living_room")
+        self.assertIsNotNone(kitchen)
+        self.assertIsNotNone(living)
+
+        edges = self.bg.store.get_edges(from_node="ha.service:light.turn_on")
+        targets = sorted(e.to_node for e in edges if e.edge_type == "targets")
+        self.assertEqual(targets, ["ha.entity:light.kitchen", "ha.entity:light.living_room"])
+
+    def test_buffer_for_mining_uses_canonical_ts_field(self):
+        self.proc._buffer_for_mining([{
+            "kind": "state_changed",
+            "entity_id": "light.kitchen",
+            "ts": "2026-02-10T03:00:00Z",
+            "old": {"state": "off", "attrs": {}},
+            "new": {"state": "on", "attrs": {}},
+        }])
+
+        self.assertEqual(len(self.proc._habitus_event_buffer), 1)
+        buffered = self.proc._habitus_event_buffer[0]
+        self.assertEqual(buffered["time_fired"], "2026-02-10T03:00:00Z")
+        self.assertEqual(buffered["data"]["new_state"]["state"], "on")
 
 
 if __name__ == "__main__":

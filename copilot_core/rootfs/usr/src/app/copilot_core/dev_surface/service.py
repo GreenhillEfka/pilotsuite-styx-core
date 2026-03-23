@@ -3,8 +3,12 @@ import os
 import json
 import threading
 import traceback
-import psutil
 from collections import deque, Counter
+
+try:
+    import psutil
+except ImportError:  # pragma: no cover - optional runtime dependency
+    psutil = None
 from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Optional, Any
 
