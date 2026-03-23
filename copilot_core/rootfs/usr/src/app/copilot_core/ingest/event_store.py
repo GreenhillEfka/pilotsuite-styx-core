@@ -29,13 +29,40 @@ _SUPPORTED_VERSIONS = {1}
 
 # Allowed event kinds
 _ALLOWED_KINDS = {"state_changed", "call_service", "heartbeat"}
+_KIND_ALIASES = {"service_call": "call_service"}
 
 # Allowed source identifiers
 _ALLOWED_SOURCES = {"ha", "home_assistant"}
+_SOURCE_ALIASES = {"home_assistant": "ha"}
 
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _canonical_kind(value: Any) -> str:
+    raw = str(value or "").strip().lower()
+    return _KIND_ALIASES.get(raw, raw)
+
+
+def _canonical_source(value: Any) -> str:
+    raw = str(value or "").strip().lower()
+    return _SOURCE_ALIASES.get(raw, raw)
+
+
+def _listify_strs(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        value = [value]
+    if not isinstance(value, list):
+        return []
+    return [str(item) for item in value if str(item).strip()]
+
+
+def _truncate_context_id(value: Any) -> str:
+    value = str(value or "")
+    return value[:12] if len(value) > 12 else value
 
 
 def _compute_dedup_key(event: dict[str, Any]) -> str:
@@ -156,23 +183,31 @@ class EventStore:
 
         # Normalize: accept both forwarder formats
         # HA forwarder uses "type" + "source"; N3 spec uses "kind" + "src"
-        kind = event.get("kind") or event.get("type")
-        src = event.get("src") or event.get("source")
+        kind = _canonical_kind(event.get("kind") or event.get("type"))
+        src = _canonical_source(event.get("src") or event.get("source"))
 
         if not kind:
             return "missing 'kind' or 'type'"
         if not src:
             return "missing 'src' or 'source'"
 
-        # We accept both naming conventions
-        if kind not in _ALLOWED_KINDS and kind not in {"state_changed", "call_service", "heartbeat"}:
+        if kind not in _ALLOWED_KINDS:
             return f"unsupported kind: {kind}"
 
-        if src not in _ALLOWED_SOURCES:
+        if src not in {"ha", *(_ALLOWED_SOURCES - {"ha"})}:
             return f"unsupported source: {src}"
 
-        if not event.get("entity_id") and kind != "heartbeat":
-            return "missing 'entity_id' for non-heartbeat event"
+        attrs = event.get("attributes") if isinstance(event.get("attributes"), dict) else {}
+        service_payload = event.get("service") if isinstance(event.get("service"), dict) else {}
+
+        if kind == "state_changed" and not event.get("entity_id"):
+            return "missing 'entity_id' for state_changed event"
+
+        if kind == "call_service":
+            service_domain = service_payload.get("domain") or event.get("domain") or attrs.get("domain")
+            service_name = service_payload.get("service") or event.get("service") or attrs.get("service")
+            if not service_domain or not service_name:
+                return "missing service.domain/service for call_service event"
 
         if not event.get("ts"):
             return "missing 'ts'"
@@ -231,11 +266,17 @@ class EventStore:
 
     def _normalize(self, event: dict[str, Any], dedup_key: str) -> dict[str, Any]:
         """Normalize forwarder envelope to canonical Core format."""
-        kind = event.get("kind") or event.get("type", "unknown")
-        src = event.get("src") or event.get("source", "unknown")
+        kind = _canonical_kind(event.get("kind") or event.get("type", "unknown"))
+        src = _canonical_source(event.get("src") or event.get("source", "unknown"))
 
         # Extract attrs from both formats
-        attrs = event.get("attributes", {})
+        attrs = event.get("attributes") if isinstance(event.get("attributes"), dict) else {}
+        zone_ids = _listify_strs(
+            event.get("zone_ids")
+            or attrs.get("zone_ids")
+            or event.get("zone_id")
+        )
+        zone_id = zone_ids[0] if zone_ids else ""
 
         normalized: dict[str, Any] = {
             "v": event.get("v", 1),
@@ -246,6 +287,8 @@ class EventStore:
             "src": src,
             "entity_id": event.get("entity_id", ""),
             "domain": attrs.get("domain") or event.get("domain", ""),
+            "zone_ids": zone_ids,
+            "zone_id": zone_id,
         }
 
         # State delta (support both N3 spec format and current forwarder format)
@@ -258,37 +301,51 @@ class EventStore:
                 # Current forwarder: flat in attributes
                 normalized["old"] = {
                     "state": attrs.get("old_state"),
-                    "attrs": {},
+                    "attrs": attrs.get("old_attrs", {}),
                 }
                 normalized["new"] = {
                     "state": attrs.get("new_state"),
-                    "attrs": attrs.get("state_attributes", {}),
+                    "attrs": attrs.get("state_attributes", attrs.get("new_attrs", {})),
                 }
 
-            # Zone info
-            zone_ids = attrs.get("zone_ids") or event.get("zone_id")
-            if isinstance(zone_ids, str):
-                zone_ids = [zone_ids]
-            normalized["zone_ids"] = zone_ids or []
-
         elif kind == "call_service":
+            service_payload = event.get("service") if isinstance(event.get("service"), dict) else {}
+            entity_ids = _listify_strs(
+                service_payload.get("entity_ids")
+                or attrs.get("entity_ids")
+                or event.get("entity_id")
+            )
+            service_name = (
+                service_payload.get("service")
+                or attrs.get("service")
+                or event.get("service")
+                or ""
+            )
             normalized["service"] = {
-                "domain": attrs.get("domain", ""),
-                "service": attrs.get("service", ""),
-                "entity_ids": attrs.get("entity_ids", []),
+                "domain": service_payload.get("domain") or attrs.get("domain", "") or event.get("domain", ""),
+                "service": service_name,
+                "entity_ids": entity_ids,
             }
-            normalized["zone_ids"] = attrs.get("zone_ids", [])
 
         elif kind == "heartbeat":
             normalized["entity_count"] = event.get("entity_count", 0)
 
-        # Context (truncated per N3 spec)
-        ctx_id = event.get("context_id", "")
-        if isinstance(ctx_id, str) and len(ctx_id) > 12:
-            ctx_id = ctx_id[:12]
+        # Context (truncated per N3 spec / privacy budget)
+        raw_context = event.get("context") if isinstance(event.get("context"), dict) else {}
+        ctx_id = _truncate_context_id(raw_context.get("id") or event.get("context_id"))
+        ctx_parent_id = _truncate_context_id(raw_context.get("parent_id") or event.get("context_parent_id"))
+        ctx_user_id = _truncate_context_id(raw_context.get("user_id") or event.get("context_user_id"))
         normalized["context_id"] = ctx_id
+        normalized["context_parent_id"] = ctx_parent_id
+        normalized["context_user_id"] = ctx_user_id
+        if ctx_id or ctx_parent_id or ctx_user_id:
+            normalized["context"] = {
+                "id": ctx_id,
+                "parent_id": ctx_parent_id,
+                "user_id": ctx_user_id,
+            }
 
-        normalized["trigger"] = event.get("trigger", "unknown")
+        normalized["trigger"] = event.get("trigger") or attrs.get("trigger") or "unknown"
 
         return normalized
 
