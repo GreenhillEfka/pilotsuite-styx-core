@@ -11,6 +11,8 @@ Alle wesentlichen Aenderungen am PilotSuite Styx Core werden in dieser Datei dok
 #### Added
 - **Zone Health Module**: `copilot_core/zone_health/` — Umgebungssensorik (Temperatur, Feuchtigkeit, CO2, Lux) mit Health-Score 0-100 und Komfort-Ranges. Portiert von HA v14.7.5 `zone_health.py`. Enthält `ZoneHealthMetrics` dataclass und `ZoneHealthStore` Singleton mit History/Trend.
 - **MCP Tool `get_zone_health`**: LLM-Zugriff auf zonale Umgebungsmetriken via `/mcp` JSON-RPC Endpoint.
+- **Habitat Adapter**: `copilot_core/homeassistant/habitat_adapter.py` — HA↔Core Contract Boundary. Normalisiert HA-Events (state_changed, call_service) zu Core NeuronInput und Core-Proposals zu HA-Service-Commands. Contract-Versionen: `ha.input.v1` / `ha.output.v1`. Portiert von HA v15.0.0.
+- **Habitat Adapter Tests**: `tests/test_habitat_adapter.py` — 21 Test-Cases für alle Adapter-Funktionen.
 
 #### Fixed
 - **Version Alignment**: Core `VERSION`, `copilot_core/VERSION`, `copilot_core/config.yaml`, `copilot_core/rootfs/usr/src/app/addon/config.json` auf `15.0.17` synchronisiert.
