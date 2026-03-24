@@ -387,6 +387,7 @@ async function loadModules() {
 // ══════════════════════════════════════════════════════════════════════
 const ME = { neutral:'&#x1F610;', relax:'&#x1F60C;', focus:'&#x1F9D0;', active:'&#x26A1;', sleep:'&#x1F634;', alert:'&#x1F6A8;', social:'&#x1F91D;', recovery:'&#x1F33F;', night:'&#x1F319;', stress:'&#x1F62B;' };
 const MC = { neutral:'var(--dim)', relax:'var(--green)', focus:'var(--blue)', active:'var(--yellow)', sleep:'var(--purple)', alert:'var(--red)', social:'var(--cyan)', recovery:'var(--green)', night:'var(--purple)', stress:'var(--orange)' };
+const ZONE_ICONS = { living:'&#x1F3E0;', bath:'&#x1F6C1;', kitchen:'&#x1F372;', office:'&#x1F4BC;', hallway:'&#x1F9ED;', bedroom:'&#x1F3E1;', room_mira:'&#x1F476;', room_paul:'&#x1F466;', terrace:'&#x1F33E;', outside:'&#x1F43B;' };
 
 async function loadMood() {
   const data = await fetchJSON('/api/v1/mood/state'); if (!data) return;
@@ -433,7 +434,7 @@ async function loadZones() {
       const fields = (schema.fields || []).filter(f => f.key !== 'enabled'), en = mc.enabled !== false;
       ms += `<div class="zone-mod-section"><div class="zone-mod-hd" onclick="toggleMod(this)"><span class="zm-dot" style="background:${color}"></span><span>${esc(schema.name_de || mid)}</span><span class="badge ${en ? 'bg' : 'br'}" style="font-size:8px">${en ? 'An' : 'Aus'}</span><span class="zm-count">${fields.length} Param.</span><span class="zm-arrow">&#x25B6;</span></div><div class="zone-mod-body"><div class="zone-mod-field"><label>Aktiv</label><input type="checkbox" ${en ? 'checked' : ''} onchange="setMF('${zid}','${mid}','enabled',this.checked)"></div>${fields.map(f => renderF(zid, mid, f, mc)).join('')}</div></div>`;
     }
-    return `<div class="zone-card"><div class="zone-card-hd"><div class="zc-icon">&#x1F3E0;</div><div class="zc-info"><div class="zc-name">${esc(name)}</div><div class="zc-meta">${esc(zid)} &middot; ${ME[mood] || ''} ${mood}</div></div><span class="zc-mode badge ${modeC}">${mode}</span></div><div class="zone-modules">${ms}</div></div>`;
+    return `<div class="zone-card"><div class="zone-card-hd"><div class="zc-icon">${ZONE_ICONS[zid] || '&#x1F3E0;'}</div><div class="zc-info"><div class="zc-name">${esc(name)}</div><div class="zc-meta">${esc(zid)} &middot; ${ME[mood] || ''} ${mood}</div></div><span class="zc-mode badge ${modeC}">${mode}</span></div><div class="zone-modules">${ms}</div></div>`;
   }).join('');
   const tagDefs = tags?.tags || {};
   $('tags-panel').innerHTML = Object.entries(tagDefs).map(([tid, t]) => `<div class="tag-badge" style="background:${(t.color || '#666')}22;color:${t.color || '#666'};border-color:${t.color || '#666'}44">${esc(t.name_de || tid)}</div>`).join('');
