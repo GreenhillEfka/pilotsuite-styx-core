@@ -124,6 +124,16 @@ MCP_TOOLS = [
             "properties": {},
         },
     },
+    {
+        "name": "pilotsuite.get_zone_health",
+        "description": "Get environmental health metrics for zones (temperature, humidity, CO2, lux, health score 0-100).",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "zone": {"type": "string", "description": "Optional zone name to filter"},
+            },
+        },
+    },
 ]
 
 # MCP Prompts
@@ -218,6 +228,48 @@ def _execute_mcp_tool(name: str, arguments: dict) -> dict:
             if not energy_svc:
                 return {"error": "EnergyService not available"}
             return energy_svc.get_summary()
+
+        elif name == "pilotsuite.get_zone_health":
+            from ..zone_health import get_store, ZoneHealthMetrics
+            store = get_store()
+            zone_name = arguments.get("zone")
+            all_metrics = store.get_all()
+            if zone_name:
+                # Filter by zone name
+                filtered = {
+                    zid: m for zid, m in all_metrics.items()
+                    if zone_name.lower() in m.zone_name.lower()
+                }
+                result_zones = filtered
+            else:
+                result_zones = all_metrics
+            
+            if not result_zones:
+                return {
+                    "zones": 0,
+                    "average_health_score": store.get_average_score(),
+                    "message": "No zone health data available yet. Data arrives via HA→Core sync when HA is online."
+                }
+            
+            return {
+                "zones": len(result_zones),
+                "average_health_score": round(store.get_average_score(), 1),
+                "zones_data": {
+                    zid: {
+                        "zone_name": m.zone_name,
+                        "health_score": round(m.health_score, 1),
+                        "temperature": m.temperature,
+                        "humidity": m.humidity,
+                        "co2": m.co2,
+                        "lux": m.lux,
+                        "air_quality": m.air_quality,
+                        "temp_comfort": m.temperature_comfort,
+                        "humid_comfort": m.humidity_comfort,
+                        "last_updated": m.last_updated.isoformat(),
+                    }
+                    for zid, m in result_zones.items()
+                },
+            }
 
         else:
             return {"error": f"Unknown tool: {name}"}
