@@ -2,6 +2,24 @@
 
 Alle wesentlichen Aenderungen am PilotSuite Styx Core werden in dieser Datei dokumentiert.
 
+## [v15.0.17] - 2026-03-23
+
+### HA+Core Version Sync (Post-v15.0.4 Alignment)
+
+**Paired mit:** HA v15.0.17
+
+#### Fixed
+- **Version Alignment**: Core `VERSION`, `copilot_core/VERSION`, `copilot_core/config.yaml`, `copilot_core/rootfs/usr/src/app/addon/config.json` auf `15.0.17` synchronisiert.
+- **Event Ingest Contract**: `events_ingest.py` angepasst, Payload-Validierung fuer HA→Core Sync verschärft.
+- **Schema Extension**: `schemas.py` um 214 Zeilen erweitert für neue Event-Typen und Validierungsregeln.
+- **Event Processor**: `event_processor.py` und `event_store.py` überarbeitet für höhere Zuverlässigkeit bei der Event-Verarbeitung.
+
+#### Added
+- **Neue Tests**: `test_event_processor.py` und `test_event_store.py` für stabilisierte Event-Verarbeitung.
+- **Dokumentation**: `CORE_CONCEPT_DIRECTIVE.md`, `CORE_CONCEPT_HANDOFF.md`, `HA_CORE_INGEST_CONTRACT.md` als neue Architektur-Leitdokumente.
+
+---
+
 ## [v15.0.4] - 2026-03-22
 
 ### Runtime Version Truth Repair
