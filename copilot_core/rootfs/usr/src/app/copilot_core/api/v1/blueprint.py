@@ -3,7 +3,8 @@ from flask import Blueprint
 # Sub-blueprints with RELATIVE prefixes (nested under api_v1 /api/v1)
 from copilot_core.api.v1.candidates import bp as candidates_bp
 from copilot_core.api.v1.dev import bp as dev_bp
-from copilot_core.api.v1.events import bp as events_bp
+# RETIRED 2026-03-25: events_ingest.py is now canonical
+# from copilot_core.api.v1.events import bp as events_bp  # LEGACY — do not reuse
 from copilot_core.api.v1.mood import bp as mood_bp
 from copilot_core.api.v1.graph import bp as graph_bp
 from copilot_core.api.v1.habitus import bp as habitus_bp
@@ -43,7 +44,7 @@ api_v1 = Blueprint("api_v1", __name__, url_prefix="/api/v1")
 # Register sub-blueprints with relative url_prefix (e.g. /neurons, /kg)
 # These are correctly nested under /api/v1
 api_v1.register_blueprint(dev_bp)
-api_v1.register_blueprint(events_bp)
+# events_bp retired 2026-03-25 — events_ingest.py is now canonical
 api_v1.register_blueprint(candidates_bp)
 api_v1.register_blueprint(mood_bp)
 api_v1.register_blueprint(graph_bp)

@@ -1372,7 +1372,7 @@ def register_blueprints(app: Flask, services: dict) -> None:
         # ── Previously nested in api_v1 (blueprint.py) — now flat ──────
         # Blueprints with relative prefix: override to /api/v1/<prefix>
         ("copilot_core.api.v1.candidates",              "bp",               "/api/v1/candidates"),
-        ("copilot_core.api.v1.events",                  "bp",               "/api/v1/events"),
+        # ("copilot_core.api.v1.events",               "bp",  "/api/v1/events"),  # RETIRED 2026-03-25 — events_ingest is now canonical
         ("copilot_core.api.v1.mood",                    "bp",               "/api/v1/mood"),
         ("copilot_core.api.v1.graph",                   "bp",               "/api/v1/graph"),
         ("copilot_core.api.v1.habitus",                 "bp",               "/api/v1/habitus"),

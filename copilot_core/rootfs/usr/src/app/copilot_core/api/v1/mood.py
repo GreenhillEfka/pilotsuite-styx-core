@@ -29,7 +29,7 @@ def _scorer() -> MoodScorer:
 def _event_store_if_available() -> EventStore | None:
     # Import-time singletons can vary; we keep mood module decoupled.
     try:
-        from copilot_core.api.v1.events import _store as events_store_factory
+        from copilot_core.api.v1.events_ingest import get_store as events_store_factory
 
         return events_store_factory()
     except Exception:
