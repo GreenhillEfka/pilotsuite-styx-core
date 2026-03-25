@@ -12,6 +12,7 @@ import threading
 import time
 from typing import Dict, Any, Optional, Callable, List, Set
 from ..brain_graph.service import BrainGraphService
+from ..brain_read_model import feed_brain
 from ..dev_surface.service import dev_surface
 
 logger = logging.getLogger(__name__)
@@ -115,6 +116,9 @@ class EventProcessor:
                 try:
                     for processor in self.processors:
                         processor(event)
+                    # Explicit brain feed: transfer event into Brain Read Model
+                    # (after/normal to normal processing as specified in Slice 5)
+                    feed_brain(event)
                     stats["processed"] += 1
                     successful_events.append(event)
                 except Exception as e:
