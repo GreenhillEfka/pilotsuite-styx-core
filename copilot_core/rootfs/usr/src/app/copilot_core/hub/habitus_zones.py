@@ -17,6 +17,9 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
+# ZoneType unified import from homeassistant layer (authoritative archetype)
+from copilot_core.homeassistant.habitus_zones import ZoneType as ZoneTypeEnum
+
 logger = logging.getLogger(__name__)
 
 
@@ -41,6 +44,7 @@ class HabitusZone:
 
     zone_id: str
     name: str
+    zone_type: str = "living"  # ZoneType enum value (living, bath, kitchen, ...)
     rooms: list[str] = field(default_factory=list)  # room_ids
     icon: str = "mdi:home-floor-1"
     mode: str = "active"  # active, idle, sleeping, party, away, custom
@@ -48,6 +52,7 @@ class HabitusZone:
     enabled: bool = True
     priority: int = 0  # higher = more important
     settings: dict[str, Any] = field(default_factory=dict)
+    enabled_modules: set[str] = field(default_factory=set)  # modules active for this zone
 
 
 @dataclass
@@ -84,40 +89,75 @@ class ZoneOverview:
 # ── Predefined zone templates ──────────────────────────────────────────────
 
 _ZONE_TEMPLATES = {
-    "wohnbereich": {
+    "living": {
         "name": "Wohnbereich",
         "icon": "mdi:sofa",
         "rooms": ["wohnzimmer", "esszimmer"],
+        "zone_type": "living",
+        "enabled_modules": {"light", "motion", "music", "volume", "tv", "climate"},
     },
-    "badbereich": {
+    "bath": {
         "name": "Badbereich",
         "icon": "mdi:shower-head",
         "rooms": ["bad", "badezimmer", "toilette", "gäste-wc", "gaeste_wc"],
+        "zone_type": "bath",
+        "enabled_modules": {"light", "motion", "climate"},
     },
-    "schlafbereich": {
+    "bedroom": {
         "name": "Schlafbereich",
         "icon": "mdi:bed",
         "rooms": ["schlafzimmer", "kinderzimmer", "gästezimmer"],
+        "zone_type": "bedroom",
+        "enabled_modules": {"light", "motion", "music", "volume", "climate"},
     },
-    "küchenbereich": {
+    "kitchen": {
         "name": "Küchenbereich",
         "icon": "mdi:stove",
         "rooms": ["küche", "kueche", "speisekammer", "vorratskammer"],
+        "zone_type": "kitchen",
+        "enabled_modules": {"light", "motion", "music", "volume", "climate"},
     },
-    "eingangsbereich": {
+    "hallway": {
         "name": "Eingangsbereich",
         "icon": "mdi:door-open",
         "rooms": ["flur", "diele", "eingang", "garderobe"],
+        "zone_type": "hallway",
+        "enabled_modules": {"light", "motion", "camera"},
     },
-    "außenbereich": {
+    "outside": {
         "name": "Außenbereich",
         "icon": "mdi:tree",
         "rooms": ["garten", "terrasse", "balkon", "garage", "carport"],
+        "zone_type": "outside",
+        "enabled_modules": {"light", "motion", "camera"},
     },
-    "büro": {
+    "office": {
         "name": "Büro / Arbeitszimmer",
         "icon": "mdi:desk",
         "rooms": ["büro", "buero", "arbeitszimmer", "homeoffice"],
+        "zone_type": "office",
+        "enabled_modules": {"light", "motion", "music", "volume", "climate"},
+    },
+    "room_mira": {
+        "name": "Kinderzimmer Mira",
+        "icon": "mdi:baby-face-outline",
+        "rooms": ["kinderzimmer mira", "miras zimmer", "mira"],
+        "zone_type": "room_mira",
+        "enabled_modules": {"light", "motion", "music", "volume", "climate"},
+    },
+    "room_paul": {
+        "name": "Kinderzimmer Paul",
+        "icon": "mdi:teddy-bear",
+        "rooms": ["kinderzimmer paul", "pauls zimmer", "paul"],
+        "zone_type": "room_paul",
+        "enabled_modules": {"light", "motion", "music", "volume", "climate"},
+    },
+    "terrace": {
+        "name": "Terrasse / Balkon",
+        "icon": "mdi:balcony",
+        "rooms": ["terrasse", "balkon", "patio"],
+        "zone_type": "terrace",
+        "enabled_modules": {"light", "motion", "music", "volume", "camera"},
     },
 }
 
@@ -207,14 +247,18 @@ class HabitusZoneEngine:
     # ── Zone management ─────────────────────────────────────────────────
 
     def create_zone(self, zone_id: str, name: str, room_ids: list[str] | None = None,
-                    icon: str = "mdi:home-floor-1", priority: int = 0) -> HabitusZone:
+                    icon: str = "mdi:home-floor-1", priority: int = 0,
+                    zone_type: str = "living",
+                    enabled_modules: set[str] | None = None) -> HabitusZone:
         """Create a new Habitus Zone."""
         zone = HabitusZone(
             zone_id=zone_id,
             name=name,
+            zone_type=zone_type,
             rooms=room_ids or [],
             icon=icon,
             priority=priority,
+            enabled_modules=enabled_modules or set(),
         )
         self._refresh_zone_entities(zone)
         self._zones[zone_id] = zone
@@ -241,6 +285,8 @@ class HabitusZoneEngine:
             name=template["name"],
             room_ids=matched_rooms,
             icon=template["icon"],
+            zone_type=template.get("zone_type", "living"),
+            enabled_modules=set(template.get("enabled_modules", [])),
         )
         return zone
 
