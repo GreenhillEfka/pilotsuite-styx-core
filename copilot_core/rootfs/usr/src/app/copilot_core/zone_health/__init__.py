@@ -302,7 +302,222 @@ def get_store() -> ZoneHealthStore:
     return _store
 
 
+# ── Presence-Health Correlation ─────────────────────────────────────────────────
+
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from typing import Any
+
+
+@dataclass
+class PresenceHealthCorrelation:
+    """Correlation between presence and health for a zone."""
+    zone_id: str
+    zone_name: str
+    timestamp: datetime = field(default_factory=lambda: datetime.now(tz=timezone.utc))
+
+    # Presence inputs
+    presence_confidence: float = 0.0  # 0.0–1.0
+    is_occupied: bool = False
+    absence_minutes: float = 0.0
+
+    # Health inputs
+    health_score: float = 100.0
+    temperature: float | None = None
+    humidity: float | None = None
+    co2: float | None = None
+    air_quality: str = "unknown"
+
+    # Derived correlation
+    occupancy_impact: str = "neutral"   # positive | neutral | negative
+    absence_risk: str = "low"          # low | medium | high
+    recommended_action: str = "none"    # ventilate | climate_adjust | notify | none
+    confidence: float = 0.5
+
+    def to_dict(self) -> dict[str, Any]:
+        d = {
+            "zone_id": self.zone_id,
+            "zone_name": self.zone_name,
+            "timestamp": self.timestamp.isoformat(),
+            "presence_confidence": self.presence_confidence,
+            "is_occupied": self.is_occupied,
+            "absence_minutes": self.absence_minutes,
+            "health_score": self.health_score,
+            "temperature": self.temperature,
+            "humidity": self.humidity,
+            "co2": self.co2,
+            "air_quality": self.air_quality,
+            "occupancy_impact": self.occupancy_impact,
+            "absence_risk": self.absence_risk,
+            "recommended_action": self.recommended_action,
+            "confidence": self.confidence,
+        }
+        return d
+
+
+def correlate_presence_health(
+    zone_id: str,
+    zone_name: str,
+    *,
+    presence_confidence: float,
+    is_occupied: bool,
+    absence_minutes: float,
+    health_score: float,
+    temperature: float | None = None,
+    humidity: float | None = None,
+    co2: float | None = None,
+    air_quality: str = "unknown",
+) -> PresenceHealthCorrelation:
+    """Correlate presence and health metrics for a zone.
+
+    Combines occupancy state with environmental health data to produce
+    actionable recommendations.
+
+    Args:
+        zone_id: Zone identifier
+        zone_name: Human-readable zone name
+        presence_confidence: How confident we are about presence (0–1)
+        is_occupied: Whether zone is currently occupied
+        absence_minutes: Minutes since last detected presence
+        health_score: Zone health score 0–100
+        temperature: Current temperature (°C) or None
+        humidity: Current humidity (%) or None
+        co2: Current CO2 level (ppm) or None
+        air_quality: Air quality label (good/moderate/poor/unknown)
+
+    Returns:
+        PresenceHealthCorrelation with derived insights
+    """
+    corr = PresenceHealthCorrelation(
+        zone_id=zone_id,
+        zone_name=zone_name,
+        presence_confidence=presence_confidence,
+        is_occupied=is_occupied,
+        absence_minutes=absence_minutes,
+        health_score=health_score,
+        temperature=temperature,
+        humidity=humidity,
+        co2=co2,
+        air_quality=air_quality,
+    )
+
+    # ── Occupancy impact ────────────────────────────────────────────────────────
+    if is_occupied:
+        if health_score >= 75:
+            corr.occupancy_impact = "positive"
+        elif co2 is not None and co2 > 1000:
+            corr.occupancy_impact = "negative"
+        else:
+            corr.occupancy_impact = "neutral"
+    else:
+        corr.occupancy_impact = "neutral"
+
+    # ── Absence degradation risk ────────────────────────────────────────────────
+    if absence_minutes < 30:
+        corr.absence_risk = "low"
+    elif absence_minutes < 120:
+        corr.absence_risk = "medium" if health_score < 60 else "low"
+    else:  # >2h absence
+        if health_score < 50:
+            corr.absence_risk = "high"
+        elif temperature is not None and (temperature < 15 or temperature > 30):
+            corr.absence_risk = "high"
+        elif humidity is not None and (humidity < 20 or humidity > 80):
+            corr.absence_risk = "medium"
+        else:
+            corr.absence_risk = "low"
+
+    # ── Recommended action ─────────────────────────────────────────────────────
+    if is_occupied and health_score < 50:
+        if co2 is not None and co2 > 1200:
+            corr.recommended_action = "ventilate"
+        else:
+            corr.recommended_action = "notify"
+    elif is_occupied and health_score < 75:
+        if co2 is not None and co2 > 1000:
+            corr.recommended_action = "ventilate"
+        elif temperature is not None and (temperature < 18 or temperature > 26):
+            corr.recommended_action = "climate_adjust"
+        elif humidity is not None and (humidity < 30 or humidity > 70):
+            corr.recommended_action = "climate_adjust"
+        else:
+            corr.recommended_action = "none"
+    elif not is_occupied and health_score < 60:
+        corr.recommended_action = "notify"
+    else:
+        corr.recommended_action = "none"
+
+    # ── Confidence ─────────────────────────────────────────────────────────────
+    # Higher confidence when we have both presence AND health data
+    has_health = temperature is not None or co2 is not None or humidity is not None
+    if presence_confidence > 0.5 and has_health:
+        corr.confidence = 0.85
+    elif presence_confidence > 0.3 or has_health:
+        corr.confidence = 0.6
+    else:
+        corr.confidence = 0.3
+
+    return corr
+
+
+def get_presence_health_insights(
+    correlations: dict[str, PresenceHealthCorrelation],
+) -> dict[str, Any]:
+    """Generate aggregate insights from per-zone correlations.
+
+    Args:
+        correlations: Dict of zone_id → PresenceHealthCorrelation
+
+    Returns:
+        Dict with aggregate insights and per-zone recommendations
+    """
+    if not correlations:
+        return {
+            "total_zones": 0,
+            "occupied_zones": 0,
+            "zones_needing_action": 0,
+            "zones_with_poor_health": 0,
+            "recommendations": [],
+            "timestamp": datetime.now(tz=timezone.utc).isoformat(),
+        }
+
+    occupied = sum(1 for c in correlations.values() if c.is_occupied)
+    poor_health = sum(1 for c in correlations.values() if c.health_score < 50)
+    needing_action = sum(
+        1 for c in correlations.values() if c.recommended_action != "none"
+    )
+
+    recommendations = [
+        {
+            "zone_id": c.zone_id,
+            "zone_name": c.zone_name,
+            "action": c.recommended_action,
+            "reason": (
+                f"health={c.health_score:.0f}, "
+                f"presence={c.presence_confidence:.0%}, "
+                f"impact={c.occupancy_impact}"
+            ),
+            "confidence": c.confidence,
+        }
+        for c in correlations.values()
+        if c.recommended_action != "none"
+    ]
+
+    # Sort by confidence descending
+    recommendations.sort(key=lambda r: r["confidence"], reverse=True)
+
+    return {
+        "total_zones": len(correlations),
+        "occupied_zones": occupied,
+        "zones_needing_action": needing_action,
+        "zones_with_poor_health": poor_health,
+        "recommendations": recommendations,
+        "timestamp": datetime.now(tz=timezone.utc).isoformat(),
+    }
+
+
 __all__ = [
+    # Zone health
     "ZoneHealthMetrics",
     "ZoneHealthStore",
     "TEMP_COMFORT_MIN",
@@ -312,4 +527,8 @@ __all__ = [
     "CO2_GOOD_MAX",
     "CO2_MODERATE_MAX",
     "get_store",
+    # Presence-health correlation
+    "PresenceHealthCorrelation",
+    "correlate_presence_health",
+    "get_presence_health_insights",
 ]
