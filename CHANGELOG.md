@@ -2,6 +2,22 @@
 
 Alle wesentlichen Aenderungen am PilotSuite Styx Core werden in dieser Datei dokumentiert.
 
+## [v15.0.18] - 2026-03-25
+
+**PilotClaw Autonom-Entwicklung** (2026-03-24/25)
+
+**Paired mit:** HA v15.0.17 (同期)
+
+#### Added
+- **Entity Sorter**: `copilot_core/habitus/entity_sorter.py` — HA-Entity→Habitus-Zone Matching mit Keyword-basiertem Confidence-Score (0.0–1.0). Portiert von HA v15.0.0 `habitus_entity_sorting.py`. 12 Zonen-Mappings inkl. room_mira/room_paul. Threshold 0.5 → ungeordnet.
+- **Presence-Health Korrelation**: `copilot_core/zone_health/` erweitert um `PresenceHealthCorrelation`, `correlate_presence_health()` und `get_presence_health_insights()`. Leitet aus Presence+Health: occupancy_impact, absence_risk, recommended_action.
+- **S2TA Quick Wins (Ops)**: `services/cron_watchdog.py`, `utils/checkpoint.py`, `utils/dms.py` — Cron-Überwachung + Resume-Checkpoint + Dead-Man-Switch Adapter für SOTA-Scout.
+
+#### Changed
+- **CHANGELOG**: Struktur angepasst für Autonomous-Release-Workflow
+
+---
+
 ## [v15.0.17] - 2026-03-23
 
 ### HA+Core Version Sync (Post-v15.0.4 Alignment)
