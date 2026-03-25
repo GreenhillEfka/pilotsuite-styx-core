@@ -511,7 +511,7 @@ class ChatHandler:
         # ── 4. Recent events summary ─────────────────────────────────
         try:
             # Try the event store via events API singleton
-            from copilot_core.api.v1.events import _store as _get_event_store
+            from copilot_core.api.v1.events_ingest import get_store as _get_event_store
             store = _get_event_store()
             recent = store.list(limit=5)
             if recent:
