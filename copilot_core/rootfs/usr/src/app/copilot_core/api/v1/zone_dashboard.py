@@ -1075,36 +1075,26 @@ def execute_quick_action():
 def get_zone_detail(zone_id: str):
     """Detailansicht einer einzelnen Zone mit allen Moduldaten."""
     zone_id = zone_id if zone_id.startswith("zone:") else f"zone:{zone_id}"
-    zones = _get_habitus_zones()
-    zone = next((z for z in zones if z.get("zone_id") == zone_id), None)
-    if zone is None:
+    
+    # Slice 6: Use ZoneDetailReadModel for truth-backed zone data
+    zone_engine = _svc.get("habitus_zones")
+    zone_automation = _svc.get("zone_automation")
+    example = _get_example()
+    
+    zone_detail = build_zone_detail_read_model(
+        zone_engine, zone_id,
+        zone_automation=zone_automation,
+        example_data=example,
+    )
+    
+    if zone_detail is None:
         return jsonify({"ok": False, "error": "Zone not found"}), 404
-
-    entity_ids = zone.get("entity_ids", [])
-    entities_by_role = zone.get("entities_by_role", {})
-    scenes_data = zone.get("scenes", [])
-
-    zone_data: Dict[str, Any] = {
-        "zone_id": zone.get("zone_id"),
-        "name": zone.get("name"),
-        "name_de": zone.get("name_de", zone.get("name", zone_id)),
-        "name_en": zone.get("name_en", ""),
-        "zone_type": zone.get("zone_type", "room"),
-        "icon": zone.get("icon", ""),
-        "color": zone.get("color", ""),
-        "priority": zone.get("priority", 0),
-        "status": _get_zone_status(zone),
-        "person_count": _get_person_count(zone),
-        "entity_count": len(entity_ids),
-        "entity_counts_by_domain": _get_entity_count(zone),
-        "modules": _get_zone_module_data(zone_id),
-        "mood": _get_zone_mood(zone_id),
-        "quick_actions": _generate_quick_actions(zone),
-        "entity_ids": entity_ids,
-        "entities": entities_by_role,
-        "scenes": scenes_data,
-        "metadata": zone.get("metadata", {}),
-        "enabled": zone.get("enabled", True),
-        "updated_at": zone.get("updated_at"),
-    }
+    
+    # Enrich with modules and quick actions
+    zone_data: Dict[str, Any] = zone_detail.copy()
+    zone_data["modules"] = _get_zone_module_data(zone_id)
+    zone_data["mood"] = _get_zone_mood(zone_id)
+    zone_data["quick_actions"] = _generate_quick_actions(zone_data)
+    zone_data["entity_counts_by_domain"] = _get_entity_count(zone_data)
+    
     return jsonify({"ok": True, "zone": zone_data})
