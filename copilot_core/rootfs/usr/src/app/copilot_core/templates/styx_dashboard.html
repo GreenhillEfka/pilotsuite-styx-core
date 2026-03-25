@@ -235,6 +235,18 @@ a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
 
   <!-- Tab 5: Habituszonen -->
   <div class="tab-content" id="tab-zones">
+    <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+      <button class="btn" onclick="exportZonesYAML()">&#x1F4BE; YAML Export</button>
+      <button class="btn" onclick="showZonesImport()">&#x1F4C1; YAML Import</button>
+    </div>
+    <div id="zones-import-area" style="display:none;margin-bottom:14px" class="card">
+      <h3>&#x1F4C1; YAML Import</h3>
+      <textarea id="yaml-import-text" rows="6" style="width:100%;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px;font-family:monospace;font-size:11px" placeholder="Zone YAML hier einfügen..."></textarea>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <button class="btn" onclick="doZonesImport()">&#x2714; Importieren</button>
+        <button class="btn" onclick="showZonesImport()">Abbrechen</button>
+      </div>
+    </div>
     <div class="grid g2" id="zones-grid"></div>
     <div class="card" style="margin-top:16px">
       <h3>&#x1F3F7; Tag-System</h3>
@@ -422,6 +434,7 @@ async function loadZones() {
   const [dashboard, schemas, tags] = await Promise.all([fetchJSON('/api/v1/zone-automation/dashboard'), fetchJSON('/api/v1/zone-automation/module-schemas'), fetchJSON('/api/v1/zone-automation/tags')]);
   if (schemas?.schemas) moduleSchemas = schemas.schemas;
   const zones = dashboard?.zones || [], el = $('zones-grid');
+  window._cachedZones = zones; // cache for YAML export
   el.innerHTML = zones.map(z => {
     const zid = z.zone_id || '', cfg = z.config || {}, state = z.state || {};
     const mode = cfg.automation_mode || state.automation_mode || 'off';
@@ -447,6 +460,10 @@ function renderF(zid, mid, f, cfg) {
 }
 function toggleMod(hd) { const b = hd.nextElementSibling, a = hd.querySelector('.zm-arrow'); b.classList.toggle('open'); a.style.transform = b.classList.contains('open') ? 'rotate(90deg)' : ''; }
 async function setMF(zid, mid, key, val) { await postJSON(`/api/v1/zone-automation/zones/${zid}/config`, { modules: { [mid]: { [key]: val } } }); }
+function showZonesImport() { const el = $('zones-import-area'); el.style.display = el.style.display === 'none' ? 'block' : 'none'; }
+function zoneToYAML(z) { const cfg = z.config || {}, state = z.state || {}; let y = `# ${z.zone_id}\n`; y += `zone_id: "${z.zone_id}"\n`; if (cfg.zone_name) y += `zone_name: "${cfg.zone_name}"\n`; if (cfg.automation_mode) y += `automation_mode: ${cfg.automation_mode}\n`; if (cfg.modules) { y += `modules:\n`; for (const [mid, mc] of Object.entries(cfg.modules)) { y += `  ${mid}:\n`; for (const [k, v] of Object.entries(mc)) { if (k !== 'enabled') y += `    ${k}: ${typeof v === 'string' ? `"${v}"` : v}\n`; } } } return y; }
+function exportZonesYAML() { const zones = window._cachedZones || []; if (!zones.length) { alert('Keine Zonen zum Exportieren'); return; } const yaml = zones.map(z => zoneToYAML(z)).join('\n---\n\n'); const blob = new Blob([yaml], {type: 'text/plain'}); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `zones_export_${new Date().toISOString().slice(0,10)}.yaml`; a.click(); }
+async function doZonesImport() { const text = $('yaml-import-text').value.trim(); if (!text) return; try { const res = await postJSON('/api/v1/zone-automation/import', {yaml: text}); alert('Import erfolgreich: ' + res.imported + ' Zonen'); showZonesImport(); if (activeTab === 'zones') loadZones(); } catch(e) { alert('Import fehlgeschlagen: ' + e.message); } }
 
 // ══════════════════════════════════════════════════════════════════════
 // TAB 6: STATUS
