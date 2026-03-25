@@ -23,6 +23,12 @@ from typing import Any, Callable, Dict, List, Optional
 from flask import Blueprint, jsonify, request
 
 from copilot_core.api.security import require_token
+from copilot_core.core.dashboard_read_models import (
+    build_zone_summary_read_model,
+    build_zone_detail_read_model,
+    build_module_read_model,
+    build_system_overview_read_model,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -54,6 +60,7 @@ def init_zone_dashboard_api(**services: Any) -> None:
         "hub_light_intel", "hub_presence_intel", "hub_media",
         "hub_modes", "hub_scenes", "hub_energy",
         "hub_notifications", "hub_musikwolke",
+        "habitus_zones",
     )
     wired = sum(1 for k in engine_keys if _svc.get(k))
     _LOGGER.info(
@@ -876,9 +883,13 @@ def get_dashboard():
     include_actions = _parse_bool_param("include_actions")
     include_modules = _parse_bool_param("include_modules")
 
-    zones = _get_habitus_zones()
+    # Slice 6: ZoneSummaryReadModel as truth base for zone list
+    zone_engine = _svc.get("habitus_zones")
+    example = _get_example()
+    zone_summary = build_zone_summary_read_model(zone_engine, example_data=example)
+    zones_rm = zone_summary.get("zones", [])
     dashboard_zones = []
-    for zone in zones:
+    for zone in zones_rm:
         zid = zone.get("zone_id", "")
         zone_data: Dict[str, Any] = {
             "zone_id": zid,
@@ -891,10 +902,13 @@ def get_dashboard():
             "priority": zone.get("priority", 0),
             "status": _get_zone_status(zone),
             "person_count": _get_person_count(zone),
-            "entity_count": len(zone.get("entity_ids", [])),
+            "entity_count": zone.get("entity_count", 0),
             "entity_counts_by_domain": _get_entity_count(zone),
             "enabled": zone.get("enabled", True),
-            "updated_at": zone.get("updated_at"),
+            "_read_model": {
+                "freshness": zone_summary.get("freshness", ""),
+                "source": zone_summary.get("source", ""),
+            },
         }
         if include_modules:
             zone_data["modules"] = _get_zone_module_data(zid)
