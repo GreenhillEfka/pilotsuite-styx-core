@@ -416,3 +416,198 @@ PRESENCE_NEURON_CLASSES = {
     "motion_presence": MotionPresenceNeuron,
     "combined_presence": CombinedPresenceNeuron,
 }
+
+
+# -----------------------------------------------------------------------------
+# Zone Presence API (Synapse Layer Integration)
+# -----------------------------------------------------------------------------
+
+class ZonePresenceManager:
+    """Bridge zwischen Presence-Neuronen und Habitus-Zonen.
+
+    Ermöglicht zonen-basierte Präsenzerkennung:
+    - Tracking von Person/Entity-Präsenz pro Zone
+    - Konfidenz-basierte Aggregierung
+    - Schnittstelle zu habitus_zones für Automation-Trigger
+    """
+
+    def __init__(self) -> None:
+        self._zone_presence: Dict[str, Dict[str, Any]] = {}
+        self._zone_callbacks: List[Callable[[str, bool, float], None]] = []
+
+    def register_zone(
+        self,
+        zone_id: str,
+        entity_ids: List[str],
+        mmwave_entities: Optional[List[str]] = None,
+        motion_entities: Optional[List[str]] = None,
+    ) -> None:
+        """Register a zone for presence tracking.
+
+        Args:
+            zone_id: Zone identifier (e.g. "living_room")
+            entity_ids: All HA entity IDs relevant for this zone
+            mmwave_entities: mmWave sensor entity IDs (optional)
+            motion_entities: Motion sensor entity IDs (optional)
+        """
+        self._zone_presence[zone_id] = {
+            "entity_ids": entity_ids,
+            "mmwave_entities": mmwave_entities or [],
+            "motion_entities": motion_entities or [],
+            "presence": False,
+            "confidence": 0.0,
+            "last_seen": None,
+            "last_changed": datetime.now(timezone.utc).isoformat(),
+        }
+        _LOGGER.info("Zone %s registered for presence tracking", zone_id)
+
+    def update_from_neuron(
+        self,
+        zone_id: str,
+        presence: bool,
+        confidence: float,
+        source: str = "neuron",
+    ) -> bool:
+        """Update zone presence from a neuron evaluation.
+
+        Args:
+            zone_id: Zone identifier
+            presence: Detected presence
+            confidence: Detection confidence (0.0-1.0)
+            source: Source of update (e.g. "neuron", "mmwave", "motion")
+
+        Returns:
+            True if presence state changed
+        """
+        if zone_id not in self._zone_presence:
+            _LOGGER.warning("Zone %s not registered for presence tracking", zone_id)
+            return False
+
+        zone = self._zone_presence[zone_id]
+        old_presence = zone["presence"]
+
+        # Update with weighted confidence
+        zone["presence"] = presence
+        zone["confidence"] = confidence
+        zone["last_seen"] = datetime.now(timezone.utc).isoformat()
+        zone["source"] = source
+
+        changed = old_presence != presence
+        if changed:
+            zone["last_changed"] = datetime.now(timezone.utc).isoformat()
+            _LOGGER.info(
+                "Zone %s presence changed: %s -> %s (confidence=%.2f, source=%s)",
+                zone_id, old_presence, presence, confidence, source
+            )
+            # Trigger callbacks
+            for cb in self._zone_callbacks:
+                try:
+                    cb(zone_id, presence, confidence)
+                except Exception as exc:
+                    _LOGGER.warning("Zone callback failed: %s", exc)
+
+        return changed
+
+    def get_zone_presence(self, zone_id: str) -> Dict[str, Any]:
+        """Get current presence state for a zone.
+
+        Returns:
+            {
+                "presence": bool,
+                "confidence": float,
+                "last_seen": str | None,
+                "last_changed": str,
+            }
+        """
+        if zone_id not in self._zone_presence:
+            return {
+                "presence": False,
+                "confidence": 0.0,
+                "last_seen": None,
+                "last_changed": None,
+            }
+        return {
+            "presence": self._zone_presence[zone_id]["presence"],
+            "confidence": self._zone_presence[zone_id]["confidence"],
+            "last_seen": self._zone_presence[zone_id]["last_seen"],
+            "last_changed": self._zone_presence[zone_id]["last_changed"],
+        }
+
+    def get_all_zones(self) -> Dict[str, Dict[str, Any]]:
+        """Get presence state for all registered zones."""
+        return {
+            zone_id: {
+                "presence": data["presence"],
+                "confidence": data["confidence"],
+                "last_seen": data["last_seen"],
+                "last_changed": data["last_changed"],
+            }
+            for zone_id, data in self._zone_presence.items()
+        }
+
+    def get_automation_neurons(self, zone_id: str) -> List[str]:
+        """Get neuron IDs associated with zone automations.
+
+        Used by Synapse Integration to find affected automations
+        when zone presence changes.
+        """
+        if zone_id not in self._zone_presence:
+            return []
+        # Return all entity IDs that can trigger zone automations
+        return self._zone_presence[zone_id].get("entity_ids", [])
+
+    def get_zone_synapses(self, zone_id: str) -> Dict[str, Any]:
+        """Get full Synapse map for a zone.
+
+        Returns:
+            Dict with:
+                - zone_id
+                - neurons: list of neuron IDs in zone
+                - presence: current presence state
+                - entity_map: HA entity_id -> neuron_id
+        """
+        if zone_id not in self._zone_presence:
+            return {
+                "zone_id": zone_id,
+                "neurons": [],
+                "presence": None,
+                "entity_map": {},
+            }
+
+        data = self._zone_presence[zone_id]
+        entity_map = {
+            eid: f"presence.{eid.replace('.', '_')}"
+            for eid in data["entity_ids"]
+        }
+
+        return {
+            "zone_id": zone_id,
+            "neurons": data["entity_ids"],
+            "presence": {
+                "detected": data["presence"],
+                "confidence": data["confidence"],
+                "last_seen": data["last_seen"],
+            },
+            "entity_map": entity_map,
+        }
+
+    def on_zone_presence_change(
+        self, callback: Callable[[str, bool, float], None]
+    ) -> None:
+        """Register a callback for zone presence changes.
+
+        Callback receives: (zone_id: str, presence: bool, confidence: float)
+        """
+        self._zone_callbacks.append(callback)
+
+
+# Global singleton
+_zone_presence_manager: Optional[ZonePresenceManager] = None
+
+
+def get_zone_presence_manager() -> ZonePresenceManager:
+    """Get the global ZonePresenceManager instance."""
+    global _zone_presence_manager
+    if _zone_presence_manager is None:
+        _zone_presence_manager = ZonePresenceManager()
+    return _zone_presence_manager

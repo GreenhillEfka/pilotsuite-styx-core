@@ -1367,6 +1367,7 @@ def register_blueprints(app: Flask, services: dict) -> None:
         # NOTE: sonos_bp is registered individually below (after init_sonos_api wiring)
         ("copilot_core.api.v1.module_control",   "module_control_bp",    None),
         ("copilot_core.api.v1.rag",              "bp",                   None),
+        ("copilot_core.api.v1.synapse",          "bp",                   "/api/v1/synapse"),
         ("copilot_core.api.v1.styx_chat",        "bp",                   None),
         ("copilot_core.api.v1.mcp",              "bp",                   None),
         # ── Previously nested in api_v1 (blueprint.py) — now flat ──────

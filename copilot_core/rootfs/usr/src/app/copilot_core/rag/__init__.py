@@ -6,6 +6,7 @@ Now includes SearXNG web search integration and query routing.
 
 from .bm25 import BM25Document, BM25Hit, BM25SqliteIndex
 from .hybrid_search import FusedHit, RankedHit, reciprocal_rank_fusion
+from .indexer import IndexManager, NamespaceInfo, NamespaceStats
 try:
     from .searxng_client import SearXNGClient, SearXNGResult, get_searxng_client
 except ImportError:
@@ -27,4 +28,7 @@ __all__ = [
     "QueryType",
     "QueryClassification",
     "classify_query",
+    "IndexManager",
+    "NamespaceInfo",
+    "NamespaceStats",
 ]

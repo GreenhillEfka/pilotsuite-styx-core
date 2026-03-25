@@ -469,9 +469,13 @@ def _build_result_entry(
 # ENDPOINT 1: POST /api/rag/search  –  Hybrid Search (BM25 + Semantic + RRF)
 # ══════════════════════════════════════════════════════════════════════════
 
-@bp.route("/search", methods=["POST"])
+@bp.route("/search", methods=["GET", "POST"])
 def rag_search() -> Tuple[Any, int] | Any:
     """Hybrid search combining BM25 lexical and semantic results via RRF.
+    
+    Supports both GET and POST:
+    - GET: /api/v1/rag/search?q=<query>&namespace=<ns>&top_k=<k>
+    - POST: JSON body with {query, namespace, top_k, ...}
     
     Results are cached with TTL=600s (10 min) for improved performance.
     Cache hit rate target: >80% for frequently accessed queries.
@@ -487,8 +491,25 @@ def rag_search() -> Tuple[Any, int] | Any:
     cache_hit = False
 
     try:
-        data: Dict[str, Any] = request.get_json(silent=True) or {}
-        namespace = str(data.get("namespace", "default") or "default")
+        # Handle GET vs POST
+        if request.method == "GET":
+            namespace = str(request.args.get("namespace", "default") or "default")
+            query = str(request.args.get("q", request.args.get("query", ""))).strip()
+            data: Dict[str, Any] = {
+                "namespace": namespace,
+                "query": query,
+                "top_k": request.args.get("top_k", 10),
+                "use_lexical": request.args.get("use_lexical", "true").lower() in ("true", "1", "yes"),
+                "use_semantic": request.args.get("use_semantic", "true").lower() in ("true", "1", "yes"),
+                "include_text": request.args.get("include_text", "true").lower() in ("true", "1", "yes"),
+                "include_metadata": request.args.get("include_metadata", "true").lower() in ("true", "1", "yes"),
+                "rrf_k": request.args.get("rrf_k", 60),
+                "lexical_weight": request.args.get("lexical_weight", 1.0),
+                "semantic_weight": request.args.get("semantic_weight", 1.0),
+            }
+        else:
+            data = request.get_json(silent=True) or {}
+            namespace = str(data.get("namespace", "default") or "default")
         
         # Namespace validation
         if not _validate_namespace(namespace):
