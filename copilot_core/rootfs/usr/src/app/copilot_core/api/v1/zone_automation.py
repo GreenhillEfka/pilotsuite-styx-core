@@ -365,9 +365,9 @@ def search_entities():
 @zone_automation_bp.route("/import", methods=["POST"])
 @require_token
 def import_entities():
-    """Import entities from example config or custom data.
+    """Import entities from example config, custom data, or YAML.
 
-    Body: {"source": "example"} or {"zones": {"zone_id": {"role": ["entity_id", ...]}}}
+    Body: {"source": "example"} or {"zones": {...}} or {"yaml": "zone_id: ..."}
     """
     if _controller is None:
         return jsonify({"ok": False, "error": "Controller not initialized"}), 503
@@ -384,7 +384,26 @@ def import_entities():
         count = _controller.import_from_example_config(zones)
         return jsonify({"ok": True, "imported": count, "source": "custom"})
 
-    return jsonify({"ok": False, "error": "Provide 'source': 'example' or 'zones' dict"}), 400
+    # YAML import support
+    yaml_text = data.get("yaml") or data.get("yaml_text")
+    if yaml_text and isinstance(yaml_text, str):
+        try:
+            import yaml as yaml_lib
+            parsed = yaml_lib.safe_load_all(yaml_text)
+            imported_count = 0
+            for doc in parsed:
+                if isinstance(doc, dict) and doc.get("zone_id"):
+                    zone_entry = {doc["zone_id"]: doc}
+                    try:
+                        _controller.import_from_example_config(zone_entry)
+                        imported_count += 1
+                    except Exception:
+                        pass
+            return jsonify({"ok": True, "imported": imported_count, "source": "yaml"})
+        except Exception as e:
+            return jsonify({"ok": False, "error": f"YAML parse error: {e}"}), 400
+
+    return jsonify({"ok": False, "error": "Provide 'source': 'example', 'zones' dict, or 'yaml' text"}), 400
 
 
 # ── Ensure Zones ────────────────────────────────────────────────────────────
