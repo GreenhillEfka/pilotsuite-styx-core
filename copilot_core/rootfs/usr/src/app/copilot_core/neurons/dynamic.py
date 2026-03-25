@@ -577,3 +577,86 @@ class DynamicNeuronFactory:
         b = module_b.replace(".", "_")
         parts = sorted([a, b])
         return f"dynamic.{parts[0]}_x_{parts[1]}"
+
+    # -------------------------------------------------------------------------
+    # Entity-driven neuron creation (used by NeuronFeeder)
+    # -------------------------------------------------------------------------
+
+    def create_for_entity(
+        self,
+        entity_id: str,
+        neuron_id: str,
+        neuron_type: str,
+    ) -> Optional[DynamicMetaNeuron]:
+        """Create or ensure a dynamic neuron exists for a HA entity.
+
+        Called by NeuronFeeder when a new entity_id is encountered that
+        has no Synapse Contract yet.
+
+        Args:
+            entity_id: HA entity_id (e.g. "light.living_room")
+            neuron_id: Target neuron_id (e.g. "state.light_living_room")
+            neuron_type: Neuron type string (e.g. "context", "state", "presence")
+
+        Returns:
+            The created or existing DynamicMetaNeuron, or None if the type
+            is not handled / max limit reached.
+        """
+        # Only create meta-layer dynamic neurons (Layer 3)
+        # Direct entity neurons are created by NeuronFeeder's contract
+        # This hook is for cross-entity meta patterns discovered later
+        safe_name = neuron_id.replace(".", "_").replace(" ", "_")
+        meta_neuron_id = f"meta.entity_{safe_name}"
+
+        # Check if already exists
+        with self._lock:
+            if meta_neuron_id in self._dynamic_neurons:
+                return self._dynamic_neurons[meta_neuron_id]
+            if len(self._dynamic_neurons) >= self._max_neurons:
+                return None
+
+        # Build config for a context-type meta neuron
+        config = NeuronConfig(
+            name=f"meta.entity_{safe_name}",
+            neuron_type=NeuronType.CONTEXT,
+            threshold=0.5,
+            decay_rate=RELEVANCE_DECAY_RATE,
+            smoothing_factor=0.2,
+            entity_ids=[entity_id],
+            weights={},
+            enabled=True,
+        )
+
+        neuron = DynamicMetaNeuron(
+            config=config,
+            source_neurons=[neuron_id],  # aggregates the direct entity neuron
+            source_weights={neuron_id: 1.0},
+            relevance=0.8,  # start with high relevance for entity-driven neurons
+        )
+
+        with self._lock:
+            self._dynamic_neurons[meta_neuron_id] = neuron
+
+        # Register with NeuronManager if available
+        if self._neuron_manager:
+            self._neuron_manager.add_neuron("context", meta_neuron_id, neuron)
+            _LOGGER.info("Entity-driven dynamic neuron registered: %s", meta_neuron_id)
+
+        # Persist
+        self._save_persisted()
+
+        return neuron
+
+    def get_dynamic_neuron(self, neuron_id: str) -> Optional[DynamicMetaNeuron]:
+        """Return a specific dynamic neuron by ID."""
+        with self._lock:
+            return self._dynamic_neurons.get(neuron_id)
+
+    def get_by_type(self, neuron_type: str) -> List[Dict[str, Any]]:
+        """Return all dynamic neurons filtered by their type field."""
+        with self._lock:
+            return [
+                n.to_dict()
+                for n in self._dynamic_neurons.values()
+                if n.config.neuron_type.value == neuron_type
+            ]

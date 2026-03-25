@@ -235,6 +235,14 @@ def create_app() -> Flask:
     except Exception:
         logging.getLogger(__name__).exception("Failed to register Styx Chat API blueprint")
 
+    # Synapse Layer API endpoints (/api/v1/synapse/*, /api/v1/presence/*)
+    try:
+        from copilot_core.api.v1.synapse_api import bp as synapse_bp
+        app.register_blueprint(synapse_bp)
+        logging.getLogger(__name__).info("Synapse Layer API registered")
+    except Exception:
+        logging.getLogger(__name__).exception("Failed to register Synapse Layer API blueprint")
+
     # Initialize Tags API v2 (FIX: Flask Blueprint rewrite)
     from copilot_core.tags.api import init_tags_api
     from copilot_core.tags import TagRegistry

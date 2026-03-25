@@ -613,3 +613,34 @@ def get_zone_keywords() -> Dict[str, ZoneType]:
         for keyword in zone.get_all_keywords():
             keyword_map[keyword.lower()] = zone.zone_type
     return keyword_map
+
+
+# Lazy imports to avoid circular dependencies
+def get_automation_neurons(zone_id: str) -> List[str]:
+    """Gibt Neuron-IDs zurück, die zu Zonen-Automations gehören.
+    
+    Args:
+        zone_id: Zone identifier (z.B. "living", "bath", etc.)
+    
+    Returns:
+        Liste von Neuron-IDs
+    """
+    from copilot_core.neurons.presence import get_zone_presence_manager
+    return get_zone_presence_manager().get_automation_neurons(zone_id)
+
+
+def get_zone_synapses(zone_id: str) -> Dict[str, Any]:
+    """Gibt die vollständige Synapsen-Map für eine Zone zurück.
+    
+    Args:
+        zone_id: Zone identifier
+    
+    Returns:
+        Dict mit:
+            - zone_id
+            - neurons: Liste der Neuron-IDs
+            - presence: Aktueller Präsenz-Status
+            - entity_map: HA entity_id -> neuron_id Mapping
+    """
+    from copilot_core.neurons.presence import get_zone_presence_manager
+    return get_zone_presence_manager().get_zone_synapses(zone_id)
