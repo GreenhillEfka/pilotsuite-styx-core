@@ -12,12 +12,16 @@ from __future__ import annotations
 
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
+import json
 import sys
+
+from flask import Flask
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CORE_APP_ROOT = REPO_ROOT / "copilot_core" / "rootfs" / "usr" / "src" / "app"
 HA_REPO_ROOT = REPO_ROOT.parent / "pilotsuite-styx-ha"
+SANDBOX_ROOT = REPO_ROOT.parent.parent / "workspaces" / "pilotsuite-stxy-sandbox"
 HABITAT_ADAPTER_PATH = HA_REPO_ROOT / "custom_components" / "copilot_ha" / "habitat_adapter.py"
 
 path_str = str(CORE_APP_ROOT)
@@ -26,6 +30,11 @@ if CORE_APP_ROOT.exists() and path_str not in sys.path:
 
 
 from copilot_core.core.taxonomy import classify_entity  # noqa: E402
+from copilot_core.api.v1.zone_automation import (  # noqa: E402
+    init_zone_automation_api,
+    sync_zone_definitions,
+)
+from copilot_core.hub.zone_automation import ZoneAutomationController  # noqa: E402
 
 
 _adapter_spec = spec_from_file_location("workspace_habitat_adapter", HABITAT_ADAPTER_PATH)
@@ -36,6 +45,11 @@ _adapter_spec.loader.exec_module(_habitat_adapter)
 build_call_service_forward_item = _habitat_adapter.build_call_service_forward_item
 build_state_changed_forward_item = _habitat_adapter.build_state_changed_forward_item
 normalize_received_webhook_payload = _habitat_adapter.normalize_received_webhook_payload
+
+
+def _load_sandbox_fixture(relative_path: str) -> dict:
+    with (SANDBOX_ROOT / relative_path).open("r", encoding="utf-8") as handle:
+        return json.load(handle)
 
 
 def test_workspace_state_changed_payload_is_core_classifiable() -> None:
@@ -106,3 +120,34 @@ def test_workspace_core_suggestion_normalizes_back_to_ha_command() -> None:
     assert payload["proposal_intent"]["action_type"] == "light.turn_on"
     assert payload["module_command"]["target"]["entity_id"] == classification.entity_id
     assert payload["module_command"]["payload"]["brightness_pct"] == 35
+
+
+
+def test_workspace_zone_sync_fixture_binds_to_core_api_contract() -> None:
+    fixture = _load_sandbox_fixture("fixtures/ha_events/zone_definitions.json")
+
+    controller = ZoneAutomationController()
+    init_zone_automation_api(controller)
+
+    app = Flask(__name__)
+    app.config["TESTING"] = True
+
+    with app.test_request_context(
+        "/api/v1/zone-automation/sync-definitions",
+        method="POST",
+        json=fixture,
+    ):
+        response = sync_zone_definitions.__wrapped__()
+
+    body = response.get_json()
+    assert body["ok"] is True
+    assert body["count"] == 2
+    assert sorted(body["synced"]) == ["badbereich", "wohnbereich"]
+
+    wohn = controller.get_zone_config("wohnbereich")
+    bad = controller.get_zone_config("badbereich")
+    assert wohn.zone_name == "Wohnbereich"
+    assert wohn.zone_type == "living"
+    assert len(getattr(wohn, "_ha_entities", [])) == 2
+    assert bad.zone_name == "Badbereich"
+    assert bad.zone_type == "bath"
