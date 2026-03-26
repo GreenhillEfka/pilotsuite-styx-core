@@ -10,6 +10,7 @@ workspace without depending on Home Assistant installation state.
 
 from __future__ import annotations
 
+from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
 import sys
 
@@ -17,19 +18,24 @@ import sys
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CORE_APP_ROOT = REPO_ROOT / "copilot_core" / "rootfs" / "usr" / "src" / "app"
 HA_REPO_ROOT = REPO_ROOT.parent / "pilotsuite-styx-ha"
+HABITAT_ADAPTER_PATH = HA_REPO_ROOT / "custom_components" / "copilot_ha" / "habitat_adapter.py"
 
-for path in (CORE_APP_ROOT, HA_REPO_ROOT):
-    path_str = str(path)
-    if path.exists() and path_str not in sys.path:
-        sys.path.insert(0, path_str)
+path_str = str(CORE_APP_ROOT)
+if CORE_APP_ROOT.exists() and path_str not in sys.path:
+    sys.path.insert(0, path_str)
 
 
 from copilot_core.core.taxonomy import classify_entity  # noqa: E402
-from custom_components.copilot_ha.habitat_adapter import (  # noqa: E402
-    build_call_service_forward_item,
-    build_state_changed_forward_item,
-    normalize_received_webhook_payload,
-)
+
+
+_adapter_spec = spec_from_file_location("workspace_habitat_adapter", HABITAT_ADAPTER_PATH)
+assert _adapter_spec and _adapter_spec.loader, f"missing habitat adapter at {HABITAT_ADAPTER_PATH}"
+_habitat_adapter = module_from_spec(_adapter_spec)
+_adapter_spec.loader.exec_module(_habitat_adapter)
+
+build_call_service_forward_item = _habitat_adapter.build_call_service_forward_item
+build_state_changed_forward_item = _habitat_adapter.build_state_changed_forward_item
+normalize_received_webhook_payload = _habitat_adapter.normalize_received_webhook_payload
 
 
 def test_workspace_state_changed_payload_is_core_classifiable() -> None:
