@@ -25,6 +25,7 @@ from .presence import (
     mmWavePresenceNeuron, MotionPresenceNeuron, CombinedPresenceNeuron,
     create_mmwave_presence_neuron, create_motion_presence_neuron,
     create_combined_presence_neuron, PRESENCE_NEURON_CLASSES,
+    ZonePresenceManager, get_zone_presence_manager,
 )
 from .energy import (
     PVForecastNeuron as EnergyPVForecastNeuron,
@@ -51,6 +52,9 @@ from .dynamic import (
 from .mood_history import (
     MoodHistoryStore, get_mood_history_store, reset_mood_history_store,
 )
+from .feeding import (
+    NeuronFeeder, FeedEvent, FeedResult, SynapseContract,
+)
 
 __all__ = [
     # Manager
@@ -58,7 +62,7 @@ __all__ = [
     "get_neuron_manager",
     # Base classes
     "BaseNeuron",
-    "NeuronState", 
+    "NeuronState",
     "NeuronConfig",
     "NeuronType",
     "MoodType",
@@ -104,6 +108,8 @@ __all__ = [
     "create_motion_presence_neuron",
     "create_combined_presence_neuron",
     "PRESENCE_NEURON_CLASSES",
+    "ZonePresenceManager",
+    "get_zone_presence_manager",
     # Energy neurons
     "EnergyPVForecastNeuron",
     "EnergyCostNeuron",
@@ -139,4 +145,9 @@ __all__ = [
     "MoodHistoryStore",
     "get_mood_history_store",
     "reset_mood_history_store",
+    # Synapse Feeding
+    "NeuronFeeder",
+    "FeedEvent",
+    "FeedResult",
+    "SynapseContract",
 ]
