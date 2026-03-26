@@ -6,6 +6,7 @@ SANDBOX_ROOT="$(cd "$ROOT/../.." && pwd)/workspaces/pilotsuite-stxy-sandbox"
 HANDOFF_DIR="$SANDBOX_ROOT/handoff"
 OUT="$HANDOFF_DIR/core_workspace_target.json"
 PAIR_OUT="$HANDOFF_DIR/core_release_pairing.json"
+EVIDENCE_OUT="$HANDOFF_DIR/core_workspace_harness_evidence.json"
 
 mkdir -p "$HANDOFF_DIR"
 
@@ -20,10 +21,28 @@ CORE_HANDOFF="$ROOT/docs/CORE_CONCEPT_HANDOFF.md"
 HA_REVIEW_GATE="/config/clawd/team/repos/pilotsuite-styx-ha/scripts/release_review_gate.sh"
 HA_HANDOFF_SUMMARY="/config/clawd/team/repos/pilotsuite-styx-ha/scripts/release_handoff_summary.sh"
 SANDBOX_HANDOFF="$SANDBOX_ROOT/handoff/2026-03-26_core_contract_harness_handoff.md"
+RUNNER_PATH="$ROOT/scripts/run_workspace_ha_core_contract_tests.sh"
+TEST_FILE_PATH="$ROOT/tests/integration/test_workspace_ha_core_contract.py"
 
 RECENT_COMMITS_JSON="$({
   printf '%s\n' "$RECENT_COMMITS" | awk '{printf "    \"%s\"", $0; if (NR < lines) printf ","; printf "\n"}' lines="$(printf '%s\n' "$RECENT_COMMITS" | wc -l)"
 })"
+
+if command -v python3 >/dev/null 2>&1; then
+  PYTHON3_AVAILABLE=true
+else
+  PYTHON3_AVAILABLE=false
+fi
+
+if python3 -c "import pytest" >/dev/null 2>&1 2>/dev/null; then
+  PYTEST_AVAILABLE=true
+  EVIDENCE_STATUS="runnable"
+  EVIDENCE_NEXT_ACTION="run workspace harness and capture result in this file"
+else
+  PYTEST_AVAILABLE=false
+  EVIDENCE_STATUS="awaiting_workspace_pytest"
+  EVIDENCE_NEXT_ACTION="provide python3+pytest in workspace environment, then run $RUNNER_PATH"
+fi
 
 cat > "$OUT" <<EOF
 {
@@ -33,8 +52,8 @@ cat > "$OUT" <<EOF
   "head_commit": "$HEAD_COMMIT",
   "status": "$AHEAD_STATUS",
   "workspace_harness": {
-    "runner": "$ROOT/scripts/run_workspace_ha_core_contract_tests.sh",
-    "test_file": "$ROOT/tests/integration/test_workspace_ha_core_contract.py",
+    "runner": "$RUNNER_PATH",
+    "test_file": "$TEST_FILE_PATH",
     "requirements_note": "python3 + pytest in workspace environment",
     "coverage": [
       "ha_to_core state_changed canonical",
@@ -52,7 +71,8 @@ cat > "$OUT" <<EOF
       "$SANDBOX_ROOT/fixtures/ha_events/call_service.json",
       "$SANDBOX_ROOT/fixtures/ha_events/zone_definitions.json"
     ],
-    "handoff_note": "$SANDBOX_HANDOFF"
+    "handoff_note": "$SANDBOX_HANDOFF",
+    "evidence_file": "$EVIDENCE_OUT"
   },
   "recent_commits": [
 $RECENT_COMMITS_JSON
@@ -84,6 +104,7 @@ cat > "$PAIR_OUT" <<EOF
   "shared_workspace_inputs": {
     "core_workspace_target": "$OUT",
     "core_handoff_note": "$SANDBOX_HANDOFF",
+    "core_harness_evidence": "$EVIDENCE_OUT",
     "fixtures": [
       "$SANDBOX_ROOT/fixtures/ha_events/canonical_state_changed.json",
       "$SANDBOX_ROOT/fixtures/ha_events/legacy_state_changed.json",
@@ -94,10 +115,42 @@ cat > "$PAIR_OUT" <<EOF
   "ha_release_pairing_expectations": {
     "review_gate": "$HA_REVIEW_GATE",
     "handoff_summary": "$HA_HANDOFF_SUMMARY",
-    "pairing_rule": "HA release candidate should reference this Core target plus shared sandbox harness surfaces; no live-install claim implied"
+    "pairing_rule": "HA release candidate should reference this Core target plus shared sandbox harness surfaces and evidence file; no live-install claim implied"
   }
+}
+EOF
+
+cat > "$EVIDENCE_OUT" <<EOF
+{
+  "generated_at_utc": "$TIMESTAMP",
+  "owner_lane": "PilotClaw",
+  "core_target_commit": "$HEAD_COMMIT",
+  "runner": "$RUNNER_PATH",
+  "test_file": "$TEST_FILE_PATH",
+  "environment": {
+    "python3_available": $PYTHON3_AVAILABLE,
+    "pytest_available": $PYTEST_AVAILABLE
+  },
+  "status": "$EVIDENCE_STATUS",
+  "coverage_expectation": [
+    "ha_to_core canonical state_changed",
+    "ha_to_core legacy state_changed fallback lane",
+    "ha_to_core call_service",
+    "ha_to_core zone sync",
+    "core_to_ha suggestion normalization",
+    "events endpoint /api/v1/events workspace harness"
+  ],
+  "last_result": null,
+  "last_result_source": null,
+  "next_exact_action": "$EVIDENCE_NEXT_ACTION",
+  "notes": [
+    "workspace-only evidence lane",
+    "not a live-install verification signal",
+    "approved concepts and older research are already folded into the harness surfaces"
+  ]
 }
 EOF
 
 echo "$OUT"
 echo "$PAIR_OUT"
+echo "$EVIDENCE_OUT"
