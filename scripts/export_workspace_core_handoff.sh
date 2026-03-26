@@ -23,6 +23,7 @@ HA_HANDOFF_SUMMARY="/config/clawd/team/repos/pilotsuite-styx-ha/scripts/release_
 SANDBOX_HANDOFF="$SANDBOX_ROOT/handoff/2026-03-26_core_contract_harness_handoff.md"
 RUNNER_PATH="$ROOT/scripts/run_workspace_ha_core_contract_tests.sh"
 TEST_FILE_PATH="$ROOT/tests/integration/test_workspace_ha_core_contract.py"
+EVIDENCE_LOG="$HANDOFF_DIR/core_workspace_harness_last_run.log"
 
 json_string_or_null() {
   local value="${1-}"
@@ -38,8 +39,8 @@ RECENT_COMMITS_JSON="$({
   printf '%s\n' "$RECENT_COMMITS" | awk '{printf "    \"%s\"", $0; if (NR < lines) printf ","; printf "\n"}' lines="$(printf '%s\n' "$RECENT_COMMITS" | wc -l)"
 })"
 
-HARNESS_LAST_RESULT_JSON="$(json_string_or_null "${WORKSPACE_HARNESS_LAST_RESULT:-}")"
-HARNESS_LAST_RESULT_SOURCE_JSON="$(json_string_or_null "${WORKSPACE_HARNESS_LAST_RESULT_SOURCE:-}")"
+HARNESS_LAST_RESULT_RAW="${WORKSPACE_HARNESS_LAST_RESULT:-}"
+HARNESS_LAST_RESULT_SOURCE_RAW="${WORKSPACE_HARNESS_LAST_RESULT_SOURCE:-}"
 
 if command -v python3 >/dev/null 2>&1; then
   PYTHON3_AVAILABLE=true
@@ -56,6 +57,34 @@ else
   EVIDENCE_STATUS="awaiting_workspace_pytest"
   EVIDENCE_NEXT_ACTION="provide python3+pytest in workspace environment, then run $RUNNER_PATH"
 fi
+
+if [[ "${WORKSPACE_HARNESS_AUTO_RUN:-0}" == "1" ]]; then
+  if [[ "$PYTEST_AVAILABLE" == true ]]; then
+    if "$RUNNER_PATH" >"$EVIDENCE_LOG" 2>&1; then
+      HARNESS_LAST_RESULT_RAW="pass"
+      HARNESS_LAST_RESULT_SOURCE_RAW="auto-run:$RUNNER_PATH"
+      EVIDENCE_STATUS="passed"
+      EVIDENCE_NEXT_ACTION="pair this passing workspace evidence with the next HA release candidate"
+    else
+      HARNESS_LAST_RESULT_RAW="fail"
+      HARNESS_LAST_RESULT_SOURCE_RAW="auto-run:$RUNNER_PATH"
+      EVIDENCE_STATUS="failed"
+      EVIDENCE_NEXT_ACTION="inspect $EVIDENCE_LOG and fix the failing workspace harness"
+    fi
+  else
+    : >"$EVIDENCE_LOG"
+    printf '%s\n' 'auto-run blocked: pytest unavailable in workspace environment' >"$EVIDENCE_LOG"
+    if [[ -z "$HARNESS_LAST_RESULT_RAW" ]]; then
+      HARNESS_LAST_RESULT_RAW="auto-run blocked: pytest unavailable"
+    fi
+    if [[ -z "$HARNESS_LAST_RESULT_SOURCE_RAW" ]]; then
+      HARNESS_LAST_RESULT_SOURCE_RAW="auto-run-guard"
+    fi
+  fi
+fi
+
+HARNESS_LAST_RESULT_JSON="$(json_string_or_null "$HARNESS_LAST_RESULT_RAW")"
+HARNESS_LAST_RESULT_SOURCE_JSON="$(json_string_or_null "$HARNESS_LAST_RESULT_SOURCE_RAW")"
 
 cat > "$OUT" <<EOF
 {
@@ -85,7 +114,8 @@ cat > "$OUT" <<EOF
       "$SANDBOX_ROOT/fixtures/ha_events/zone_definitions.json"
     ],
     "handoff_note": "$SANDBOX_HANDOFF",
-    "evidence_file": "$EVIDENCE_OUT"
+    "evidence_file": "$EVIDENCE_OUT",
+    "evidence_log": "$EVIDENCE_LOG"
   },
   "recent_commits": [
 $RECENT_COMMITS_JSON
@@ -118,6 +148,7 @@ cat > "$PAIR_OUT" <<EOF
     "core_workspace_target": "$OUT",
     "core_handoff_note": "$SANDBOX_HANDOFF",
     "core_harness_evidence": "$EVIDENCE_OUT",
+    "core_harness_log": "$EVIDENCE_LOG",
     "fixtures": [
       "$SANDBOX_ROOT/fixtures/ha_events/canonical_state_changed.json",
       "$SANDBOX_ROOT/fixtures/ha_events/legacy_state_changed.json",
@@ -140,6 +171,7 @@ cat > "$EVIDENCE_OUT" <<EOF
   "core_target_commit": "$HEAD_COMMIT",
   "runner": "$RUNNER_PATH",
   "test_file": "$TEST_FILE_PATH",
+  "log_file": "$EVIDENCE_LOG",
   "environment": {
     "python3_available": $PYTHON3_AVAILABLE,
     "pytest_available": $PYTEST_AVAILABLE
