@@ -24,9 +24,22 @@ SANDBOX_HANDOFF="$SANDBOX_ROOT/handoff/2026-03-26_core_contract_harness_handoff.
 RUNNER_PATH="$ROOT/scripts/run_workspace_ha_core_contract_tests.sh"
 TEST_FILE_PATH="$ROOT/tests/integration/test_workspace_ha_core_contract.py"
 
+json_string_or_null() {
+  local value="${1-}"
+  if [[ -z "$value" ]]; then
+    printf 'null'
+  else
+    value="$(printf '%s' "$value" | sed 's/\\/\\\\/g; s/"/\\"/g')"
+    printf '"%s"' "$value"
+  fi
+}
+
 RECENT_COMMITS_JSON="$({
   printf '%s\n' "$RECENT_COMMITS" | awk '{printf "    \"%s\"", $0; if (NR < lines) printf ","; printf "\n"}' lines="$(printf '%s\n' "$RECENT_COMMITS" | wc -l)"
 })"
+
+HARNESS_LAST_RESULT_JSON="$(json_string_or_null "${WORKSPACE_HARNESS_LAST_RESULT:-}")"
+HARNESS_LAST_RESULT_SOURCE_JSON="$(json_string_or_null "${WORKSPACE_HARNESS_LAST_RESULT_SOURCE:-}")"
 
 if command -v python3 >/dev/null 2>&1; then
   PYTHON3_AVAILABLE=true
@@ -140,13 +153,14 @@ cat > "$EVIDENCE_OUT" <<EOF
     "core_to_ha suggestion normalization",
     "events endpoint /api/v1/events workspace harness"
   ],
-  "last_result": null,
-  "last_result_source": null,
+  "last_result": $HARNESS_LAST_RESULT_JSON,
+  "last_result_source": $HARNESS_LAST_RESULT_SOURCE_JSON,
   "next_exact_action": "$EVIDENCE_NEXT_ACTION",
   "notes": [
     "workspace-only evidence lane",
     "not a live-install verification signal",
-    "approved concepts and older research are already folded into the harness surfaces"
+    "approved concepts and older research are already folded into the harness surfaces",
+    "optional writeback via WORKSPACE_HARNESS_LAST_RESULT and WORKSPACE_HARNESS_LAST_RESULT_SOURCE"
   ]
 }
 EOF
