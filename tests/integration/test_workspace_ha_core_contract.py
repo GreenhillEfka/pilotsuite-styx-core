@@ -35,6 +35,7 @@ from copilot_core.api.v1.zone_automation import (  # noqa: E402
     sync_zone_definitions,
 )
 from copilot_core.hub.zone_automation import ZoneAutomationController  # noqa: E402
+from copilot_core.ingest.event_store import EventStore  # noqa: E402
 
 
 _adapter_spec = spec_from_file_location("workspace_habitat_adapter", HABITAT_ADAPTER_PATH)
@@ -151,3 +152,53 @@ def test_workspace_zone_sync_fixture_binds_to_core_api_contract() -> None:
     assert len(getattr(wohn, "_ha_entities", [])) == 2
     assert bad.zone_name == "Badbereich"
     assert bad.zone_type == "bath"
+
+
+
+def test_workspace_fallback_lane_accepts_canonical_and_legacy_state_changed() -> None:
+    store = EventStore(store_path=str(REPO_ROOT / "tmp" / "workspace-contract-events.jsonl"))
+
+    canonical = _load_sandbox_fixture("fixtures/ha_events/canonical_state_changed.json")
+    legacy = _load_sandbox_fixture("fixtures/ha_events/legacy_state_changed.json")
+
+    result = store.ingest_batch([canonical, legacy])
+    assert result["accepted"] == 2
+    assert result["rejected"] == 0
+
+    events = store.query(limit=10)
+    assert len(events) == 2
+
+    canonical_event = events[0]
+    legacy_event = events[1]
+
+    assert canonical_event["kind"] == "state_changed"
+    assert canonical_event["src"] == "ha"
+    assert canonical_event["zone_id"] == "wohnbereich"
+    assert canonical_event["new"]["attrs"]["brightness"] == 180
+    assert canonical_event["context_id"] == "ctxcanonical"
+
+    assert legacy_event["kind"] == "state_changed"
+    assert legacy_event["src"] == "ha"
+    assert legacy_event["zone_id"] == "wohnbereich"
+    assert legacy_event["new"]["state"] == "on"
+    assert legacy_event["new"]["attrs"]["brightness"] == 140
+    assert legacy_event["trigger"] == "automation"
+    assert legacy_event["context_id"] == "ctxlegacy123"
+
+
+
+def test_workspace_call_service_fixture_normalizes_to_core_contract() -> None:
+    store = EventStore(store_path=str(REPO_ROOT / "tmp" / "workspace-contract-events-call.jsonl"))
+    call_service = _load_sandbox_fixture("fixtures/ha_events/call_service.json")
+
+    result = store.ingest_batch([call_service])
+    assert result["accepted"] == 1
+    assert result["rejected"] == 0
+
+    stored = store.query(limit=10)[0]
+    assert stored["kind"] == "call_service"
+    assert stored["src"] == "ha"
+    assert stored["service"]["domain"] == "light"
+    assert stored["service"]["service"] == "turn_on"
+    assert stored["service"]["entity_ids"] == ["light.living_room_main"]
+    assert stored["zone_id"] == "wohnbereich"
