@@ -196,6 +196,7 @@ cat > "$EVIDENCE_OUT" <<EOF
   "runner": "$RUNNER_PATH",
   "test_file": "$TEST_FILE_PATH",
   "log_file": "$EVIDENCE_LOG",
+  "rc_input_chain": "$RC_CHAIN_OUT",
   "environment": {
     "python3_available": $PYTHON3_AVAILABLE,
     "pytest_available": $PYTEST_AVAILABLE
@@ -216,7 +217,8 @@ cat > "$EVIDENCE_OUT" <<EOF
     "workspace-only evidence lane",
     "not a live-install verification signal",
     "approved concepts and older research are already folded into the harness surfaces",
-    "optional writeback via WORKSPACE_HARNESS_LAST_RESULT and WORKSPACE_HARNESS_LAST_RESULT_SOURCE"
+    "optional writeback via WORKSPACE_HARNESS_LAST_RESULT and WORKSPACE_HARNESS_LAST_RESULT_SOURCE",
+    "uses the same canonical core_rc_input_chain.json as target and pairing exports"
   ]
 }
 EOF
