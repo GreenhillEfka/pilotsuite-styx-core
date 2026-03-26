@@ -14,6 +14,7 @@ from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
 import json
 import sys
+from unittest.mock import patch
 
 from flask import Flask
 
@@ -34,6 +35,7 @@ from copilot_core.api.v1.zone_automation import (  # noqa: E402
     init_zone_automation_api,
     sync_zone_definitions,
 )
+from copilot_core.api.v1.events_ingest import bp as events_ingest_bp, set_store  # noqa: E402
 from copilot_core.hub.zone_automation import ZoneAutomationController  # noqa: E402
 from copilot_core.ingest.event_store import EventStore  # noqa: E402
 
@@ -51,6 +53,15 @@ normalize_received_webhook_payload = _habitat_adapter.normalize_received_webhook
 def _load_sandbox_fixture(relative_path: str) -> dict:
     with (SANDBOX_ROOT / relative_path).open("r", encoding="utf-8") as handle:
         return json.load(handle)
+
+
+def _create_events_client(store_path_name: str):
+    app = Flask(__name__)
+    app.config["TESTING"] = True
+    app.register_blueprint(events_ingest_bp)
+    store = EventStore(store_path=str(REPO_ROOT / "tmp" / store_path_name))
+    set_store(store)
+    return app.test_client(), store
 
 
 def test_workspace_state_changed_payload_is_core_classifiable() -> None:
@@ -202,3 +213,53 @@ def test_workspace_call_service_fixture_normalizes_to_core_contract() -> None:
     assert stored["service"]["service"] == "turn_on"
     assert stored["service"]["entity_ids"] == ["light.living_room_main"]
     assert stored["zone_id"] == "wohnbereich"
+
+
+
+def test_workspace_events_endpoint_accepts_canonical_and_legacy_batch() -> None:
+    client, store = _create_events_client("workspace-endpoint-events.jsonl")
+    canonical = _load_sandbox_fixture("fixtures/ha_events/canonical_state_changed.json")
+    legacy = _load_sandbox_fixture("fixtures/ha_events/legacy_state_changed.json")
+
+    with patch("copilot_core.api.security.get_auth_token", return_value="workspace-token"), \
+         patch("copilot_core.api.security.is_auth_required", return_value=True):
+        response = client.post(
+            "/api/v1/events",
+            json={"items": [canonical, legacy]},
+            headers={"X-Auth-Token": "workspace-token"},
+        )
+
+    assert response.status_code == 200
+    body = response.get_json()
+    assert body["accepted"] == 2
+    assert body["rejected"] == 0
+
+    stored = store.query(limit=10)
+    assert len(stored) == 2
+    assert stored[0]["kind"] == "state_changed"
+    assert stored[1]["kind"] == "state_changed"
+    assert stored[1]["src"] == "ha"
+
+
+
+def test_workspace_events_endpoint_accepts_call_service_fixture() -> None:
+    client, store = _create_events_client("workspace-endpoint-call-service.jsonl")
+    call_service = _load_sandbox_fixture("fixtures/ha_events/call_service.json")
+
+    with patch("copilot_core.api.security.get_auth_token", return_value="workspace-token"), \
+         patch("copilot_core.api.security.is_auth_required", return_value=True):
+        response = client.post(
+            "/api/v1/events",
+            json={"items": [call_service]},
+            headers={"X-Auth-Token": "workspace-token"},
+        )
+
+    assert response.status_code == 200
+    body = response.get_json()
+    assert body["accepted"] == 1
+    assert body["rejected"] == 0
+
+    accepted = store.query(limit=10)[0]
+    assert accepted["kind"] == "call_service"
+    assert accepted["zone_id"] == "wohnbereich"
+    assert accepted["service"]["service"] == "turn_on"
