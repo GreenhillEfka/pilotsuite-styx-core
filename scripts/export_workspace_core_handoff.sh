@@ -8,6 +8,7 @@ OUT="$HANDOFF_DIR/core_workspace_target.json"
 PAIR_OUT="$HANDOFF_DIR/core_release_pairing.json"
 EVIDENCE_OUT="$HANDOFF_DIR/core_workspace_harness_evidence.json"
 BOOTSTRAP_HINT_OUT="$HANDOFF_DIR/core_workspace_bootstrap_hint.json"
+RC_CHAIN_OUT="$HANDOFF_DIR/core_rc_input_chain.json"
 
 mkdir -p "$HANDOFF_DIR"
 
@@ -22,6 +23,9 @@ CORE_HANDOFF="$ROOT/docs/CORE_CONCEPT_HANDOFF.md"
 HA_REVIEW_GATE="/config/clawd/team/repos/pilotsuite-styx-ha/scripts/release_review_gate.sh"
 HA_HANDOFF_SUMMARY="/config/clawd/team/repos/pilotsuite-styx-ha/scripts/release_handoff_summary.sh"
 SANDBOX_HANDOFF="$SANDBOX_ROOT/handoff/2026-03-26_core_contract_harness_handoff.md"
+STXY_ACCEPTANCE_DOC="$SANDBOX_ROOT/handoff/2026-03-26_core_harness_review_acceptance.md"
+STXY_COMBINED_RC_DOC="$SANDBOX_ROOT/handoff/2026-03-26_combined_rc_handoff_checklist.md"
+STXY_RELEASER_DOC="$SANDBOX_ROOT/handoff/2026-03-26_releaser_cutover_checklist.md"
 RUNNER_PATH="$ROOT/scripts/run_workspace_ha_core_contract_tests.sh"
 TEST_FILE_PATH="$ROOT/tests/integration/test_workspace_ha_core_contract.py"
 EVIDENCE_LOG="$HANDOFF_DIR/core_workspace_harness_last_run.log"
@@ -39,6 +43,21 @@ json_string_or_null() {
 RECENT_COMMITS_JSON="$({
   printf '%s\n' "$RECENT_COMMITS" | awk '{printf "    \"%s\"", $0; if (NR < lines) printf ","; printf "\n"}' lines="$(printf '%s\n' "$RECENT_COMMITS" | wc -l)"
 })"
+
+RC_INPUT_CHAIN_JSON='  [
+    {"commit": "be2bcb1c", "role": "zone presence + neuron feeding surface exports"},
+    {"commit": "f213b16e", "role": "workspace HA-core contract lane"},
+    {"commit": "29a0a7b1", "role": "workspace HA contract runner hardening"},
+    {"commit": "5d9b3837", "role": "zone sync bound into workspace harness"},
+    {"commit": "e705646c", "role": "fallback-lane fixtures bound into ingest harness"},
+    {"commit": "0b280672", "role": "workspace fixtures bound to events ingest endpoint"},
+    {"commit": "6441ad0a", "role": "workspace handoff target export"},
+    {"commit": "2faad979", "role": "release pairing input export"},
+    {"commit": "274d52c1", "role": "workspace harness evidence status export"},
+    {"commit": "5299a72a", "role": "workspace harness evidence writeback"},
+    {"commit": "9bac0be7", "role": "harness auto-run evidence capture"},
+    {"commit": "5863bb65", "role": "bootstrap hint attached to pairing exports"}
+  ]'
 
 HARNESS_LAST_RESULT_RAW="${WORKSPACE_HARNESS_LAST_RESULT:-}"
 HARNESS_LAST_RESULT_SOURCE_RAW="${WORKSPACE_HARNESS_LAST_RESULT_SOURCE:-}"
@@ -117,7 +136,8 @@ cat > "$OUT" <<EOF
     "handoff_note": "$SANDBOX_HANDOFF",
     "evidence_file": "$EVIDENCE_OUT",
     "evidence_log": "$EVIDENCE_LOG",
-    "bootstrap_hint": "$BOOTSTRAP_HINT_OUT"
+    "bootstrap_hint": "$BOOTSTRAP_HINT_OUT",
+    "rc_input_chain": "$RC_CHAIN_OUT"
   },
   "recent_commits": [
 $RECENT_COMMITS_JSON
@@ -152,6 +172,7 @@ cat > "$PAIR_OUT" <<EOF
     "core_harness_evidence": "$EVIDENCE_OUT",
     "core_harness_log": "$EVIDENCE_LOG",
     "core_bootstrap_hint": "$BOOTSTRAP_HINT_OUT",
+    "core_rc_input_chain": "$RC_CHAIN_OUT",
     "fixtures": [
       "$SANDBOX_ROOT/fixtures/ha_events/canonical_state_changed.json",
       "$SANDBOX_ROOT/fixtures/ha_events/legacy_state_changed.json",
@@ -200,6 +221,27 @@ cat > "$EVIDENCE_OUT" <<EOF
 }
 EOF
 
+cat > "$RC_CHAIN_OUT" <<EOF
+{
+  "generated_at_utc": "$TIMESTAMP",
+  "owner_lane": "PilotClaw",
+  "current_head_commit": "$HEAD_COMMIT",
+  "current_status": "$AHEAD_STATUS",
+  "accepted_rc_input_chain": $RC_INPUT_CHAIN_JSON,
+  "reviewer_acceptance": {
+    "core_harness_review_acceptance": "$STXY_ACCEPTANCE_DOC",
+    "combined_rc_handoff_checklist": "$STXY_COMBINED_RC_DOC",
+    "releaser_cutover_checklist": "$STXY_RELEASER_DOC"
+  },
+  "notes": [
+    "machine-readable core commit chain for HomeClaw/Stxy pairing",
+    "shared sandbox reviewer lane has accepted this chain as RC input",
+    "no live-install claim implied"
+  ]
+}
+EOF
+
 echo "$OUT"
 echo "$PAIR_OUT"
 echo "$EVIDENCE_OUT"
+echo "$RC_CHAIN_OUT"
