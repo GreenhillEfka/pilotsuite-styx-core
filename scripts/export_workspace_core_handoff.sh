@@ -7,6 +7,7 @@ HANDOFF_DIR="$SANDBOX_ROOT/handoff"
 OUT="$HANDOFF_DIR/core_workspace_target.json"
 PAIR_OUT="$HANDOFF_DIR/core_release_pairing.json"
 EVIDENCE_OUT="$HANDOFF_DIR/core_workspace_harness_evidence.json"
+BOOTSTRAP_HINT_OUT="$HANDOFF_DIR/core_workspace_bootstrap_hint.json"
 
 mkdir -p "$HANDOFF_DIR"
 
@@ -115,7 +116,8 @@ cat > "$OUT" <<EOF
     ],
     "handoff_note": "$SANDBOX_HANDOFF",
     "evidence_file": "$EVIDENCE_OUT",
-    "evidence_log": "$EVIDENCE_LOG"
+    "evidence_log": "$EVIDENCE_LOG",
+    "bootstrap_hint": "$BOOTSTRAP_HINT_OUT"
   },
   "recent_commits": [
 $RECENT_COMMITS_JSON
@@ -149,6 +151,7 @@ cat > "$PAIR_OUT" <<EOF
     "core_handoff_note": "$SANDBOX_HANDOFF",
     "core_harness_evidence": "$EVIDENCE_OUT",
     "core_harness_log": "$EVIDENCE_LOG",
+    "core_bootstrap_hint": "$BOOTSTRAP_HINT_OUT",
     "fixtures": [
       "$SANDBOX_ROOT/fixtures/ha_events/canonical_state_changed.json",
       "$SANDBOX_ROOT/fixtures/ha_events/legacy_state_changed.json",
