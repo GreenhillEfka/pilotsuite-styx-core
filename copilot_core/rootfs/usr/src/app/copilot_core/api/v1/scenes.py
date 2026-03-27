@@ -22,6 +22,19 @@ scenes_bp = Blueprint("scenes", __name__, url_prefix="/api/v1/scenes")
 _scene_cache: dict[str, dict] = {}
 
 
+def _scenes_dependency_error():
+    return jsonify({
+        "ok": False,
+        "error": "scenes_unavailable",
+        "message": "Optional HTTP dependency 'requests' is not installed",
+    }), 503
+
+
+
+def _scenes_dependency_ready() -> bool:
+    return http_requests is not None
+
+
 @scenes_bp.route("", methods=["GET"])
 @require_token
 def list_scenes():
@@ -105,6 +118,9 @@ def create_scene():
         "entity_ids": ["light.wohnzimmer", "cover.wohnzimmer", ...]
     }
     """
+    if not _scenes_dependency_ready():
+        return _scenes_dependency_error()
+
     data = request.get_json()
     if not data:
         return jsonify({"error": "No JSON body"}), 400
@@ -206,6 +222,9 @@ def create_scene():
 @require_token
 def apply_scene(scene_id):
     """Apply a saved scene — restore entity states."""
+    if not _scenes_dependency_ready():
+        return _scenes_dependency_error()
+
     scene = _scene_cache.get(scene_id)
     if not scene:
         return jsonify({"error": f"Szene '{scene_id}' nicht gefunden"}), 404
@@ -276,6 +295,9 @@ def update_scene_cache():
 
 def _apply_entity_state(ha_url: str, headers: dict, entity_id: str, state_data: dict):
     """Apply a specific state to an entity via HA Supervisor API."""
+    if not _scenes_dependency_ready():
+        raise RuntimeError("Optional HTTP dependency 'requests' is not installed")
+
     domain = entity_id.split(".", 1)[0]
     target_state = state_data.get("state", "")
 
