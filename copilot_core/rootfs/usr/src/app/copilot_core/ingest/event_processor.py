@@ -12,7 +12,7 @@ import threading
 import time
 from typing import Dict, Any, Optional, Callable, List, Set
 from ..brain_graph.service import BrainGraphService
-from ..brain_read_model import feed_brain
+from ..core.brain_read_model import feed_brain
 from ..dev_surface.service import dev_surface
 
 logger = logging.getLogger(__name__)

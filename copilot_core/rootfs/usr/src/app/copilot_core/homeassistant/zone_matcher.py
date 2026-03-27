@@ -293,3 +293,125 @@ def match_room(room_name: str) -> MatchResult:
 def match_rooms(room_names: List[str]) -> List[MatchResult]:
     """Convenience-Funktion für multiples Room-Matching."""
     return get_matcher().match_multiple_rooms(room_names)
+
+
+def map_homeassistant_topology(areas: List[Dict], entities: List[Dict]) -> Dict:
+    """Map Home Assistant areas/entities into canonical habitus zones.
+
+    Areas with low-confidence or weakly explained matches stay in ``ungeordnet``
+    so the operator can review them instead of silently polluting the truth lane.
+    """
+    matcher = get_matcher()
+    auto_map_threshold = 80.0
+    areas = areas or []
+    entities = entities or []
+
+    entities_by_area: Dict[str, List[Dict]] = {}
+    for entity in entities:
+        attrs = entity.get("attributes") or {}
+        area_id = str(attrs.get("area_id") or entity.get("area_id") or "").strip()
+        entities_by_area.setdefault(area_id, []).append(entity)
+
+    zones: Dict[str, Dict] = {}
+    ungeordnet_areas: List[Dict] = []
+    ungeordnet_entities: List[Dict] = []
+
+    for area in areas:
+        area_id = str(area.get("area_id") or area.get("id") or "").strip()
+        area_name = str(area.get("name") or area_id).strip()
+        linked_entities = list(entities_by_area.get(area_id, []))
+        match = matcher.match_room_to_zone(area_name)
+        normalized_area_name = matcher._normalize_room_name(area_name)
+        matched_keyword_norm = matcher._normalize_room_name(match.matched_keyword or "") if match.matched_keyword else ""
+        keyword_explains_area = bool(
+            matched_keyword_norm
+            and (
+                matched_keyword_norm in normalized_area_name
+                or normalized_area_name in matched_keyword_norm
+            )
+        )
+
+        if (
+            match.needs_review
+            or match.confidence < auto_map_threshold
+            or not matched_keyword_norm
+            or not keyword_explains_area
+        ):
+            ungeordnet_areas.append({
+                "area_id": area_id,
+                "name": area_name,
+                "confidence": match.confidence,
+                "matched_keyword": match.matched_keyword,
+            })
+            ungeordnet_entities.extend(linked_entities)
+            continue
+
+        zone_type = match.zone.zone_type.value
+        bucket = zones.setdefault(
+            zone_type,
+            {
+                "zone_type": zone_type,
+                "zone_name_de": match.zone.name_de,
+                "zone_name_en": match.zone.name_en,
+                "confidence": [],
+                "areas": [],
+                "entities": [],
+            },
+        )
+        bucket["confidence"].append(match.confidence)
+        bucket["areas"].append(
+            {
+                "area_id": area_id,
+                "name": area_name,
+                "confidence": match.confidence,
+                "matched_keyword": match.matched_keyword,
+            }
+        )
+        bucket["entities"].extend(linked_entities)
+
+    zone_list = []
+    for bucket in zones.values():
+        entity_ids = []
+        for entity in bucket["entities"]:
+            entity_id = str(entity.get("entity_id") or "").strip()
+            if entity_id:
+                entity_ids.append(entity_id)
+        zone_list.append(
+            {
+                "zone_type": bucket["zone_type"],
+                "zone_name_de": bucket["zone_name_de"],
+                "zone_name_en": bucket["zone_name_en"],
+                "area_count": len(bucket["areas"]),
+                "entity_count": len(entity_ids),
+                "areas": bucket["areas"],
+                "entity_ids": list(dict.fromkeys(entity_ids)),
+                "avg_confidence": round(sum(bucket["confidence"]) / len(bucket["confidence"]), 1)
+                if bucket["confidence"]
+                else 0.0,
+            }
+        )
+
+    zone_list.sort(key=lambda item: (-item["entity_count"], item["zone_type"]))
+
+    return {
+        "summary": {
+            "area_count": len(areas),
+            "entity_count": len(entities),
+            "mapped_zone_count": len(zone_list),
+            "mapped_area_count": sum(zone["area_count"] for zone in zone_list),
+            "mapped_entity_count": sum(zone["entity_count"] for zone in zone_list),
+        },
+        "zones": zone_list,
+        "ungeordnet": {
+            "area_count": len(ungeordnet_areas),
+            "entity_count": len(ungeordnet_entities),
+            "areas": ungeordnet_areas,
+            "entity_ids": list(
+                dict.fromkeys(
+                    str(entity.get("entity_id") or "").strip()
+                    for entity in ungeordnet_entities
+                    if str(entity.get("entity_id") or "").strip()
+                )
+            ),
+        },
+    }
