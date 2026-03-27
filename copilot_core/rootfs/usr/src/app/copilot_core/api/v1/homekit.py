@@ -87,7 +87,7 @@ def toggle_homekit():
     # Try to reload HomeKit integration via HA Supervisor API
     ha_url = os.environ.get("SUPERVISOR_API", "http://supervisor/core/api")
     ha_token = os.environ.get("SUPERVISOR_TOKEN", "")
-    if ha_token:
+    if ha_token and http_requests is not None:
         headers = {"Authorization": f"Bearer {ha_token}", "Content-Type": "application/json"}
         try:
             http_requests.post(
@@ -97,6 +97,8 @@ def toggle_homekit():
             logger.info("HomeKit reload triggered after zone toggle")
         except Exception as exc:
             logger.warning("HomeKit reload failed (may not be installed): %s", exc)
+    elif ha_token and http_requests is None:
+        logger.warning("HomeKit reload skipped: optional HTTP dependency 'requests' is not installed")
 
     action = "aktiviert" if enabled else "deaktiviert"
     logger.info("HomeKit %s for zone %s (%d entities)", action, zone_name, len(supported))
