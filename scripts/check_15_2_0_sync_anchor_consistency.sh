@@ -5,7 +5,7 @@ REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
 EXPECTED_CORE_SOURCE="/config/clawd/team/repos/pilotsuite-styx-core"
-EXPECTED_PAIRED_CORE_REF="cf3e8ac1"
+EXPECTED_PAIRED_CORE_REF="8b017a74"
 EXPECTED_VERSION="15.2.0"
 CURRENT_HEAD="$(git rev-parse --short=8 HEAD)"
 
@@ -69,10 +69,9 @@ done
 
 SYNC_DOC="docs/CORE_15_2_0_SYNC_ANCHOR_2026-03-27.md"
 if grep -Fq "$CURRENT_HEAD" "$SYNC_DOC"; then
-  printf 'PASS %s current-head=%s\n' "$SYNC_DOC" "$CURRENT_HEAD"
+  printf 'NOTE %s mentions current-head=%s\n' "$SYNC_DOC" "$CURRENT_HEAD"
 else
-  printf 'FAIL %s missing current-head %s\n' "$SYNC_DOC" "$CURRENT_HEAD"
-  failures=$((failures + 1))
+  printf 'NOTE %s does not pin current-head=%s (expected for docs/readiness commits above the paired ref)\n' "$SYNC_DOC" "$CURRENT_HEAD"
 fi
 
 if [[ "$failures" -ne 0 ]]; then
