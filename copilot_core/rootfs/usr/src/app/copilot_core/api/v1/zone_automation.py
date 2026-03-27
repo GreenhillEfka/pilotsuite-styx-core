@@ -605,6 +605,8 @@ def sync_zone_definitions():
             if "entities" in zone:
                 cfg.ha_entities = list(zone["entities"])
                 cfg._ha_entities = list(zone["entities"])  # backward-compatible HA context for Brain
+                if hasattr(_controller, "sync_entities_from_topology"):
+                    _controller.sync_entities_from_topology(zone_id, list(zone["entities"]))
 
             _mirror_zone_truth_into_habitus_engine(zone, cfg)
             synced.append(zone_id)

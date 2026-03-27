@@ -873,6 +873,53 @@ class ZoneAutomationController:
 
         return assignment
 
+    def sync_entities_from_topology(self, zone_id: str, entities: list[Any]) -> list[ZoneEntityAssignment]:
+        """Replace zone assignments from a synced HA topology payload."""
+        synced: list[ZoneEntityAssignment] = []
+        seen: set[str] = set()
+
+        for item in entities or []:
+            entity_id = ""
+            role: str | None = None
+            tags: list[str] | None = None
+            display_name = ""
+
+            if isinstance(item, str):
+                entity_id = item.strip()
+            elif isinstance(item, dict):
+                entity_id = str(item.get("entity_id", "")).strip()
+                candidate_role = str(item.get("role", "")).strip()
+                role = candidate_role or None
+                candidate_tags = item.get("tags")
+                if isinstance(candidate_tags, list):
+                    tags = [str(tag).strip() for tag in candidate_tags if str(tag).strip()]
+                display_name = str(
+                    item.get("display_name")
+                    or item.get("friendly_name")
+                    or item.get("name")
+                    or ""
+                ).strip()
+            else:
+                entity_id = str(item).strip()
+
+            if not entity_id or entity_id in seen:
+                continue
+
+            seen.add(entity_id)
+            synced.append(
+                ZoneEntityAssignment(
+                    entity_id=entity_id,
+                    zone_id=zone_id,
+                    role=role or detect_entity_role(entity_id),
+                    tags=tags or detect_entity_tags(entity_id),
+                    display_name=display_name or entity_id.split(".")[-1].replace("_", " ").title(),
+                    source="ha_sync",
+                )
+            )
+
+        self._entity_assignments[zone_id] = synced
+        return list(synced)
+
     def remove_entity(self, zone_id: str, entity_id: str) -> bool:
         """Remove an entity from a zone."""
         if zone_id not in self._entity_assignments:
