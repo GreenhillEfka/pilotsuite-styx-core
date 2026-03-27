@@ -135,25 +135,44 @@ def _get_example() -> Dict[str, Any]:
 # ═══════════════════════════════════════════════════════════════════════
 
 def _get_habitus_zones() -> List[Dict[str, Any]]:
-    """Get zones from habitus_zones module, enriched with example entities."""
+    """Get zones from the Core truth engine first, enriched with example data only as fallback."""
     zones: List[Any] = []
-    try:
-        from copilot_core.homeassistant.habitus_zones import get_all_zones
-        zones = get_all_zones()
-    except ImportError:
-        _LOGGER.warning("habitus_zones module not available")
+    zone_engine = _svc.get("habitus_zones")
+
+    if zone_engine is not None:
+        overview = _safe(lambda: zone_engine.get_overview())
+        if overview is not None:
+            truth_zones: List[Dict[str, Any]] = []
+            for zone in getattr(overview, "zones", []) or []:
+                zid = zone.get("zone_id", "") if isinstance(zone, dict) else getattr(zone, "zone_id", "")
+                if not zid:
+                    continue
+                full_zone = _safe(lambda zid=zid: zone_engine.get_zone(zid))
+                if isinstance(full_zone, dict):
+                    truth_zones.append(full_zone)
+                elif isinstance(zone, dict):
+                    truth_zones.append(dict(zone))
+            if truth_zones:
+                zones = truth_zones
+
+    if not zones:
+        try:
+            from copilot_core.homeassistant.habitus_zones import get_all_zones
+            zones = get_all_zones()
+        except ImportError:
+            _LOGGER.warning("habitus_zones module not available")
 
     ex = _get_example()
     zone_entities = ex.get("zone_entities", {})
     zone_display = ex.get("zone_display", {})
-    if not zone_entities:
+    if not zone_entities and not zone_display:
         return zones
 
     enriched = []
     for zone in zones:
         if isinstance(zone, dict):
             zid = zone.get("zone_id", "")
-            zdict = zone
+            zdict = dict(zone)
         else:
             zid = getattr(zone, "zone_type", getattr(zone, "zone_id", ""))
             if hasattr(zid, "value"):
@@ -169,6 +188,8 @@ def _get_habitus_zones() -> List[Dict[str, Any]]:
                 "entities": {},
                 "enabled": True,
             }
+        if isinstance(zdict.get("entities"), list) and not zdict.get("entity_ids"):
+            zdict["entity_ids"] = list(zdict.get("entities", []))
         if zid in zone_entities and not zdict.get("entities"):
             zdict["entities"] = zone_entities[zid]
             zdict["entity_ids"] = [
