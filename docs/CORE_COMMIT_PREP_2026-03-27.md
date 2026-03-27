@@ -16,7 +16,7 @@ Vor Commit-Prep zuletzt grün:
 ```
 
 Result:
-- **32 tests passed**
+- **35 tests passed**
 - **0 warnings**
 
 ## Working set
@@ -61,7 +61,7 @@ feat(core): harden truth chain across zone sync, taxonomy, brain and dashboard r
 ```
 
 ### Commit Group B — Contract regression evidence
-**Intent:** neue Regression-Suites + reproduzierbarer Bundle-Runner
+**Intent:** neue Regression-Suites + reproduzierbarer Bundle-Runner + Ref-Drift-Guard
 
 ```bash
 git add \
@@ -69,12 +69,13 @@ git add \
   tests/test_dashboard_read_models_contract.py \
   tests/test_taxonomy_contract.py \
   tests/test_zone_truth_sync_contract.py \
-  scripts/run_core_contract_bundle.sh
+  scripts/run_core_contract_bundle.sh \
+  scripts/check_15_2_0_sync_anchor_consistency.sh
 ```
 
 **Suggested commit message:**
 ```text
-test(core): add contract bundle for truth-chain regression coverage
+test(core): add contract bundle and sync-anchor consistency guard
 ```
 
 ### Commit Group C — Review / handoff / RC prep docs
@@ -130,4 +131,5 @@ feat(core): harden truth contracts and bundle release-readiness evidence
 
 ## Recommended next step
 - Builder chooses either the 3-commit grouping or the squash option above.
-- After staging choice, run the bundle once more and move into formal review.
+- Before formal review, run both `./scripts/check_15_2_0_sync_anchor_consistency.sh` and `./scripts/run_core_contract_bundle.sh`.
+- After both are green, move into formal review.

@@ -5,6 +5,7 @@
 - **Role:** builder/owner handoff note
 - **Boundary:** Repo/Dev only
 - **Non-claims:** no release, no install, no live-test
+- **Authoritative Core repo:** `/config/clawd/team/repos/pilotsuite-styx-core`
 
 ## Why this handoff exists
 This note is the explicit restart anchor for the Core lane if the current writer pauses, times out, or hands over for review/commit-prep.
@@ -12,7 +13,7 @@ This note is the explicit restart anchor for the Core lane if the current writer
 ## Current state
 ### Exact committed anchor
 - **Branch:** `main`
-- **Commit:** `1d4fc18f`
+- **Commit:** `cf3e8ac1`
 
 ### What is already done
 - Core contract hardening completed across:
@@ -34,11 +35,11 @@ Run:
 ```
 
 Current result:
-- **32 tests passed**
+- **35 tests passed**
 - **0 warnings**
 
 ## Modified/untracked artifact set
-### Committed code files in `1d4fc18f`
+### Committed code files in `cf3e8ac1`
 - `copilot_core/rootfs/usr/src/app/copilot_core/api/v1/zone_automation.py`
 - `copilot_core/rootfs/usr/src/app/copilot_core/core/brain_read_model.py`
 - `copilot_core/rootfs/usr/src/app/copilot_core/core/dashboard_read_models.py`
@@ -69,12 +70,12 @@ Current result:
 
 ## Exact next task for the next writer
 ### Review / follow-up pass
-1. Review commit **`1d4fc18f`** against the packet in `docs/CORE_REVIEW_PACKET_2026-03-27.md`
+1. Review commit **`cf3e8ac1`** against the packet in `docs/CORE_REVIEW_PACKET_2026-03-27.md`
 2. Re-run:
    ```bash
    ./scripts/run_core_contract_bundle.sh
    ```
-3. If review is green, keep `1d4fc18f` as the Core handoff anchor
+3. If review is green, keep `cf3e8ac1` as the Core handoff anchor
 4. If review finds a sharp blocker, cut one follow-up Core-only fix commit on top
 
 ## Risks / watch-outs

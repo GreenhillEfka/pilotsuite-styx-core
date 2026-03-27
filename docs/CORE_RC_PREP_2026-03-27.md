@@ -7,6 +7,7 @@ Explizites Release-Candidate-Prep-Artefakt für die Core-Lane.
 - Dies ist **Repo/Dev-Readiness**.
 - **Kein Release, kein Install, kein Live-Test.**
 - Release-Governance bleibt: **Builder -> Review -> Release**.
+- **Authoritative Core repo:** `/config/clawd/team/repos/pilotsuite-styx-core`
 
 ## RC Scope
 ### Change area
@@ -36,7 +37,7 @@ Contract-Härtung für:
 
 ## Head / branch
 - **Branch:** `main`
-- **Head:** `1d4fc18f`
+- **Head:** `cf3e8ac1`
 
 ## What is now hardened
 ### 1) Zone Truth persistence
@@ -100,7 +101,7 @@ Contract-Härtung für:
 - [x] Contract suites geschrieben/ergänzt
 - [x] Bundle-Runner grün
 - [x] HA-Release-Handoff erstellt
-- [x] Exakter Commit-Schnitt für den 15.2.0-Kandidaten erstellt (`1d4fc18f`)
+- [x] Exakter Commit-Schnitt für den 15.2.0-Kandidaten erstellt (`cf3e8ac1`)
 - [ ] Final changelog/release note input vorbereiten
 
 ### Reviewer should verify
@@ -116,6 +117,6 @@ Contract-Härtung für:
 - Kein Live-Erfolg behauptet
 
 ## Recommended next step
-1. Review dieses RC-Preps gegen Commit **`1d4fc18f`** + Contract bundle
+1. Review dieses RC-Preps gegen Commit **`cf3e8ac1`** + Contract bundle
 2. Danach nur noch Review-/Release-Governance-Entscheidung, ob der Commit der RC-Anker bleibt oder ein weiterer Core-Fix nötig ist
 3. Erst nach Review in Release-Governance übergehen

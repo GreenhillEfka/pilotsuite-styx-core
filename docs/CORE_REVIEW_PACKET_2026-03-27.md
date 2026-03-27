@@ -5,6 +5,7 @@ Kompaktes Review-Paket für die aktuelle Core-Lane.
 
 **Boundary:** Repo/Dev only.
 **Not included:** release, install, live-test.
+**Authoritative Core repo:** `/config/clawd/team/repos/pilotsuite-styx-core`
 
 ## Reviewer start here
 ### 1) Validate the evidence
@@ -12,7 +13,7 @@ Kompaktes Review-Paket für die aktuelle Core-Lane.
 ./scripts/run_core_contract_bundle.sh
 ```
 Expected baseline:
-- **32 tests passed**
+- **35 tests passed**
 - **0 warnings**
 
 ### 2) Review the code scope
@@ -37,6 +38,12 @@ Expected baseline:
 - `docs/CORE_RELEASE_INPUT_2026-03-27.md`
 - `docs/CORE_BUILDER_HANDOFF_2026-03-27.md`
 - `docs/CORE_COMMIT_PREP_2026-03-27.md`
+- `docs/CORE_15_2_0_SYNC_ANCHOR_2026-03-27.md`
+
+### 4) Use the current sync decision
+- authoritative paired Core cutover ref for HA releaser-prep: `cf3e8ac1`
+- current repo `HEAD`: `cf3e8ac1`
+- this ref supersedes `1d4fc18f` because newer functional startup/import/metrics hardening is validated green on current `HEAD`
 
 ## What changed
 ### Zone truth chain

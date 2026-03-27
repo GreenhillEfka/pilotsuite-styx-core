@@ -9,6 +9,7 @@ Vorbereitete Release-/Review-Eingabe für den nächsten Core-Release-Kandidaten.
 - kein Release
 - kein Install
 - kein Live-Test
+- **Authoritative Core repo:** `/config/clawd/team/repos/pilotsuite-styx-core`
 
 ## Candidate scope summary
 ### Theme
@@ -46,6 +47,7 @@ Contract-Härtung der Core-Truth-Lane rund um:
 #### Review / handoff docs
 - `docs/HA_RELEASE_CONTRACT_HANDOFF_2026-03-27.md`
 - `docs/CORE_RC_PREP_2026-03-27.md`
+- `docs/CORE_15_2_0_SYNC_ANCHOR_2026-03-27.md`
 
 ## Evidence snapshot
 ### Command
@@ -54,7 +56,7 @@ Contract-Härtung der Core-Truth-Lane rund um:
 ```
 
 ### Result
-- **32 tests passed**
+- **35 tests passed**
 - **0 warnings**
 
 ## Proposed changelog input (draft, not applied)
@@ -106,5 +108,5 @@ Contract-Härtung der Core-Truth-Lane rund um:
 
 ## Recommended next step
 - Reviewer nimmt dieses Dokument + `docs/CORE_RC_PREP_2026-03-27.md` + Bundle-Evidence als Review-Paket.
-- Exakter Review-Anker ist Commit **`1d4fc18f`**.
-- Der Recovery-Stand `f1243375` bleibt historisch referenziert, aber der aktuelle Core-Fix-Anker ist `1d4fc18f`.
+- Exakter Review-Anker ist Commit **`cf3e8ac1`**.
+- Der Recovery-Stand `f1243375` bleibt historisch referenziert, aber der aktuelle Core-Fix-Anker ist `cf3e8ac1`.
