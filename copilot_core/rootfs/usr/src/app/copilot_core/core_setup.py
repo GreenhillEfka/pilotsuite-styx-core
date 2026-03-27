@@ -1583,6 +1583,7 @@ def register_blueprints(app: Flask, services: dict) -> None:
         init_zone_health_api(
             zone_automation=services.get("zone_automation"),
             module_registry=services.get("module_registry"),
+            habitus_zones=services.get("hub_zones"),
         )
         app.register_blueprint(zone_health_bp)
         _LOGGER.info("Zone Health API registered")

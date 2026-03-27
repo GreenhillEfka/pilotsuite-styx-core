@@ -28,6 +28,55 @@ zone_health_bp = Blueprint("zone_health", __name__, url_prefix="/api/v1/zone/hea
 _svc: dict[str, Any] = {}
 
 
+def _normalize_entities_by_role(value: Any) -> dict[str, list[str]]:
+    if not isinstance(value, dict):
+        return {}
+
+    normalized: dict[str, list[str]] = {}
+    for role, raw_entities in value.items():
+        if isinstance(raw_entities, list):
+            items = [str(eid).strip() for eid in raw_entities if str(eid).strip()]
+            if items:
+                normalized[str(role)] = items
+    return normalized
+
+
+
+def _normalize_entity_ids(zone: dict[str, Any]) -> list[str]:
+    raw_entity_ids = zone.get("entity_ids")
+    if isinstance(raw_entity_ids, list):
+        entity_ids = [str(eid).strip() for eid in raw_entity_ids if str(eid).strip()]
+    else:
+        raw_entities = zone.get("entities")
+        if isinstance(raw_entities, list):
+            entity_ids = [str(eid).strip() for eid in raw_entities if str(eid).strip()]
+        elif isinstance(raw_entities, dict):
+            entity_ids = [
+                str(eid).strip()
+                for role_entities in raw_entities.values()
+                if isinstance(role_entities, list)
+                for eid in role_entities
+                if str(eid).strip()
+            ]
+        else:
+            entity_ids = []
+
+    return list(dict.fromkeys(entity_ids))
+
+
+
+def _merge_entities_by_role(*entity_maps: Any) -> dict[str, list[str]]:
+    merged: dict[str, list[str]] = {}
+    for entity_map in entity_maps:
+        for role, entity_ids in _normalize_entities_by_role(entity_map).items():
+            bucket = merged.setdefault(role, [])
+            for eid in entity_ids:
+                if eid not in bucket:
+                    bucket.append(eid)
+    return merged
+
+
+
 def init_zone_health_api(**services: Any) -> None:
     """Initialize Zone Health API with service references."""
     _svc.clear()
@@ -65,6 +114,8 @@ class ZoneHealthResult:
     entity_details: list[EntityHealth] = field(default_factory=list)
     issues: list[str] = field(default_factory=list)
     automation_mode: str = "unknown"
+    zone_type: str = ""
+    enabled_modules: list[str] = field(default_factory=list)
     module_states: dict[str, str] = field(default_factory=dict)
     event_coverage: dict[str, bool] = field(default_factory=dict)
     checked_at: str = ""
@@ -81,6 +132,8 @@ class ZoneHealthResult:
             "stale_entities": self.stale_entities,
             "issues": self.issues,
             "automation_mode": self.automation_mode,
+            "zone_type": self.zone_type,
+            "enabled_modules": self.enabled_modules,
             "module_states": self.module_states,
             "event_coverage": self.event_coverage,
             "checked_at": self.checked_at,
@@ -133,8 +186,10 @@ class ZoneHealthChecker:
         """
         zone_id = zone.get("zone_id", "")
         zone_name = zone.get("name_de", zone.get("name", zone_id))
-        entity_ids = zone.get("entity_ids", [])
-        entities_by_role = zone.get("entities", {})
+        entity_ids = _normalize_entity_ids(zone)
+        entities_by_role = _merge_entities_by_role(zone.get("entities_by_role"), zone.get("entities"))
+        zone_type = str(zone.get("zone_type", zone_id) or zone_id)
+        enabled_modules = [str(module_id) for module_id in zone.get("enabled_modules", []) if str(module_id)]
 
         now = datetime.now(timezone.utc)
         result = ZoneHealthResult(
@@ -143,6 +198,8 @@ class ZoneHealthChecker:
             health_score=100,
             status="healthy",
             total_entities=len(entity_ids),
+            zone_type=zone_type,
+            enabled_modules=enabled_modules,
             checked_at=now.isoformat(),
         )
 
@@ -339,8 +396,44 @@ class ZoneHealthChecker:
         return {}
 
     def _get_zones(self) -> list[dict[str, Any]]:
-        """Get zone configurations."""
+        """Get zone configurations from the Core truth engine first."""
         za = _svc.get("zone_automation")
+        zone_engine = _svc.get("habitus_zones") or _svc.get("hub_zones")
+
+        if zone_engine is not None:
+            try:
+                overview = zone_engine.get_overview()
+                truth_zones: list[dict[str, Any]] = []
+                for zone in getattr(overview, "zones", []) or []:
+                    zid = zone.get("zone_id", "") if isinstance(zone, dict) else getattr(zone, "zone_id", "")
+                    if not zid:
+                        continue
+
+                    full_zone = zone_engine.get_zone(zid)
+                    base_zone = dict(full_zone) if isinstance(full_zone, dict) else (dict(zone) if isinstance(zone, dict) else {"zone_id": zid})
+                    role_entities = {}
+                    if za and hasattr(za, "get_zone_entities_by_role"):
+                        role_entities = za.get_zone_entities_by_role(zid) or {}
+
+                    merged_zone = dict(base_zone)
+                    merged_zone["zone_id"] = zid
+                    merged_zone["name_de"] = merged_zone.get("name_de") or merged_zone.get("name") or zid
+                    merged_zone["zone_type"] = str(merged_zone.get("zone_type", zid) or zid)
+                    merged_zone["enabled_modules"] = [
+                        str(module_id) for module_id in merged_zone.get("enabled_modules", []) if str(module_id)
+                    ]
+                    merged_zone["entities_by_role"] = _merge_entities_by_role(role_entities, merged_zone.get("entities_by_role"))
+                    merged_zone["entity_ids"] = _normalize_entity_ids(merged_zone)
+                    if not merged_zone["entity_ids"]:
+                        merged_zone["entity_ids"] = _normalize_entity_ids({"entities": merged_zone["entities_by_role"]})
+                    merged_zone["entities"] = merged_zone["entities_by_role"]
+                    truth_zones.append(merged_zone)
+
+                if truth_zones:
+                    return truth_zones
+            except Exception:
+                logger.debug("Failed to assemble zone health zones from truth engine", exc_info=True)
+
         if za and hasattr(za, "get_all_states"):
             try:
                 states = za.get_all_states()
@@ -350,20 +443,19 @@ class ZoneHealthChecker:
                     entities = {}
                     if hasattr(za, "get_zone_entities_by_role"):
                         entities = za.get_zone_entities_by_role(zid) or {}
-                    entity_ids = [
-                        eid for role_list in entities.values()
-                        if isinstance(role_list, list)
-                        for eid in role_list
-                    ]
+                    entity_ids = _normalize_entity_ids({"entities": entities})
                     zones.append({
                         "zone_id": zid,
                         "name_de": s.get("name", zid),
+                        "zone_type": s.get("zone_type", zid),
+                        "enabled_modules": [str(module_id) for module_id in s.get("enabled_modules", []) if str(module_id)],
                         "entity_ids": entity_ids,
-                        "entities": entities,
+                        "entities_by_role": _normalize_entities_by_role(entities),
+                        "entities": _normalize_entities_by_role(entities),
                     })
                 return zones
             except Exception:
-                pass
+                logger.debug("Failed to assemble zone health zones from automation state", exc_info=True)
 
         # Fallback to habitus_zones
         try:
@@ -378,7 +470,7 @@ class ZoneHealthChecker:
             for z in zones_raw:
                 if isinstance(z, dict):
                     zid = z.get("zone_id", "")
-                    zdict = z
+                    zdict = dict(z)
                 else:
                     zid = getattr(z, "zone_type", "")
                     if hasattr(zid, "value"):
@@ -386,14 +478,12 @@ class ZoneHealthChecker:
                     zdict = {
                         "zone_id": zid,
                         "name_de": getattr(z, "name_de", zid),
+                        "zone_type": zid,
+                        "enabled_modules": [],
                     }
-                entities = EXAMPLE_ZONE_ENTITIES.get(zid, {})
-                entity_ids = [
-                    eid for role_list in entities.values()
-                    if isinstance(role_list, list)
-                    for eid in role_list
-                ]
-                zdict["entity_ids"] = entity_ids
+                entities = _normalize_entities_by_role(EXAMPLE_ZONE_ENTITIES.get(zid, {}))
+                zdict["entities_by_role"] = entities
+                zdict["entity_ids"] = _normalize_entity_ids({"entities": entities})
                 zdict["entities"] = entities
                 zones.append(zdict)
             return zones
