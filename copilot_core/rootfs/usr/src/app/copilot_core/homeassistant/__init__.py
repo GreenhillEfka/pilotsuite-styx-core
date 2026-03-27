@@ -51,10 +51,15 @@ from .entity_mapper import (
     WidgetType,
     SensorDeviceClass,
 )
-from .api import (
-    ha_discovery_bp,
-    init_ha_discovery_api,
-)
+
+try:
+    from .api import (
+        ha_discovery_bp,
+        init_ha_discovery_api,
+    )
+except ImportError:
+    ha_discovery_bp = None  # type: ignore[assignment,misc]
+    init_ha_discovery_api = None  # type: ignore[assignment,misc]
 
 __all__ = [
     # Client
