@@ -11,7 +11,7 @@ The Core recovery candidate for **v15.2.0** is now cut as an exact committed rev
 
 ## Exact anchor
 - **Branch:** `main`
-- **Commit:** `f1243375`
+- **Commit:** `1d4fc18f`
 
 ## What is already present in the worktree
 The current worktree already contains contract-hardening edits across:
@@ -44,7 +44,7 @@ Validated with:
 ```
 
 Result at handoff:
-- **25 tests passed**
+- **32 tests passed**
 - **0 warnings**
 
 ## Risks / watch-outs
@@ -53,7 +53,7 @@ Result at handoff:
 - Review should verify downstream consumers tolerate the stronger zone/module metadata now exposed.
 
 ## Exact next step
-1. Review commit **`f1243375`** as the exact **15.2.0 candidate set**.
+1. Review commit **`1d4fc18f`** as the exact **15.2.0 candidate set**.
 2. Use the contract bundle evidence and handoff docs as the review packet.
 3. Pass to independent review/release-readiness per governance.
 4. Do not install/release before reviewer signoff.

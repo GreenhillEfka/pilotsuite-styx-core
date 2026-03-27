@@ -16,7 +16,7 @@ Vor Commit-Prep zuletzt grün:
 ```
 
 Result:
-- **25 tests passed**
+- **32 tests passed**
 - **0 warnings**
 
 ## Working set

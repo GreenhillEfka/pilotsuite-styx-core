@@ -8,14 +8,13 @@ HA should send event batches to:
 
 - `POST /api/v1/events`
 
-### Current wiring blocker
+### Current wiring status
 
-The contract code now exists in `copilot_core/api/v1/events_ingest.py`, but app wiring still registers:
+The route-prefix duplication in Core wiring is fixed:
 
-- `copilot_core.api.v1.events_ingest` with `url_prefix="/api/v1"`
-- legacy `copilot_core.api.v1.events` at `"/api/v1/events"`
-
-That means the uniform contract path is not yet the clearly exposed runtime path, and verifier should check route registration before any HA lane relies on the new contract.
+- `copilot_core.api.v1.events_ingest` is now registered without an extra `url_prefix`
+- canonical runtime paths stay at `POST /api/v1/events`, `GET /api/v1/events`, `GET /api/v1/events/stats`
+- verifier should still confirm the runtime route map, but the former `/api/v1/api/v1/events` duplication is no longer the intended wiring
 
 Core now accepts both:
 
