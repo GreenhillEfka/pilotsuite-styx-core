@@ -7,7 +7,11 @@
 - **Non-claims:** no release, no install, no live-test
 
 ## Candidate intent
-Prepare the next Core recovery candidate as **v15.2.0** on top of the current repo worktree so the contract/truth lane is internally coherent and ready for independent review.
+The Core recovery candidate for **v15.2.0** is now cut as an exact committed review anchor so the contract/truth lane is internally coherent and ready for independent review.
+
+## Exact anchor
+- **Branch:** `main`
+- **Commit:** `f1243375`
 
 ## What is already present in the worktree
 The current worktree already contains contract-hardening edits across:
@@ -49,7 +53,7 @@ Result at handoff:
 - Review should verify downstream consumers tolerate the stronger zone/module metadata now exposed.
 
 ## Exact next step
-1. Review the current Core worktree diff as the **15.2.0 candidate set**.
-2. Stage intended code + tests + docs only.
+1. Review commit **`f1243375`** as the exact **15.2.0 candidate set**.
+2. Use the contract bundle evidence and handoff docs as the review packet.
 3. Pass to independent review/release-readiness per governance.
 4. Do not install/release before reviewer signoff.

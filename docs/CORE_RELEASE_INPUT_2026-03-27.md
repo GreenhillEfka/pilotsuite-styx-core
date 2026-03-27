@@ -52,7 +52,7 @@ Contract-Härtung der Core-Truth-Lane rund um:
 
 ## Proposed changelog input (draft, not applied)
 ```markdown
-## [v15.0.x] - 2026-03-27
+## [v15.2.0] - 2026-03-27
 
 ### Added
 - **Core Contract Bundle Runner**: `scripts/run_core_contract_bundle.sh` bündelt die aktuellen Contract-Suites für Zone Truth, Dashboard Read Models, Taxonomy, Brain Read Model und Workspace HA↔Core Contract.
@@ -98,4 +98,5 @@ Contract-Härtung der Core-Truth-Lane rund um:
 
 ## Recommended next step
 - Reviewer nimmt dieses Dokument + `docs/CORE_RC_PREP_2026-03-27.md` + Bundle-Evidence als Review-Paket.
-- Danach Builder entscheidet über Commit-/Squash-/RC-Vorbereitung.
+- Exakter Review-Anker ist Commit **`f1243375`**.
+- Danach nur noch entscheiden, ob `f1243375` als RC-Anker bleibt oder ein weiterer Core-Fix nötig ist.
