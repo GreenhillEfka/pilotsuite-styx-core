@@ -870,6 +870,34 @@ def _parse_bool_param(name: str, default: bool = True) -> bool:
     return request.args.get(name, str(default)).lower() == "true"
 
 
+def _resolve_zone_id(zone_id: str) -> str:
+    """Resolve incoming zone ids against the actual truth lane identifiers."""
+    candidate = str(zone_id or "").strip()
+    if not candidate:
+        return candidate
+
+    variants = [candidate]
+    if candidate.startswith("zone:"):
+        variants.append(candidate.removeprefix("zone:"))
+    else:
+        variants.append(f"zone:{candidate}")
+
+    zone_engine = _svc.get("habitus_zones")
+    if zone_engine is not None:
+        for zid in variants:
+            zone = _safe(lambda zid=zid: zone_engine.get_zone(zid))
+            if zone is not None:
+                return zid
+
+    example = _get_example()
+    known = set((example.get("zone_entities") or {}).keys()) | set((example.get("zone_display") or {}).keys())
+    for zid in variants:
+        if zid in known:
+            return zid
+
+    return candidate
+
+
 @zone_dashboard_bp.route("", methods=["GET"])
 @require_token
 def get_dashboard():
@@ -1044,7 +1072,7 @@ def get_mood():
 @require_token
 def set_mood(zone_id: str):
     """Set mood data for a zone."""
-    zone_id = zone_id if zone_id.startswith("zone:") else f"zone:{zone_id}"
+    zone_id = _resolve_zone_id(zone_id)
     body = request.get_json(silent=True) or {}
     if not body:
         return jsonify({"ok": False, "error": "Mood data required"}), 400
@@ -1074,8 +1102,8 @@ def execute_quick_action():
 @require_token
 def get_zone_detail(zone_id: str):
     """Detailansicht einer einzelnen Zone mit allen Moduldaten."""
-    zone_id = zone_id if zone_id.startswith("zone:") else f"zone:{zone_id}"
-    
+    zone_id = _resolve_zone_id(zone_id)
+
     # Slice 6: Use ZoneDetailReadModel for truth-backed zone data
     zone_engine = _svc.get("habitus_zones")
     zone_automation = _svc.get("zone_automation")

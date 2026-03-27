@@ -174,6 +174,9 @@ def test_workspace_zone_sync_fixture_binds_to_core_api_contract() -> None:
     assert wohn_zone["zone_type"] == "living"
     assert bad_zone["entity_count"] == 3
     assert bad_zone["zone_type"] == "bath"
+    by_role = controller.get_zone_entities_by_role("wohnbereich")
+    assert by_role["lights"][0]["entity_id"] == "light.living_room_main"
+    assert by_role["motion"][0]["entity_id"] == "binary_sensor.living_room_motion"
 
 
 

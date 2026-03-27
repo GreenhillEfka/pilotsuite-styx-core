@@ -86,6 +86,15 @@ def test_sync_definitions_persists_zone_truth_metadata_on_controller() -> None:
         {"entity_id": "camera.terrasse", "role": "camera"},
     ]
     assert cfg._ha_entities == cfg.ha_entities
+    by_role = controller.get_zone_entities_by_role("terrace")
+    assert set(by_role) == {"lights", "camera"}
+    assert by_role["lights"][0]["entity_id"] == "light.balkon_licht"
+    assert by_role["lights"][0]["role"] == "lights"
+    assert by_role["lights"][0]["source"] == "ha_sync"
+    assert "licht" in by_role["lights"][0]["tags"]
+    assert by_role["camera"][0]["entity_id"] == "camera.terrasse"
+    assert by_role["camera"][0]["role"] == "camera"
+    assert by_role["camera"][0]["source"] == "ha_sync"
     assert zone is not None
     assert zone["name"] == "Terrasse"
     assert zone["zone_type"] == "terrace"
