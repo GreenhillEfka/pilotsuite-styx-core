@@ -10,6 +10,10 @@
 This note is the explicit restart anchor for the Core lane if the current writer pauses, times out, or hands over for review/commit-prep.
 
 ## Current state
+### Exact committed anchor
+- **Branch:** `main`
+- **Commit:** `f1243375`
+
 ### What is already done
 - Core contract hardening completed across:
   - Zone Truth Sync
@@ -33,7 +37,7 @@ Current result:
 - **0 warnings**
 
 ## Modified/untracked artifact set
-### Modified code files
+### Committed code files in `f1243375`
 - `copilot_core/rootfs/usr/src/app/copilot_core/api/v1/zone_automation.py`
 - `copilot_core/rootfs/usr/src/app/copilot_core/core/brain_read_model.py`
 - `copilot_core/rootfs/usr/src/app/copilot_core/core/dashboard_read_models.py`
@@ -57,15 +61,14 @@ Current result:
   - review and clean before commit/release prep
 
 ## Exact next task for the next writer
-### Commit-prep / hygiene pass
-1. Review `git status`
-2. Clean generated `tmp/` artifacts that should not ship
-3. Re-run:
+### Review / follow-up pass
+1. Review commit **`f1243375`** against the packet in `docs/CORE_REVIEW_PACKET_2026-03-27.md`
+2. Re-run:
    ```bash
    ./scripts/run_core_contract_bundle.sh
    ```
-4. Stage only the intended code/tests/docs/runner files
-5. Prepare commit grouping or squash plan for review
+3. If review is green, keep `f1243375` as the Core handoff anchor
+4. If review finds a sharp blocker, cut one follow-up Core-only fix commit on top
 
 ## Risks / watch-outs
 - `dashboard_read_models.py` is the broadest touch surface in this lane
