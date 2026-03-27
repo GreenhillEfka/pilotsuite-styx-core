@@ -36,8 +36,16 @@ def _run_async(coro, timeout: int = 10):
 
     return asyncio.run(asyncio.wait_for(coro, timeout=timeout))
 
-from copilot_core.monitoring.metrics import get_prometheus_metrics, get_metrics_collector
-from copilot_core.monitoring.health import get_health_checker
+try:
+    from copilot_core.monitoring.metrics import get_prometheus_metrics, get_metrics_collector
+except ImportError:  # pragma: no cover - depends on optional runtime deps
+    get_prometheus_metrics = None  # type: ignore[assignment]
+    get_metrics_collector = None  # type: ignore[assignment]
+
+try:
+    from copilot_core.monitoring.health import get_health_checker
+except ImportError:  # pragma: no cover - depends on optional runtime deps
+    get_health_checker = None  # type: ignore[assignment]
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +70,12 @@ def prometheus_metrics():
     - LLM API metrics
     - Home Assistant integration metrics
     """
+    if get_prometheus_metrics is None:
+        return jsonify({
+            "error": "metrics_unavailable",
+            "message": "Optional monitoring dependencies are not installed",
+        }), 503
+
     try:
         data, content_type = get_prometheus_metrics()
         return Response(data, mimetype=content_type)
@@ -89,6 +103,13 @@ def health_check():
     - Storage paths
     - External services (Home Assistant, Ollama, etc.)
     """
+    if get_health_checker is None:
+        return jsonify({
+            "status": "degraded",
+            "error": "health_checker_unavailable",
+            "message": "Optional monitoring dependencies are not installed",
+        }), 200
+
     try:
         full_check = request.args.get("full", "false").lower() == "true"
         timeout = int(request.args.get("timeout", "10"))
@@ -136,6 +157,13 @@ def readiness_probe():
     - 200: Ready to serve
     - 503: Not ready (still initializing or critical failure)
     """
+    if get_health_checker is None:
+        return jsonify({
+            "ready": False,
+            "status": "degraded",
+            "error": "health_checker_unavailable",
+        }), 503
+
     try:
         checker = get_health_checker()
         health = _run_async(checker.get_dependency_health(), timeout=5)
@@ -185,6 +213,12 @@ def metrics_summary():
     Returns a JSON summary of key metrics instead of Prometheus format.
     Useful for quick debugging or dashboards that don't support Prometheus.
     """
+    if get_metrics_collector is None:
+        return jsonify({
+            "error": "metrics_unavailable",
+            "message": "Optional monitoring dependencies are not installed",
+        }), 503
+
     try:
         from prometheus_client import REGISTRY
         
