@@ -13,7 +13,7 @@ Kompaktes Review-Paket für die aktuelle Core-Lane.
 ./scripts/run_core_contract_bundle.sh
 ```
 Expected baseline:
-- **35 tests passed**
+- **36 tests passed**
 - **0 warnings**
 
 ### 2) Review the code scope
@@ -24,12 +24,18 @@ Expected baseline:
 - `copilot_core/rootfs/usr/src/app/copilot_core/core/taxonomy.py`
 - `copilot_core/rootfs/usr/src/app/copilot_core/hub/habitus_zones.py`
 - `copilot_core/rootfs/usr/src/app/copilot_core/hub/zone_automation.py`
+- `copilot_core/rootfs/usr/src/app/copilot_core/api/v1/metrics.py`
+- `copilot_core/rootfs/usr/src/app/copilot_core/api/v1/zone_health.py`
+- `copilot_core/rootfs/usr/src/app/copilot_core/homeassistant/__init__.py`
+- `copilot_core/rootfs/usr/src/app/copilot_core/core_setup.py`
 
 #### Regression evidence / runner
 - `tests/test_brain_read_model_contract.py`
 - `tests/test_dashboard_read_models_contract.py`
 - `tests/test_taxonomy_contract.py`
 - `tests/test_zone_truth_sync_contract.py`
+- `tests/test_metrics_blueprint_contract.py`
+- `tests/test_zone_health_blueprint_contract.py`
 - `scripts/run_core_contract_bundle.sh`
 
 ### 3) Review the support docs
@@ -41,9 +47,9 @@ Expected baseline:
 - `docs/CORE_15_2_0_SYNC_ANCHOR_2026-03-27.md`
 
 ### 4) Use the current sync decision
-- authoritative paired Core cutover ref for HA releaser-prep: `cf3e8ac1`
-- current repo `HEAD`: `cf3e8ac1`
-- this ref supersedes `1d4fc18f` because newer functional startup/import/metrics hardening is validated green on current `HEAD`
+- authoritative paired Core cutover ref for HA releaser-prep: `8b017a74`
+- repo docs/readiness commits may continue on top of `main`; for exact live head snapshots use the release manifest/export surfaces
+- this ref supersedes `1d4fc18f` because newer functional startup/import/optional-dependency hardening is validated green on the coordinated line
 
 ## What changed
 ### Zone truth chain

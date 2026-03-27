@@ -19,7 +19,7 @@ Diese Übergabe bündelt den aktuellen Core-Contract-Stand, damit die HA-Lane ei
 ```
 
 ### Letztes Ergebnis
-- **35 Tests grün**
+- **36 Tests grün**
 - **0 Warnings**
 - Kein Release, kein Install, kein Live-Test
 
@@ -31,6 +31,8 @@ Diese Übergabe bündelt den aktuellen Core-Contract-Stand, damit die HA-Lane ei
 - `tests/test_zone_dashboard_contract.py`
 - `tests/test_core_wiring_contract.py`
 - `tests/test_event_processor_import_contract.py`
+- `tests/test_metrics_blueprint_contract.py`
+- `tests/test_zone_health_blueprint_contract.py`
 - `tests/integration/test_workspace_ha_core_contract.py`
 
 ## Was in der Core-Lane contract-seitig gehärtet wurde
@@ -109,5 +111,5 @@ Vor einem HA-Release-Kandidaten gegen die Core-Schnittstelle prüfen:
 
 ## Nächster sinnvoller Cross-Lane Schritt
 - HA-Lane nimmt dieses Handoff als Review-Input für den nächsten HA-Release-Kandidaten
-- Gepaarter Core cutover ref ist jetzt `cf3e8ac1`; ältere Refs wie `1d4fc18f` oder `a6eba8a2` sind für den aktuellen koordinierten Cutover veraltet
+- Gepaarter Core cutover ref ist jetzt `8b017a74`; ältere Refs wie `1d4fc18f` oder `a6eba8a2` sind für den aktuellen koordinierten Cutover veraltet
 - Ein neuer Pairing-Ref gilt erst, wenn ein neuerer Ref explizit validiert und announced wird

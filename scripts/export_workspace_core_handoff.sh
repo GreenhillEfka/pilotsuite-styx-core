@@ -27,8 +27,17 @@ STXY_ACCEPTANCE_DOC="$SANDBOX_ROOT/handoff/2026-03-26_core_harness_review_accept
 STXY_COMBINED_RC_DOC="$SANDBOX_ROOT/handoff/2026-03-26_combined_rc_handoff_checklist.md"
 STXY_RELEASER_DOC="$SANDBOX_ROOT/handoff/2026-03-26_releaser_cutover_checklist.md"
 RUNNER_PATH="$ROOT/scripts/run_workspace_ha_core_contract_tests.sh"
+SYNC_CHECKER_PATH="$ROOT/scripts/check_15_2_0_sync_anchor_consistency.sh"
+SYNC_ANCHOR_DOC="$ROOT/docs/CORE_15_2_0_SYNC_ANCHOR_2026-03-27.md"
+CORE_BUILDER_HANDOFF_DOC="$ROOT/docs/CORE_BUILDER_HANDOFF_2026-03-27.md"
+CORE_REVIEW_PACKET_DOC="$ROOT/docs/CORE_REVIEW_PACKET_2026-03-27.md"
+CORE_RELEASE_INPUT_DOC="$ROOT/docs/CORE_RELEASE_INPUT_2026-03-27.md"
+CORE_POINTER_DOC="$ROOT/docs/CORE_15_2_0_RELEASER_PREP_POINTER_2026-03-27.md"
+CORE_RELEASE_MANIFEST_DOC="$ROOT/docs/CORE_15_2_0_RELEASE_MANIFEST_2026-03-27.json"
+WORKSPACE_RELEASE_ENTRYPOINT="$HANDOFF_DIR/core_release_entrypoint.json"
 TEST_FILE_PATH="$ROOT/tests/integration/test_workspace_ha_core_contract.py"
 EVIDENCE_LOG="$HANDOFF_DIR/core_workspace_harness_last_run.log"
+PAIRED_CUTOVER_REF="$(sed -n 's/^EXPECTED_PAIRED_CORE_REF="\([^"]*\)"/\1/p' "$SYNC_CHECKER_PATH" | head -n 1)"
 
 json_string_or_null() {
   local value="${1-}"
@@ -126,6 +135,18 @@ cat > "$OUT" <<EOF
       "endpoint-level POST /api/v1/events harness"
     ]
   },
+  "release_readiness": {
+    "paired_cutover_ref": "$PAIRED_CUTOVER_REF",
+    "single_entrypoint_doc": "$CORE_POINTER_DOC",
+    "release_manifest_doc": "$CORE_RELEASE_MANIFEST_DOC",
+    "workspace_release_entrypoint": "$WORKSPACE_RELEASE_ENTRYPOINT",
+    "sync_anchor_doc": "$SYNC_ANCHOR_DOC",
+    "sync_checker": "$SYNC_CHECKER_PATH",
+    "core_builder_handoff": "$CORE_BUILDER_HANDOFF_DOC",
+    "core_review_packet": "$CORE_REVIEW_PACKET_DOC",
+    "core_release_input": "$CORE_RELEASE_INPUT_DOC",
+    "contract_bundle_runner": "$ROOT/scripts/run_core_contract_bundle.sh"
+  },
   "shared_sandbox_artifacts": {
     "fixtures": [
       "$SANDBOX_ROOT/fixtures/ha_events/canonical_state_changed.json",
@@ -154,6 +175,7 @@ cat > "$PAIR_OUT" <<EOF
     "repo": "$ROOT",
     "branch": "$HEAD_BRANCH",
     "head_commit": "$HEAD_COMMIT",
+    "paired_cutover_ref": "$PAIRED_CUTOVER_REF",
     "status": "$AHEAD_STATUS"
   },
   "binding_context": {
@@ -168,6 +190,8 @@ cat > "$PAIR_OUT" <<EOF
   },
   "shared_workspace_inputs": {
     "core_workspace_target": "$OUT",
+    "core_release_entrypoint": "$WORKSPACE_RELEASE_ENTRYPOINT",
+    "core_release_manifest": "$CORE_RELEASE_MANIFEST_DOC",
     "core_handoff_note": "$SANDBOX_HANDOFF",
     "core_harness_evidence": "$EVIDENCE_OUT",
     "core_harness_log": "$EVIDENCE_LOG",
@@ -184,6 +208,15 @@ cat > "$PAIR_OUT" <<EOF
     "review_gate": "$HA_REVIEW_GATE",
     "handoff_summary": "$HA_HANDOFF_SUMMARY",
     "pairing_rule": "HA release candidate should reference this Core target plus shared sandbox harness surfaces and evidence file; no live-install claim implied"
+  },
+  "core_release_readiness": {
+    "single_entrypoint_doc": "$CORE_POINTER_DOC",
+    "release_manifest_doc": "$CORE_RELEASE_MANIFEST_DOC",
+    "workspace_release_entrypoint": "$WORKSPACE_RELEASE_ENTRYPOINT",
+    "sync_anchor_doc": "$SYNC_ANCHOR_DOC",
+    "sync_checker": "$SYNC_CHECKER_PATH",
+    "contract_bundle_runner": "$ROOT/scripts/run_core_contract_bundle.sh",
+    "paired_cutover_ref": "$PAIRED_CUTOVER_REF"
   }
 }
 EOF
@@ -193,7 +226,10 @@ cat > "$EVIDENCE_OUT" <<EOF
   "generated_at_utc": "$TIMESTAMP",
   "owner_lane": "PilotClaw",
   "core_target_commit": "$HEAD_COMMIT",
+  "paired_cutover_ref": "$PAIRED_CUTOVER_REF",
   "runner": "$RUNNER_PATH",
+  "sync_checker": "$SYNC_CHECKER_PATH",
+  "sync_anchor_doc": "$SYNC_ANCHOR_DOC",
   "test_file": "$TEST_FILE_PATH",
   "log_file": "$EVIDENCE_LOG",
   "rc_input_chain": "$RC_CHAIN_OUT",
@@ -219,7 +255,15 @@ cat > "$EVIDENCE_OUT" <<EOF
     "approved concepts and older research are already folded into the harness surfaces",
     "optional writeback via WORKSPACE_HARNESS_LAST_RESULT and WORKSPACE_HARNESS_LAST_RESULT_SOURCE",
     "uses the same canonical core_rc_input_chain.json as target and pairing exports"
-  ]
+  ],
+  "release_readiness": {
+    "single_entrypoint_doc": "$CORE_POINTER_DOC",
+    "release_manifest_doc": "$CORE_RELEASE_MANIFEST_DOC",
+    "workspace_release_entrypoint": "$WORKSPACE_RELEASE_ENTRYPOINT",
+    "sync_anchor_doc": "$SYNC_ANCHOR_DOC",
+    "sync_checker": "$SYNC_CHECKER_PATH",
+    "contract_bundle_runner": "$ROOT/scripts/run_core_contract_bundle.sh"
+  }
 }
 EOF
 
@@ -228,6 +272,7 @@ cat > "$RC_CHAIN_OUT" <<EOF
   "generated_at_utc": "$TIMESTAMP",
   "owner_lane": "PilotClaw",
   "current_head_commit": "$HEAD_COMMIT",
+  "paired_cutover_ref": "$PAIRED_CUTOVER_REF",
   "current_status": "$AHEAD_STATUS",
   "accepted_rc_input_chain": $RC_INPUT_CHAIN_JSON,
   "reviewer_acceptance": {
@@ -239,7 +284,19 @@ cat > "$RC_CHAIN_OUT" <<EOF
     "machine-readable core commit chain for HomeClaw/Stxy pairing",
     "shared sandbox reviewer lane has accepted this chain as RC input",
     "no live-install claim implied"
-  ]
+  ],
+  "release_readiness_commands": {
+    "sync_checker": "$SYNC_CHECKER_PATH",
+    "contract_bundle": "$ROOT/scripts/run_core_contract_bundle.sh"
+  },
+  "release_readiness_docs": {
+    "pointer": "$CORE_POINTER_DOC",
+    "manifest": "$CORE_RELEASE_MANIFEST_DOC",
+    "sync_anchor": "$SYNC_ANCHOR_DOC",
+    "builder_handoff": "$CORE_BUILDER_HANDOFF_DOC",
+    "review_packet": "$CORE_REVIEW_PACKET_DOC",
+    "release_input": "$CORE_RELEASE_INPUT_DOC"
+  }
 }
 EOF
 

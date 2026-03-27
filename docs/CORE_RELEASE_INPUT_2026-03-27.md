@@ -56,7 +56,7 @@ Contract-Härtung der Core-Truth-Lane rund um:
 ```
 
 ### Result
-- **35 tests passed**
+- **36 tests passed**
 - **0 warnings**
 
 ## Proposed changelog input (draft, not applied)
@@ -108,5 +108,5 @@ Contract-Härtung der Core-Truth-Lane rund um:
 
 ## Recommended next step
 - Reviewer nimmt dieses Dokument + `docs/CORE_RC_PREP_2026-03-27.md` + Bundle-Evidence als Review-Paket.
-- Exakter Review-Anker ist Commit **`cf3e8ac1`**.
-- Der Recovery-Stand `f1243375` bleibt historisch referenziert, aber der aktuelle Core-Fix-Anker ist `cf3e8ac1`.
+- Exakter Review-Anker ist Commit **`8b017a74`**.
+- Der Recovery-Stand `f1243375` bleibt historisch referenziert, aber der aktuelle Core-Fix-Anker ist `8b017a74`.

@@ -12,8 +12,8 @@ The Core recovery candidate for **v15.2.0** is now cut as an exact committed rev
 
 ## Exact anchor
 - **Branch:** `main`
-- **Commit:** `cf3e8ac1`
-- **Paired Core cutover ref:** `cf3e8ac1`
+- **Commit:** `8b017a74`
+- **Paired Core cutover ref:** `8b017a74`
 
 ## What is already present in the worktree
 The current worktree already contains contract-hardening edits across:
@@ -23,12 +23,17 @@ The current worktree already contains contract-hardening edits across:
 - `copilot_core/rootfs/usr/src/app/copilot_core/core/taxonomy.py`
 - `copilot_core/rootfs/usr/src/app/copilot_core/hub/habitus_zones.py`
 - `copilot_core/rootfs/usr/src/app/copilot_core/hub/zone_automation.py`
+- `copilot_core/rootfs/usr/src/app/copilot_core/api/v1/metrics.py`
+- `copilot_core/rootfs/usr/src/app/copilot_core/api/v1/zone_health.py`
+- `copilot_core/rootfs/usr/src/app/copilot_core/homeassistant/__init__.py`
+- `copilot_core/rootfs/usr/src/app/copilot_core/core_setup.py`
 
 Current candidate theme:
 - zone truth sync carries `zone_type`, `enabled_modules`, and HA entities more explicitly
 - dashboard read models classify entities, expose enabled modules, and derive module states more coherently
 - brain read model falls back to cached graph growth snapshots
 - contract bundle remains the primary evidence path
+- optional-dependency API lanes now degrade cleanly instead of disappearing from the registry
 
 ## Version alignment applied
 The canonical version files are now aligned to **15.2.0**:
@@ -46,7 +51,7 @@ Validated with:
 ```
 
 Result at handoff:
-- **35 tests passed**
+- **36 tests passed**
 - **0 warnings**
 
 ## Risks / watch-outs
@@ -55,7 +60,7 @@ Result at handoff:
 - Review should verify downstream consumers tolerate the stronger zone/module metadata now exposed.
 
 ## Exact next step
-1. Review commit **`cf3e8ac1`** as the exact **15.2.0 candidate set**.
+1. Review commit **`8b017a74`** as the exact **15.2.0 candidate set**.
 2. Use the contract bundle evidence and handoff docs as the review packet.
 3. Pass to independent review/release-readiness per governance.
 4. Do not install/release before reviewer signoff.
