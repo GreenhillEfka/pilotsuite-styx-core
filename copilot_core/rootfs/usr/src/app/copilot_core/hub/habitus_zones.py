@@ -367,6 +367,58 @@ class HabitusZoneEngine:
         zone.priority = int(priority)
         return True
 
+    def sync_external_zone_topology(
+        self,
+        zone_id: str,
+        *,
+        name: str,
+        zone_type: str = "living",
+        enabled_modules: set[str] | None = None,
+        entities: list[Any] | None = None,
+        icon: str | None = None,
+        priority: int | None = None,
+        enabled: bool | None = None,
+    ) -> HabitusZone:
+        """Upsert a zone from external HA/Core topology data.
+
+        This keeps the HabitusZoneEngine usable even when HA provides direct zone
+        definitions without a fully populated room registry yet.
+        """
+        zone = self._zones.get(zone_id)
+        if zone is None:
+            zone = self.create_zone(
+                zone_id=zone_id,
+                name=name,
+                room_ids=[],
+                icon=icon or "mdi:home-floor-1",
+                priority=priority or 0,
+                zone_type=zone_type,
+                enabled_modules=enabled_modules or set(),
+            )
+        else:
+            zone.name = name.strip() or zone.name
+            zone.zone_type = zone_type or zone.zone_type
+            if enabled_modules is not None:
+                zone.enabled_modules = set(enabled_modules)
+            if icon:
+                zone.icon = icon
+            if priority is not None:
+                zone.priority = int(priority)
+            if enabled is not None:
+                zone.enabled = bool(enabled)
+
+        if entities is not None:
+            normalized_entities = self._normalize_external_entities(entities)
+            zone.entities = normalized_entities
+            zone.settings["ha_topology_entities"] = list(entities)
+            for entity_id in normalized_entities:
+                domain = entity_id.split(".")[0] if "." in entity_id else "unknown"
+                self._entity_types[entity_id] = domain
+        elif zone.rooms:
+            self._refresh_zone_entities(zone)
+
+        return zone
+
     # ── Entity state tracking ───────────────────────────────────────────
 
     def update_entity_state(self, entity_id: str, value: Any) -> None:
@@ -538,6 +590,24 @@ class HabitusZoneEngine:
             if room:
                 entities.extend(room.entities)
         zone.entities = list(dict.fromkeys(entities))  # deduplicate preserving order
+
+    @staticmethod
+    def _normalize_external_entities(entities: list[Any]) -> list[str]:
+        """Normalize HA topology payload entries into a stable list of entity_ids."""
+        normalized: list[str] = []
+        for item in entities:
+            entity_id = ""
+            if isinstance(item, str):
+                entity_id = item
+            elif isinstance(item, dict):
+                entity_id = str(item.get("entity_id", "")).strip()
+            else:
+                entity_id = str(item).strip()
+
+            if entity_id:
+                normalized.append(entity_id)
+
+        return list(dict.fromkeys(normalized))
 
     def _find_zone_for_room(self, room_id: str) -> str | None:
         """Find which zone a room belongs to."""

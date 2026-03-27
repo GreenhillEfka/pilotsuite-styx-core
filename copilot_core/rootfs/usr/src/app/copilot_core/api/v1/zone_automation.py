@@ -40,12 +40,34 @@ zone_automation_bp = Blueprint(
 
 # Module-level service reference
 _controller: Optional[Any] = None
+_zone_engine: Optional[Any] = None
 
 
-def init_zone_automation_api(controller=None) -> None:
-    """Wire the zone automation controller into the blueprint."""
-    global _controller
+def _mirror_zone_truth_into_habitus_engine(zone: dict[str, Any], cfg: Any) -> None:
+    """Mirror synced HA zone definitions into the HabitusZone truth engine."""
+    if _zone_engine is None:
+        return
+
+    try:
+        _zone_engine.sync_external_zone_topology(
+            str(zone.get("zone_id", "")).strip(),
+            name=str(zone.get("name_de") or zone.get("name") or getattr(cfg, "zone_name", "") or zone.get("zone_id", "")).strip(),
+            zone_type=str(zone.get("zone_type") or getattr(cfg, "zone_type", "room") or "room"),
+            enabled_modules=set(getattr(cfg, "enabled_modules", set()) or set()),
+            entities=list(zone.get("entities", getattr(cfg, "ha_entities", [])) or []),
+            icon=str(zone.get("icon", "")).strip() or None,
+            priority=zone.get("priority"),
+            enabled=zone.get("enabled"),
+        )
+    except Exception as exc:
+        _LOGGER.warning("Failed to mirror synced zone '%s' into Habitus engine: %s", zone.get("zone_id"), exc)
+
+
+def init_zone_automation_api(controller=None, zone_engine=None) -> None:
+    """Wire the zone automation controller and optional zone engine into the blueprint."""
+    global _controller, _zone_engine
     _controller = controller
+    _zone_engine = zone_engine
     _LOGGER.info("Zone Automation API initialized")
 
 
@@ -486,6 +508,8 @@ def sync_zone_definitions():
             if "entities" in zone:
                 cfg.ha_entities = list(zone["entities"])
                 cfg._ha_entities = list(zone["entities"])  # backward-compatible HA context for Brain
+
+            _mirror_zone_truth_into_habitus_engine(zone, cfg)
             synced.append(zone_id)
 
     _LOGGER.info(
