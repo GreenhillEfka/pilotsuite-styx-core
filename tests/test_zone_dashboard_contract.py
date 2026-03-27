@@ -17,6 +17,8 @@ if CORE_APP_ROOT.exists() and path_str not in sys.path:
 
 
 from copilot_core.api.v1.zone_dashboard import (  # noqa: E402
+    get_dashboard_summary,
+    get_mood,
     get_zone_detail,
     init_zone_dashboard_api,
     set_mood,
@@ -82,3 +84,34 @@ def test_zone_dashboard_mood_update_keeps_unprefixed_truth_zone_id() -> None:
     assert body["ok"] is True
     assert body["zone_id"] == "wohnbereich"
     assert body["mood"]["comfort"] == 0.7
+
+
+def test_zone_dashboard_summary_prefers_truth_engine_zones() -> None:
+    _init_services()
+    app = Flask(__name__)
+    app.config["TESTING"] = True
+    app.register_blueprint(zone_dashboard_bp)
+
+    with app.test_request_context("/api/v1/zone/dashboard/summary", method="GET"):
+        response = get_dashboard_summary.__wrapped__()
+
+    body = response.get_json()
+    assert body["ok"] is True
+    assert body["summary"]["total_zones"] == 1
+    assert body["summary"]["zone_types"] == {"living": 1}
+    assert body["summary"]["total_entities"] == 2
+
+
+def test_zone_dashboard_mood_list_prefers_truth_engine_zones() -> None:
+    _init_services()
+    app = Flask(__name__)
+    app.config["TESTING"] = True
+    app.register_blueprint(zone_dashboard_bp)
+
+    with app.test_request_context("/api/v1/zone/dashboard/mood", method="GET"):
+        response = get_mood.__wrapped__()
+
+    body = response.get_json()
+    assert body["ok"] is True
+    assert body["count"] == 1
+    assert set(body["mood"].keys()) == {"wohnbereich"}
