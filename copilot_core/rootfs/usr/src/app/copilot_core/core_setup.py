@@ -1494,7 +1494,7 @@ def register_blueprints(app: Flask, services: dict) -> None:
         from copilot_core.hub.zone_automation import ZoneAutomationController
         zone_auto_ctrl = ZoneAutomationController()
         services["zone_automation"] = zone_auto_ctrl
-        init_zone_automation_api(zone_auto_ctrl)
+        init_zone_automation_api(zone_auto_ctrl, services.get("hub_zones"))
     except Exception as exc:
         _LOGGER.warning("Zone Automation init failed: %s", exc)
         init_zone_automation_api(None)

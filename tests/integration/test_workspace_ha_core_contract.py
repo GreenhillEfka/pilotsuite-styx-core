@@ -36,6 +36,7 @@ from copilot_core.api.v1.zone_automation import (  # noqa: E402
     sync_zone_definitions,
 )
 from copilot_core.api.v1.events_ingest import bp as events_ingest_bp, set_store  # noqa: E402
+from copilot_core.hub.habitus_zones import HabitusZoneEngine  # noqa: E402
 from copilot_core.hub.zone_automation import ZoneAutomationController  # noqa: E402
 from copilot_core.ingest.event_store import EventStore  # noqa: E402
 
@@ -139,7 +140,8 @@ def test_workspace_zone_sync_fixture_binds_to_core_api_contract() -> None:
     fixture = _load_sandbox_fixture("fixtures/ha_events/zone_definitions.json")
 
     controller = ZoneAutomationController()
-    init_zone_automation_api(controller)
+    zone_engine = HabitusZoneEngine()
+    init_zone_automation_api(controller, zone_engine)
 
     app = Flask(__name__)
     app.config["TESTING"] = True
@@ -158,11 +160,20 @@ def test_workspace_zone_sync_fixture_binds_to_core_api_contract() -> None:
 
     wohn = controller.get_zone_config("wohnbereich")
     bad = controller.get_zone_config("badbereich")
+    overview = zone_engine.get_overview()
+    wohn_zone = zone_engine.get_zone("wohnbereich")
+    bad_zone = zone_engine.get_zone("badbereich")
+
     assert wohn.zone_name == "Wohnbereich"
     assert wohn.zone_type == "living"
     assert len(getattr(wohn, "_ha_entities", [])) == 2
     assert bad.zone_name == "Badbereich"
     assert bad.zone_type == "bath"
+    assert overview.total_zones == 2
+    assert wohn_zone["entity_count"] == 2
+    assert wohn_zone["zone_type"] == "living"
+    assert bad_zone["entity_count"] == 3
+    assert bad_zone["zone_type"] == "bath"
 
 
 

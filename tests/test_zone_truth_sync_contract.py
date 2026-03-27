@@ -17,6 +17,7 @@ if CORE_APP_ROOT.exists() and path_str not in sys.path:
 
 
 from copilot_core.api.v1.zone_automation import init_zone_automation_api, sync_zone_definitions  # noqa: E402
+from copilot_core.hub.habitus_zones import HabitusZoneEngine  # noqa: E402
 from copilot_core.hub.zone_automation import ZoneAutomationConfig, ZoneAutomationController  # noqa: E402
 
 
@@ -43,7 +44,8 @@ def test_zone_automation_config_roundtrips_zone_truth_metadata() -> None:
 
 def test_sync_definitions_persists_zone_truth_metadata_on_controller() -> None:
     controller = ZoneAutomationController()
-    init_zone_automation_api(controller)
+    zone_engine = HabitusZoneEngine()
+    init_zone_automation_api(controller, zone_engine)
 
     app = Flask(__name__)
     app.config["TESTING"] = True
@@ -73,6 +75,7 @@ def test_sync_definitions_persists_zone_truth_metadata_on_controller() -> None:
 
     body = response.get_json()
     cfg = controller.get_zone_config("terrace")
+    zone = zone_engine.get_zone("terrace")
 
     assert body == {"ok": True, "synced": ["terrace"], "count": 1}
     assert cfg.zone_name == "Terrasse"
@@ -83,3 +86,8 @@ def test_sync_definitions_persists_zone_truth_metadata_on_controller() -> None:
         {"entity_id": "camera.terrasse", "role": "camera"},
     ]
     assert cfg._ha_entities == cfg.ha_entities
+    assert zone is not None
+    assert zone["name"] == "Terrasse"
+    assert zone["zone_type"] == "terrace"
+    assert zone["enabled_modules"] == ["camera", "light", "music"]
+    assert zone["entities"] == ["light.balkon_licht", "camera.terrasse"]
