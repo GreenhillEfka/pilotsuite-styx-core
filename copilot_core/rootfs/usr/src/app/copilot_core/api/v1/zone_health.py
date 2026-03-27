@@ -406,6 +406,18 @@ class ZoneHealthChecker:
 _checker: ZoneHealthChecker | None = None
 
 
+def _zone_health_dependency_error():
+    return jsonify({
+        "ok": False,
+        "error": "zone_health_unavailable",
+        "message": "Optional HTTP dependency 'requests' is not installed",
+    }), 503
+
+
+def _zone_health_dependency_ready() -> bool:
+    return http_requests is not None
+
+
 def _get_checker() -> ZoneHealthChecker:
     global _checker
     if _checker is None:
@@ -417,6 +429,9 @@ def _get_checker() -> ZoneHealthChecker:
 @require_token
 def get_all_zone_health():
     """Health overview for all zones."""
+    if not _zone_health_dependency_ready():
+        return _zone_health_dependency_error()
+
     checker = _get_checker()
     results = checker.check_all_zones()
     return jsonify({
@@ -438,6 +453,9 @@ def get_all_zone_health():
 @require_token
 def get_zone_health_detail(zone_id: str):
     """Detailed health for a specific zone (includes entity-level details)."""
+    if not _zone_health_dependency_ready():
+        return _zone_health_dependency_error()
+
     checker = _get_checker()
     zones = checker._get_zones()
     zone_id_norm = zone_id if zone_id.startswith("zone:") else f"zone:{zone_id}"

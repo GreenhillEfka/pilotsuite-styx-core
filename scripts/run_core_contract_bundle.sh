@@ -68,6 +68,7 @@ rm -f \
   tests/test_zone_dashboard_contract.py \
   tests/test_brain_read_model_contract.py \
   tests/test_metrics_blueprint_contract.py \
+  tests/test_zone_health_blueprint_contract.py \
   tests/test_taxonomy_contract.py \
   tests/test_zone_truth_sync_contract.py \
   tests/test_core_wiring_contract.py \
