@@ -1571,6 +1571,7 @@ def register_blueprints(app: Flask, services: dict) -> None:
             aggregator=zone_aggregator,
             zone_automation=services.get("zone_automation"),
             bus=services.get("integration_bus"),
+            habitus_zones=services.get("hub_zones"),
         )
         app.register_blueprint(zone_aggregates_bp)
         _LOGGER.info("Zone Aggregates API registered")

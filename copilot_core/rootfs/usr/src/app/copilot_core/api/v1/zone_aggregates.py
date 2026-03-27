@@ -39,6 +39,55 @@ _aggregator = None
 _scene_db: str = ""
 
 
+def _normalize_entities_by_role(value: Any) -> dict[str, list[str]]:
+    if not isinstance(value, dict):
+        return {}
+
+    normalized: dict[str, list[str]] = {}
+    for role, raw_entities in value.items():
+        if isinstance(raw_entities, list):
+            items = [str(eid).strip() for eid in raw_entities if str(eid).strip()]
+            if items:
+                normalized[str(role)] = items
+    return normalized
+
+
+
+def _normalize_entity_ids(zone: dict[str, Any]) -> list[str]:
+    raw_entity_ids = zone.get("entity_ids")
+    if isinstance(raw_entity_ids, list):
+        entity_ids = [str(eid).strip() for eid in raw_entity_ids if str(eid).strip()]
+    else:
+        raw_entities = zone.get("entities")
+        if isinstance(raw_entities, list):
+            entity_ids = [str(eid).strip() for eid in raw_entities if str(eid).strip()]
+        elif isinstance(raw_entities, dict):
+            entity_ids = [
+                str(eid).strip()
+                for role_entities in raw_entities.values()
+                if isinstance(role_entities, list)
+                for eid in role_entities
+                if str(eid).strip()
+            ]
+        else:
+            entity_ids = []
+
+    return list(dict.fromkeys(entity_ids))
+
+
+
+def _merge_entities_by_role(*entity_maps: Any) -> dict[str, list[str]]:
+    merged: dict[str, list[str]] = {}
+    for entity_map in entity_maps:
+        for role, entity_ids in _normalize_entities_by_role(entity_map).items():
+            bucket = merged.setdefault(role, [])
+            for eid in entity_ids:
+                if eid not in bucket:
+                    bucket.append(eid)
+    return merged
+
+
+
 def init_zone_aggregates_api(aggregator=None, **services: Any) -> None:
     """Initialize Zone Aggregates API."""
     global _aggregator, _scene_db
@@ -218,29 +267,65 @@ def _row_to_scene(row) -> dict[str, Any]:
 # ── Zone Helpers ────────────────────────────────────────────────────────
 
 def _get_zone(zone_id: str) -> dict[str, Any] | None:
-    """Get zone config by ID."""
+    """Get zone config by ID, preferring the Core truth engine."""
+    requested_ids = {zone_id, zone_id.replace("zone:", "")}
+    requested_ids.update({f"zone:{zid}" for zid in list(requested_ids) if zid})
+
     za = _svc.get("zone_automation")
+    zone_engine = _svc.get("habitus_zones") or _svc.get("hub_zones")
+
+    if zone_engine is not None:
+        try:
+            overview = zone_engine.get_overview()
+            for zone in getattr(overview, "zones", []) or []:
+                zid = zone.get("zone_id", "") if isinstance(zone, dict) else getattr(zone, "zone_id", "")
+                if zid not in requested_ids:
+                    continue
+
+                full_zone = zone_engine.get_zone(zid)
+                base_zone = dict(full_zone) if isinstance(full_zone, dict) else (dict(zone) if isinstance(zone, dict) else {"zone_id": zid})
+                role_entities = {}
+                if za and hasattr(za, "get_zone_entities_by_role"):
+                    role_entities = za.get_zone_entities_by_role(zid) or {}
+
+                merged_zone = dict(base_zone)
+                merged_zone["zone_id"] = zid
+                merged_zone["name_de"] = merged_zone.get("name_de") or merged_zone.get("name") or zid
+                merged_zone["zone_type"] = str(merged_zone.get("zone_type", zid) or zid)
+                merged_zone["enabled_modules"] = [
+                    str(module_id) for module_id in merged_zone.get("enabled_modules", []) if str(module_id)
+                ]
+                merged_zone["entities_by_role"] = _merge_entities_by_role(role_entities, merged_zone.get("entities_by_role"))
+                merged_zone["entity_ids"] = _normalize_entity_ids(merged_zone)
+                if not merged_zone["entity_ids"]:
+                    merged_zone["entity_ids"] = _normalize_entity_ids({"entities": merged_zone["entities_by_role"]})
+                merged_zone["entities"] = merged_zone["entities_by_role"]
+                return merged_zone
+        except Exception:
+            logger.debug("Failed to assemble zone aggregate from truth engine", exc_info=True)
+
     if za and hasattr(za, "get_all_states"):
         try:
             for s in za.get_all_states():
                 zid = s.get("zone_id", "")
-                if zid == zone_id or zid == f"zone:{zone_id}":
-                    entities = {}
-                    if hasattr(za, "get_zone_entities_by_role"):
-                        entities = za.get_zone_entities_by_role(zid) or {}
-                    entity_ids = [
-                        eid for role_list in entities.values()
-                        if isinstance(role_list, list)
-                        for eid in role_list
-                    ]
-                    return {
-                        "zone_id": zid,
-                        "name_de": s.get("name", zid),
-                        "entity_ids": entity_ids,
-                        "entities": entities,
-                    }
+                if zid not in requested_ids:
+                    continue
+                entities = {}
+                if hasattr(za, "get_zone_entities_by_role"):
+                    entities = za.get_zone_entities_by_role(zid) or {}
+                entities = _normalize_entities_by_role(entities)
+                entity_ids = _normalize_entity_ids({"entities": entities})
+                return {
+                    "zone_id": zid,
+                    "name_de": s.get("name", zid),
+                    "zone_type": s.get("zone_type", zid),
+                    "enabled_modules": [str(module_id) for module_id in s.get("enabled_modules", []) if str(module_id)],
+                    "entity_ids": entity_ids,
+                    "entities_by_role": entities,
+                    "entities": entities,
+                }
         except Exception:
-            pass
+            logger.debug("Failed to assemble zone aggregate from automation state", exc_info=True)
 
     # Fallback: habitus_zones + example_config
     try:
@@ -255,17 +340,15 @@ def _get_zone(zone_id: str) -> dict[str, Any] | None:
             zid = z.get("zone_id", "") if isinstance(z, dict) else getattr(z, "zone_type", "")
             if hasattr(zid, "value"):
                 zid = zid.value
-            if zid == zone_id or zid == zone_id.replace("zone:", ""):
-                entities = EXAMPLE_ZONE_ENTITIES.get(zid, {})
-                entity_ids = [
-                    eid for role_list in entities.values()
-                    if isinstance(role_list, list)
-                    for eid in role_list
-                ]
+            if zid in requested_ids:
+                entities = _normalize_entities_by_role(EXAMPLE_ZONE_ENTITIES.get(zid, {}))
                 return {
                     "zone_id": zid,
                     "name_de": z.get("name_de", zid) if isinstance(z, dict) else getattr(z, "name_de", zid),
-                    "entity_ids": entity_ids,
+                    "zone_type": z.get("zone_type", zid) if isinstance(z, dict) else zid,
+                    "enabled_modules": [str(module_id) for module_id in (z.get("enabled_modules", []) if isinstance(z, dict) else []) if str(module_id)],
+                    "entity_ids": _normalize_entity_ids({"entities": entities}),
+                    "entities_by_role": entities,
                     "entities": entities,
                 }
     except ImportError:
@@ -521,6 +604,9 @@ def get_zone_aggregates(zone_id: str):
         "ok": True,
         "zone_id": zone["zone_id"],
         "zone_name": zone.get("name_de", zone_id),
+        "zone_type": zone.get("zone_type", zone.get("zone_id", zone_id)),
+        "enabled_modules": zone.get("enabled_modules", []),
+        "entities_by_role": zone.get("entities_by_role", zone.get("entities", {})),
         "aggregates": aggregates,
         "total_entities": len(zone["entity_ids"]),
         "generated_at": datetime.now(timezone.utc).isoformat(),
