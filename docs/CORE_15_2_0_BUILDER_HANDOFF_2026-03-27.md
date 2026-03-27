@@ -5,13 +5,15 @@
 - **Role:** builder/owner handoff note
 - **Boundary:** repo/dev only
 - **Non-claims:** no release, no install, no live-test
+- **Authoritative Core repo:** `/config/clawd/team/repos/pilotsuite-styx-core`
 
 ## Candidate intent
 The Core recovery candidate for **v15.2.0** is now cut as an exact committed review anchor so the contract/truth lane is internally coherent and ready for independent review.
 
 ## Exact anchor
 - **Branch:** `main`
-- **Commit:** `1d4fc18f`
+- **Commit:** `cf3e8ac1`
+- **Paired Core cutover ref:** `cf3e8ac1`
 
 ## What is already present in the worktree
 The current worktree already contains contract-hardening edits across:
@@ -44,7 +46,7 @@ Validated with:
 ```
 
 Result at handoff:
-- **32 tests passed**
+- **35 tests passed**
 - **0 warnings**
 
 ## Risks / watch-outs
@@ -53,7 +55,7 @@ Result at handoff:
 - Review should verify downstream consumers tolerate the stronger zone/module metadata now exposed.
 
 ## Exact next step
-1. Review commit **`1d4fc18f`** as the exact **15.2.0 candidate set**.
+1. Review commit **`cf3e8ac1`** as the exact **15.2.0 candidate set**.
 2. Use the contract bundle evidence and handoff docs as the review packet.
 3. Pass to independent review/release-readiness per governance.
 4. Do not install/release before reviewer signoff.

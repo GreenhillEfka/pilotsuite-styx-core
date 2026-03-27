@@ -7,6 +7,7 @@ Contract-seitiges Übergabe-/Review-Artefakt aus der Core-Lane für die HA-Relea
 - Das ist **Dev/Repo-Evidence**, kein Install- oder Live-Test.
 - Release-Governance bleibt: **Builder -> Review -> Release**.
 - **Kein Live-Test ohne Release.**
+- **Authoritative Core repo:** `/config/clawd/team/repos/pilotsuite-styx-core`
 
 ## Scope of this handoff
 Diese Übergabe bündelt den aktuellen Core-Contract-Stand, damit die HA-Lane einen sauberen Release-Kandidaten gegen belastbare Core-Contracts reviewen kann.
@@ -18,8 +19,8 @@ Diese Übergabe bündelt den aktuellen Core-Contract-Stand, damit die HA-Lane ei
 ```
 
 ### Letztes Ergebnis
-- **25 Tests grün**
-- **2 Pytest-Config-Warnings** aus der gewählten venv
+- **35 Tests grün**
+- **0 Warnings**
 - Kein Release, kein Install, kein Live-Test
 
 ### Enthaltene Suites
@@ -27,6 +28,9 @@ Diese Übergabe bündelt den aktuellen Core-Contract-Stand, damit die HA-Lane ei
 - `tests/test_brain_read_model_contract.py`
 - `tests/test_taxonomy_contract.py`
 - `tests/test_zone_truth_sync_contract.py`
+- `tests/test_zone_dashboard_contract.py`
+- `tests/test_core_wiring_contract.py`
+- `tests/test_event_processor_import_contract.py`
 - `tests/integration/test_workspace_ha_core_contract.py`
 
 ## Was in der Core-Lane contract-seitig gehärtet wurde
@@ -100,9 +104,10 @@ Vor einem HA-Release-Kandidaten gegen die Core-Schnittstelle prüfen:
 - erst danach Release-Gate / Install / Live-Test
 
 ## Bekannte Restpunkte
-- Bundle nutzt aktuell die erste passende pytest-Umgebung mit `pytest + flask`; daraus kommen noch 2 Pytest-Config-Warnings
-- Das ist **kein funktionaler Contract-Fail**, aber ein Readiness-Thema für saubere Runner-Umgebung
+- Kein scharfer Contract-Blocker aus dem Core-Bundle-Stand
+- Weiterer Bewegungsgrund für die HA-Lane wäre nur ein neuer explizit validierter Core cutover ref oder ein scharfer HA-seitiger Blocker
 
 ## Nächster sinnvoller Cross-Lane Schritt
 - HA-Lane nimmt dieses Handoff als Review-Input für den nächsten HA-Release-Kandidaten
-- Core-Lane kann bei Bedarf als nächstes ein Warning-/Runner-Cleanup für die Bundle-Umgebung liefern
+- Gepaarter Core cutover ref ist jetzt `cf3e8ac1`; ältere Refs wie `1d4fc18f` oder `a6eba8a2` sind für den aktuellen koordinierten Cutover veraltet
+- Ein neuer Pairing-Ref gilt erst, wenn ein neuerer Ref explizit validiert und announced wird
