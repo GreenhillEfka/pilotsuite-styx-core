@@ -458,11 +458,13 @@ class HabitusZoneEngine:
         return {
             "zone_id": zone.zone_id,
             "name": zone.name,
+            "zone_type": zone.zone_type,
             "icon": zone.icon,
             "mode": zone.mode,
             "mode_name": _ZONE_MODES.get(zone.mode, {}).get("name", zone.mode),
             "enabled": zone.enabled,
             "priority": zone.priority,
+            "enabled_modules": sorted(zone.enabled_modules),
             "rooms": rooms,
             "room_count": len(zone.rooms),
             "entity_count": len(zone.entities),
@@ -489,11 +491,13 @@ class HabitusZoneEngine:
             zone_list.append({
                 "zone_id": zone.zone_id,
                 "name": zone.name,
+                "zone_type": zone.zone_type,
                 "icon": zone.icon,
                 "mode": zone.mode,
                 "enabled": zone.enabled,
                 "room_count": len(zone.rooms),
                 "entity_count": len(zone.entities),
+                "priority": zone.priority,
             })
 
         unassigned = [rid for rid in self._rooms if rid not in assigned_rooms]

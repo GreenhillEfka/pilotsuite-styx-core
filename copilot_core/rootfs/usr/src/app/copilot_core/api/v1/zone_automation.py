@@ -578,8 +578,11 @@ def sync_zone_definitions():
             # Store HA entity definitions + zone metadata on the config
             cfg.zone_name = zone.get("name_de", zone_id)
             cfg.zone_type = zone.get("zone_type", cfg.zone_type or "room")
+            if "enabled_modules" in zone and isinstance(zone.get("enabled_modules"), list):
+                cfg.enabled_modules = set(str(mid) for mid in zone.get("enabled_modules", []) if str(mid).strip())
             if "entities" in zone:
-                cfg._ha_entities = zone["entities"]  # HA context for Brain
+                cfg.ha_entities = list(zone["entities"])
+                cfg._ha_entities = list(zone["entities"])  # backward-compatible HA context for Brain
             synced.append(zone_id)
 
     _LOGGER.info(

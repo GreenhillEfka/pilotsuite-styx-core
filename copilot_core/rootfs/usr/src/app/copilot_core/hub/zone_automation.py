@@ -116,6 +116,9 @@ class ZoneAutomationConfig:
 
     zone_id: str
     zone_name: str = ""
+    zone_type: str = "room"
+    enabled_modules: set[str] = field(default_factory=set)
+    ha_entities: list[dict[str, Any]] = field(default_factory=list)
     automation_mode: str = "learning"  # off | learning | autonomy
     light: ZoneLightConfig = field(default_factory=ZoneLightConfig)
     music: ZoneMusicConfig = field(default_factory=ZoneMusicConfig)
@@ -124,11 +127,16 @@ class ZoneAutomationConfig:
     def __post_init__(self) -> None:
         if not self.modules:
             self.modules = ZoneModuleRegistry.create_defaults()
+        # Backward-compatible mirror for older callers still reading cfg._ha_entities
+        self._ha_entities = list(self.ha_entities)
 
     def to_dict(self) -> dict[str, Any]:
         result = {
             "zone_id": self.zone_id,
             "zone_name": self.zone_name,
+            "zone_type": self.zone_type,
+            "enabled_modules": sorted(self.enabled_modules),
+            "ha_entities": list(self.ha_entities),
             "automation_mode": self.automation_mode,
             # Legacy keys for backward compatibility
             "light": asdict(self.light),
@@ -156,6 +164,9 @@ class ZoneAutomationConfig:
         return cls(
             zone_id=data.get("zone_id", ""),
             zone_name=data.get("zone_name", ""),
+            zone_type=data.get("zone_type", "room"),
+            enabled_modules=set(data.get("enabled_modules", [])),
+            ha_entities=list(data.get("ha_entities", [])),
             automation_mode=mode,
             light=ZoneLightConfig(**{k: v for k, v in light_data.items() if k in ZoneLightConfig.__dataclass_fields__}),
             music=ZoneMusicConfig(**{k: v for k, v in music_data.items() if k in ZoneMusicConfig.__dataclass_fields__}),
