@@ -39,6 +39,20 @@ _aggregator = None
 _scene_db: str = ""
 
 
+def _zone_aggregates_dependency_error():
+    return jsonify({
+        "ok": False,
+        "error": "zone_aggregates_unavailable",
+        "message": "Optional HTTP dependency 'requests' is not installed",
+    }), 503
+
+
+
+def _zone_aggregates_dependency_ready() -> bool:
+    return http_requests is not None
+
+
+
 def _normalize_entities_by_role(value: Any) -> dict[str, list[str]]:
     if not isinstance(value, dict):
         return {}
@@ -473,6 +487,9 @@ ZONE_PRESETS = [
 
 def _capture_zone_states(entity_ids: list[str]) -> dict[str, dict[str, Any]]:
     """Capture current entity states from HA Supervisor API."""
+    if not _zone_aggregates_dependency_ready():
+        return {}
+
     ha_url = os.environ.get("SUPERVISOR_API", "http://supervisor/core/api")
     ha_token = os.environ.get("SUPERVISOR_TOKEN", "")
     if not ha_token:
@@ -526,6 +543,9 @@ def _capture_zone_states(entity_ids: list[str]) -> dict[str, dict[str, Any]]:
 
 def _create_ha_scene(scene_id: str, entity_ids: list[str]) -> str | None:
     """Register a scene in HA via snapshot and return scene entity_id."""
+    if not _zone_aggregates_dependency_ready():
+        return None
+
     ha_url = os.environ.get("SUPERVISOR_API", "http://supervisor/core/api")
     ha_token = os.environ.get("SUPERVISOR_TOKEN", "")
     if not ha_token:
@@ -546,6 +566,9 @@ def _create_ha_scene(scene_id: str, entity_ids: list[str]) -> str | None:
 
 def _apply_ha_scene(ha_scene_eid: str) -> bool:
     """Apply a HA scene by entity_id."""
+    if not _zone_aggregates_dependency_ready():
+        return False
+
     ha_url = os.environ.get("SUPERVISOR_API", "http://supervisor/core/api")
     ha_token = os.environ.get("SUPERVISOR_TOKEN", "")
     if not ha_token:
@@ -649,6 +672,9 @@ def capture_zone_scene(zone_id: str):
 
     Body: {"name": "Gemuetlicher Abend", "create_ha_scene": true}
     """
+    if not _zone_aggregates_dependency_ready():
+        return _zone_aggregates_dependency_error()
+
     zone = _get_zone(zone_id)
     if not zone:
         return jsonify({"ok": False, "error": f"Zone '{zone_id}' nicht gefunden"}), 404
@@ -708,6 +734,9 @@ def apply_zone_scene(zone_id: str):
 
     Body: {"scene_id": "hz_wohnbereich_abc12345"}
     """
+    if not _zone_aggregates_dependency_ready():
+        return _zone_aggregates_dependency_error()
+
     body = request.get_json(silent=True) or {}
     scene_id = body.get("scene_id")
     if not scene_id:
