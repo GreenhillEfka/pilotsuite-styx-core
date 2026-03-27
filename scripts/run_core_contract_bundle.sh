@@ -72,6 +72,7 @@ rm -f \
   tests/test_zone_health_truth_contract.py \
   tests/test_zone_aggregates_blueprint_contract.py \
   tests/test_zone_aggregates_truth_contract.py \
+  tests/test_scenes_blueprint_contract.py \
   tests/test_taxonomy_contract.py \
   tests/test_zone_truth_sync_contract.py \
   tests/test_core_wiring_contract.py \
