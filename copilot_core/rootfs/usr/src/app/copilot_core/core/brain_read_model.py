@@ -268,15 +268,29 @@ def update_graph_growth_snapshot(
 # ── Internal Builders ────────────────────────────────────────────────────────
 
 
+def _cached_graph_growth() -> BrainGraphGrowth:
+    """Baue Graph-Growth-Snapshot aus dem zuletzt bekannten Read-Model-Cache."""
+    return BrainGraphGrowth(
+        total_nodes=_brain_state.get("_graph_nodes", _brain_state.get("last_graph_nodes", 0)),
+        total_edges=_brain_state.get("_graph_edges", _brain_state.get("last_graph_edges", 0)),
+        new_nodes_since_last=_brain_state.get("_growth_new_nodes", 0),
+        new_edges_since_last=_brain_state.get("_growth_new_edges", 0),
+        nodes_by_kind=_brain_state.get("_nodes_by_kind", {}),
+        edges_by_type=_brain_state.get("_edges_by_type", {}),
+        top_active_nodes=_brain_state.get("_top_active_nodes", []),
+        graph_version=_brain_state.get("_graph_version", 0),
+    )
+
+
 def _build_graph_growth(brain_graph_service: Any) -> BrainGraphGrowth:
     """Baue Graph-Growth-Snapshot aus BrainGraphService."""
     if brain_graph_service is None:
-        return BrainActivitySnapshot().graph
+        return _cached_graph_growth()
 
     try:
         stats = brain_graph_service.get_stats()
     except Exception:
-        return BrainActivitySnapshot().graph
+        return _cached_graph_growth()
 
     total_nodes = stats.get("nodes_count", 0)
     total_edges = stats.get("edges_count", 0)
