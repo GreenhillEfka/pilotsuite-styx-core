@@ -1354,7 +1354,8 @@ def register_blueprints(app: Flask, services: dict) -> None:
         ("copilot_core.api.v1.auth",             "auth_bp",              None),
         # Standalone blueprints with their own absolute prefix
         ("copilot_core.api.v1.log_fixer_tx",    "bp",                   None),
-        ("copilot_core.api.v1.events_ingest",    "bp",                   "/api/v1"),
+        # events_ingest defines absolute /api/v1/events routes itself — do not prefix again
+        ("copilot_core.api.v1.events_ingest",    "bp",                   None),
         ("copilot_core.api.v1.sensors",          "bp",                   None),
         ("copilot_core.api.v1.homekit",          "homekit_bp",           None),
         ("copilot_core.api.v1.anomaly",          "anomaly_bp",           "/api/v1"),

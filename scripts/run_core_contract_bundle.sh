@@ -65,9 +65,12 @@ rm -f \
 
 "$PYTEST_BIN" \
   tests/test_dashboard_read_models_contract.py \
+  tests/test_zone_dashboard_contract.py \
   tests/test_brain_read_model_contract.py \
   tests/test_taxonomy_contract.py \
   tests/test_zone_truth_sync_contract.py \
+  tests/test_core_wiring_contract.py \
+  tests/test_event_processor_import_contract.py \
   tests/integration/test_workspace_ha_core_contract.py \
   -q \
   "$@"
