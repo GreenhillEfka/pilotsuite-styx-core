@@ -24,6 +24,18 @@ _cache_ts: float = 0.0
 CACHE_TTL = 300  # 5 min
 
 
+def _calendar_dependency_error():
+    return jsonify({
+        "ok": False,
+        "error": "calendar_unavailable",
+        "message": "Optional HTTP dependency 'requests' is not installed",
+    }), 503
+
+
+def _calendar_dependency_ready() -> bool:
+    return http_requests is not None
+
+
 def _get_ha_headers() -> tuple[str, dict]:
     ha_url = os.environ.get("SUPERVISOR_API", "http://supervisor/core/api")
     ha_token = os.environ.get("SUPERVISOR_TOKEN", "")
@@ -77,6 +89,9 @@ def _fetch_events(start: str, end: str) -> list[dict]:
 @require_token
 def list_calendars():
     """List all HA calendar entities."""
+    if not _calendar_dependency_ready():
+        return _calendar_dependency_error()
+
     calendars = _fetch_calendar_entities()
     return jsonify({"calendars": calendars, "count": len(calendars)})
 
@@ -85,8 +100,8 @@ def list_calendars():
 @require_token
 def events_today():
     """Get all calendar events for today."""
-    # global _event_cache
-# global _cache_ts
+    if not _calendar_dependency_ready():
+        return _calendar_dependency_error()
 
     now = datetime.now()
     date_key = now.strftime("%Y-%m-%d")
@@ -108,6 +123,9 @@ def events_today():
 @require_token
 def events_upcoming():
     """Get upcoming events for the next N days (default 7)."""
+    if not _calendar_dependency_ready():
+        return _calendar_dependency_error()
+
     days = min(int(request.args.get("days", 7)), 30)
     now = datetime.now()
     start = now.isoformat()
