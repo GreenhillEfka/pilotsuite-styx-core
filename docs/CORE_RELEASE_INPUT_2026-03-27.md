@@ -17,6 +17,7 @@ Contract-Härtung der Core-Truth-Lane rund um:
 - Dashboard Read Models
 - Classification Authority
 - Brain Read Model
+- Startup Wiring / Ingest Route Canonicalization
 - Contract Bundle / Review-Readiness
 
 ### Candidate artifact set
@@ -25,13 +26,19 @@ Contract-Härtung der Core-Truth-Lane rund um:
 - `copilot_core/rootfs/usr/src/app/copilot_core/core/brain_read_model.py`
 - `copilot_core/rootfs/usr/src/app/copilot_core/core/dashboard_read_models.py`
 - `copilot_core/rootfs/usr/src/app/copilot_core/core/taxonomy.py`
+- `copilot_core/rootfs/usr/src/app/copilot_core/core_setup.py`
+- `copilot_core/rootfs/usr/src/app/copilot_core/homeassistant/zone_matcher.py`
 - `copilot_core/rootfs/usr/src/app/copilot_core/hub/habitus_zones.py`
 - `copilot_core/rootfs/usr/src/app/copilot_core/hub/zone_automation.py`
+- `copilot_core/rootfs/usr/src/app/copilot_core/ingest/event_processor.py`
 
 #### Tests / evidence
 - `tests/test_brain_read_model_contract.py`
+- `tests/test_core_wiring_contract.py`
 - `tests/test_dashboard_read_models_contract.py`
+- `tests/test_event_processor_import_contract.py`
 - `tests/test_taxonomy_contract.py`
+- `tests/test_zone_dashboard_contract.py`
 - `tests/test_zone_truth_sync_contract.py`
 - `tests/integration/test_workspace_ha_core_contract.py`
 - `scripts/run_core_contract_bundle.sh`
@@ -47,7 +54,7 @@ Contract-Härtung der Core-Truth-Lane rund um:
 ```
 
 ### Result
-- **25 tests passed**
+- **32 tests passed**
 - **0 warnings**
 
 ## Proposed changelog input (draft, not applied)
@@ -63,10 +70,11 @@ Contract-Härtung der Core-Truth-Lane rund um:
 - **Dashboard Read Models**: Zone Summary/Detail/SystemOverview hängen jetzt sauberer an Zone Truth, Taxonomy, Automation-Lane und Brain-Summary.
 - **Classification Authority**: Terrasse/Balkon/Loggia/Patio/Deck werden kanonisch nach `terrace` aufgelöst; Garten/Garage bleiben `outside`.
 - **Brain Read Model**: gecachte Graph-Snapshots bleiben auch ohne aktiven BrainGraph-Service sichtbar.
+- **Startup / Ingest Wiring**: `events_ingest` bleibt kanonisch auf `/api/v1/events`, `event_processor` importiert wieder aus `copilot_core.core.brain_read_model`, und `map_homeassistant_topology()` ist wieder vorhanden.
 
 ### Tests
 - Neue Contract-Suites für Brain/Read Models/Taxonomy/Zone Truth.
-- Contract-Bundle aktuell grün: 25 Tests.
+- Contract-Bundle aktuell grün: 32 Tests.
 
 ### Documentation
 - HA-Release-Review-Handoff und Core-RC-Prep ergänzt.
@@ -98,5 +106,5 @@ Contract-Härtung der Core-Truth-Lane rund um:
 
 ## Recommended next step
 - Reviewer nimmt dieses Dokument + `docs/CORE_RC_PREP_2026-03-27.md` + Bundle-Evidence als Review-Paket.
-- Exakter Review-Anker ist Commit **`f1243375`**.
-- Danach nur noch entscheiden, ob `f1243375` als RC-Anker bleibt oder ein weiterer Core-Fix nötig ist.
+- Exakter Review-Anker ist Commit **`1d4fc18f`**.
+- Der Recovery-Stand `f1243375` bleibt historisch referenziert, aber der aktuelle Core-Fix-Anker ist `1d4fc18f`.

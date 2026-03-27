@@ -36,7 +36,7 @@ Contract-Härtung für:
 
 ## Head / branch
 - **Branch:** `main`
-- **Head:** `f1243375`
+- **Head:** `1d4fc18f`
 
 ## What is now hardened
 ### 1) Zone Truth persistence
@@ -69,14 +69,17 @@ Contract-Härtung für:
 ```
 
 ### Latest result
-- **25 Tests grün**
+- **32 Tests grün**
 - **0 Warnings**
 
 ### Bundled suites
 - `tests/test_dashboard_read_models_contract.py`
+- `tests/test_zone_dashboard_contract.py`
 - `tests/test_brain_read_model_contract.py`
 - `tests/test_taxonomy_contract.py`
 - `tests/test_zone_truth_sync_contract.py`
+- `tests/test_core_wiring_contract.py`
+- `tests/test_event_processor_import_contract.py`
 - `tests/integration/test_workspace_ha_core_contract.py`
 
 ## Risks / review focus
@@ -97,7 +100,7 @@ Contract-Härtung für:
 - [x] Contract suites geschrieben/ergänzt
 - [x] Bundle-Runner grün
 - [x] HA-Release-Handoff erstellt
-- [x] Exakter Commit-Schnitt für den 15.2.0-Kandidaten erstellt (`f1243375`)
+- [x] Exakter Commit-Schnitt für den 15.2.0-Kandidaten erstellt (`1d4fc18f`)
 - [ ] Final changelog/release note input vorbereiten
 
 ### Reviewer should verify
@@ -113,6 +116,6 @@ Contract-Härtung für:
 - Kein Live-Erfolg behauptet
 
 ## Recommended next step
-1. Review dieses RC-Preps gegen Commit **`f1243375`** + Contract bundle
+1. Review dieses RC-Preps gegen Commit **`1d4fc18f`** + Contract bundle
 2. Danach nur noch Review-/Release-Governance-Entscheidung, ob der Commit der RC-Anker bleibt oder ein weiterer Core-Fix nötig ist
 3. Erst nach Review in Release-Governance übergehen

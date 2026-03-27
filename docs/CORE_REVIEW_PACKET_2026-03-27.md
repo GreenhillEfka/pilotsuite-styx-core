@@ -12,7 +12,7 @@ Kompaktes Review-Paket für die aktuelle Core-Lane.
 ./scripts/run_core_contract_bundle.sh
 ```
 Expected baseline:
-- **25 tests passed**
+- **32 tests passed**
 - **0 warnings**
 
 ### 2) Review the code scope

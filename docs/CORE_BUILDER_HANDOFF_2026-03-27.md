@@ -12,7 +12,7 @@ This note is the explicit restart anchor for the Core lane if the current writer
 ## Current state
 ### Exact committed anchor
 - **Branch:** `main`
-- **Commit:** `f1243375`
+- **Commit:** `1d4fc18f`
 
 ### What is already done
 - Core contract hardening completed across:
@@ -20,6 +20,7 @@ This note is the explicit restart anchor for the Core lane if the current writer
   - Dashboard Read Models
   - Classification Authority
   - Brain Read Model
+  - Startup Wiring / Ingest Route Canonicalization
   - Contract Bundle Runner
 - Review/support artifacts already prepared:
   - `docs/HA_RELEASE_CONTRACT_HANDOFF_2026-03-27.md`
@@ -33,22 +34,28 @@ Run:
 ```
 
 Current result:
-- **25 tests passed**
+- **32 tests passed**
 - **0 warnings**
 
 ## Modified/untracked artifact set
-### Committed code files in `f1243375`
+### Committed code files in `1d4fc18f`
 - `copilot_core/rootfs/usr/src/app/copilot_core/api/v1/zone_automation.py`
 - `copilot_core/rootfs/usr/src/app/copilot_core/core/brain_read_model.py`
 - `copilot_core/rootfs/usr/src/app/copilot_core/core/dashboard_read_models.py`
 - `copilot_core/rootfs/usr/src/app/copilot_core/core/taxonomy.py`
+- `copilot_core/rootfs/usr/src/app/copilot_core/core_setup.py`
+- `copilot_core/rootfs/usr/src/app/copilot_core/homeassistant/zone_matcher.py`
 - `copilot_core/rootfs/usr/src/app/copilot_core/hub/habitus_zones.py`
 - `copilot_core/rootfs/usr/src/app/copilot_core/hub/zone_automation.py`
+- `copilot_core/rootfs/usr/src/app/copilot_core/ingest/event_processor.py`
 
 ### New tests / runner / docs
 - `tests/test_brain_read_model_contract.py`
+- `tests/test_core_wiring_contract.py`
 - `tests/test_dashboard_read_models_contract.py`
+- `tests/test_event_processor_import_contract.py`
 - `tests/test_taxonomy_contract.py`
+- `tests/test_zone_dashboard_contract.py`
 - `tests/test_zone_truth_sync_contract.py`
 - `scripts/run_core_contract_bundle.sh`
 - `docs/HA_RELEASE_CONTRACT_HANDOFF_2026-03-27.md`
@@ -62,12 +69,12 @@ Current result:
 
 ## Exact next task for the next writer
 ### Review / follow-up pass
-1. Review commit **`f1243375`** against the packet in `docs/CORE_REVIEW_PACKET_2026-03-27.md`
+1. Review commit **`1d4fc18f`** against the packet in `docs/CORE_REVIEW_PACKET_2026-03-27.md`
 2. Re-run:
    ```bash
    ./scripts/run_core_contract_bundle.sh
    ```
-3. If review is green, keep `f1243375` as the Core handoff anchor
+3. If review is green, keep `1d4fc18f` as the Core handoff anchor
 4. If review finds a sharp blocker, cut one follow-up Core-only fix commit on top
 
 ## Risks / watch-outs
@@ -84,11 +91,17 @@ Current result:
 - `core/taxonomy.py`
 - `core/dashboard_read_models.py`
 - `core/brain_read_model.py`
+- `core_setup.py`
+- `homeassistant/zone_matcher.py`
+- `ingest/event_processor.py`
 
 ### Group 2 — Regression evidence
 - `tests/test_brain_read_model_contract.py`
+- `tests/test_core_wiring_contract.py`
 - `tests/test_dashboard_read_models_contract.py`
+- `tests/test_event_processor_import_contract.py`
 - `tests/test_taxonomy_contract.py`
+- `tests/test_zone_dashboard_contract.py`
 - `tests/test_zone_truth_sync_contract.py`
 - `scripts/run_core_contract_bundle.sh`
 
