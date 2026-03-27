@@ -1822,9 +1822,9 @@ async def cleanup_services(services: dict) -> None:
     _LOGGER.info("Service cleanup complete")
 
 
-# Import required modules at module level (these are lightweight)
-from copilot_core.api.v1 import log_fixer_tx
-from copilot_core.api.v1 import events_ingest
+# Import only the concrete callback hook we need here.
+# Route blueprints are loaded dynamically via the registry and must not make the
+# whole core_setup import fail just because an optional API lane has extra deps.
 from copilot_core.api.v1.events_ingest import set_post_ingest_callback
 from copilot_core.brain_graph.service import BrainGraphService
 from copilot_core.brain_graph.store import BrainGraphStore
