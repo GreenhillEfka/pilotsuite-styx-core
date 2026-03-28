@@ -37,13 +37,13 @@ Validated for the current coordinated line (`8b017a74` pair ref, with docs/readi
 ```bash
 ./scripts/check_15_2_0_sync_anchor_consistency.sh
 ./scripts/run_core_contract_bundle.sh
-pytest -q tests/test_metrics_blueprint_contract.py tests/test_zone_health_blueprint_contract.py tests/test_core_wiring_contract.py
+pytest -q tests/test_metrics_blueprint_contract.py tests/test_zone_health_blueprint_contract.py tests/test_zone_aggregates_blueprint_contract.py tests/test_scenes_blueprint_contract.py tests/test_optional_blueprint_wiring_contract.py
 ```
 
 Results:
 - sync-anchor checker: **PASS**
-- contract bundle: **36 passed**
-- targeted metrics/wiring/zone-health checks: **6 passed**
+- contract bundle: **64 passed**
+- targeted metrics/aggregates/scenes/wiring checks: **11 passed**
 - warnings: **0**
 
 ## Coordination effect

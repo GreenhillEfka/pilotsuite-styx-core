@@ -119,5 +119,5 @@ Contract-Härtung für:
 
 ## Recommended next step
 1. Review dieses RC-Preps gegen Commit **`8b017a74`** + Contract bundle
-2. Danach nur noch Review-/Release-Governance-Entscheidung, ob der Commit der RC-Anker bleibt oder ein weiterer Core-Fix nötig ist
+2. Danach Review-/Release-Governance-Entscheidung, ob der Commit der RC-Anker bleibt oder ob die neueren, oberhalb liegenden Hardening-Slices als nächster koordinierter Cutover ref vorgeschlagen werden sollen
 3. Erst nach Review in Release-Governance übergehen

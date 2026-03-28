@@ -17,7 +17,7 @@ Give the Core repo a single repo-local pointer to the current authoritative Core
 - paired Core cutover ref for HA/releaser coordination: `8b017a74`
 - exact live repo-head snapshot is exported via `docs/CORE_15_2_0_RELEASE_MANIFEST_2026-03-27.json` and the workspace release entrypoint when needed
 - sync-anchor checker: PASS
-- contract bundle on current packaging head: `45 passed / 0 warnings`
+- contract bundle on current packaging head: `64 passed / 0 warnings`
 - builder stance: hold this cutover line unless a newer explicitly validated functional Core ref appears
 
 ## Primary Core release-readiness artifacts
