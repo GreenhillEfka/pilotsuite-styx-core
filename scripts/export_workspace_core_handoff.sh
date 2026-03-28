@@ -33,6 +33,9 @@ CORE_BUILDER_HANDOFF_DOC="$ROOT/docs/CORE_BUILDER_HANDOFF_2026-03-27.md"
 CORE_REVIEW_PACKET_DOC="$ROOT/docs/CORE_REVIEW_PACKET_2026-03-27.md"
 CORE_RELEASE_INPUT_DOC="$ROOT/docs/CORE_RELEASE_INPUT_2026-03-27.md"
 CORE_GITHUB_RELEASE_NOTES_DOC="$ROOT/docs/CORE_GITHUB_RELEASE_NOTES_INPUT_2026-03-27.md"
+CORE_RELEASE_QUEUE_STATUS_DOC="$ROOT/docs/CORE_RELEASE_QUEUE_STATUS_2026-03-28.md"
+CORE_RELEASE_GOVERNANCE_DOC="$ROOT/docs/CORE_RELEASE_GOVERNANCE_CHECKLIST_2026-03-28.md"
+CORE_REAL_RELEASE_RUNBOOK_DOC="$ROOT/docs/CORE_REAL_RELEASE_RUNBOOK_2026-03-28.md"
 CORE_POINTER_DOC="$ROOT/docs/CORE_15_2_0_RELEASER_PREP_POINTER_2026-03-27.md"
 CORE_RELEASE_MANIFEST_DOC="$ROOT/docs/CORE_15_2_0_RELEASE_MANIFEST_2026-03-27.json"
 WORKSPACE_RELEASE_ENTRYPOINT="$HANDOFF_DIR/core_release_entrypoint.json"
@@ -147,7 +150,13 @@ cat > "$OUT" <<EOF
     "core_review_packet": "$CORE_REVIEW_PACKET_DOC",
     "core_release_input": "$CORE_RELEASE_INPUT_DOC",
     "core_github_release_notes_input": "$CORE_GITHUB_RELEASE_NOTES_DOC",
-    "contract_bundle_runner": "$ROOT/scripts/run_core_contract_bundle.sh"
+    "core_release_queue_status": "$CORE_RELEASE_QUEUE_STATUS_DOC",
+    "core_release_governance_checklist": "$CORE_RELEASE_GOVERNANCE_DOC",
+    "core_real_release_runbook": "$CORE_REAL_RELEASE_RUNBOOK_DOC",
+    "contract_bundle_runner": "$ROOT/scripts/run_core_contract_bundle.sh",
+    "release_queue_status_doc": "$CORE_RELEASE_QUEUE_STATUS_DOC",
+    "release_governance_checklist_doc": "$CORE_RELEASE_GOVERNANCE_DOC",
+    "real_release_runbook_doc": "$CORE_REAL_RELEASE_RUNBOOK_DOC"
   },
   "shared_sandbox_artifacts": {
     "fixtures": [
@@ -218,6 +227,9 @@ cat > "$PAIR_OUT" <<EOF
     "sync_anchor_doc": "$SYNC_ANCHOR_DOC",
     "sync_checker": "$SYNC_CHECKER_PATH",
     "contract_bundle_runner": "$ROOT/scripts/run_core_contract_bundle.sh",
+    "release_queue_status_doc": "$CORE_RELEASE_QUEUE_STATUS_DOC",
+    "release_governance_checklist_doc": "$CORE_RELEASE_GOVERNANCE_DOC",
+    "real_release_runbook_doc": "$CORE_REAL_RELEASE_RUNBOOK_DOC",
     "paired_cutover_ref": "$PAIRED_CUTOVER_REF"
   }
 }
@@ -264,7 +276,10 @@ cat > "$EVIDENCE_OUT" <<EOF
     "workspace_release_entrypoint": "$WORKSPACE_RELEASE_ENTRYPOINT",
     "sync_anchor_doc": "$SYNC_ANCHOR_DOC",
     "sync_checker": "$SYNC_CHECKER_PATH",
-    "contract_bundle_runner": "$ROOT/scripts/run_core_contract_bundle.sh"
+    "contract_bundle_runner": "$ROOT/scripts/run_core_contract_bundle.sh",
+    "release_queue_status_doc": "$CORE_RELEASE_QUEUE_STATUS_DOC",
+    "release_governance_checklist_doc": "$CORE_RELEASE_GOVERNANCE_DOC",
+    "real_release_runbook_doc": "$CORE_REAL_RELEASE_RUNBOOK_DOC"
   }
 }
 EOF
@@ -298,7 +313,10 @@ cat > "$RC_CHAIN_OUT" <<EOF
     "builder_handoff": "$CORE_BUILDER_HANDOFF_DOC",
     "review_packet": "$CORE_REVIEW_PACKET_DOC",
     "release_input": "$CORE_RELEASE_INPUT_DOC",
-    "github_release_notes_input": "$CORE_GITHUB_RELEASE_NOTES_DOC"
+    "github_release_notes_input": "$CORE_GITHUB_RELEASE_NOTES_DOC",
+    "release_queue_status": "$CORE_RELEASE_QUEUE_STATUS_DOC",
+    "release_governance_checklist": "$CORE_RELEASE_GOVERNANCE_DOC",
+    "real_release_runbook": "$CORE_REAL_RELEASE_RUNBOOK_DOC"
   }
 }
 EOF
