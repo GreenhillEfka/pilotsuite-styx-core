@@ -28,6 +28,8 @@ STXY_COMBINED_RC_DOC="$SANDBOX_ROOT/handoff/2026-03-26_combined_rc_handoff_check
 STXY_RELEASER_DOC="$SANDBOX_ROOT/handoff/2026-03-26_releaser_cutover_checklist.md"
 RUNNER_PATH="$ROOT/scripts/run_workspace_ha_core_contract_tests.sh"
 SYNC_CHECKER_PATH="$ROOT/scripts/check_15_2_0_sync_anchor_consistency.sh"
+POINTER_CHECKER_PATH="$ROOT/scripts/check_15_2_0_releaser_pointers.sh"
+STRICT_RELEASE_GATE_PATH="$ROOT/scripts/check_15_2_0_release_gate.sh"
 SYNC_ANCHOR_DOC="$ROOT/docs/CORE_15_2_0_SYNC_ANCHOR_2026-03-27.md"
 CORE_BUILDER_HANDOFF_DOC="$ROOT/docs/CORE_BUILDER_HANDOFF_2026-03-27.md"
 CORE_REVIEW_PACKET_DOC="$ROOT/docs/CORE_REVIEW_PACKET_2026-03-27.md"
@@ -154,6 +156,8 @@ cat > "$OUT" <<EOF
     "core_release_governance_checklist": "$CORE_RELEASE_GOVERNANCE_DOC",
     "core_real_release_runbook": "$CORE_REAL_RELEASE_RUNBOOK_DOC",
     "contract_bundle_runner": "$ROOT/scripts/run_core_contract_bundle.sh",
+    "releaser_pointer_check": "$POINTER_CHECKER_PATH",
+    "strict_release_gate": "$STRICT_RELEASE_GATE_PATH",
     "release_queue_status_doc": "$CORE_RELEASE_QUEUE_STATUS_DOC",
     "release_governance_checklist_doc": "$CORE_RELEASE_GOVERNANCE_DOC",
     "real_release_runbook_doc": "$CORE_REAL_RELEASE_RUNBOOK_DOC"
@@ -226,7 +230,9 @@ cat > "$PAIR_OUT" <<EOF
     "workspace_release_entrypoint": "$WORKSPACE_RELEASE_ENTRYPOINT",
     "sync_anchor_doc": "$SYNC_ANCHOR_DOC",
     "sync_checker": "$SYNC_CHECKER_PATH",
+    "releaser_pointer_check": "$POINTER_CHECKER_PATH",
     "contract_bundle_runner": "$ROOT/scripts/run_core_contract_bundle.sh",
+    "strict_release_gate": "$STRICT_RELEASE_GATE_PATH",
     "release_queue_status_doc": "$CORE_RELEASE_QUEUE_STATUS_DOC",
     "release_governance_checklist_doc": "$CORE_RELEASE_GOVERNANCE_DOC",
     "real_release_runbook_doc": "$CORE_REAL_RELEASE_RUNBOOK_DOC",
@@ -276,7 +282,9 @@ cat > "$EVIDENCE_OUT" <<EOF
     "workspace_release_entrypoint": "$WORKSPACE_RELEASE_ENTRYPOINT",
     "sync_anchor_doc": "$SYNC_ANCHOR_DOC",
     "sync_checker": "$SYNC_CHECKER_PATH",
+    "releaser_pointer_check": "$POINTER_CHECKER_PATH",
     "contract_bundle_runner": "$ROOT/scripts/run_core_contract_bundle.sh",
+    "strict_release_gate": "$STRICT_RELEASE_GATE_PATH",
     "release_queue_status_doc": "$CORE_RELEASE_QUEUE_STATUS_DOC",
     "release_governance_checklist_doc": "$CORE_RELEASE_GOVERNANCE_DOC",
     "real_release_runbook_doc": "$CORE_REAL_RELEASE_RUNBOOK_DOC"
@@ -304,7 +312,9 @@ cat > "$RC_CHAIN_OUT" <<EOF
   ],
   "release_readiness_commands": {
     "sync_checker": "$SYNC_CHECKER_PATH",
-    "contract_bundle": "$ROOT/scripts/run_core_contract_bundle.sh"
+    "releaser_pointer_check": "$POINTER_CHECKER_PATH",
+    "contract_bundle": "$ROOT/scripts/run_core_contract_bundle.sh",
+    "strict_release_gate": "$STRICT_RELEASE_GATE_PATH"
   },
   "release_readiness_docs": {
     "pointer": "$CORE_POINTER_DOC",
