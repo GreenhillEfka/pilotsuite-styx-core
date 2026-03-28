@@ -37,6 +37,7 @@ SCRIPT_PATHS=(
 
 EXPORT_PATHS=(
   "/config/clawd/team/workspaces/pilotsuite-stxy-sandbox/handoff/core_workspace_target.json"
+  "/config/clawd/team/workspaces/pilotsuite-stxy-sandbox/handoff/core_release_status.json"
   "/config/clawd/team/workspaces/pilotsuite-stxy-sandbox/handoff/core_release_pairing.json"
   "/config/clawd/team/workspaces/pilotsuite-stxy-sandbox/handoff/core_workspace_harness_evidence.json"
   "/config/clawd/team/workspaces/pilotsuite-stxy-sandbox/handoff/core_rc_input_chain.json"
@@ -117,14 +118,19 @@ rc = Path('/config/clawd/team/workspaces/pilotsuite-stxy-sandbox/handoff/core_rc
 entry_data = json.loads(entry.read_text(encoding='utf-8'))
 target_data = json.loads(target.read_text(encoding='utf-8'))
 rc_data = json.loads(rc.read_text(encoding='utf-8'))
+assert 'release_status' in entry_data['primary_docs']
 assert 'queue_status' in entry_data['primary_docs']
 assert 'governance_checklist' in entry_data['primary_docs']
 assert 'real_release_runbook' in entry_data['primary_docs']
+assert 'release_status_export' in entry_data['validation_commands']
 assert 'strict_release_gate' in entry_data['validation_commands']
 assert 'release_lock_create' in entry_data['validation_commands']
 assert 'release_lock_check' in entry_data['validation_commands']
 assert 'release_lock_clear' in entry_data['validation_commands']
 rr = target_data['release_readiness']
+assert 'release_status_doc' in rr
+assert 'workspace_release_status' in rr
+assert 'release_status_export' in rr
 assert 'core_release_queue_status' in rr
 assert 'core_release_governance_checklist' in rr
 assert 'core_real_release_runbook' in rr
@@ -133,11 +139,14 @@ assert 'release_lock_check' in rr
 assert 'release_lock_clear' in rr
 rc_commands = rc_data['release_readiness_commands']
 assert 'releaser_pointer_check' in rc_commands
+assert 'release_status_export' in rc_commands
 assert 'strict_release_gate' in rc_commands
 assert 'release_lock_create' in rc_commands
 assert 'release_lock_check' in rc_commands
 assert 'release_lock_clear' in rc_commands
 rc_docs = rc_data['release_readiness_docs']
+assert 'release_status' in rc_docs
+assert 'workspace_release_status' in rc_docs
 assert 'release_queue_status' in rc_docs
 assert 'release_governance_checklist' in rc_docs
 assert 'real_release_runbook' in rc_docs
