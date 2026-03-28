@@ -32,6 +32,8 @@ Diese Checklist gilt für den vorbereiteten Core-Kandidaten **`v15.2.0`** bei ge
 - `docs/CORE_RELEASE_INPUT_2026-03-27.md`
 - `docs/CORE_GITHUB_RELEASE_NOTES_INPUT_2026-03-27.md`
 - `docs/CORE_RELEASE_QUEUE_STATUS_2026-03-28.md`
+- `docs/CORE_RELEASE_GOVERNANCE_CHECKLIST_2026-03-28.md`
+- `docs/CORE_REAL_RELEASE_RUNBOOK_2026-03-28.md`
 - `docs/HA_RELEASE_CONTRACT_HANDOFF_2026-03-27.md`
 
 ## Strict release gate commands
