@@ -1,6 +1,18 @@
 # Changelog
 
-Alle wesentlichen Aenderungen am PilotSuite Styx Core werden in dieser Datei dokumentiert.
+
+## [v15.2.6] - 2026-03-28
+
+### Added
+- PR #157 in der finalen Core-Integration konsolidiert: Zone-Automation-HOT-Pfad (`zone_automation`) inkl. Hub/API-Hotfixes und Tests.
+- Status/Read-Model-Funktionen für v15.2.6 validiert mit PR157- und Runtime-Tests.
+
+### Changed
+- Dokumentation und Release-Readme auf `v15.2.6` angehoben (repo-konsolidierte Linie).
+
+### Fixed
+- Laufzeit-Drift-Schutz: Alle Core-Version-Dateien (`VERSION`, Add-on-Config, Manifest) auf `v15.2.6` konsolidiert.
+
 
 ## [v15.2.4] - 2026-03-28
 
@@ -12,8 +24,7 @@ Alle wesentlichen Aenderungen am PilotSuite Styx Core werden in dieser Datei dok
 - Stabilere Übergabe von Presence-/Zone-Metadaten in Core-Hot-Path bei fehlenden Feldern.
 
 ### Paired
-- Bereit für Paarung mit HA-Linie v15.2.4 (geplante Folgeveröffentlichung).
-- Bereit für Paarung mit HA-Linie v15.2.4.
+- Bereit für Paarung mit HA-Linie v15.2.6 (geplante Folgeveröffentlichung).
 
 
 ## [v15.0.18] - 2026-03-25
