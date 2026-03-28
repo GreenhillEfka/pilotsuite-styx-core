@@ -32,6 +32,7 @@ SYNC_CHECKER_PATH="$ROOT/scripts/check_15_2_0_sync_anchor_consistency.sh"
 POINTER_CHECKER_PATH="$ROOT/scripts/check_15_2_0_releaser_pointers.sh"
 STRICT_RELEASE_GATE_PATH="$ROOT/scripts/check_15_2_0_release_gate.sh"
 RELEASE_STATUS_EXPORT_PATH="$ROOT/scripts/export_15_2_0_release_status.sh"
+RELEASE_STATUS_CHECK_PATH="$ROOT/scripts/check_15_2_0_release_status.sh"
 RELEASE_LOCK_CREATE_PATH="$ROOT/scripts/create_15_2_0_release_lock.sh"
 RELEASE_LOCK_CHECK_PATH="$ROOT/scripts/check_15_2_0_release_lock.sh"
 RELEASE_LOCK_CLEAR_PATH="$ROOT/scripts/clear_15_2_0_release_lock.sh"
@@ -166,6 +167,7 @@ cat > "$OUT" <<EOF
     "contract_bundle_runner": "$ROOT/scripts/run_core_contract_bundle.sh",
     "releaser_pointer_check": "$POINTER_CHECKER_PATH",
     "release_status_export": "$RELEASE_STATUS_EXPORT_PATH",
+    "release_status_check": "$RELEASE_STATUS_CHECK_PATH",
     "strict_release_gate": "$STRICT_RELEASE_GATE_PATH",
     "release_lock_create": "$RELEASE_LOCK_CREATE_PATH",
     "release_lock_check": "$RELEASE_LOCK_CHECK_PATH",
@@ -248,6 +250,7 @@ cat > "$PAIR_OUT" <<EOF
     "releaser_pointer_check": "$POINTER_CHECKER_PATH",
     "contract_bundle_runner": "$ROOT/scripts/run_core_contract_bundle.sh",
     "release_status_export": "$RELEASE_STATUS_EXPORT_PATH",
+    "release_status_check": "$RELEASE_STATUS_CHECK_PATH",
     "strict_release_gate": "$STRICT_RELEASE_GATE_PATH",
     "release_lock_create": "$RELEASE_LOCK_CREATE_PATH",
     "release_lock_check": "$RELEASE_LOCK_CHECK_PATH",
@@ -306,6 +309,7 @@ cat > "$EVIDENCE_OUT" <<EOF
     "releaser_pointer_check": "$POINTER_CHECKER_PATH",
     "contract_bundle_runner": "$ROOT/scripts/run_core_contract_bundle.sh",
     "release_status_export": "$RELEASE_STATUS_EXPORT_PATH",
+    "release_status_check": "$RELEASE_STATUS_CHECK_PATH",
     "strict_release_gate": "$STRICT_RELEASE_GATE_PATH",
     "release_lock_create": "$RELEASE_LOCK_CREATE_PATH",
     "release_lock_check": "$RELEASE_LOCK_CHECK_PATH",
@@ -340,6 +344,7 @@ cat > "$RC_CHAIN_OUT" <<EOF
     "releaser_pointer_check": "$POINTER_CHECKER_PATH",
     "contract_bundle": "$ROOT/scripts/run_core_contract_bundle.sh",
     "release_status_export": "$RELEASE_STATUS_EXPORT_PATH",
+    "release_status_check": "$RELEASE_STATUS_CHECK_PATH",
     "strict_release_gate": "$STRICT_RELEASE_GATE_PATH",
     "release_lock_create": "$RELEASE_LOCK_CREATE_PATH",
     "release_lock_check": "$RELEASE_LOCK_CHECK_PATH",
