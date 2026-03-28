@@ -30,9 +30,10 @@ Validated on the current repo/dev lane with:
 Strict release gate for real-cut readiness:
 
 ```bash
-./scripts/refresh_15_2_0_release_surfaces.sh
 ./scripts/check_15_2_0_release_gate.sh
 ```
+
+The gate refreshes workspace release surfaces itself and preserves a clean repo worktree by restoring the committed repo manifest after export.
 
 Result:
 - releaser-pointer check: **PASS**
@@ -57,7 +58,7 @@ Before any actual Core release attempt, all of the following must happen in orde
 If cleanliness or validation breaks during the wait window, abort the cut and push the lane back to builder/reviewer work.
 
 ## Packaging-snapshot caveat
-The committed repo-local release manifest is a generated packaging surface and can lag the newest docs-only HEAD by one commit if docs are amended after export. Therefore, before any real handoff/cut discussion, refresh the export surfaces again and treat the freshly generated workspace entrypoint / manifest as authoritative for the exact repo-head snapshot. The strict gate script `./scripts/check_15_2_0_release_gate.sh` enforces exact manifest-head alignment for any real-cut-ready claim.
+The committed repo-local release manifest is a generated packaging surface and can lag the newest docs-only HEAD by one commit if docs are amended after export. Therefore, for real handoff/cut discussion, treat the freshly refreshed **workspace release entrypoint** as the exact repo-head snapshot surface. The strict gate script `./scripts/check_15_2_0_release_gate.sh` enforces exact workspace-entrypoint-to-HEAD alignment while keeping the repo worktree clean.
 
 ## Exact next step
 - No release yet.
