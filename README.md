@@ -118,6 +118,16 @@ Vollständige API-Dokumentation: [docs/API_REFERENCE.md](docs/API_REFERENCE.md)
 
 ---
 
+
+## State of the Art (2026-03-28)
+
+- **Aktive Line:** 15.2.x
+- **Aktueller Tag:** [v15.2.2](https://github.com/GreenhillEfka/pilotsuite-styx-core/releases/tag/v15.2.2)
+- **Konsolidierungsstand für das nächste Paket:**
+  - PR **#157** (Zone-Sync) ist technisch prinzipiell mergebar, aber CI stoppt aktuell an `ModuleNotFoundError: prometheus_client`.
+  - PR **#156** ist CONFLICTING/legacy (`release-prep/v14.7.3`), nicht für den aktuellen Head geeignet.
+- Zielzustand: Kern-Release stabilisieren, danach Pair-Release mit HA auf `update.ai_home_copilot_update`-fähig setzen.
+
 ## Architecture
 
 ```
