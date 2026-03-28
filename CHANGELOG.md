@@ -2,6 +2,19 @@
 
 Alle wesentlichen Aenderungen am PilotSuite Styx Core werden in dieser Datei dokumentiert.
 
+## [v15.2.4] - 2026-03-28
+
+### Added
+- PR #157 übernommen: behebt verbleibende HA↔Core-Zone-Sync-Lücken im Automation-Flow (`zone_automation`) inklusive `sync-definitions` Konsistenz und robusteren Hold/State-Pfaden.
+- Neue Tests für Zone-Automation-Sync und API-Handling ergänzt.
+
+### Fixed
+- Stabilere Übergabe von Presence-/Zone-Metadaten in Core-Hot-Path bei fehlenden Feldern.
+
+### Paired
+- Bereit für Paarung mit HA-Linie v15.2.4 (geplante Folgeveröffentlichung).
+
+
 ## [v15.0.18] - 2026-03-25
 
 **PilotClaw Autonom-Entwicklung** (2026-03-24/25)
