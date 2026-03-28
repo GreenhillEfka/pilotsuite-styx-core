@@ -16,14 +16,17 @@ DOC_PATHS=(
   "docs/CORE_RELEASE_INPUT_2026-03-27.md"
   "docs/CORE_GITHUB_RELEASE_NOTES_INPUT_2026-03-27.md"
   "docs/CORE_RELEASE_QUEUE_STATUS_2026-03-28.md"
+  "docs/CORE_RELEASE_GOVERNANCE_CHECKLIST_2026-03-28.md"
   "docs/HA_RELEASE_CONTRACT_HANDOFF_2026-03-27.md"
 )
 
 SCRIPT_PATHS=(
   "scripts/export_15_2_0_release_manifest.sh"
+  "scripts/refresh_15_2_0_release_surfaces.sh"
   "scripts/check_15_2_0_sync_anchor_consistency.sh"
   "scripts/run_core_contract_bundle.sh"
   "scripts/check_15_2_0_releaser_pointers.sh"
+  "scripts/check_15_2_0_release_gate.sh"
 )
 
 EXPORT_PATHS=(
