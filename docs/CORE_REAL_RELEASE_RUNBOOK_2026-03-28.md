@@ -49,12 +49,17 @@ Do **all** of the following in order:
    ```bash
    ./scripts/create_15_2_0_release_lock.sh pilotclaw 2026-03-28T03:45:00Z
    ```
-4. Rerun:
+4. Refresh and inspect the live machine-readable cut state:
+   ```bash
+   ./scripts/export_15_2_0_release_status.sh
+   ./scripts/check_15_2_0_release_status.sh
+   ```
+5. Rerun:
    ```bash
    ./scripts/check_15_2_0_release_gate.sh
    ```
    If a lock file is present, the gate will validate it via `./scripts/check_15_2_0_release_lock.sh`.
-5. Only proceed if the gate is still green and the lane remains clean/validated/lane-ready
+6. Only proceed if the gate is still green and the lane remains clean/validated/lane-ready
 
 If cleanliness or validation breaks during the waiting window, abort the cut, clear any active repo-local lock with `./scripts/clear_15_2_0_release_lock.sh`, and push the lane back to builder/reviewer work.
 

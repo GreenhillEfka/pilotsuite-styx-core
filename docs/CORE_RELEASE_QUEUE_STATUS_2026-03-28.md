@@ -30,6 +30,8 @@ Validated on the current repo/dev lane with:
 Strict release gate for real-cut readiness:
 
 ```bash
+./scripts/export_15_2_0_release_status.sh
+./scripts/check_15_2_0_release_status.sh
 ./scripts/check_15_2_0_release_gate.sh
 ```
 
@@ -41,7 +43,7 @@ Optional release-lock helpers for a real cut window:
 ./scripts/clear_15_2_0_release_lock.sh
 ```
 
-The gate refreshes workspace release surfaces itself and preserves a clean repo worktree by restoring the committed repo manifest after export. If `RELEASE_LOCK.md` exists, the gate validates it automatically instead of treating it as dirty drift.
+The gate refreshes workspace release surfaces itself and preserves a clean repo worktree by restoring the committed repo manifest after export. If `RELEASE_LOCK.md` exists, the gate validates it automatically instead of treating it as dirty drift. The status export/check pair gives the fastest machine-readable view of queue/lock/wait/next-step before the full gate.
 
 Result:
 - releaser-pointer check: **PASS**

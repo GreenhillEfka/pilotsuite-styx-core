@@ -36,13 +36,34 @@ assert workspace_status.get('candidate_version') == Path('VERSION').read_text(en
 assert workspace_status.get('paired_cutover_ref') == '8b017a74'
 assert isinstance(workspace_status.get('commands'), dict)
 assert isinstance(workspace_status.get('docs'), dict)
+assert 'strict_release_gate' in workspace_status['commands']
+assert 'create_release_lock' in workspace_status['commands']
+assert 'check_release_lock' in workspace_status['commands']
+assert 'clear_release_lock' in workspace_status['commands']
+assert 'runbook' in workspace_status['docs']
+assert 'queue_status' in workspace_status['docs']
 assert 'queue_state' in workspace_status
 assert 'next_visible_step' in workspace_status
+lock = workspace_status.get('release_lock', {})
+queue_state = workspace_status.get('queue_state')
+next_step = workspace_status.get('next_visible_step')
+if not lock.get('present'):
+    assert queue_state == 'unlocked'
+    assert next_step == 'mache v15.2.0'
+elif not lock.get('valid'):
+    assert queue_state == 'locked-invalid'
+    assert next_step == 'fix or clear RELEASE_LOCK.md before any cut discussion'
+elif lock.get('wait_elapsed'):
+    assert queue_state == 'locked-ready-for-gate'
+    assert next_step == 'rerun strict release gate and decide on workflow dispatch'
+else:
+    assert queue_state == 'locked-waiting'
+    assert next_step == 'continue waiting until the 5-minute post-announcement window elapses'
 PY
 then
-  printf 'PASS release-status json shape/version/pairing basic checks\n'
+  printf 'PASS release-status json shape/version/pairing/state-machine checks\n'
 else
-  printf 'FAIL release-status json shape/version/pairing basic checks\n'
+  printf 'FAIL release-status json shape/version/pairing/state-machine checks\n'
   failures=$((failures + 1))
 fi
 
