@@ -30,6 +30,7 @@ SCRIPT_PATHS=(
   "scripts/check_15_2_0_releaser_pointers.sh"
   "scripts/check_15_2_0_release_gate.sh"
   "scripts/export_15_2_0_release_status.sh"
+  "scripts/check_15_2_0_release_status.sh"
   "scripts/create_15_2_0_release_lock.sh"
   "scripts/check_15_2_0_release_lock.sh"
   "scripts/clear_15_2_0_release_lock.sh"
@@ -123,6 +124,7 @@ assert 'queue_status' in entry_data['primary_docs']
 assert 'governance_checklist' in entry_data['primary_docs']
 assert 'real_release_runbook' in entry_data['primary_docs']
 assert 'release_status_export' in entry_data['validation_commands']
+assert 'release_status_check' in entry_data['validation_commands']
 assert 'strict_release_gate' in entry_data['validation_commands']
 assert 'release_lock_create' in entry_data['validation_commands']
 assert 'release_lock_check' in entry_data['validation_commands']
@@ -131,6 +133,7 @@ rr = target_data['release_readiness']
 assert 'release_status_doc' in rr
 assert 'workspace_release_status' in rr
 assert 'release_status_export' in rr
+assert 'release_status_check' in rr
 assert 'core_release_queue_status' in rr
 assert 'core_release_governance_checklist' in rr
 assert 'core_real_release_runbook' in rr

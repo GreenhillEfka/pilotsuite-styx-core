@@ -41,6 +41,7 @@ Give the Core repo a single repo-local pointer to the current authoritative Core
 - `scripts/check_15_2_0_releaser_pointers.sh`
 - `scripts/check_15_2_0_release_gate.sh`
 - `scripts/export_15_2_0_release_status.sh`
+- `scripts/check_15_2_0_release_status.sh`
 - `scripts/create_15_2_0_release_lock.sh`
 - `scripts/check_15_2_0_release_lock.sh`
 - `scripts/clear_15_2_0_release_lock.sh`
@@ -57,10 +58,11 @@ Give the Core repo a single repo-local pointer to the current authoritative Core
 Use this pointer as the single repo-local Core entrypoint for review/releaser/HA coordination. Before handoff/cutover discussion, run:
 1. `./scripts/refresh_15_2_0_release_surfaces.sh`
 2. `./scripts/export_15_2_0_release_status.sh`
-3. `./scripts/check_15_2_0_releaser_pointers.sh`
-4. `./scripts/check_15_2_0_sync_anchor_consistency.sh`
-5. `./scripts/run_core_contract_bundle.sh`
-6. `./scripts/check_15_2_0_release_gate.sh`
+3. `./scripts/check_15_2_0_release_status.sh`
+4. `./scripts/check_15_2_0_releaser_pointers.sh`
+5. `./scripts/check_15_2_0_sync_anchor_consistency.sh`
+6. `./scripts/run_core_contract_bundle.sh`
+7. `./scripts/check_15_2_0_release_gate.sh`
 
 Governance gate for any **real** release attempt:
 1. post the exact group-thread announcement `mache v15.2.0`

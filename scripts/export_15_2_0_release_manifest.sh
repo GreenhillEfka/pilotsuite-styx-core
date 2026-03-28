@@ -23,6 +23,7 @@ POINTER_CHECKER="$ROOT/scripts/check_15_2_0_releaser_pointers.sh"
 BUNDLE_RUNNER="$ROOT/scripts/run_core_contract_bundle.sh"
 STRICT_RELEASE_GATE="$ROOT/scripts/check_15_2_0_release_gate.sh"
 RELEASE_STATUS_EXPORT="$ROOT/scripts/export_15_2_0_release_status.sh"
+RELEASE_STATUS_CHECK="$ROOT/scripts/check_15_2_0_release_status.sh"
 RELEASE_LOCK_CREATE="$ROOT/scripts/create_15_2_0_release_lock.sh"
 RELEASE_LOCK_CHECK="$ROOT/scripts/check_15_2_0_release_lock.sh"
 RELEASE_LOCK_CLEAR="$ROOT/scripts/clear_15_2_0_release_lock.sh"
@@ -67,6 +68,7 @@ cat > "$REPO_OUT" <<EOF
     "sync_anchor_check": "$SYNC_CHECKER",
     "contract_bundle": "$BUNDLE_RUNNER",
     "release_status_export": "$RELEASE_STATUS_EXPORT",
+    "release_status_check": "$RELEASE_STATUS_CHECK",
     "strict_release_gate": "$STRICT_RELEASE_GATE",
     "release_lock_create": "$RELEASE_LOCK_CREATE",
     "release_lock_check": "$RELEASE_LOCK_CHECK",

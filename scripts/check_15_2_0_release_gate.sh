@@ -9,8 +9,11 @@ QUEUE_DOC="docs/CORE_RELEASE_QUEUE_STATUS_2026-03-28.md"
 GOVERNANCE_DOC="docs/CORE_RELEASE_GOVERNANCE_CHECKLIST_2026-03-28.md"
 MANIFEST_PATH="docs/CORE_15_2_0_RELEASE_MANIFEST_2026-03-27.json"
 WORKSPACE_ENTRYPOINT="/config/clawd/team/workspaces/pilotsuite-stxy-sandbox/handoff/core_release_entrypoint.json"
+WORKSPACE_STATUS="/config/clawd/team/workspaces/pilotsuite-stxy-sandbox/handoff/core_release_status.json"
 RELEASE_LOCK_PATH="RELEASE_LOCK.md"
 RELEASE_LOCK_CHECK="./scripts/check_15_2_0_release_lock.sh"
+RELEASE_STATUS_EXPORT="./scripts/export_15_2_0_release_status.sh"
+RELEASE_STATUS_CHECK="./scripts/check_15_2_0_release_status.sh"
 CURRENT_HEAD="$(git rev-parse --short=8 HEAD)"
 
 failures=0
@@ -70,6 +73,7 @@ else
 fi
 
 ./scripts/refresh_15_2_0_release_surfaces.sh >/dev/null
+"$RELEASE_STATUS_EXPORT" >/dev/null
 
 if [[ -f "$WORKSPACE_ENTRYPOINT" ]]; then
   printf 'PASS present %s\n' "$WORKSPACE_ENTRYPOINT"
@@ -78,7 +82,15 @@ else
   failures=$((failures + 1))
 fi
 
+if [[ -f "$WORKSPACE_STATUS" ]]; then
+  printf 'PASS present %s\n' "$WORKSPACE_STATUS"
+else
+  printf 'FAIL missing %s\n' "$WORKSPACE_STATUS"
+  failures=$((failures + 1))
+fi
+
 ./scripts/check_15_2_0_releaser_pointers.sh
+./scripts/check_15_2_0_release_status.sh
 ./scripts/check_15_2_0_sync_anchor_consistency.sh
 ./scripts/run_core_contract_bundle.sh
 
