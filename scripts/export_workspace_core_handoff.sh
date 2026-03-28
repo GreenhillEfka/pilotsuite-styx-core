@@ -32,6 +32,7 @@ SYNC_ANCHOR_DOC="$ROOT/docs/CORE_15_2_0_SYNC_ANCHOR_2026-03-27.md"
 CORE_BUILDER_HANDOFF_DOC="$ROOT/docs/CORE_BUILDER_HANDOFF_2026-03-27.md"
 CORE_REVIEW_PACKET_DOC="$ROOT/docs/CORE_REVIEW_PACKET_2026-03-27.md"
 CORE_RELEASE_INPUT_DOC="$ROOT/docs/CORE_RELEASE_INPUT_2026-03-27.md"
+CORE_GITHUB_RELEASE_NOTES_DOC="$ROOT/docs/CORE_GITHUB_RELEASE_NOTES_INPUT_2026-03-27.md"
 CORE_POINTER_DOC="$ROOT/docs/CORE_15_2_0_RELEASER_PREP_POINTER_2026-03-27.md"
 CORE_RELEASE_MANIFEST_DOC="$ROOT/docs/CORE_15_2_0_RELEASE_MANIFEST_2026-03-27.json"
 WORKSPACE_RELEASE_ENTRYPOINT="$HANDOFF_DIR/core_release_entrypoint.json"
@@ -145,6 +146,7 @@ cat > "$OUT" <<EOF
     "core_builder_handoff": "$CORE_BUILDER_HANDOFF_DOC",
     "core_review_packet": "$CORE_REVIEW_PACKET_DOC",
     "core_release_input": "$CORE_RELEASE_INPUT_DOC",
+    "core_github_release_notes_input": "$CORE_GITHUB_RELEASE_NOTES_DOC",
     "contract_bundle_runner": "$ROOT/scripts/run_core_contract_bundle.sh"
   },
   "shared_sandbox_artifacts": {
@@ -295,7 +297,8 @@ cat > "$RC_CHAIN_OUT" <<EOF
     "sync_anchor": "$SYNC_ANCHOR_DOC",
     "builder_handoff": "$CORE_BUILDER_HANDOFF_DOC",
     "review_packet": "$CORE_REVIEW_PACKET_DOC",
-    "release_input": "$CORE_RELEASE_INPUT_DOC"
+    "release_input": "$CORE_RELEASE_INPUT_DOC",
+    "github_release_notes_input": "$CORE_GITHUB_RELEASE_NOTES_DOC"
   }
 }
 EOF

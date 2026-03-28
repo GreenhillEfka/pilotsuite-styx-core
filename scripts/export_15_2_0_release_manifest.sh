@@ -12,6 +12,7 @@ SYNC_ANCHOR_DOC="$ROOT/docs/CORE_15_2_0_SYNC_ANCHOR_2026-03-27.md"
 BUILDER_HANDOFF_DOC="$ROOT/docs/CORE_15_2_0_BUILDER_HANDOFF_2026-03-27.md"
 REVIEW_PACKET_DOC="$ROOT/docs/CORE_REVIEW_PACKET_2026-03-27.md"
 RELEASE_INPUT_DOC="$ROOT/docs/CORE_RELEASE_INPUT_2026-03-27.md"
+GITHUB_RELEASE_NOTES_DOC="$ROOT/docs/CORE_GITHUB_RELEASE_NOTES_INPUT_2026-03-27.md"
 HA_CONTRACT_HANDOFF_DOC="$ROOT/docs/HA_RELEASE_CONTRACT_HANDOFF_2026-03-27.md"
 POINTER_CHECKER="$ROOT/scripts/check_15_2_0_releaser_pointers.sh"
 BUNDLE_RUNNER="$ROOT/scripts/run_core_contract_bundle.sh"
@@ -44,6 +45,7 @@ cat > "$REPO_OUT" <<EOF
     "builder_handoff": "$BUILDER_HANDOFF_DOC",
     "review_packet": "$REVIEW_PACKET_DOC",
     "release_input": "$RELEASE_INPUT_DOC",
+    "github_release_notes_input": "$GITHUB_RELEASE_NOTES_DOC",
     "ha_contract_handoff": "$HA_CONTRACT_HANDOFF_DOC"
   },
   "validation_commands": {
