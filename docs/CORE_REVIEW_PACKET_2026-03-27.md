@@ -13,7 +13,7 @@ Kompaktes Review-Paket für die aktuelle Core-Lane.
 ./scripts/run_core_contract_bundle.sh
 ```
 Expected baseline:
-- **36 tests passed**
+- **64 tests passed**
 - **0 warnings**
 
 ### 2) Review the code scope
@@ -36,15 +36,32 @@ Expected baseline:
 - `tests/test_zone_truth_sync_contract.py`
 - `tests/test_metrics_blueprint_contract.py`
 - `tests/test_zone_health_blueprint_contract.py`
+- `tests/test_zone_aggregates_blueprint_contract.py`
+- `tests/test_zone_aggregates_truth_contract.py`
+- `tests/test_scenes_blueprint_contract.py`
+- `tests/test_api_v1_syntax_contract.py`
+- `tests/test_optional_blueprint_wiring_contract.py`
+- `tests/test_flat_blueprint_registry_contract.py`
+- `tests/test_flat_blueprint_registry_attr_contract.py`
+- `tests/test_habitus_accept_contract.py`
+- `tests/test_anomaly_blueprint_contract.py`
+- `tests/test_conversation_blueprint_contract.py`
+- `tests/test_entity_assignment_blueprint_contract.py`
+- `tests/test_mcp_blueprint_contract.py`
+- `tests/test_onyx_bridge_blueprint_contract.py`
+- `tests/test_styx_voice_blueprint_contract.py`
+- `tests/test_weather_blueprint_contract.py`
 - `scripts/run_core_contract_bundle.sh`
+- `scripts/check_15_2_0_release_gate.sh`
 
 ### 3) Review the support docs
 - `docs/HA_RELEASE_CONTRACT_HANDOFF_2026-03-27.md`
 - `docs/CORE_RC_PREP_2026-03-27.md`
 - `docs/CORE_RELEASE_INPUT_2026-03-27.md`
 - `docs/CORE_BUILDER_HANDOFF_2026-03-27.md`
-- `docs/CORE_COMMIT_PREP_2026-03-27.md`
 - `docs/CORE_15_2_0_SYNC_ANCHOR_2026-03-27.md`
+- `docs/CORE_RELEASE_QUEUE_STATUS_2026-03-28.md`
+- `docs/CORE_RELEASE_GOVERNANCE_CHECKLIST_2026-03-28.md`
 
 ### 4) Use the current sync decision
 - authoritative paired Core cutover ref for HA releaser-prep: `8b017a74`
@@ -92,5 +109,5 @@ Expected baseline:
 - [ ] RC prep + release input docs are sufficient for Builder -> Review -> Release
 
 ## Exact next step after review
-- If accepted: use `docs/CORE_COMMIT_PREP_2026-03-27.md` to stage/commit or squash the change-set for formal review/release-candidate prep.
+- If accepted: use `./scripts/check_15_2_0_release_gate.sh` plus the governance/queue docs as the formal pre-cut gate for reviewer/releaser flow.
 - If not accepted: annotate the failing file/path and feed that back into the Core lane as the next exact task.
