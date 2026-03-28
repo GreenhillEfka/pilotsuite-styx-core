@@ -1,6 +1,15 @@
 # Changelog
 
 
+## [v15.2.7] - 2026-03-28
+
+### Added
+- State-of-Art-Konsolidierung: PR #157 vollständig integriert für Zone Automation + Dashboard-Readme/Version Alignment.
+
+### Fixed
+- Konsistente Releaseversionen auf `v15.2.7` für alle Core-Versionartefakte.
+
+
 ## [v15.2.6] - 2026-03-28
 
 ### Added
