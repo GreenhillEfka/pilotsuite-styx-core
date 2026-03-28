@@ -20,9 +20,9 @@ Diese Checklist gilt für den vorbereiteten Core-Kandidaten **`v15.2.0`** bei ge
 
 ## Builder checklist
 - [ ] Worktree clean
-- [ ] `./scripts/refresh_15_2_0_release_surfaces.sh` ausgeführt, wenn die Packaging-Surfaces hinter dem aktuellen HEAD liegen
 - [ ] Repo-lokale Manifest-/Pointer-/Handoff-Surfaces sind aktuell
 - [ ] `./scripts/check_15_2_0_release_gate.sh` ist grün
+- [ ] Workspace release entrypoint ist der exakte Current-HEAD-Snapshot für reale Handoff-/Cut-Diskussionen
 
 ## Reviewer / releaser input packet
 - `docs/CORE_15_2_0_RELEASER_PREP_POINTER_2026-03-27.md`
@@ -36,9 +36,13 @@ Diese Checklist gilt für den vorbereiteten Core-Kandidaten **`v15.2.0`** bei ge
 
 ## Strict release gate commands
 ```bash
-./scripts/refresh_15_2_0_release_surfaces.sh
 ./scripts/check_15_2_0_release_gate.sh
 ```
+
+Notes:
+- the gate refreshes workspace release surfaces itself
+- it keeps the repo worktree clean by restoring the committed repo manifest after export
+- the workspace release entrypoint is treated as the exact current-head snapshot surface for real handoff/cut discussion
 
 ## Mandatory real-release governance sequence
 Before any actual release attempt, do **all** of the following in order:

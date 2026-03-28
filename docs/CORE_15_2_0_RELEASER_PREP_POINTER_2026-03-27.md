@@ -62,7 +62,7 @@ Governance gate for any **real** release attempt:
 5. abort the cut if cleanliness/validation breaks
 
 Packaging note:
-- the committed repo-local manifest is a generated snapshot surface and can lag the newest docs-only HEAD by one commit after docs refreshes; before real handoff/cut discussion, refresh the export surfaces and treat the newly generated manifest/workspace entrypoint as authoritative for the exact current repo head.
+- the committed repo-local manifest is a generated snapshot surface and can lag the newest docs-only HEAD by one commit after docs refreshes; for real handoff/cut discussion, the strict gate refreshes the workspace release entrypoint and treats that workspace surface as authoritative for the exact current repo head while restoring the committed repo manifest to keep the worktree clean.
 
 Only update this pointer when one of these exact fields changes:
 1. authoritative Core source/provenance

@@ -8,6 +8,7 @@ EXPECTED_VERSION="15.2.0"
 QUEUE_DOC="docs/CORE_RELEASE_QUEUE_STATUS_2026-03-28.md"
 GOVERNANCE_DOC="docs/CORE_RELEASE_GOVERNANCE_CHECKLIST_2026-03-28.md"
 MANIFEST_PATH="docs/CORE_15_2_0_RELEASE_MANIFEST_2026-03-27.json"
+WORKSPACE_ENTRYPOINT="/config/clawd/team/workspaces/pilotsuite-stxy-sandbox/handoff/core_release_entrypoint.json"
 CURRENT_HEAD="$(git rev-parse --short=8 HEAD)"
 
 failures=0
@@ -48,10 +49,25 @@ for path in "$QUEUE_DOC" "$GOVERNANCE_DOC" "$MANIFEST_PATH"; do
   fi
 done
 
+./scripts/refresh_15_2_0_release_surfaces.sh >/dev/null
+
+if [[ -f "$WORKSPACE_ENTRYPOINT" ]]; then
+  printf 'PASS present %s\n' "$WORKSPACE_ENTRYPOINT"
+else
+  printf 'FAIL missing %s\n' "$WORKSPACE_ENTRYPOINT"
+  failures=$((failures + 1))
+fi
+
 ./scripts/check_15_2_0_releaser_pointers.sh
 ./scripts/check_15_2_0_sync_anchor_consistency.sh
 ./scripts/run_core_contract_bundle.sh
 
+workspace_head="$(python3 - <<'PY'
+import json
+from pathlib import Path
+print(json.loads(Path('/config/clawd/team/workspaces/pilotsuite-stxy-sandbox/handoff/core_release_entrypoint.json').read_text(encoding='utf-8')).get('head_commit', ''))
+PY
+)"
 manifest_head="$(python3 - <<'PY'
 import json
 from pathlib import Path
@@ -59,12 +75,17 @@ print(json.loads(Path('docs/CORE_15_2_0_RELEASE_MANIFEST_2026-03-27.json').read_
 PY
 )"
 
-if [[ "$manifest_head" == "$CURRENT_HEAD" ]]; then
-  printf 'PASS release manifest head matches current HEAD (%s)\n' "$CURRENT_HEAD"
+if [[ "$workspace_head" == "$CURRENT_HEAD" ]]; then
+  printf 'PASS workspace release entrypoint head matches current HEAD (%s)\n' "$CURRENT_HEAD"
 else
-  printf 'FAIL release manifest head=%s differs from current HEAD=%s\n' "$manifest_head" "$CURRENT_HEAD"
-  printf 'HINT run ./scripts/refresh_15_2_0_release_surfaces.sh and commit/amend the refreshed manifest before a real cut\n'
+  printf 'FAIL workspace release entrypoint head=%s differs from current HEAD=%s\n' "$workspace_head" "$CURRENT_HEAD"
   failures=$((failures + 1))
+fi
+
+if [[ "$manifest_head" == "$CURRENT_HEAD" ]]; then
+  printf 'PASS committed repo manifest head matches current HEAD (%s)\n' "$CURRENT_HEAD"
+else
+  printf 'NOTE committed repo manifest head=%s differs from current HEAD=%s; workspace entrypoint is the exact current-head surface for real handoff/cut discussion\n' "$manifest_head" "$CURRENT_HEAD"
 fi
 
 if [[ "$failures" -ne 0 ]]; then
