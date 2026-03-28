@@ -56,11 +56,19 @@ def _load_sandbox_fixture(relative_path: str) -> dict:
         return json.load(handle)
 
 
+def _fresh_store_path(store_path_name: str) -> Path:
+    path = REPO_ROOT / "tmp" / store_path_name
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.exists():
+        path.unlink()
+    return path
+
+
 def _create_events_client(store_path_name: str):
     app = Flask(__name__)
     app.config["TESTING"] = True
     app.register_blueprint(events_ingest_bp)
-    store = EventStore(store_path=str(REPO_ROOT / "tmp" / store_path_name))
+    store = EventStore(store_path=str(_fresh_store_path(store_path_name)))
     set_store(store)
     return app.test_client(), store
 
@@ -181,7 +189,7 @@ def test_workspace_zone_sync_fixture_binds_to_core_api_contract() -> None:
 
 
 def test_workspace_fallback_lane_accepts_canonical_and_legacy_state_changed() -> None:
-    store = EventStore(store_path=str(REPO_ROOT / "tmp" / "workspace-contract-events.jsonl"))
+    store = EventStore(store_path=str(_fresh_store_path("workspace-contract-events.jsonl")))
 
     canonical = _load_sandbox_fixture("fixtures/ha_events/canonical_state_changed.json")
     legacy = _load_sandbox_fixture("fixtures/ha_events/legacy_state_changed.json")
@@ -213,7 +221,7 @@ def test_workspace_fallback_lane_accepts_canonical_and_legacy_state_changed() ->
 
 
 def test_workspace_call_service_fixture_normalizes_to_core_contract() -> None:
-    store = EventStore(store_path=str(REPO_ROOT / "tmp" / "workspace-contract-events-call.jsonl"))
+    store = EventStore(store_path=str(_fresh_store_path("workspace-contract-events-call.jsonl")))
     call_service = _load_sandbox_fixture("fixtures/ha_events/call_service.json")
 
     result = store.ingest_batch([call_service])
@@ -277,3 +285,62 @@ def test_workspace_events_endpoint_accepts_call_service_fixture() -> None:
     assert accepted["kind"] == "call_service"
     assert accepted["zone_id"] == "wohnbereich"
     assert accepted["service"]["service"] == "turn_on"
+
+
+
+def test_workspace_events_endpoint_accepts_nested_adapter_only_batch() -> None:
+    client, store = _create_events_client("workspace-endpoint-nested-adapter.jsonl")
+    state_item = build_state_changed_forward_item(
+        item_id="evt-workspace-nested-1",
+        ts="2026-03-28T11:10:00Z",
+        entity_id="light.living_room_main",
+        old_state="off",
+        new_state="on",
+        zone_ids=["wohnbereich"],
+        state_attributes={"brightness": 190},
+        neuron_tags=["ambient_need"],
+        occurred_at_ms=1774696200000,
+    )
+    call_item = build_call_service_forward_item(
+        item_id="evt-workspace-nested-2",
+        ts="2026-03-28T11:11:00Z",
+        domain="light",
+        service="turn_on",
+        entity_ids=["light.living_room_main"],
+        zone_ids=["wohnbereich"],
+        occurred_at_ms=1774696260000,
+    )
+    nested_only_items = [
+        {
+            "adapter": state_item["adapter"],
+            "habitat_event": state_item["habitat_event"],
+            "neuron_input": state_item["neuron_input"],
+        },
+        {
+            "adapter": call_item["adapter"],
+            "habitat_event": call_item["habitat_event"],
+            "neuron_input": call_item["neuron_input"],
+        },
+    ]
+
+    with patch("copilot_core.api.security.get_auth_token", return_value="workspace-token"), \
+         patch("copilot_core.api.security.is_auth_required", return_value=True):
+        response = client.post(
+            "/api/v1/events",
+            json={"items": nested_only_items},
+            headers={"X-Auth-Token": "workspace-token"},
+        )
+
+    assert response.status_code == 200
+    body = response.get_json()
+    assert body["accepted"] == 2
+    assert body["rejected"] == 0
+
+    stored = store.query(limit=10)
+    assert [item["kind"] for item in stored] == ["state_changed", "call_service"]
+    assert stored[0]["src"] == "ha"
+    assert stored[0]["entity_id"] == "light.living_room_main"
+    assert stored[0]["zone_id"] == "wohnbereich"
+    assert stored[0]["new"]["attrs"]["brightness"] == 190
+    assert stored[1]["service"]["service"] == "turn_on"
+    assert stored[1]["service"]["entity_ids"] == ["light.living_room_main"]

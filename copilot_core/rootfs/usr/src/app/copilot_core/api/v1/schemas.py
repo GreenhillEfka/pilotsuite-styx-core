@@ -19,6 +19,20 @@ _ALLOWED_HA_EVENT_KINDS = ("state_changed", "call_service", "heartbeat")
 _ALLOWED_HA_EVENT_SOURCES = ("ha", "home_assistant")
 
 
+def _as_dict(value: Any) -> dict[str, Any]:
+    return dict(value) if isinstance(value, dict) else {}
+
+
+def _first_present(*values: Any) -> Any:
+    for value in values:
+        if value is None:
+            continue
+        if isinstance(value, str) and not value.strip():
+            continue
+        return value
+    return None
+
+
 class HAStateSnapshot(BaseModel):
     """Canonical before/after state snapshot."""
 
@@ -129,48 +143,151 @@ class HAEventInput(BaseModel):
             return data
 
         data = dict(data)
-        attrs = data.get("attributes") if isinstance(data.get("attributes"), dict) else {}
-        kind = str(data.get("kind") or data.get("type") or "").strip().lower()
-        src = str(data.get("src") or data.get("source") or "").strip().lower()
+        attrs = _as_dict(data.get("attributes"))
+        habitat_event = _as_dict(data.get("habitat_event"))
+        habitat_attrs = _as_dict(habitat_event.get("attributes"))
+        habitat_context = _as_dict(habitat_event.get("context"))
+        habitat_state = _as_dict(habitat_event.get("state"))
+        neuron_input = _as_dict(data.get("neuron_input"))
+        neuron_context = _as_dict(neuron_input.get("context"))
+        neuron_metadata = _as_dict(neuron_input.get("metadata"))
+        adapter = _as_dict(data.get("adapter"))
+
+        kind = str(
+            _first_present(
+                data.get("kind"),
+                data.get("type"),
+                habitat_event.get("event_type"),
+                adapter.get("event_type"),
+                neuron_context.get("event_type"),
+                "",
+            )
+        ).strip().lower()
+        src = str(
+            _first_present(
+                data.get("src"),
+                data.get("source"),
+                habitat_context.get("source"),
+                neuron_context.get("source"),
+                adapter.get("name"),
+                "",
+            )
+        ).strip().lower()
 
         if kind == "service_call":
             kind = "call_service"
         if kind:
             data["kind"] = kind
 
-        if src == "home_assistant":
+        if src in {"home_assistant", "homeassistant"}:
             src = "ha"
         if src:
             data["src"] = src
 
-        if "domain" not in data and attrs.get("domain"):
-            data["domain"] = attrs.get("domain")
+        if "ts" not in data or not str(data.get("ts") or "").strip():
+            nested_ts = _first_present(habitat_context.get("ts"), neuron_context.get("ts"))
+            if nested_ts is not None:
+                data["ts"] = nested_ts
+
+        if not data.get("entity_id"):
+            entity_id = _first_present(
+                habitat_event.get("entity_id"),
+                neuron_input.get("entity_id"),
+            )
+            if entity_id is not None:
+                data["entity_id"] = entity_id
+
+        if not data.get("domain"):
+            domain = _first_present(
+                data.get("domain"),
+                attrs.get("domain"),
+                habitat_event.get("domain"),
+                habitat_attrs.get("domain"),
+                neuron_input.get("domain"),
+                habitat_event.get("module_id"),
+                neuron_input.get("module_id"),
+            )
+            if domain is not None:
+                data["domain"] = domain
 
         zone_ids = data.get("zone_ids")
         if zone_ids is None:
-            zone_ids = attrs.get("zone_ids")
-        if zone_ids is None and data.get("zone_id"):
-            zone_ids = [data.get("zone_id")]
+            zone_ids = _first_present(
+                attrs.get("zone_ids"),
+                habitat_attrs.get("zone_ids"),
+                neuron_metadata.get("zone_ids"),
+            )
+        zone_id = _first_present(
+            data.get("zone_id"),
+            habitat_event.get("zone_id"),
+            neuron_input.get("zone_id"),
+        )
+        if zone_ids is None and zone_id is not None:
+            zone_ids = [zone_id]
         if zone_ids is not None:
             data["zone_ids"] = zone_ids
+        if zone_id is not None and not data.get("zone_id"):
+            data["zone_id"] = zone_id
 
         if kind == "state_changed":
+            old_state = _first_present(
+                attrs.get("old_state"),
+                habitat_attrs.get("old_state"),
+                neuron_metadata.get("old_state"),
+            )
+            new_state = _first_present(
+                attrs.get("new_state"),
+                habitat_attrs.get("new_state"),
+                neuron_metadata.get("new_state"),
+                habitat_event.get("state"),
+                neuron_input.get("value"),
+            )
+            state_attrs = _first_present(
+                attrs.get("state_attributes"),
+                attrs.get("new_attrs"),
+                habitat_attrs.get("state_attributes"),
+                habitat_attrs.get("new_attrs"),
+                neuron_metadata.get("state_attributes"),
+                {},
+            )
             if "old" not in data:
                 data["old"] = {
-                    "state": attrs.get("old_state"),
-                    "attrs": attrs.get("old_attrs") or {},
+                    "state": old_state,
+                    "attrs": attrs.get("old_attrs") or habitat_attrs.get("old_attrs") or {},
                 }
             if "new" not in data:
                 data["new"] = {
-                    "state": attrs.get("new_state"),
-                    "attrs": attrs.get("state_attributes") or attrs.get("new_attrs") or {},
+                    "state": new_state,
+                    "attrs": state_attrs,
                 }
 
         if kind == "call_service" and "service" not in data:
+            entity_ids = _first_present(
+                habitat_state.get("entity_ids"),
+                habitat_attrs.get("entity_ids"),
+                neuron_metadata.get("entity_ids"),
+                attrs.get("entity_ids"),
+                data.get("entity_id"),
+                habitat_event.get("entity_id"),
+                [],
+            )
             service_payload = {
-                "domain": data.get("domain") or attrs.get("domain") or "",
-                "service": attrs.get("service") or data.get("service") or "",
-                "entity_ids": attrs.get("entity_ids") or data.get("entity_id") or [],
+                "domain": _first_present(
+                    data.get("domain"),
+                    attrs.get("domain"),
+                    habitat_state.get("domain"),
+                    habitat_attrs.get("domain"),
+                    neuron_input.get("domain"),
+                    "",
+                ) or "",
+                "service": _first_present(
+                    habitat_state.get("service"),
+                    habitat_attrs.get("service"),
+                    attrs.get("service"),
+                    data.get("service"),
+                    "",
+                ) or "",
+                "entity_ids": entity_ids,
             }
             data["service"] = service_payload
 
