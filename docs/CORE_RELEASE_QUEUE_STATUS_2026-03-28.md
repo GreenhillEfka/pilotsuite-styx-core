@@ -33,7 +33,14 @@ Strict release gate for real-cut readiness:
 ./scripts/check_15_2_0_release_gate.sh
 ```
 
-The gate refreshes workspace release surfaces itself and preserves a clean repo worktree by restoring the committed repo manifest after export.
+Optional release-lock helpers for a real cut window:
+
+```bash
+./scripts/create_15_2_0_release_lock.sh <owner>
+./scripts/check_15_2_0_release_lock.sh
+```
+
+The gate refreshes workspace release surfaces itself and preserves a clean repo worktree by restoring the committed repo manifest after export. If `RELEASE_LOCK.md` exists, the gate validates it automatically instead of treating it as dirty drift.
 
 Result:
 - releaser-pointer check: **PASS**

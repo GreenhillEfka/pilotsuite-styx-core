@@ -19,7 +19,7 @@ Diese Checklist gilt für den vorbereiteten Core-Kandidaten **`v15.2.0`** bei ge
 - Docs/release-prep lane läuft darüber auf `main`, aber jeder echte Cut braucht vorab eine frisch exportierte Snapshot-Oberfläche
 
 ## Builder checklist
-- [ ] Worktree clean
+- [ ] Worktree clean (an active `RELEASE_LOCK.md` is tolerated by the strict gate)
 - [ ] Repo-lokale Manifest-/Pointer-/Handoff-Surfaces sind aktuell
 - [ ] `./scripts/check_15_2_0_release_gate.sh` ist grün
 - [ ] Workspace release entrypoint ist der exakte Current-HEAD-Snapshot für reale Handoff-/Cut-Diskussionen
@@ -41,10 +41,17 @@ Diese Checklist gilt für den vorbereiteten Core-Kandidaten **`v15.2.0`** bei ge
 ./scripts/check_15_2_0_release_gate.sh
 ```
 
+Optional release-lock helpers for a real cut window:
+```bash
+./scripts/create_15_2_0_release_lock.sh <owner>
+./scripts/check_15_2_0_release_lock.sh
+```
+
 Notes:
 - the gate refreshes workspace release surfaces itself
 - it keeps the repo worktree clean by restoring the committed repo manifest after export
 - the workspace release entrypoint is treated as the exact current-head snapshot surface for real handoff/cut discussion
+- if `RELEASE_LOCK.md` exists, the gate validates it automatically instead of treating it as dirty drift
 
 ## Mandatory real-release governance sequence
 Before any actual release attempt, do **all** of the following in order:
