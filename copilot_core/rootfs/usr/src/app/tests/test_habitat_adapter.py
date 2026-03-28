@@ -14,6 +14,7 @@ from copilot_core.homeassistant.habitat_adapter import (
     normalize_received_webhook_payload,
     wrap_core_proposal,
     wrap_core_action,
+    wrap_accepted_proposal_action,
 )
 
 
@@ -178,3 +179,62 @@ class TestOutboundAction:
         assert result["action_intent"]["action_id"] == "act-002"
         assert result["action_intent"]["approved"] is True
         assert result["module_command"]["command_mode"] == "execute"
+
+    def test_wrap_accepted_proposal_action_defaults_to_suggest(self):
+        result = wrap_accepted_proposal_action(
+            action_id="act-accepted-001",
+            proposal_id="prop-accepted-001",
+            module_id="light",
+            zone_id="living",
+            service_call={
+                "domain": "light",
+                "service": "turn_on",
+                "target": {"entity_id": "light.living_room"},
+                "expected_state": "on",
+            },
+            confidence=0.82,
+            explanation="Accepted but still waiting for instruction",
+            policy_gate={
+                "eligible_for_execution": False,
+                "needs_explicit_styx_instruction": True,
+                "direct_execution_enabled": False,
+                "approval_required": True,
+                "execution_state": "awaiting_styx_instruction",
+                "decision_source": "accepted_pending_instruction",
+                "blocked_reasons": ["accepted_pending_instruction"],
+            },
+        )
+        assert result["action_intent"]["action_id"] == "act-accepted-001"
+        assert result["action_intent"]["action_type"] == "light.turn_on"
+        assert result["action_intent"]["approved"] is False
+        assert result["action_intent"]["autonomy_mode"] == "learning"
+        assert result["module_command"]["payload"]["expected_state"] == "on"
+        assert result["module_command"]["command_mode"] == "suggest"
+
+    def test_wrap_accepted_proposal_action_can_be_execute_ready(self):
+        result = wrap_accepted_proposal_action(
+            action_id="act-accepted-002",
+            proposal_id="prop-accepted-002",
+            module_id="climate",
+            zone_id="bedroom",
+            service_call={
+                "domain": "climate",
+                "service": "set_temperature",
+                "target": {"entity_id": "climate.bedroom"},
+                "expected_state": 19.0,
+            },
+            confidence=0.95,
+            explanation="Approved for direct execution",
+            policy_gate={
+                "eligible_for_execution": True,
+                "needs_explicit_styx_instruction": False,
+                "direct_execution_enabled": True,
+                "approval_required": False,
+                "blocked_reasons": [],
+            },
+        )
+        assert result["action_intent"]["action_id"] == "act-accepted-002"
+        assert result["action_intent"]["approved"] is True
+        assert result["action_intent"]["autonomy_mode"] == "autonomous"
+        assert result["module_command"]["command_mode"] == "execute"
+        assert result["module_command"]["target"]["entity_id"] == "climate.bedroom"

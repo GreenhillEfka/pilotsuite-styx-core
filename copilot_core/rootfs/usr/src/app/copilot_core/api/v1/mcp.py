@@ -12,6 +12,11 @@ These endpoints complement the JSON-RPC /mcp endpoint for simpler HTTP integrati
 
 from flask import Blueprint, current_app, jsonify, request
 
+try:
+    import requests as http_requests
+except ImportError:  # pragma: no cover - depends on optional runtime deps
+    http_requests = None  # type: ignore[assignment]
+
 from copilot_core.api.security import validate_token as _validate_token
 from copilot_core.mcp_server import mcp_bp as mcp_rpc_bp
 
@@ -19,6 +24,14 @@ bp = Blueprint("mcp_rest", __name__, url_prefix="/api/v1/mcp")
 
 # In-memory MCP server connections
 _MCP_CONNECTIONS: dict = {}
+
+
+def _mcp_http_dependency_error():
+    return jsonify({
+        "ok": False,
+        "error": "mcp_http_unavailable",
+        "message": "Optional HTTP dependency 'requests' is not installed",
+    }), 503
 
 
 def _require_auth():
@@ -63,9 +76,11 @@ def connect():
             }), 400
         
         # Attempt connection (simple connectivity check)
-        import requests
+        if http_requests is None:
+            return _mcp_http_dependency_error()
+
         try:
-            response = requests.post(
+            response = http_requests.post(
                 f"{server_url}/mcp",
                 json={"jsonrpc": "2.0", "id": 1, "method": "ping"},
                 timeout=timeout
@@ -122,20 +137,22 @@ def status():
     """
     try:
         # Update connection status for all registered servers
-        import requests
-        
-        for server_id, conn_info in _MCP_CONNECTIONS.items():
-            try:
-                response = requests.post(
-                    f"{conn_info['server_url']}/mcp",
-                    json={"jsonrpc": "2.0", "id": 3, "method": "ping"},
-                    timeout=conn_info.get("timeout", 10)
-                )
-                conn_info["connected"] = response.status_code == 200
-                conn_info["last_status_check"] = payload.get("time") if (payload := request.get_json(silent=True)) else None
-            except Exception as e:
-                conn_info["connected"] = False
-                conn_info["last_error"] = str(e)
+        if http_requests is not None:
+            for server_id, conn_info in _MCP_CONNECTIONS.items():
+                try:
+                    response = http_requests.post(
+                        f"{conn_info['server_url']}/mcp",
+                        json={"jsonrpc": "2.0", "id": 3, "method": "ping"},
+                        timeout=conn_info.get("timeout", 10)
+                    )
+                    conn_info["connected"] = response.status_code == 200
+                    conn_info["last_status_check"] = payload.get("time") if (payload := request.get_json(silent=True)) else None
+                except Exception as e:
+                    conn_info["connected"] = False
+                    conn_info["last_error"] = str(e)
+        else:
+            for conn_info in _MCP_CONNECTIONS.values():
+                conn_info.setdefault("last_error", "Optional HTTP dependency 'requests' is not installed")
         
         connected_count = sum(1 for c in _MCP_CONNECTIONS.values() if c.get("connected", False))
         
@@ -227,6 +244,9 @@ def query():
     - resource_uri: str
     """
     try:
+        if http_requests is None:
+            return _mcp_http_dependency_error()
+
         payload = request.get_json(silent=True) or {}
         
         server_id = payload.get("server_id")
@@ -260,7 +280,9 @@ def query():
             }), 400
         
         # Build query
-        import requests
+        if http_requests is None:
+            return _mcp_http_dependency_error()
+
         import json
         
         query_data = {

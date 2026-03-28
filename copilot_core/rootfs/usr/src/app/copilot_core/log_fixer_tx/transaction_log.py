@@ -8,7 +8,12 @@ import fcntl
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, Any
-from ulid import ULID
+from uuid import uuid4
+
+try:
+    from ulid import ULID
+except ImportError:  # pragma: no cover - depends on optional runtime deps
+    ULID = None  # type: ignore[assignment]
 
 logger = logging.getLogger(__name__)
 
@@ -73,9 +78,9 @@ class TransactionLog:
             meta: Optional metadata (e.g., correlationId)
             
         Returns:
-            txId (ULID string)
+            txId (ULID string when available, otherwise UUID4 hex)
         """
-        tx_id = str(ULID())
+        tx_id = str(ULID()) if ULID is not None else uuid4().hex
         return tx_id
         
     def append_intent(

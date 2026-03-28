@@ -24,19 +24,35 @@ import os
 import threading
 from typing import Any, Dict, List, Optional
 from datetime import datetime, timezone
-import numpy as np
+
+try:
+    import numpy as np
+except ImportError:  # pragma: no cover - depends on optional runtime deps
+    np = None  # type: ignore[assignment]
 
 from flask import Blueprint, jsonify, request
 
-from copilot_core.ml.anomaly_detector import (
-    AnomalyDetector,
-    AnomalyConfig,
-    AnomalyLevel,
-    AnomalyResult,
-    create_anomaly_detector,
-)
-from copilot_core.ml.feature_extractor import FeatureExtractor, FeatureConfig
-from copilot_core.ml.model_store import ModelStore, ModelMetadata, TrainingRecord
+try:
+    from copilot_core.ml.anomaly_detector import (
+        AnomalyDetector,
+        AnomalyConfig,
+        AnomalyLevel,
+        AnomalyResult,
+        create_anomaly_detector,
+    )
+    from copilot_core.ml.feature_extractor import FeatureExtractor, FeatureConfig
+    from copilot_core.ml.model_store import ModelStore, ModelMetadata, TrainingRecord
+except ImportError:  # pragma: no cover - depends on optional runtime deps
+    AnomalyDetector = None  # type: ignore[assignment,misc]
+    AnomalyConfig = None  # type: ignore[assignment,misc]
+    AnomalyLevel = None  # type: ignore[assignment,misc]
+    AnomalyResult = None  # type: ignore[assignment,misc]
+    create_anomaly_detector = None  # type: ignore[assignment,misc]
+    FeatureExtractor = None  # type: ignore[assignment,misc]
+    FeatureConfig = None  # type: ignore[assignment,misc]
+    ModelStore = None  # type: ignore[assignment,misc]
+    ModelMetadata = None  # type: ignore[assignment,misc]
+    TrainingRecord = None  # type: ignore[assignment,misc]
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +64,35 @@ _detector: Optional[AnomalyDetector] = None
 _detector_lock = threading.Lock()
 _model_store: Optional[ModelStore] = None
 _model_store_lock = threading.Lock()
+
+
+def _anomaly_dependency_ready() -> bool:
+    return all(
+        dep is not None
+        for dep in (
+            np,
+            create_anomaly_detector,
+            AnomalyLevel,
+            AnomalyResult,
+            ModelStore,
+            ModelMetadata,
+            TrainingRecord,
+        )
+    )
+
+
+def _anomaly_dependency_error():
+    return jsonify({
+        "ok": False,
+        "error": "anomaly_unavailable",
+        "message": "Optional ML dependencies are not installed",
+    }), 503
+
+
+@anomaly_bp.before_request
+def _require_anomaly_dependencies():
+    if not _anomaly_dependency_ready():
+        return _anomaly_dependency_error()
 
 
 def get_detector() -> AnomalyDetector:

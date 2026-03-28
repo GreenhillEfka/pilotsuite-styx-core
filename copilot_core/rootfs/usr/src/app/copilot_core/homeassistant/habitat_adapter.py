@@ -485,6 +485,13 @@ def _build_action_intent(
         "approval_required": _coerce_bool(data.get("approval_required"), True),
         "explanation_required": _coerce_bool(data.get("explanation_required"), True),
         "requires_confirmation": _coerce_bool(data.get("requires_confirmation"), True),
+        "execution_state": data.get("execution_state"),
+        "decision_source": data.get("decision_source"),
+        "blocked_reasons": _copy_list(
+            data.get("blocked_reasons") if isinstance(data.get("blocked_reasons"), list) else None
+        ),
+        "accepted_at": data.get("accepted_at"),
+        "source": data.get("source"),
         "output_adapter": ADAPTER_ID,
         "source_input_ids": _copy_list(
             data.get("source_input_ids") if isinstance(data.get("source_input_ids"), list) else None
@@ -526,6 +533,11 @@ def _build_module_command_from_action(
             "direct_execution_enabled": action_intent["direct_execution_enabled"],
             "approval_required": action_intent["approval_required"],
             "requires_confirmation": action_intent["requires_confirmation"],
+            "execution_state": action_intent.get("execution_state"),
+            "decision_source": action_intent.get("decision_source"),
+            "blocked_reasons": _copy_list(action_intent.get("blocked_reasons")),
+            "accepted_at": action_intent.get("accepted_at"),
+            "source": action_intent.get("source"),
             "output_adapter": ADAPTER_ID,
         },
     }
@@ -690,6 +702,90 @@ def wrap_core_action(
     return normalize_received_webhook_payload("autonomy_executed", data)
 
 
+def wrap_accepted_proposal_action(
+    action_id: str,
+    proposal_id: str,
+    module_id: str,
+    zone_id: str | None,
+    service_call: Mapping[str, Any],
+    confidence: float = 0.0,
+    explanation: str = "",
+    policy_gate: Mapping[str, Any] | None = None,
+    **extra: Any,
+) -> dict[str, Any]:
+    """Build a canonical Core → HA action envelope from an accepted proposal preview.
+
+    This hardens the accepted-proposal handoff so API routes can reuse the same
+    adapter contract logic instead of rebuilding action_type / target / payload /
+    approval semantics ad hoc.
+    """
+    preview = dict(service_call)
+    policy = dict(policy_gate or {})
+
+    domain = str(preview.get("domain") or "").strip().lower()
+    service = str(preview.get("service") or "").strip().lower()
+    action_type = ".".join(part for part in [domain, service] if part) or "unknown"
+    target = dict(preview.get("target") or {})
+    payload = (
+        {"expected_state": preview.get("expected_state")}
+        if preview.get("expected_state") is not None
+        else {}
+    )
+
+    approved = _coerce_bool(extra.pop("approved", policy.get("eligible_for_execution")), False)
+    needs_explicit = _coerce_bool(
+        extra.get("requires_confirmation", policy.get("needs_explicit_styx_instruction")),
+        True,
+    )
+    autonomy_mode = extra.pop(
+        "autonomy_mode",
+        "autonomous" if approved and not needs_explicit else "learning",
+    )
+    direct_execution_enabled = _coerce_bool(
+        extra.pop("direct_execution_enabled", policy.get("direct_execution_enabled")),
+        False,
+    )
+    approval_required = _coerce_bool(
+        extra.pop("approval_required", policy.get("approval_required")),
+        True,
+    )
+    requires_confirmation = _coerce_bool(
+        extra.pop("requires_confirmation", policy.get("needs_explicit_styx_instruction")),
+        True,
+    )
+    blocked_reasons = _copy_list(
+        extra.pop("blocked_reasons", policy.get("blocked_reasons") if isinstance(policy.get("blocked_reasons"), list) else None)
+    )
+
+    return wrap_core_action(
+        action_id=action_id,
+        proposal_id=proposal_id,
+        module_id=module_id,
+        action_type=action_type,
+        target=target,
+        payload=payload,
+        confidence=confidence,
+        explanation=explanation,
+        zone_id=zone_id,
+        approved=approved,
+        autonomy_mode=autonomy_mode,
+        suggestion_mode=str(extra.pop("suggestion_mode", policy.get("suggestion_mode") or "explainable_manual")),
+        explanation_required=_coerce_bool(
+            extra.pop("explanation_required", policy.get("explanation_required")),
+            True,
+        ),
+        execution_state=extra.pop("execution_state", policy.get("execution_state")),
+        decision_source=extra.pop("decision_source", policy.get("decision_source")),
+        accepted_at=extra.pop("accepted_at", None),
+        source=extra.pop("source", None),
+        direct_execution_enabled=direct_execution_enabled,
+        approval_required=approval_required,
+        requires_confirmation=requires_confirmation,
+        blocked_reasons=blocked_reasons,
+        **extra,
+    )
+
+
 __all__ = [
     # Identity
     "ADAPTER_ID",
@@ -707,4 +803,5 @@ __all__ = [
     # Outbound convenience builders
     "wrap_core_proposal",
     "wrap_core_action",
+    "wrap_accepted_proposal_action",
 ]

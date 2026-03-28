@@ -11,6 +11,7 @@ from flask import Blueprint, current_app, jsonify, request
 
 from copilot_core.habitus_miner.service import HabitusMinerService
 from copilot_core.habitus_miner.model import MiningConfig
+from copilot_core.homeassistant.habitat_adapter import wrap_accepted_proposal_action
 from copilot_core.homeassistant.habitus_zones import (
     ZoneType,
     evaluate_action_policy,
@@ -406,12 +407,25 @@ def accept_zone_proposal():
             "service_call": action_preview,
             "blocked_reasons": policy_gate["blocked_reasons"],
         }
+        ha_output = wrap_accepted_proposal_action(
+            action_id=action_intent_id,
+            proposal_id=proposal_id,
+            module_id=module_id or "unknown",
+            zone_id=zone_id,
+            service_call=action_preview,
+            confidence=float(proposal.get("confidence") or 0.0),
+            explanation=str(proposal.get("summary") or proposal.get("title") or ""),
+            accepted_at=accepted_at,
+            source="proposal.accepted",
+            policy_gate=policy_gate,
+        )
 
         return jsonify({
             "status": "ok",
             "proposal_intent": proposal_intent,
             "action_intent": action_intent,
             "habitat_module_command": habitat_module_command,
+            "ha_output": ha_output,
             "policy_gate": policy_gate,
         })
 

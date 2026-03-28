@@ -32,6 +32,14 @@ _SERVICE_RE = re.compile(r"^[a-z_][a-z0-9_]*$")
 _ENTITY_ID_RE = re.compile(r"^[a-z0-9_]+\.[a-z0-9_]+$")
 
 
+def _onyx_dependency_error():
+    return jsonify({
+        "ok": False,
+        "error": "onyx_bridge_unavailable",
+        "message": "Optional HTTP dependency 'requests' is not installed",
+    }), 503
+
+
 def _ha_url() -> str:
     return os.environ.get("SUPERVISOR_API", "http://supervisor/core/api").rstrip("/")
 
@@ -87,7 +95,9 @@ def onyx_status():
     reachable = False
     error = ""
 
-    if token:
+    if http_requests is None:
+        error = "Optional HTTP dependency 'requests' is not installed"
+    elif token:
         try:
             resp = http_requests.get(f"{_ha_url()}/config", headers=headers, timeout=5)
             reachable = resp.ok
@@ -114,6 +124,9 @@ def onyx_status():
 @require_token
 def onyx_ha_service_call():
     """Execute a controlled HA service call and optionally return readback state."""
+    if http_requests is None:
+        return _onyx_dependency_error()
+
     token = _ha_token()
     if not token:
         return jsonify({"ok": False, "error": "SUPERVISOR_TOKEN missing"}), 503

@@ -67,14 +67,28 @@ rm -f \
   tests/test_dashboard_read_models_contract.py \
   tests/test_zone_dashboard_contract.py \
   tests/test_brain_read_model_contract.py \
+  tests/test_api_v1_syntax_contract.py \
+  tests/test_optional_blueprint_wiring_contract.py \
+  tests/test_flat_blueprint_registry_contract.py \
+  tests/test_flat_blueprint_registry_attr_contract.py \
   tests/test_metrics_blueprint_contract.py \
   tests/test_zone_health_blueprint_contract.py \
+  tests/test_calendar_blueprint_contract.py \
+  tests/test_homekit_blueprint_contract.py \
+  tests/test_weather_blueprint_contract.py \
+  tests/test_conversation_blueprint_contract.py \
+  tests/test_onyx_bridge_blueprint_contract.py \
+  tests/test_entity_assignment_blueprint_contract.py \
+  tests/test_anomaly_blueprint_contract.py \
+  tests/test_styx_voice_blueprint_contract.py \
+  tests/test_mcp_blueprint_contract.py \
   tests/test_zone_health_truth_contract.py \
   tests/test_zone_aggregates_blueprint_contract.py \
   tests/test_zone_aggregates_truth_contract.py \
   tests/test_scenes_blueprint_contract.py \
   tests/test_taxonomy_contract.py \
   tests/test_zone_truth_sync_contract.py \
+  tests/test_habitus_accept_contract.py \
   tests/test_core_wiring_contract.py \
   tests/test_event_processor_import_contract.py \
   tests/integration/test_workspace_ha_core_contract.py \

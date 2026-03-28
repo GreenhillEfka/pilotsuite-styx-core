@@ -32,7 +32,10 @@ import os
 import threading
 import time
 
-import requests as http_requests
+try:
+    import requests as http_requests
+except ImportError:  # pragma: no cover - depends on optional runtime deps
+    http_requests = None  # type: ignore[assignment]
 
 from copilot_core.api.security import require_token
 from copilot_core.llm_provider import LLMProvider
@@ -1375,6 +1378,13 @@ def _execute_ha_tool(name: str, arguments: dict) -> dict:
 
     Uses circuit breaker (v3.6.0) to fail fast when HA is unreachable.
     """
+    if http_requests is None:
+        return {
+            "error": "ha_http_unavailable",
+            "message": "Optional HTTP dependency 'requests' is not installed",
+            "tool": name,
+        }
+
     ha_url = os.environ.get("SUPERVISOR_API", "http://supervisor/core/api")
     ha_token = os.environ.get("SUPERVISOR_TOKEN", "")
 
