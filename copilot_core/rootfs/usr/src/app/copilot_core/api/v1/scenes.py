@@ -10,7 +10,10 @@ import os
 import time
 import uuid
 
-import requests as http_requests
+try:
+    import requests as http_requests
+except ImportError:  # pragma: no cover - depends on optional runtime deps
+    http_requests = None  # type: ignore[assignment]
 
 from copilot_core.api.security import require_token
 

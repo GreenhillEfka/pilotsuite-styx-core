@@ -18,7 +18,10 @@ from datetime import datetime, timezone, timedelta
 from flask import Blueprint, jsonify, request
 from typing import Any, Dict, List, Optional
 
-import requests as http_requests
+try:
+    import requests as http_requests
+except ImportError:  # pragma: no cover - depends on optional runtime deps
+    http_requests = None  # type: ignore[assignment]
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -89,6 +92,10 @@ class WeatherService:
 
     def _fetch_open_meteo_current(self) -> Optional[Dict[str, Any]]:
         """Fetch current weather from Open-Meteo API."""
+        if http_requests is None:
+            _LOGGER.info("Open-Meteo current fetch skipped: optional HTTP dependency 'requests' is not installed")
+            return None
+
         try:
             url = (
                 "https://api.open-meteo.com/v1/forecast"
@@ -442,3 +449,4 @@ def health():
             if service and service._cache_time else None
         ),
     })
+

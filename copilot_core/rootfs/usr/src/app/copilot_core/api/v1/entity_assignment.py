@@ -13,7 +13,10 @@ import os
 import re
 from collections import defaultdict
 
-import requests
+try:
+    import requests
+except ImportError:  # pragma: no cover - depends on optional runtime deps
+    requests = None  # type: ignore[assignment]
 from flask import Blueprint, jsonify
 
 from copilot_core.api.security import require_token
@@ -46,6 +49,15 @@ _DOMAIN_BONUS = {
     frozenset({"light", "sensor"}): 0.15,
     frozenset({"light", "climate"}): 0.25,
 }
+
+
+def _entity_assignment_dependency_error():
+    return jsonify({
+        "ok": False,
+        "error": "entity_assignment_unavailable",
+        "message": "Optional HTTP dependency 'requests' is not installed",
+        "suggestions": [],
+    }), 503
 
 
 def _room_hint_from_entity_id(entity_id: str) -> str | None:
@@ -95,6 +107,9 @@ def _fetch_states() -> list[dict] | None:
 @require_token
 def get_suggestions():
     """Return entity groupings with zone assignment suggestions."""
+    if requests is None:
+        return _entity_assignment_dependency_error()
+
     states = _fetch_states()
     if states is None:
         return jsonify({"ok": False, "error": "Supervisor API nicht erreichbar", "suggestions": []})

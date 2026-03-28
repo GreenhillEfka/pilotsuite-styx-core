@@ -19,6 +19,11 @@ import subprocess
 import tempfile
 from typing import Any
 
+try:
+    import requests as http_requests
+except ImportError:  # pragma: no cover - depends on optional runtime deps
+    http_requests = None  # type: ignore[assignment]
+
 from flask import Blueprint, jsonify, request, send_file
 
 from copilot_core.api.security import validate_token
@@ -33,6 +38,14 @@ OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434")
 STT_MODEL = os.environ.get("STYX_STT_MODEL", "whisper")
 TTS_VOICE = os.environ.get("STYX_TTS_VOICE", "de-DE-ConradNeural")
 TTS_ENGINE = os.environ.get("STYX_TTS_ENGINE", "edge-tts")  # edge-tts or piper
+
+
+def _styx_voice_http_dependency_error():
+    return jsonify({
+        "ok": False,
+        "error": "styx_voice_http_unavailable",
+        "message": "Optional HTTP dependency 'requests' is not installed",
+    }), 503
 
 
 @styx_voice_bp.before_request
@@ -55,7 +68,8 @@ def speech_to_text():
         language: ISO code (default: de)
     Returns: {"ok": true, "text": "...", "language": "de"}
     """
-    import requests as http_requests
+    if http_requests is None:
+        return _styx_voice_http_dependency_error()
 
     language = request.args.get("language", "de")
 
@@ -209,16 +223,21 @@ def voice_status():
 
     stt_available = False
     tts_available = False
+    stt_error = ""
 
     # Check Ollama for STT (whisper)
-    try:
-        import requests as http_requests
-        resp = http_requests.get(f"{OLLAMA_URL}/api/tags", timeout=3)
-        if resp.status_code == 200:
-            models = [m.get("name", "") for m in resp.json().get("models", [])]
-            stt_available = any("whisper" in m.lower() for m in models)
-    except Exception:
-        pass
+    if http_requests is None:
+        stt_error = "Optional HTTP dependency 'requests' is not installed"
+    else:
+        try:
+            resp = http_requests.get(f"{OLLAMA_URL}/api/tags", timeout=3)
+            if resp.status_code == 200:
+                models = [m.get("name", "") for m in resp.json().get("models", [])]
+                stt_available = any("whisper" in m.lower() for m in models)
+            else:
+                stt_error = f"Ollama returned {resp.status_code}"
+        except Exception as exc:
+            stt_error = str(exc)
 
     # Check edge-tts availability
     tts_available = shutil.which("edge-tts") is not None
@@ -229,6 +248,7 @@ def voice_status():
             "available": stt_available,
             "engine": "whisper" if stt_available else "none",
             "model": STT_MODEL,
+            "error": stt_error,
         },
         "tts": {
             "available": tts_available,
