@@ -11,7 +11,8 @@ Repo-lokaler Draft für GitHub-Release-Notes / changelog bullets.
 
 ## Coordination posture
 - **Protected functional pairing ref for HA/releaser coordination:** `8b017a74`
-- **Current packaging head on `main`:** `3e135e21`
+- **Current larger functional milestone above the protected pairing ref:** `3e135e21`
+- **Exact current docs/release-prep head:** use the current repo HEAD validated by `./scripts/check_15_2_0_release_gate.sh`; for real handoff/cut discussion, treat the refreshed workspace release entrypoint as the exact current-head snapshot surface.
 - **Rule:** Release-readiness / reviewer / releaser docs dürfen oberhalb des geschützten Pairing-Refs weiterlaufen, solange der Pairing-Ref explizit stabil bleibt.
 
 ## Milestone slices committed above the protected pairing ref
@@ -74,9 +75,10 @@ Result:
 
 ### Release-readiness packaging
 - Repo-local release pointer / manifest / workspace entrypoint stay available as the single release-prep entry surface.
+- Queue / governance / real-release runbook surfaces are available repo-locally for reviewer/releaser flow.
 - Protected pairing ref remains explicit: `8b017a74`.
-- Current packaging head remains exportable separately for reviewer/releaser consumption.
+- The strict release gate treats the workspace release entrypoint as the exact current-head snapshot surface for real cut discussion.
 
 ## Exact reviewer/releaser note
 - For HA/releaser pairing and protected cutover discussion, continue to treat **`8b017a74`** as the functional pairing ref until a newer functional cutover ref is explicitly validated and coordinated.
-- For GitHub release packaging / docs / notes / manifest generation, use the current repo head exported in `docs/CORE_15_2_0_RELEASE_MANIFEST_2026-03-27.json`.
+- For GitHub release packaging / docs / notes / manifest generation, use the current repo head validated by `./scripts/check_15_2_0_release_gate.sh` and exported via the refreshed workspace release entrypoint / release surfaces.
