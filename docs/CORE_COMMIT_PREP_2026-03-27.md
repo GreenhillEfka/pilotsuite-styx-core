@@ -1,135 +1,58 @@
 # Core Commit Prep — 2026-03-27
 
-## Purpose
-Ausführbare Commit-/Stage-Gruppierung für die aktuelle Core-Lane.
+## Status
+**Historical / superseded artifact.**
 
-**Boundary:**
+Dieses Dokument beschreibt eine frühere Commit-/Stage-Gruppierung aus der Core-Recovery-Phase.
+Es ist **nicht mehr** die aktuelle operative Review-/Release-Prep-Anleitung.
+
+## Boundary
 - Repo/Dev only
 - kein Release
 - kein Install
 - kein Live-Test
 
-## Current validated baseline
-Vor Commit-Prep zuletzt grün:
-```bash
-./scripts/run_core_contract_bundle.sh
-```
+## Why this doc is historical now
+Die ursprünglich hier geplanten Commit-Gruppen sind inzwischen in der Core-Lane materialisiert und von neueren Release-Prep-/Governance-Surfaces überholt worden.
 
-Result:
-- **35 tests passed**
-- **0 warnings**
+Spätere, relevante Milestones oberhalb dieser frühen Commit-Prep-Phase sind u. a.:
+- `3e135e21` — `feat(core): harden optional blueprints and proposal handoffs`
+- `c7a88558` — `docs(core): refresh release prep after blueprint hardening milestone`
+- `f5d0db99` — `docs(core): add release queue status and manifest drift note`
+- `59a212bc` — `fix(core): make strict release gate workspace-exact`
+- `249fdeb2` — `docs(core): refresh reviewer and ha handoff surfaces`
 
-## Working set
-### Modified
-- `copilot_core/rootfs/usr/src/app/copilot_core/api/v1/zone_automation.py`
-- `copilot_core/rootfs/usr/src/app/copilot_core/core/brain_read_model.py`
-- `copilot_core/rootfs/usr/src/app/copilot_core/core/dashboard_read_models.py`
-- `copilot_core/rootfs/usr/src/app/copilot_core/core/taxonomy.py`
-- `copilot_core/rootfs/usr/src/app/copilot_core/hub/habitus_zones.py`
-- `copilot_core/rootfs/usr/src/app/copilot_core/hub/zone_automation.py`
+## Original intent (preserved for auditability)
+Die frühere Absicht dieses Dokuments war:
+1. funktionale Truth-Chain-Änderungen getrennt zu committen
+2. Contract-/Regression-Evidence als eigenen Block zu schneiden
+3. Review-/Handoff-/RC-Prep-Dokumente separat zu bündeln
 
-### New
-- `tests/test_brain_read_model_contract.py`
-- `tests/test_dashboard_read_models_contract.py`
-- `tests/test_taxonomy_contract.py`
-- `tests/test_zone_truth_sync_contract.py`
-- `scripts/run_core_contract_bundle.sh`
-- `docs/HA_RELEASE_CONTRACT_HANDOFF_2026-03-27.md`
+Das war sinnvoll für die frühe Builder-Phase, ist aber **nicht** mehr der richtige operative Einstiegspunkt.
+
+## Current authoritative surfaces instead
+Für die aktuelle Review-/Releaser-/Governance-Arbeit gelten stattdessen diese Artefakte als maßgeblich:
+- `docs/CORE_15_2_0_RELEASER_PREP_POINTER_2026-03-27.md`
 - `docs/CORE_RC_PREP_2026-03-27.md`
+- `docs/CORE_REVIEW_PACKET_2026-03-27.md`
 - `docs/CORE_RELEASE_INPUT_2026-03-27.md`
-- `docs/CORE_BUILDER_HANDOFF_2026-03-27.md`
-- `docs/CORE_COMMIT_PREP_2026-03-27.md`
+- `docs/CORE_RELEASE_QUEUE_STATUS_2026-03-28.md`
+- `docs/CORE_RELEASE_GOVERNANCE_CHECKLIST_2026-03-28.md`
+- `docs/HA_RELEASE_CONTRACT_HANDOFF_2026-03-27.md`
 
-## Preferred grouping
+## Current authoritative commands instead
+- `./scripts/run_core_contract_bundle.sh`
+- `./scripts/check_15_2_0_releaser_pointers.sh`
+- `./scripts/check_15_2_0_sync_anchor_consistency.sh`
+- `./scripts/check_15_2_0_release_gate.sh`
 
-### Commit Group A — Core truth chain hardening
-**Intent:** funktionale Core-Änderungen zusammenhalten
+## Release governance reminder
+Vor jedem echten Releaseversuch gilt strikt:
+1. `mache v15.2.0`
+2. **5 Minuten warten**
+3. Release-Lock beachten
+4. `./scripts/check_15_2_0_release_gate.sh` erneut grün
 
-```bash
-git add \
-  copilot_core/rootfs/usr/src/app/copilot_core/api/v1/zone_automation.py \
-  copilot_core/rootfs/usr/src/app/copilot_core/core/brain_read_model.py \
-  copilot_core/rootfs/usr/src/app/copilot_core/core/dashboard_read_models.py \
-  copilot_core/rootfs/usr/src/app/copilot_core/core/taxonomy.py \
-  copilot_core/rootfs/usr/src/app/copilot_core/hub/habitus_zones.py \
-  copilot_core/rootfs/usr/src/app/copilot_core/hub/zone_automation.py
-```
-
-**Suggested commit message:**
-```text
-feat(core): harden truth chain across zone sync, taxonomy, brain and dashboard read models
-```
-
-### Commit Group B — Contract regression evidence
-**Intent:** neue Regression-Suites + reproduzierbarer Bundle-Runner + Ref-Drift-Guard
-
-```bash
-git add \
-  tests/test_brain_read_model_contract.py \
-  tests/test_dashboard_read_models_contract.py \
-  tests/test_taxonomy_contract.py \
-  tests/test_zone_truth_sync_contract.py \
-  scripts/run_core_contract_bundle.sh \
-  scripts/check_15_2_0_sync_anchor_consistency.sh
-```
-
-**Suggested commit message:**
-```text
-test(core): add contract bundle and sync-anchor consistency guard
-```
-
-### Commit Group C — Review / handoff / RC prep docs
-**Intent:** Review- und Release-Readiness-Artefakte getrennt von Code halten
-
-```bash
-git add \
-  docs/HA_RELEASE_CONTRACT_HANDOFF_2026-03-27.md \
-  docs/CORE_RC_PREP_2026-03-27.md \
-  docs/CORE_RELEASE_INPUT_2026-03-27.md \
-  docs/CORE_BUILDER_HANDOFF_2026-03-27.md \
-  docs/CORE_COMMIT_PREP_2026-03-27.md
-```
-
-**Suggested commit message:**
-```text
-docs(core): prepare review handoff and rc input for contract hardening
-```
-
-## Squash option
-Wenn ein einzelner sauberer Review-Commit bevorzugt wird:
-
-```bash
-git add \
-  copilot_core/rootfs/usr/src/app/copilot_core/api/v1/zone_automation.py \
-  copilot_core/rootfs/usr/src/app/copilot_core/core/brain_read_model.py \
-  copilot_core/rootfs/usr/src/app/copilot_core/core/dashboard_read_models.py \
-  copilot_core/rootfs/usr/src/app/copilot_core/core/taxonomy.py \
-  copilot_core/rootfs/usr/src/app/copilot_core/hub/habitus_zones.py \
-  copilot_core/rootfs/usr/src/app/copilot_core/hub/zone_automation.py \
-  tests/test_brain_read_model_contract.py \
-  tests/test_dashboard_read_models_contract.py \
-  tests/test_taxonomy_contract.py \
-  tests/test_zone_truth_sync_contract.py \
-  scripts/run_core_contract_bundle.sh \
-  docs/HA_RELEASE_CONTRACT_HANDOFF_2026-03-27.md \
-  docs/CORE_RC_PREP_2026-03-27.md \
-  docs/CORE_RELEASE_INPUT_2026-03-27.md \
-  docs/CORE_BUILDER_HANDOFF_2026-03-27.md \
-  docs/CORE_COMMIT_PREP_2026-03-27.md
-```
-
-**Suggested squash message:**
-```text
-feat(core): harden truth contracts and bundle release-readiness evidence
-```
-
-## Pre-commit checklist
-- [ ] `git status` contains only intended files
-- [ ] `./scripts/run_core_contract_bundle.sh` still green
-- [ ] no generated `tmp/` artifacts returned
-- [ ] docs remain clearly marked as repo/dev evidence, not live success claims
-
-## Recommended next step
-- Builder chooses either the 3-commit grouping or the squash option above.
-- Before formal review, run both `./scripts/check_15_2_0_sync_anchor_consistency.sh` and `./scripts/run_core_contract_bundle.sh`.
-- After both are green, move into formal review.
+## Exact next step
+- Für aktuelle Builder-/Reviewer-/Releaser-Arbeit dieses Dokument **nicht** als Primärquelle verwenden.
+- Stattdessen immer vom Releaser-Prep-Pointer + Queue/Governance/Gate-Surfaces ausgehen.
