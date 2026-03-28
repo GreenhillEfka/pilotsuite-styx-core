@@ -475,3 +475,103 @@ class TestZoneAutomationAPI:
                 assert resp.status_code == 200
                 data = json.loads(resp.data)
                 assert data["count"] == 1
+
+
+# ── HubZone Sync Tests ────────────────────────────────────────────────────────
+
+
+class TestHubZoneSync:
+    """Tests for the sync endpoint and sync_habitus_zones method."""
+
+    def _make_client(self):
+        from copilot_core.api.v1.zone_automation import zone_automation_bp, init_zone_automation_api
+        from copilot_core.hub.zone_automation import ZoneAutomationController
+        ctrl = ZoneAutomationController()
+        init_zone_automation_api(ctrl)
+        app = Flask(__name__)
+        app.config["TESTING"] = True
+        app.register_blueprint(zone_automation_bp)
+        return app, ctrl
+
+    def test_sync_creates_zone_automation_config(self):
+        """sync_habitus_zones should create ZoneAutomationConfig for new zones."""
+        app, ctrl = self._make_client()
+        with patch("copilot_core.api.v1.zone_automation.require_token", lambda f: f):
+            with app.test_client() as c:
+                resp = c.post("/api/v1/zone-automation/sync",
+                    json={
+                        "zones": [
+                            {"zone_id": "wohnbereich", "name": "Wohnbereich",
+                             "area_id": "wohnzimmer", "entities": ["light.decke"]},
+                        ]
+                    },
+                    content_type="application/json",
+                )
+                assert resp.status_code == 200, f"Got {resp.status_code}: {resp.data}"
+                data = json.loads(resp.data)
+                assert data["ok"] is True
+                assert data["synced"] == 1
+                # ZoneAutomationController should have the config
+                assert "wohnbereich" in ctrl._configs
+
+    def test_sync_creates_hub_zones(self):
+        """sync_habitus_zones should register rooms+zones in HubZoneEngine."""
+        app, ctrl = self._make_client()
+        with patch("copilot_core.api.v1.zone_automation.require_token", lambda f: f):
+            with app.test_client() as c:
+                resp = c.post("/api/v1/zone-automation/sync",
+                    json={
+                        "zones": [
+                            {"zone_id": "kueche", "name": "Küche",
+                             "area_id": "kueche", "entities": []},
+                        ]
+                    },
+                    content_type="application/json",
+                )
+                assert resp.status_code == 200
+                data = json.loads(resp.data)
+                assert data["ok"] is True
+                # HubZoneEngine should have the zone
+                hub = getattr(ctrl, "_hub_zones", None)
+                assert hub is not None, "HubZoneEngine should be created on first sync"
+                assert "kueche" in hub._zones, f"Zone 'kueche' not in hub_zones: {list(hub._zones.keys())}"
+                assert "kueche" in hub._rooms
+
+    def test_sync_returns_entity_zone_map(self):
+        """sync response should include entity→zone mapping for HA."""
+        app, ctrl = self._make_client()
+        with patch("copilot_core.api.v1.zone_automation.require_token", lambda f: f):
+            with app.test_client() as c:
+                resp = c.post("/api/v1/zone-automation/sync",
+                    json={
+                        "zones": [
+                            {"zone_id": "bad", "name": "Badezimmer",
+                             "area_id": "bad", "entities": ["light.spiegel", "sensor.temp"]},
+                        ]
+                    },
+                    content_type="application/json",
+                )
+                assert resp.status_code == 200
+                data = json.loads(resp.data)
+                emap = data["ha_should_update"]["entity_zone_map"]
+                assert emap["light.spiegel"] == "bad"
+                assert emap["sensor.temp"] == "bad"
+
+    def test_ensure_zones_with_habitus_sync(self):
+        """ensure-zones with habitus_sync=true should also touch HubZoneEngine."""
+        app, ctrl = self._make_client()
+        with patch("copilot_core.api.v1.zone_automation.require_token", lambda f: f):
+            with app.test_client() as c:
+                resp = c.post("/api/v1/zone-automation/ensure-zones",
+                    json={
+                        "zone_ids": ["neue_zone"],
+                        "habitus_sync": True,
+                        "zone_names": {"neue_zone": "Neue Zone"},
+                    },
+                    content_type="application/json",
+                )
+                assert resp.status_code == 200
+                data = json.loads(resp.data)
+                assert data["ok"] is True
+                assert "neue_zone" in data["created"] or "neue_zone" in ctrl._configs
+

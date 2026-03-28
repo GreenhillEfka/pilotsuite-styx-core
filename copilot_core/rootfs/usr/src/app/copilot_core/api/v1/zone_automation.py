@@ -436,9 +436,17 @@ def import_entities():
 def ensure_zones():
     """Ensure zone automation configs exist for a list of zone IDs.
 
-    Body: {"zone_ids": ["wohnbereich", "badbereich", ...]}
+    Body: {
+        "zone_ids": ["wohnbereich", "badbereich", ...],
+        "habitus_sync": true   # optional: also register rooms+zones in HubZoneEngine
+    }
+
     Auto-creates default ZoneAutomationConfig for each zone_id that
-    doesn't exist yet. Returns the full dashboard afterwards.
+    doesn't exist yet.  When habitus_sync=true, also registers each
+    zone_id as a room + zone in HabitusZoneEngine (hub_zones) so the
+    zone_editor and habitus_zones APIs return them immediately.
+
+    Returns the full dashboard afterwards.
     """
     if _controller is None:
         return jsonify({"ok": False, "error": "Controller not initialized"}), 503
@@ -448,6 +456,7 @@ def ensure_zones():
     if not isinstance(zone_ids, list):
         return jsonify({"ok": False, "error": "'zone_ids' must be a list"}), 400
 
+    habitus_sync = bool(data.get("habitus_sync", False))
     created = []
     for zid in zone_ids:
         zid = str(zid).strip()
@@ -457,8 +466,96 @@ def ensure_zones():
             _controller.get_zone_config(zid)  # auto-creates default config
             created.append(zid)
 
+        # ── HabitusZone sync ──────────────────────────────────────────
+        if habitus_sync:
+            try:
+                _controller.sync_habitus_zones(zones=[{
+                    "zone_id": zid,
+                    "name": data.get("zone_names", {}).get(zid, zid),
+                    "area_id": zid,
+                    "entities": data.get("entities_by_zone", {}).get(zid, []),
+                }])
+            except Exception:
+                _LOGGER.debug("habitus_sync failed for zone %s (non-fatal)", zid)
+
     _LOGGER.info("Ensured %d zone(s), created %d new: %s", len(zone_ids), len(created), created)
     return jsonify({"ok": True, "created": created, **_controller.get_dashboard()})
+
+
+
+# ── HA ↔ Core Sync (HA calls this to push topology; gets back all Core state) ──
+
+
+@zone_automation_bp.route("/sync", methods=["POST"])
+@require_token
+def sync_habitus_zones():
+    """HA → Core zone topology sync + full Core state response.
+
+    HA calls this after discovering areas and entities to:
+    1. Register/update rooms and zones in HubZoneEngine (habitus_zones)
+    2. Register/update zone configs in ZoneAutomationController
+
+    Returns a complete snapshot of all Core zone state so HA can
+    initialise its own entity↔zone mappings.
+
+    Body: {
+        "zones": [
+            {
+                "zone_id": "wohnbereich",
+                "name": "Wohnbereich",
+                "area_id": "wohnzimmer",
+                "entities": ["light.wohnzimmer_decke", "sensor.wohnzimmer_temp"],
+                "icon": "mdi:sofa",
+                "priority": 10
+            },
+            ...
+        ],
+        "clear_missing": false   // if true, delete zones not in this payload
+    }
+
+    Response: {
+        "ok": true,
+        "synced": 5,
+        "created": 2,
+        "zone_automation_configs": [...],   // ZoneAutomationController state
+        "habitus_zones": [...],            // HubZoneEngine overview
+        "ha_should_update": {             // what HA should create/update locally
+            "zones": [...],
+            "entity_zone_map": {...}
+        }
+    }
+    """
+    if _controller is None:
+        return jsonify({"ok": False, "error": "Controller not initialized"}), 503
+
+    data = request.get_json(silent=True) or {}
+    zones = data.get("zones", [])
+    clear_missing = bool(data.get("clear_missing", False))
+
+    if not isinstance(zones, list):
+        return jsonify({"ok": False, "error": "'zones' must be a list"}), 400
+
+    try:
+        result = _controller.sync_habitus_zones(zones=zones, clear_missing=clear_missing)
+    except Exception as e:
+        _LOGGER.exception("sync_habitus_zones failed")
+        return jsonify({"ok": False, "error": f"sync failed: {e}"}), 500
+
+    # Also include the current automation dashboard for HA to bootstrap from
+    dashboard = _controller.get_dashboard()
+
+    return jsonify({
+        "ok": True,
+        "synced": result.get("synced", 0),
+        "created": result.get("created", 0),
+        "deleted": result.get("deleted", 0),
+        "zone_automation_configs": dashboard.get("zones", []),
+        "habitus_zones": result.get("habitus_zones", []),
+        "ha_should_update": {
+            "zones": result.get("ha_zones", []),
+            "entity_zone_map": result.get("entity_zone_map", {}),
+        },
+    })
 
 
 # ── Sync Zone Definitions (HA → Core) ──────────────────────────────────────
