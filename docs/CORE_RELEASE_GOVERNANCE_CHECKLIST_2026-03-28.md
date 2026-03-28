@@ -38,6 +38,8 @@ Diese Checklist gilt für den vorbereiteten Core-Kandidaten **`v15.2.0`** bei ge
 
 ## Strict release gate commands
 ```bash
+./scripts/export_15_2_0_release_status.sh
+./scripts/check_15_2_0_release_status.sh
 ./scripts/check_15_2_0_release_gate.sh
 ```
 
