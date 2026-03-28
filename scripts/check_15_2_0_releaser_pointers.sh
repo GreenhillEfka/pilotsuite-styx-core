@@ -10,6 +10,7 @@ EXPECTED_PAIRED_REF="8b017a74"
 
 DOC_PATHS=(
   "docs/CORE_15_2_0_RELEASE_MANIFEST_2026-03-27.json"
+  "docs/CORE_15_2_0_RELEASE_STATUS_2026-03-28.json"
   "docs/CORE_15_2_0_SYNC_ANCHOR_2026-03-27.md"
   "docs/CORE_15_2_0_BUILDER_HANDOFF_2026-03-27.md"
   "docs/CORE_REVIEW_PACKET_2026-03-27.md"
@@ -28,6 +29,7 @@ SCRIPT_PATHS=(
   "scripts/run_core_contract_bundle.sh"
   "scripts/check_15_2_0_releaser_pointers.sh"
   "scripts/check_15_2_0_release_gate.sh"
+  "scripts/export_15_2_0_release_status.sh"
   "scripts/create_15_2_0_release_lock.sh"
   "scripts/check_15_2_0_release_lock.sh"
   "scripts/clear_15_2_0_release_lock.sh"
