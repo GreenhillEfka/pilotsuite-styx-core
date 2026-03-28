@@ -20,7 +20,7 @@ if [[ ! -f "$LOCK_PATH" ]]; then
   exit 1
 fi
 
-for expected in "$EXPECTED_VERSION" "$EXPECTED_PAIRED_REF" "$EXPECTED_ANNOUNCE"; do
+for expected in "$EXPECTED_VERSION" "$EXPECTED_PAIRED_REF" "$EXPECTED_ANNOUNCE" 'status: `active`'; do
   if grep -Fq "$expected" "$LOCK_PATH"; then
     printf 'PASS lock contains %s\n' "$expected"
   else
@@ -42,17 +42,25 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 import re, sys
 text = Path(sys.argv[1]).read_text(encoding='utf-8')
-m = re.search(r'- created_at_utc: `([^`]+)`', text)
-if not m:
+ann = re.search(r'- announcement_at_utc: `([^`]+)`', text)
+created = re.search(r'- created_at_utc: `([^`]+)`', text)
+if not ann:
+    print('FAIL lock missing announcement_at_utc')
+    raise SystemExit(2)
+if not created:
     print('FAIL lock missing created_at_utc')
     raise SystemExit(2)
-created = datetime.fromisoformat(m.group(1).replace('Z', '+00:00'))
+announced_at = datetime.fromisoformat(ann.group(1).replace('Z', '+00:00'))
+created_at = datetime.fromisoformat(created.group(1).replace('Z', '+00:00'))
+if announced_at > created_at:
+    print('FAIL lock announcement_at_utc is later than created_at_utc')
+    raise SystemExit(4)
 now = datetime.now(timezone.utc)
-remaining = created + timedelta(minutes=5) - now
+remaining = announced_at + timedelta(minutes=5) - now
 if remaining.total_seconds() <= 0:
-    print('PASS lock wait window elapsed')
+    print('PASS lock wait window elapsed since announcement_at_utc')
 else:
-    print(f'FAIL lock wait window not elapsed; remaining_seconds={int(remaining.total_seconds())}')
+    print(f'FAIL lock wait window not elapsed since announcement_at_utc; remaining_seconds={int(remaining.total_seconds())}')
     raise SystemExit(3)
 PY
 rc=$?

@@ -36,7 +36,7 @@ Strict release gate for real-cut readiness:
 Optional release-lock helpers for a real cut window:
 
 ```bash
-./scripts/create_15_2_0_release_lock.sh <owner>
+./scripts/create_15_2_0_release_lock.sh <owner> <announcement_at_utc>
 ./scripts/check_15_2_0_release_lock.sh
 ```
 
