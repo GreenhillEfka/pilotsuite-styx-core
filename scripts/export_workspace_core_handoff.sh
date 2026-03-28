@@ -30,7 +30,9 @@ RUNNER_PATH="$ROOT/scripts/run_workspace_ha_core_contract_tests.sh"
 SYNC_CHECKER_PATH="$ROOT/scripts/check_15_2_0_sync_anchor_consistency.sh"
 POINTER_CHECKER_PATH="$ROOT/scripts/check_15_2_0_releaser_pointers.sh"
 STRICT_RELEASE_GATE_PATH="$ROOT/scripts/check_15_2_0_release_gate.sh"
+RELEASE_LOCK_CREATE_PATH="$ROOT/scripts/create_15_2_0_release_lock.sh"
 RELEASE_LOCK_CHECK_PATH="$ROOT/scripts/check_15_2_0_release_lock.sh"
+RELEASE_LOCK_CLEAR_PATH="$ROOT/scripts/clear_15_2_0_release_lock.sh"
 SYNC_ANCHOR_DOC="$ROOT/docs/CORE_15_2_0_SYNC_ANCHOR_2026-03-27.md"
 CORE_BUILDER_HANDOFF_DOC="$ROOT/docs/CORE_BUILDER_HANDOFF_2026-03-27.md"
 CORE_REVIEW_PACKET_DOC="$ROOT/docs/CORE_REVIEW_PACKET_2026-03-27.md"
@@ -159,7 +161,9 @@ cat > "$OUT" <<EOF
     "contract_bundle_runner": "$ROOT/scripts/run_core_contract_bundle.sh",
     "releaser_pointer_check": "$POINTER_CHECKER_PATH",
     "strict_release_gate": "$STRICT_RELEASE_GATE_PATH",
+    "release_lock_create": "$RELEASE_LOCK_CREATE_PATH",
     "release_lock_check": "$RELEASE_LOCK_CHECK_PATH",
+    "release_lock_clear": "$RELEASE_LOCK_CLEAR_PATH",
     "release_queue_status_doc": "$CORE_RELEASE_QUEUE_STATUS_DOC",
     "release_governance_checklist_doc": "$CORE_RELEASE_GOVERNANCE_DOC",
     "real_release_runbook_doc": "$CORE_REAL_RELEASE_RUNBOOK_DOC"
@@ -235,7 +239,9 @@ cat > "$PAIR_OUT" <<EOF
     "releaser_pointer_check": "$POINTER_CHECKER_PATH",
     "contract_bundle_runner": "$ROOT/scripts/run_core_contract_bundle.sh",
     "strict_release_gate": "$STRICT_RELEASE_GATE_PATH",
+    "release_lock_create": "$RELEASE_LOCK_CREATE_PATH",
     "release_lock_check": "$RELEASE_LOCK_CHECK_PATH",
+    "release_lock_clear": "$RELEASE_LOCK_CLEAR_PATH",
     "release_queue_status_doc": "$CORE_RELEASE_QUEUE_STATUS_DOC",
     "release_governance_checklist_doc": "$CORE_RELEASE_GOVERNANCE_DOC",
     "real_release_runbook_doc": "$CORE_REAL_RELEASE_RUNBOOK_DOC",
@@ -288,7 +294,9 @@ cat > "$EVIDENCE_OUT" <<EOF
     "releaser_pointer_check": "$POINTER_CHECKER_PATH",
     "contract_bundle_runner": "$ROOT/scripts/run_core_contract_bundle.sh",
     "strict_release_gate": "$STRICT_RELEASE_GATE_PATH",
+    "release_lock_create": "$RELEASE_LOCK_CREATE_PATH",
     "release_lock_check": "$RELEASE_LOCK_CHECK_PATH",
+    "release_lock_clear": "$RELEASE_LOCK_CLEAR_PATH",
     "release_queue_status_doc": "$CORE_RELEASE_QUEUE_STATUS_DOC",
     "release_governance_checklist_doc": "$CORE_RELEASE_GOVERNANCE_DOC",
     "real_release_runbook_doc": "$CORE_REAL_RELEASE_RUNBOOK_DOC"
@@ -319,7 +327,9 @@ cat > "$RC_CHAIN_OUT" <<EOF
     "releaser_pointer_check": "$POINTER_CHECKER_PATH",
     "contract_bundle": "$ROOT/scripts/run_core_contract_bundle.sh",
     "strict_release_gate": "$STRICT_RELEASE_GATE_PATH",
-    "release_lock_check": "$RELEASE_LOCK_CHECK_PATH"
+    "release_lock_create": "$RELEASE_LOCK_CREATE_PATH",
+    "release_lock_check": "$RELEASE_LOCK_CHECK_PATH",
+    "release_lock_clear": "$RELEASE_LOCK_CLEAR_PATH"
   },
   "release_readiness_docs": {
     "pointer": "$CORE_POINTER_DOC",
