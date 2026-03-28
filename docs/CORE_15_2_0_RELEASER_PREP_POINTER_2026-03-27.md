@@ -28,13 +28,16 @@ Give the Core repo a single repo-local pointer to the current authoritative Core
 - `docs/CORE_RELEASE_INPUT_2026-03-27.md`
 - `docs/CORE_GITHUB_RELEASE_NOTES_INPUT_2026-03-27.md`
 - `docs/CORE_RELEASE_QUEUE_STATUS_2026-03-28.md`
+- `docs/CORE_RELEASE_GOVERNANCE_CHECKLIST_2026-03-28.md`
 - `docs/HA_RELEASE_CONTRACT_HANDOFF_2026-03-27.md`
 
 ## Repo-local validation companions
 - `scripts/export_15_2_0_release_manifest.sh`
+- `scripts/refresh_15_2_0_release_surfaces.sh`
 - `scripts/check_15_2_0_sync_anchor_consistency.sh`
 - `scripts/run_core_contract_bundle.sh`
 - `scripts/check_15_2_0_releaser_pointers.sh`
+- `scripts/check_15_2_0_release_gate.sh`
 
 ## Machine-readable workspace exports
 - `/config/clawd/team/workspaces/pilotsuite-stxy-sandbox/handoff/core_release_entrypoint.json`
@@ -45,10 +48,11 @@ Give the Core repo a single repo-local pointer to the current authoritative Core
 
 ## Exact next step
 Use this pointer as the single repo-local Core entrypoint for review/releaser/HA coordination. Before handoff/cutover discussion, run:
-1. `./scripts/export_15_2_0_release_manifest.sh`
+1. `./scripts/refresh_15_2_0_release_surfaces.sh`
 2. `./scripts/check_15_2_0_releaser_pointers.sh`
 3. `./scripts/check_15_2_0_sync_anchor_consistency.sh`
 4. `./scripts/run_core_contract_bundle.sh`
+5. `./scripts/check_15_2_0_release_gate.sh`
 
 Governance gate for any **real** release attempt:
 1. post the exact group-thread announcement `mache v15.2.0`
