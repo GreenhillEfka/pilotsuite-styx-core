@@ -39,6 +39,8 @@ Give the Core repo a single repo-local pointer to the current authoritative Core
 - `scripts/run_core_contract_bundle.sh`
 - `scripts/check_15_2_0_releaser_pointers.sh`
 - `scripts/check_15_2_0_release_gate.sh`
+- `scripts/create_15_2_0_release_lock.sh`
+- `scripts/check_15_2_0_release_lock.sh`
 
 ## Machine-readable workspace exports
 - `/config/clawd/team/workspaces/pilotsuite-stxy-sandbox/handoff/core_release_entrypoint.json`

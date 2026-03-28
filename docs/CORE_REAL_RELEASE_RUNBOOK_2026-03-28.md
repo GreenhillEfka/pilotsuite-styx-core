@@ -41,11 +41,15 @@ Do **all** of the following in order:
    mache v15.2.0
    ```
 2. Wait **5 minutes**
-3. Treat the Core lane/repo as release-locked during that waiting window
+3. Treat the Core lane/repo as release-locked during that waiting window, preferably by creating the repo-local lock file:
+   ```bash
+   ./scripts/create_15_2_0_release_lock.sh <owner>
+   ```
 4. Rerun:
    ```bash
    ./scripts/check_15_2_0_release_gate.sh
    ```
+   If a lock file is present, the gate will validate it via `./scripts/check_15_2_0_release_lock.sh`.
 5. Only proceed if the gate is still green and the lane remains clean/validated/lane-ready
 
 If cleanliness or validation breaks during the waiting window, abort the cut and push the lane back to builder/reviewer work.
@@ -53,6 +57,7 @@ If cleanliness or validation breaks during the waiting window, abort the cut and
 ## Pre-cut operator checklist
 - [ ] `mache v15.2.0` posted in the correct group thread
 - [ ] 5-minute wait fully elapsed
+- [ ] repo-local `RELEASE_LOCK.md` created for the active cut window (recommended via `./scripts/create_15_2_0_release_lock.sh <owner>`)
 - [ ] no competing release window is active on this repo/lane
 - [ ] `./scripts/check_15_2_0_release_gate.sh` is green
 - [ ] reviewer/releaser packet is current:

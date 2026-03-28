@@ -9,6 +9,8 @@ QUEUE_DOC="docs/CORE_RELEASE_QUEUE_STATUS_2026-03-28.md"
 GOVERNANCE_DOC="docs/CORE_RELEASE_GOVERNANCE_CHECKLIST_2026-03-28.md"
 MANIFEST_PATH="docs/CORE_15_2_0_RELEASE_MANIFEST_2026-03-27.json"
 WORKSPACE_ENTRYPOINT="/config/clawd/team/workspaces/pilotsuite-stxy-sandbox/handoff/core_release_entrypoint.json"
+RELEASE_LOCK_PATH="RELEASE_LOCK.md"
+RELEASE_LOCK_CHECK="./scripts/check_15_2_0_release_lock.sh"
 CURRENT_HEAD="$(git rev-parse --short=8 HEAD)"
 
 failures=0
@@ -17,11 +19,18 @@ printf 'Core 15.2.0 strict release gate\n'
 printf 'Repo: %s\n' "$REPO_ROOT"
 printf 'Current HEAD: %s\n' "$CURRENT_HEAD"
 
-if [[ -n "$(git status --porcelain)" ]]; then
+WORKTREE_STATUS="$(git status --porcelain)"
+WORKTREE_STATUS_FILTERED="$(printf '%s\n' "$WORKTREE_STATUS" | grep -v '^?? RELEASE_LOCK.md$' || true)"
+
+if [[ -n "$WORKTREE_STATUS_FILTERED" ]]; then
   printf 'FAIL worktree is not clean\n'
   failures=$((failures + 1))
 else
-  printf 'PASS worktree clean\n'
+  if [[ -f "$RELEASE_LOCK_PATH" ]]; then
+    printf 'PASS worktree clean (release lock tolerated)\n'
+  else
+    printf 'PASS worktree clean\n'
+  fi
 fi
 
 version_root="$(tr -d '[:space:]' < VERSION)"
@@ -48,6 +57,17 @@ for path in "$QUEUE_DOC" "$GOVERNANCE_DOC" "$MANIFEST_PATH"; do
     failures=$((failures + 1))
   fi
 done
+
+if [[ -f "$RELEASE_LOCK_PATH" ]]; then
+  if "$RELEASE_LOCK_CHECK"; then
+    printf 'PASS release lock valid for coordinated cut window\n'
+  else
+    printf 'FAIL release lock present but invalid\n'
+    failures=$((failures + 1))
+  fi
+else
+  printf 'NOTE release lock absent (expected outside an active real-cut window)\n'
+fi
 
 ./scripts/refresh_15_2_0_release_surfaces.sh >/dev/null
 

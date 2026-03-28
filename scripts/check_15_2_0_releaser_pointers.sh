@@ -28,6 +28,8 @@ SCRIPT_PATHS=(
   "scripts/run_core_contract_bundle.sh"
   "scripts/check_15_2_0_releaser_pointers.sh"
   "scripts/check_15_2_0_release_gate.sh"
+  "scripts/create_15_2_0_release_lock.sh"
+  "scripts/check_15_2_0_release_lock.sh"
 )
 
 EXPORT_PATHS=(
@@ -116,13 +118,16 @@ assert 'queue_status' in entry_data['primary_docs']
 assert 'governance_checklist' in entry_data['primary_docs']
 assert 'real_release_runbook' in entry_data['primary_docs']
 assert 'strict_release_gate' in entry_data['validation_commands']
+assert 'release_lock_check' in entry_data['validation_commands']
 rr = target_data['release_readiness']
 assert 'core_release_queue_status' in rr
 assert 'core_release_governance_checklist' in rr
 assert 'core_real_release_runbook' in rr
+assert 'release_lock_check' in rr
 rc_commands = rc_data['release_readiness_commands']
 assert 'releaser_pointer_check' in rc_commands
 assert 'strict_release_gate' in rc_commands
+assert 'release_lock_check' in rc_commands
 rc_docs = rc_data['release_readiness_docs']
 assert 'release_queue_status' in rc_docs
 assert 'release_governance_checklist' in rc_docs
