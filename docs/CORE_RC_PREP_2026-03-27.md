@@ -103,7 +103,7 @@ Contract-Härtung für:
 - [x] Bundle-Runner grün
 - [x] HA-Release-Handoff erstellt
 - [x] Exakter Commit-Schnitt für den 15.2.0-Kandidaten erstellt (`8b017a74`)
-- [ ] Final changelog/release note input vorbereiten
+- [x] Final changelog/release note input vorbereiten (`docs/CORE_GITHUB_RELEASE_NOTES_INPUT_2026-03-27.md`)
 
 ### Reviewer should verify
 - [ ] Truth chain passt zu `docs/ZONE_TRUTH_CONTRACT.md`

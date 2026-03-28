@@ -1,9 +1,9 @@
 {
-  "generated_at_utc": "2026-03-27T15:47:34Z",
+  "generated_at_utc": "2026-03-28T00:37:50Z",
   "kind": "core_release_readiness_manifest",
   "repo": "/config/clawd/team/repos/pilotsuite-styx-core",
   "branch": "main",
-  "head_commit": "8b017a74",
+  "head_commit": "c471af25",
   "candidate_version": "15.2.0",
   "paired_cutover_ref": "8b017a74",
   "single_entrypoint_doc": "/config/clawd/team/repos/pilotsuite-styx-core/docs/CORE_15_2_0_RELEASER_PREP_POINTER_2026-03-27.md",
@@ -12,6 +12,7 @@
     "builder_handoff": "/config/clawd/team/repos/pilotsuite-styx-core/docs/CORE_15_2_0_BUILDER_HANDOFF_2026-03-27.md",
     "review_packet": "/config/clawd/team/repos/pilotsuite-styx-core/docs/CORE_REVIEW_PACKET_2026-03-27.md",
     "release_input": "/config/clawd/team/repos/pilotsuite-styx-core/docs/CORE_RELEASE_INPUT_2026-03-27.md",
+    "github_release_notes_input": "/config/clawd/team/repos/pilotsuite-styx-core/docs/CORE_GITHUB_RELEASE_NOTES_INPUT_2026-03-27.md",
     "ha_contract_handoff": "/config/clawd/team/repos/pilotsuite-styx-core/docs/HA_RELEASE_CONTRACT_HANDOFF_2026-03-27.md"
   },
   "validation_commands": {

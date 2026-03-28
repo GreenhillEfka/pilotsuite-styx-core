@@ -56,7 +56,7 @@ Contract-Härtung der Core-Truth-Lane rund um:
 ```
 
 ### Result
-- **36 tests passed**
+- **45 tests passed**
 - **0 warnings**
 
 ## Proposed changelog input (draft, not applied)
@@ -75,11 +75,12 @@ Contract-Härtung der Core-Truth-Lane rund um:
 - **Startup / Ingest Wiring**: `events_ingest` bleibt kanonisch auf `/api/v1/events`, `event_processor` importiert wieder aus `copilot_core.core.brain_read_model`, und `map_homeassistant_topology()` ist wieder vorhanden.
 
 ### Tests
-- Neue Contract-Suites für Brain/Read Models/Taxonomy/Zone Truth.
-- Contract-Bundle aktuell grün: 32 Tests.
+- Contract-Bundle aktuell grün: 45 Tests.
+- Zusätzliche Hardening-/Truth-Suites für Zone Health, Zone Aggregates, Scenes, Calendar und HomeKit sind grün.
 
 ### Documentation
 - HA-Release-Review-Handoff und Core-RC-Prep ergänzt.
+- Repo-lokales GitHub-Release-Notes-Input vorhanden: `docs/CORE_GITHUB_RELEASE_NOTES_INPUT_2026-03-27.md`.
 ```
 
 ## Reviewer checklist
@@ -102,11 +103,11 @@ Contract-Härtung der Core-Truth-Lane rund um:
 - [ ] Keine Live-/Install-Claims vermischen sich mit Repo-Evidence
 
 ## Release note input (short form)
-- Core-Truth-Lane gehärtet: Zone Truth Sync, Dashboard Read Models, Taxonomy und Brain Read Model stärker auf einen konsistenten Contract gezogen.
-- Neues Contract-Bundle liefert reproduzierbare Review-Evidence vor dem nächsten Release-Kandidaten.
-- HA-Release-Lane bekommt ein explizites Contract-Handoff als Review-Grundlage.
+- Geschützte Core-Truth-Lane bleibt auf dem funktionalen Pairing-Ref `8b017a74` stabil.
+- Darüber hinaus wurden nächste Release-Slices für Zone Health, Zone Aggregates, Scenes, Calendar und HomeKit gehärtet bzw. auf Truth-Lane-Semantik gezogen.
+- Repo-lokale GitHub-Release-Notes-/manifest-/pointer-Surfaces sind vorbereitet, damit Reviewer/Releaser ohne Ref-Drift arbeiten können.
 
 ## Recommended next step
-- Reviewer nimmt dieses Dokument + `docs/CORE_RC_PREP_2026-03-27.md` + Bundle-Evidence als Review-Paket.
-- Exakter Review-Anker ist Commit **`8b017a74`**.
-- Der Recovery-Stand `f1243375` bleibt historisch referenziert, aber der aktuelle Core-Fix-Anker ist `8b017a74`.
+- Reviewer/Releaser nimmt dieses Dokument + `docs/CORE_GITHUB_RELEASE_NOTES_INPUT_2026-03-27.md` + `docs/CORE_RC_PREP_2026-03-27.md` + Bundle-Evidence als Release-Prep-Paket.
+- Geschützter funktionaler Pairing-Ref bleibt Commit **`8b017a74`**.
+- Der Recovery-Stand `f1243375` bleibt historisch referenziert; aktueller Packaging-Head wird separat über Manifest/Entrypoint exportiert.
