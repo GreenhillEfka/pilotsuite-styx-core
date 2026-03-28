@@ -45,6 +45,7 @@ Optional release-lock helpers for a real cut window:
 ```bash
 ./scripts/create_15_2_0_release_lock.sh <owner> <announcement_at_utc>
 ./scripts/check_15_2_0_release_lock.sh
+./scripts/clear_15_2_0_release_lock.sh
 ```
 
 Notes:
@@ -69,7 +70,12 @@ Abort the cut and push the lane back to builder/reviewer work if any of the foll
 - paired-ref/readiness docs drift out of sync
 - another lane/repo already holds the release window
 
+## Lock lifecycle reminder
+- create the lock only for an actual coordinated cut window
+- validate it before a real cut claim
+- clear it with `./scripts/clear_15_2_0_release_lock.sh` if the cut is aborted or once the coordinated window is explicitly closed
+
 ## Non-claims
 - This checklist does **not** announce a release
-- This checklist does **not** take a release lock
+- This checklist does **not** take a release lock by itself
 - This checklist does **not** authorize skipping the 5-minute wait

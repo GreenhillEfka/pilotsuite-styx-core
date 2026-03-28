@@ -30,6 +30,7 @@ SCRIPT_PATHS=(
   "scripts/check_15_2_0_release_gate.sh"
   "scripts/create_15_2_0_release_lock.sh"
   "scripts/check_15_2_0_release_lock.sh"
+  "scripts/clear_15_2_0_release_lock.sh"
 )
 
 EXPORT_PATHS=(
