@@ -56,7 +56,7 @@ Do **all** of the following in order:
    If a lock file is present, the gate will validate it via `./scripts/check_15_2_0_release_lock.sh`.
 5. Only proceed if the gate is still green and the lane remains clean/validated/lane-ready
 
-If cleanliness or validation breaks during the waiting window, abort the cut and push the lane back to builder/reviewer work.
+If cleanliness or validation breaks during the waiting window, abort the cut, clear any active repo-local lock with `./scripts/clear_15_2_0_release_lock.sh`, and push the lane back to builder/reviewer work.
 
 ## Pre-cut operator checklist
 - [ ] `mache v15.2.0` posted in the correct group thread
@@ -108,6 +108,11 @@ Abort the cut immediately if any of the following occurs before workflow dispatc
 - worktree / repo-dev lane no longer reflects the intended state
 - competing release window appears
 - governance wait/lock rule was not satisfied
+
+If aborting after a repo-local lock was created, clear it explicitly:
+```bash
+./scripts/clear_15_2_0_release_lock.sh
+```
 
 If the workflow itself fails mid-cut, do **not** improvise a silent retry/cut in parallel. Stabilize the failure, keep the lane coordinated, and decide the next step explicitly.
 

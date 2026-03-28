@@ -38,6 +38,7 @@ Optional release-lock helpers for a real cut window:
 ```bash
 ./scripts/create_15_2_0_release_lock.sh <owner> <announcement_at_utc>
 ./scripts/check_15_2_0_release_lock.sh
+./scripts/clear_15_2_0_release_lock.sh
 ```
 
 The gate refreshes workspace release surfaces itself and preserves a clean repo worktree by restoring the committed repo manifest after export. If `RELEASE_LOCK.md` exists, the gate validates it automatically instead of treating it as dirty drift.

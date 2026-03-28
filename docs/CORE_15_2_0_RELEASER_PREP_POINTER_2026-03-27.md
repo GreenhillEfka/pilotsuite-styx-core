@@ -41,6 +41,7 @@ Give the Core repo a single repo-local pointer to the current authoritative Core
 - `scripts/check_15_2_0_release_gate.sh`
 - `scripts/create_15_2_0_release_lock.sh`
 - `scripts/check_15_2_0_release_lock.sh`
+- `scripts/clear_15_2_0_release_lock.sh`
 
 ## Machine-readable workspace exports
 - `/config/clawd/team/workspaces/pilotsuite-stxy-sandbox/handoff/core_release_entrypoint.json`
@@ -60,9 +61,10 @@ Use this pointer as the single repo-local Core entrypoint for review/releaser/HA
 Governance gate for any **real** release attempt:
 1. post the exact group-thread announcement `mache v15.2.0`
 2. wait **5 minutes**
-3. treat the lane as release-locked during that window
+3. create/validate the release lock for that window (prefer `./scripts/create_15_2_0_release_lock.sh <owner> <announcement_at_utc>` + `./scripts/check_15_2_0_release_lock.sh`)
 4. rerun cleanliness/validation after the wait
-5. abort the cut if cleanliness/validation breaks
+5. clear the lock with `./scripts/clear_15_2_0_release_lock.sh` if the cut is aborted or after the coordinated window is closed
+6. abort the cut if cleanliness/validation breaks
 
 Packaging note:
 - the committed repo-local manifest is a generated snapshot surface and can lag the newest docs-only HEAD by one commit after docs refreshes; for real handoff/cut discussion, the strict gate refreshes the workspace release entrypoint and treats that workspace surface as authoritative for the exact current repo head while restoring the committed repo manifest to keep the worktree clean.
