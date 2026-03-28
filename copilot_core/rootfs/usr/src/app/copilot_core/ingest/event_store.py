@@ -33,7 +33,145 @@ _KIND_ALIASES = {"service_call": "call_service"}
 
 # Allowed source identifiers
 _ALLOWED_SOURCES = {"ha", "home_assistant"}
-_SOURCE_ALIASES = {"home_assistant": "ha"}
+_SOURCE_ALIASES = {"home_assistant": "ha", "homeassistant": "ha"}
+
+
+def _as_dict(value: Any) -> dict[str, Any]:
+    return dict(value) if isinstance(value, dict) else {}
+
+
+def _first_present(*values: Any) -> Any:
+    for value in values:
+        if value is None:
+            continue
+        if isinstance(value, str) and not value.strip():
+            continue
+        return value
+    return None
+
+
+def _nested_context(event: dict[str, Any]) -> dict[str, Any]:
+    habitat_event = _as_dict(event.get("habitat_event"))
+    neuron_input = _as_dict(event.get("neuron_input"))
+    return {
+        "habitat_event": habitat_event,
+        "habitat_attrs": _as_dict(habitat_event.get("attributes")),
+        "habitat_context": _as_dict(habitat_event.get("context")),
+        "habitat_state": _as_dict(habitat_event.get("state")),
+        "neuron_input": neuron_input,
+        "neuron_context": _as_dict(neuron_input.get("context")),
+        "neuron_metadata": _as_dict(neuron_input.get("metadata")),
+        "adapter": _as_dict(event.get("adapter")),
+    }
+
+
+def _extract_kind(event: dict[str, Any]) -> str:
+    nested = _nested_context(event)
+    raw = _first_present(
+        event.get("kind"),
+        event.get("type"),
+        nested["habitat_event"].get("event_type"),
+        nested["adapter"].get("event_type"),
+        nested["neuron_context"].get("event_type"),
+        "",
+    )
+    return _canonical_kind(raw)
+
+
+def _extract_source(event: dict[str, Any]) -> str:
+    nested = _nested_context(event)
+    raw = _first_present(
+        event.get("src"),
+        event.get("source"),
+        nested["habitat_context"].get("source"),
+        nested["neuron_context"].get("source"),
+        nested["adapter"].get("name"),
+        "",
+    )
+    return _canonical_source(raw)
+
+
+def _extract_entity_id(event: dict[str, Any]) -> str:
+    nested = _nested_context(event)
+    return str(
+        _first_present(
+            event.get("entity_id"),
+            nested["habitat_event"].get("entity_id"),
+            nested["neuron_input"].get("entity_id"),
+            "",
+        )
+        or ""
+    )
+
+
+def _extract_ts(event: dict[str, Any]) -> str:
+    nested = _nested_context(event)
+    return str(
+        _first_present(
+            event.get("ts"),
+            nested["habitat_context"].get("ts"),
+            nested["neuron_context"].get("ts"),
+            "",
+        )
+        or ""
+    )
+
+
+def _extract_zone_ids(event: dict[str, Any]) -> list[str]:
+    nested = _nested_context(event)
+    zone_ids = _first_present(
+        event.get("zone_ids"),
+        _as_dict(event.get("attributes")).get("zone_ids"),
+        nested["habitat_attrs"].get("zone_ids"),
+        nested["neuron_metadata"].get("zone_ids"),
+        event.get("zone_id"),
+        nested["habitat_event"].get("zone_id"),
+        nested["neuron_input"].get("zone_id"),
+    )
+    return _listify_strs(zone_ids)
+
+
+def _extract_service_payload(event: dict[str, Any]) -> dict[str, Any]:
+    nested = _nested_context(event)
+    attrs = _as_dict(event.get("attributes"))
+    service_payload = _as_dict(event.get("service"))
+    return {
+        "domain": str(
+            _first_present(
+                service_payload.get("domain"),
+                event.get("domain"),
+                attrs.get("domain"),
+                nested["habitat_state"].get("domain"),
+                nested["habitat_attrs"].get("domain"),
+                nested["neuron_input"].get("domain"),
+                "",
+            )
+            or ""
+        ),
+        "service": str(
+            _first_present(
+                service_payload.get("service"),
+                attrs.get("service"),
+                event.get("service") if not isinstance(event.get("service"), dict) else None,
+                nested["habitat_state"].get("service"),
+                nested["habitat_attrs"].get("service"),
+                "",
+            )
+            or ""
+        ),
+        "entity_ids": _listify_strs(
+            _first_present(
+                service_payload.get("entity_ids"),
+                attrs.get("entity_ids"),
+                nested["habitat_state"].get("entity_ids"),
+                nested["habitat_attrs"].get("entity_ids"),
+                nested["neuron_metadata"].get("entity_ids"),
+                event.get("entity_id"),
+                nested["habitat_event"].get("entity_id"),
+                [],
+            )
+        ),
+    }
 
 
 def _now_iso() -> str:
@@ -181,10 +319,10 @@ class EventStore:
         if not isinstance(event, dict):
             return "event must be a dict"
 
-        # Normalize: accept both forwarder formats
+        # Normalize: accept both forwarder formats and nested adapter envelopes
         # HA forwarder uses "type" + "source"; N3 spec uses "kind" + "src"
-        kind = _canonical_kind(event.get("kind") or event.get("type"))
-        src = _canonical_source(event.get("src") or event.get("source"))
+        kind = _extract_kind(event)
+        src = _extract_source(event)
 
         if not kind:
             return "missing 'kind' or 'type'"
@@ -198,9 +336,11 @@ class EventStore:
             return f"unsupported source: {src}"
 
         attrs = event.get("attributes") if isinstance(event.get("attributes"), dict) else {}
-        service_payload = event.get("service") if isinstance(event.get("service"), dict) else {}
+        service_payload = _extract_service_payload(event)
+        entity_id = _extract_entity_id(event)
+        ts = _extract_ts(event)
 
-        if kind == "state_changed" and not event.get("entity_id"):
+        if kind == "state_changed" and not entity_id:
             return "missing 'entity_id' for state_changed event"
 
         if kind == "call_service":
@@ -209,7 +349,7 @@ class EventStore:
             if not service_domain or not service_name:
                 return "missing service.domain/service for call_service event"
 
-        if not event.get("ts"):
+        if not ts:
             return "missing 'ts'"
 
         return None
@@ -266,27 +406,38 @@ class EventStore:
 
     def _normalize(self, event: dict[str, Any], dedup_key: str) -> dict[str, Any]:
         """Normalize forwarder envelope to canonical Core format."""
-        kind = _canonical_kind(event.get("kind") or event.get("type", "unknown"))
-        src = _canonical_source(event.get("src") or event.get("source", "unknown"))
+        nested = _nested_context(event)
+        kind = _extract_kind(event)
+        src = _extract_source(event)
 
         # Extract attrs from both formats
         attrs = event.get("attributes") if isinstance(event.get("attributes"), dict) else {}
-        zone_ids = _listify_strs(
-            event.get("zone_ids")
-            or attrs.get("zone_ids")
-            or event.get("zone_id")
-        )
+        zone_ids = _extract_zone_ids(event)
         zone_id = zone_ids[0] if zone_ids else ""
+        entity_id = _extract_entity_id(event)
+        ts = _extract_ts(event)
 
         normalized: dict[str, Any] = {
             "v": event.get("v", 1),
             "id": dedup_key,
-            "ts": event.get("ts"),
+            "ts": ts,
             "ingested_at": _now_iso(),
             "kind": kind,
             "src": src,
-            "entity_id": event.get("entity_id", ""),
-            "domain": attrs.get("domain") or event.get("domain", ""),
+            "entity_id": entity_id,
+            "domain": str(
+                _first_present(
+                    attrs.get("domain"),
+                    event.get("domain"),
+                    nested["habitat_event"].get("domain"),
+                    nested["habitat_attrs"].get("domain"),
+                    nested["neuron_input"].get("domain"),
+                    nested["habitat_event"].get("module_id"),
+                    nested["neuron_input"].get("module_id"),
+                    "",
+                )
+                or ""
+            ),
             "zone_ids": zone_ids,
             "zone_id": zone_id,
         }
@@ -298,34 +449,37 @@ class EventStore:
                 normalized["old"] = event["old"]
                 normalized["new"] = event["new"]
             else:
-                # Current forwarder: flat in attributes
+                # Forwarder/adaptor fallback: flat attributes or nested habitat/neuron metadata
                 normalized["old"] = {
-                    "state": attrs.get("old_state"),
-                    "attrs": attrs.get("old_attrs", {}),
+                    "state": _first_present(
+                        attrs.get("old_state"),
+                        nested["habitat_attrs"].get("old_state"),
+                        nested["neuron_metadata"].get("old_state"),
+                    ),
+                    "attrs": attrs.get("old_attrs") or nested["habitat_attrs"].get("old_attrs") or {},
                 }
                 normalized["new"] = {
-                    "state": attrs.get("new_state"),
-                    "attrs": attrs.get("state_attributes", attrs.get("new_attrs", {})),
+                    "state": _first_present(
+                        attrs.get("new_state"),
+                        nested["habitat_attrs"].get("new_state"),
+                        nested["neuron_metadata"].get("new_state"),
+                        nested["habitat_event"].get("state"),
+                        nested["neuron_input"].get("value"),
+                    ),
+                    "attrs": _first_present(
+                        attrs.get("state_attributes"),
+                        attrs.get("new_attrs"),
+                        nested["habitat_attrs"].get("state_attributes"),
+                        nested["habitat_attrs"].get("new_attrs"),
+                        nested["neuron_metadata"].get("state_attributes"),
+                        {},
+                    )
+                    or {},
                 }
 
         elif kind == "call_service":
-            service_payload = event.get("service") if isinstance(event.get("service"), dict) else {}
-            entity_ids = _listify_strs(
-                service_payload.get("entity_ids")
-                or attrs.get("entity_ids")
-                or event.get("entity_id")
-            )
-            service_name = (
-                service_payload.get("service")
-                or attrs.get("service")
-                or event.get("service")
-                or ""
-            )
-            normalized["service"] = {
-                "domain": service_payload.get("domain") or attrs.get("domain", "") or event.get("domain", ""),
-                "service": service_name,
-                "entity_ids": entity_ids,
-            }
+            service_payload = _extract_service_payload(event)
+            normalized["service"] = service_payload
 
         elif kind == "heartbeat":
             normalized["entity_count"] = event.get("entity_count", 0)

@@ -317,6 +317,102 @@ class TestEventStoreNormalization(unittest.TestCase):
         self.assertEqual(stored["context_user_id"], "user12345678")
         self.assertEqual(stored["context"]["parent_id"], "parent123456")
 
+    def test_nested_habitat_state_changed_contract_is_accepted(self):
+        ev = {
+            "adapter": {
+                "name": "homeassistant",
+                "direction": "homeassistant_to_core",
+                "contract_version": "ha.input.v1",
+                "event_type": "state_changed",
+            },
+            "habitat_event": {
+                "event_id": "evt-nested-1",
+                "module_id": "light",
+                "event_type": "state_changed",
+                "entity_id": "light.living_room_main",
+                "zone_id": "wohnbereich",
+                "domain": "light",
+                "state": "on",
+                "attributes": {
+                    "old_state": "off",
+                    "new_state": "on",
+                    "state_attributes": {"brightness": 180},
+                    "zone_ids": ["wohnbereich"],
+                },
+                "context": {"source": "homeassistant", "ts": "2026-03-28T11:00:00Z"},
+            },
+            "neuron_input": {
+                "entity_id": "light.living_room_main",
+                "domain": "light",
+                "zone_id": "wohnbereich",
+                "metadata": {"zone_ids": ["wohnbereich"]},
+            },
+        }
+
+        result = self.store.ingest_batch([ev])
+        self.assertEqual(result["accepted"], 1)
+        self.assertEqual(result["rejected"], 0)
+
+        stored = self.store.query()[0]
+        self.assertEqual(stored["kind"], "state_changed")
+        self.assertEqual(stored["src"], "ha")
+        self.assertEqual(stored["ts"], "2026-03-28T11:00:00Z")
+        self.assertEqual(stored["entity_id"], "light.living_room_main")
+        self.assertEqual(stored["zone_id"], "wohnbereich")
+        self.assertEqual(stored["new"]["state"], "on")
+        self.assertEqual(stored["new"]["attrs"]["brightness"], 180)
+
+    def test_nested_habitat_call_service_contract_is_accepted(self):
+        ev = {
+            "adapter": {
+                "name": "homeassistant",
+                "direction": "homeassistant_to_core",
+                "contract_version": "ha.input.v1",
+                "event_type": "call_service",
+            },
+            "habitat_event": {
+                "event_id": "evt-nested-2",
+                "module_id": "light",
+                "event_type": "call_service",
+                "entity_id": "light.living_room_main",
+                "zone_id": "wohnbereich",
+                "domain": "light",
+                "state": {
+                    "domain": "light",
+                    "service": "turn_on",
+                    "entity_ids": ["light.living_room_main"],
+                },
+                "attributes": {
+                    "domain": "light",
+                    "service": "turn_on",
+                    "entity_ids": ["light.living_room_main"],
+                    "zone_ids": ["wohnbereich"],
+                },
+                "context": {"source": "homeassistant", "ts": "2026-03-28T11:01:00Z"},
+            },
+            "neuron_input": {
+                "entity_id": "light.living_room_main",
+                "domain": "light",
+                "zone_id": "wohnbereich",
+                "metadata": {
+                    "entity_ids": ["light.living_room_main"],
+                    "zone_ids": ["wohnbereich"],
+                },
+            },
+        }
+
+        result = self.store.ingest_batch([ev])
+        self.assertEqual(result["accepted"], 1)
+        self.assertEqual(result["rejected"], 0)
+
+        stored = self.store.query()[0]
+        self.assertEqual(stored["kind"], "call_service")
+        self.assertEqual(stored["src"], "ha")
+        self.assertEqual(stored["service"]["domain"], "light")
+        self.assertEqual(stored["service"]["service"], "turn_on")
+        self.assertEqual(stored["service"]["entity_ids"], ["light.living_room_main"])
+        self.assertEqual(stored["zone_id"], "wohnbereich")
+
 
 if __name__ == "__main__":
     unittest.main()
