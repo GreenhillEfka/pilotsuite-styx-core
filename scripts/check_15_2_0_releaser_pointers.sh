@@ -103,10 +103,42 @@ except Exception:
 PY
 )"
 
+if python3 - <<'PY'
+import json
+from pathlib import Path
+entry = Path('/config/clawd/team/workspaces/pilotsuite-stxy-sandbox/handoff/core_release_entrypoint.json')
+target = Path('/config/clawd/team/workspaces/pilotsuite-stxy-sandbox/handoff/core_workspace_target.json')
+rc = Path('/config/clawd/team/workspaces/pilotsuite-stxy-sandbox/handoff/core_rc_input_chain.json')
+entry_data = json.loads(entry.read_text(encoding='utf-8'))
+target_data = json.loads(target.read_text(encoding='utf-8'))
+rc_data = json.loads(rc.read_text(encoding='utf-8'))
+assert 'queue_status' in entry_data['primary_docs']
+assert 'governance_checklist' in entry_data['primary_docs']
+assert 'real_release_runbook' in entry_data['primary_docs']
+assert 'strict_release_gate' in entry_data['validation_commands']
+rr = target_data['release_readiness']
+assert 'core_release_queue_status' in rr
+assert 'core_release_governance_checklist' in rr
+assert 'core_real_release_runbook' in rr
+rc_commands = rc_data['release_readiness_commands']
+assert 'releaser_pointer_check' in rc_commands
+assert 'strict_release_gate' in rc_commands
+rc_docs = rc_data['release_readiness_docs']
+assert 'release_queue_status' in rc_docs
+assert 'release_governance_checklist' in rc_docs
+assert 'real_release_runbook' in rc_docs
+PY
+then
+  printf 'PASS workspace release surfaces expose queue/governance/runbook + strict-gate metadata\n'
+else
+  printf 'FAIL workspace release surfaces missing queue/governance/runbook or strict-gate metadata\n'
+  failures=$((failures + 1))
+fi
+
 if [[ -n "$MANIFEST_HEAD" && "$MANIFEST_HEAD" == "$CURRENT_HEAD" ]]; then
   printf 'PASS manifest head matches current HEAD (%s)\n' "$CURRENT_HEAD"
 else
-  printf 'NOTE manifest snapshot head=%s differs from current HEAD=%s; rerun ./scripts/export_15_2_0_release_manifest.sh before real handoff/cut\n' "${MANIFEST_HEAD:-<missing>}" "$CURRENT_HEAD"
+  printf 'NOTE manifest snapshot head=%s differs from current HEAD=%s; use ./scripts/check_15_2_0_release_gate.sh and the refreshed workspace release entrypoint as the exact real-cut surface\n' "${MANIFEST_HEAD:-<missing>}" "$CURRENT_HEAD"
 fi
 
 if [[ "$failures" -ne 0 ]]; then

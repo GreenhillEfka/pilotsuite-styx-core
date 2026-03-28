@@ -19,6 +19,7 @@ REAL_RELEASE_RUNBOOK_DOC="$ROOT/docs/CORE_REAL_RELEASE_RUNBOOK_2026-03-28.md"
 HA_CONTRACT_HANDOFF_DOC="$ROOT/docs/HA_RELEASE_CONTRACT_HANDOFF_2026-03-27.md"
 POINTER_CHECKER="$ROOT/scripts/check_15_2_0_releaser_pointers.sh"
 BUNDLE_RUNNER="$ROOT/scripts/run_core_contract_bundle.sh"
+STRICT_RELEASE_GATE="$ROOT/scripts/check_15_2_0_release_gate.sh"
 EXPORT_CHAIN="$ROOT/scripts/export_workspace_core_handoff.sh"
 WORKSPACE_TARGET="$HANDOFF_DIR/core_workspace_target.json"
 WORKSPACE_PAIRING="$HANDOFF_DIR/core_release_pairing.json"
@@ -57,7 +58,8 @@ cat > "$REPO_OUT" <<EOF
   "validation_commands": {
     "releaser_pointer_check": "$POINTER_CHECKER",
     "sync_anchor_check": "$SYNC_CHECKER",
-    "contract_bundle": "$BUNDLE_RUNNER"
+    "contract_bundle": "$BUNDLE_RUNNER",
+    "strict_release_gate": "$STRICT_RELEASE_GATE"
   },
   "workspace_exports": {
     "workspace_target": "$WORKSPACE_TARGET",
