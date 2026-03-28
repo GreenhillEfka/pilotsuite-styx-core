@@ -43,7 +43,7 @@ Diese Checklist gilt für den vorbereiteten Core-Kandidaten **`v15.2.0`** bei ge
 
 Optional release-lock helpers for a real cut window:
 ```bash
-./scripts/create_15_2_0_release_lock.sh <owner>
+./scripts/create_15_2_0_release_lock.sh <owner> <announcement_at_utc>
 ./scripts/check_15_2_0_release_lock.sh
 ```
 
