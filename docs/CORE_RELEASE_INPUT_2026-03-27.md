@@ -108,6 +108,7 @@ Contract-Härtung der Core-Truth-Lane rund um:
 - Repo-lokale GitHub-Release-Notes-/manifest-/pointer-Surfaces sind vorbereitet, damit Reviewer/Releaser ohne Ref-Drift arbeiten können.
 
 ## Recommended next step
-- Reviewer/Releaser nimmt dieses Dokument + `docs/CORE_GITHUB_RELEASE_NOTES_INPUT_2026-03-27.md` + `docs/CORE_RC_PREP_2026-03-27.md` + Bundle-Evidence als Release-Prep-Paket.
+- Reviewer/Releaser nimmt dieses Dokument + `docs/CORE_GITHUB_RELEASE_NOTES_INPUT_2026-03-27.md` + `docs/CORE_RC_PREP_2026-03-27.md` + `docs/CORE_RELEASE_QUEUE_STATUS_2026-03-28.md` + Bundle-Evidence als Release-Prep-Paket.
 - Geschützter funktionaler Pairing-Ref bleibt Commit **`8b017a74`**.
 - Der Recovery-Stand `f1243375` bleibt historisch referenziert; aktueller Packaging-Head wird separat über Manifest/Entrypoint exportiert.
+- Vor jedem echten Releaseversuch gilt strikt: `mache v15.2.0` → 5 Minuten warten → Release-Lock → Validation/Cleanliness erneut prüfen.
