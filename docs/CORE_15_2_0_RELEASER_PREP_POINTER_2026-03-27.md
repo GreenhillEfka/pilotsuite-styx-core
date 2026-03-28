@@ -48,6 +48,7 @@ Give the Core repo a single repo-local pointer to the current authoritative Core
 ## Machine-readable workspace exports
 - `/config/clawd/team/workspaces/pilotsuite-stxy-sandbox/handoff/core_release_entrypoint.json`
 - `/config/clawd/team/workspaces/pilotsuite-stxy-sandbox/handoff/core_workspace_target.json`
+- `/config/clawd/team/workspaces/pilotsuite-stxy-sandbox/handoff/core_release_status.json`
 - `/config/clawd/team/workspaces/pilotsuite-stxy-sandbox/handoff/core_release_pairing.json`
 - `/config/clawd/team/workspaces/pilotsuite-stxy-sandbox/handoff/core_workspace_harness_evidence.json`
 - `/config/clawd/team/workspaces/pilotsuite-stxy-sandbox/handoff/core_rc_input_chain.json`

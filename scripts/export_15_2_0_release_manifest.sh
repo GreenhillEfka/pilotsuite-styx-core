@@ -5,7 +5,9 @@ ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 SANDBOX_ROOT="$(cd "$ROOT/../.." && pwd)/workspaces/pilotsuite-stxy-sandbox"
 HANDOFF_DIR="$SANDBOX_ROOT/handoff"
 REPO_OUT="$ROOT/docs/CORE_15_2_0_RELEASE_MANIFEST_2026-03-27.json"
+STATUS_DOC="$ROOT/docs/CORE_15_2_0_RELEASE_STATUS_2026-03-28.json"
 WORKSPACE_OUT="$HANDOFF_DIR/core_release_entrypoint.json"
+WORKSPACE_STATUS="$HANDOFF_DIR/core_release_status.json"
 SYNC_CHECKER="$ROOT/scripts/check_15_2_0_sync_anchor_consistency.sh"
 POINTER_DOC="$ROOT/docs/CORE_15_2_0_RELEASER_PREP_POINTER_2026-03-27.md"
 SYNC_ANCHOR_DOC="$ROOT/docs/CORE_15_2_0_SYNC_ANCHOR_2026-03-27.md"
@@ -20,6 +22,7 @@ HA_CONTRACT_HANDOFF_DOC="$ROOT/docs/HA_RELEASE_CONTRACT_HANDOFF_2026-03-27.md"
 POINTER_CHECKER="$ROOT/scripts/check_15_2_0_releaser_pointers.sh"
 BUNDLE_RUNNER="$ROOT/scripts/run_core_contract_bundle.sh"
 STRICT_RELEASE_GATE="$ROOT/scripts/check_15_2_0_release_gate.sh"
+RELEASE_STATUS_EXPORT="$ROOT/scripts/export_15_2_0_release_status.sh"
 RELEASE_LOCK_CREATE="$ROOT/scripts/create_15_2_0_release_lock.sh"
 RELEASE_LOCK_CHECK="$ROOT/scripts/check_15_2_0_release_lock.sh"
 RELEASE_LOCK_CLEAR="$ROOT/scripts/clear_15_2_0_release_lock.sh"
@@ -48,6 +51,7 @@ cat > "$REPO_OUT" <<EOF
   "paired_cutover_ref": "$PAIRED_CUTOVER_REF",
   "single_entrypoint_doc": "$POINTER_DOC",
   "primary_docs": {
+    "release_status": "$STATUS_DOC",
     "sync_anchor": "$SYNC_ANCHOR_DOC",
     "builder_handoff": "$BUILDER_HANDOFF_DOC",
     "review_packet": "$REVIEW_PACKET_DOC",
@@ -62,6 +66,7 @@ cat > "$REPO_OUT" <<EOF
     "releaser_pointer_check": "$POINTER_CHECKER",
     "sync_anchor_check": "$SYNC_CHECKER",
     "contract_bundle": "$BUNDLE_RUNNER",
+    "release_status_export": "$RELEASE_STATUS_EXPORT",
     "strict_release_gate": "$STRICT_RELEASE_GATE",
     "release_lock_create": "$RELEASE_LOCK_CREATE",
     "release_lock_check": "$RELEASE_LOCK_CHECK",
@@ -69,13 +74,16 @@ cat > "$REPO_OUT" <<EOF
   },
   "workspace_exports": {
     "workspace_target": "$WORKSPACE_TARGET",
+    "release_status": "$WORKSPACE_STATUS",
     "release_pairing": "$WORKSPACE_PAIRING",
     "harness_evidence": "$WORKSPACE_EVIDENCE",
     "rc_input_chain": "$WORKSPACE_RC_CHAIN"
   },
   "export_chain": {
     "workspace_handoff_exporter": "$EXPORT_CHAIN",
-    "workspace_release_entrypoint": "$WORKSPACE_OUT"
+    "release_status_exporter": "$RELEASE_STATUS_EXPORT",
+    "workspace_release_entrypoint": "$WORKSPACE_OUT",
+    "workspace_release_status": "$WORKSPACE_STATUS"
   },
   "non_claims": [
     "no release",

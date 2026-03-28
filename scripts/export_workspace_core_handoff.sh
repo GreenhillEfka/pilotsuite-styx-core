@@ -6,6 +6,7 @@ SANDBOX_ROOT="$(cd "$ROOT/../.." && pwd)/workspaces/pilotsuite-stxy-sandbox"
 HANDOFF_DIR="$SANDBOX_ROOT/handoff"
 OUT="$HANDOFF_DIR/core_workspace_target.json"
 PAIR_OUT="$HANDOFF_DIR/core_release_pairing.json"
+STATUS_OUT="$HANDOFF_DIR/core_release_status.json"
 EVIDENCE_OUT="$HANDOFF_DIR/core_workspace_harness_evidence.json"
 BOOTSTRAP_HINT_OUT="$HANDOFF_DIR/core_workspace_bootstrap_hint.json"
 RC_CHAIN_OUT="$HANDOFF_DIR/core_rc_input_chain.json"
@@ -30,6 +31,7 @@ RUNNER_PATH="$ROOT/scripts/run_workspace_ha_core_contract_tests.sh"
 SYNC_CHECKER_PATH="$ROOT/scripts/check_15_2_0_sync_anchor_consistency.sh"
 POINTER_CHECKER_PATH="$ROOT/scripts/check_15_2_0_releaser_pointers.sh"
 STRICT_RELEASE_GATE_PATH="$ROOT/scripts/check_15_2_0_release_gate.sh"
+RELEASE_STATUS_EXPORT_PATH="$ROOT/scripts/export_15_2_0_release_status.sh"
 RELEASE_LOCK_CREATE_PATH="$ROOT/scripts/create_15_2_0_release_lock.sh"
 RELEASE_LOCK_CHECK_PATH="$ROOT/scripts/check_15_2_0_release_lock.sh"
 RELEASE_LOCK_CLEAR_PATH="$ROOT/scripts/clear_15_2_0_release_lock.sh"
@@ -43,6 +45,7 @@ CORE_RELEASE_GOVERNANCE_DOC="$ROOT/docs/CORE_RELEASE_GOVERNANCE_CHECKLIST_2026-0
 CORE_REAL_RELEASE_RUNBOOK_DOC="$ROOT/docs/CORE_REAL_RELEASE_RUNBOOK_2026-03-28.md"
 CORE_POINTER_DOC="$ROOT/docs/CORE_15_2_0_RELEASER_PREP_POINTER_2026-03-27.md"
 CORE_RELEASE_MANIFEST_DOC="$ROOT/docs/CORE_15_2_0_RELEASE_MANIFEST_2026-03-27.json"
+CORE_RELEASE_STATUS_DOC="$ROOT/docs/CORE_15_2_0_RELEASE_STATUS_2026-03-28.json"
 WORKSPACE_RELEASE_ENTRYPOINT="$HANDOFF_DIR/core_release_entrypoint.json"
 TEST_FILE_PATH="$ROOT/tests/integration/test_workspace_ha_core_contract.py"
 EVIDENCE_LOG="$HANDOFF_DIR/core_workspace_harness_last_run.log"
@@ -148,7 +151,9 @@ cat > "$OUT" <<EOF
     "paired_cutover_ref": "$PAIRED_CUTOVER_REF",
     "single_entrypoint_doc": "$CORE_POINTER_DOC",
     "release_manifest_doc": "$CORE_RELEASE_MANIFEST_DOC",
+    "release_status_doc": "$CORE_RELEASE_STATUS_DOC",
     "workspace_release_entrypoint": "$WORKSPACE_RELEASE_ENTRYPOINT",
+    "workspace_release_status": "$STATUS_OUT",
     "sync_anchor_doc": "$SYNC_ANCHOR_DOC",
     "sync_checker": "$SYNC_CHECKER_PATH",
     "core_builder_handoff": "$CORE_BUILDER_HANDOFF_DOC",
@@ -160,6 +165,7 @@ cat > "$OUT" <<EOF
     "core_real_release_runbook": "$CORE_REAL_RELEASE_RUNBOOK_DOC",
     "contract_bundle_runner": "$ROOT/scripts/run_core_contract_bundle.sh",
     "releaser_pointer_check": "$POINTER_CHECKER_PATH",
+    "release_status_export": "$RELEASE_STATUS_EXPORT_PATH",
     "strict_release_gate": "$STRICT_RELEASE_GATE_PATH",
     "release_lock_create": "$RELEASE_LOCK_CREATE_PATH",
     "release_lock_check": "$RELEASE_LOCK_CHECK_PATH",
@@ -212,6 +218,7 @@ cat > "$PAIR_OUT" <<EOF
   "shared_workspace_inputs": {
     "core_workspace_target": "$OUT",
     "core_release_entrypoint": "$WORKSPACE_RELEASE_ENTRYPOINT",
+    "core_release_status": "$STATUS_OUT",
     "core_release_manifest": "$CORE_RELEASE_MANIFEST_DOC",
     "core_handoff_note": "$SANDBOX_HANDOFF",
     "core_harness_evidence": "$EVIDENCE_OUT",
@@ -233,11 +240,14 @@ cat > "$PAIR_OUT" <<EOF
   "core_release_readiness": {
     "single_entrypoint_doc": "$CORE_POINTER_DOC",
     "release_manifest_doc": "$CORE_RELEASE_MANIFEST_DOC",
+    "release_status_doc": "$CORE_RELEASE_STATUS_DOC",
     "workspace_release_entrypoint": "$WORKSPACE_RELEASE_ENTRYPOINT",
+    "workspace_release_status": "$STATUS_OUT",
     "sync_anchor_doc": "$SYNC_ANCHOR_DOC",
     "sync_checker": "$SYNC_CHECKER_PATH",
     "releaser_pointer_check": "$POINTER_CHECKER_PATH",
     "contract_bundle_runner": "$ROOT/scripts/run_core_contract_bundle.sh",
+    "release_status_export": "$RELEASE_STATUS_EXPORT_PATH",
     "strict_release_gate": "$STRICT_RELEASE_GATE_PATH",
     "release_lock_create": "$RELEASE_LOCK_CREATE_PATH",
     "release_lock_check": "$RELEASE_LOCK_CHECK_PATH",
@@ -288,11 +298,14 @@ cat > "$EVIDENCE_OUT" <<EOF
   "release_readiness": {
     "single_entrypoint_doc": "$CORE_POINTER_DOC",
     "release_manifest_doc": "$CORE_RELEASE_MANIFEST_DOC",
+    "release_status_doc": "$CORE_RELEASE_STATUS_DOC",
     "workspace_release_entrypoint": "$WORKSPACE_RELEASE_ENTRYPOINT",
+    "workspace_release_status": "$STATUS_OUT",
     "sync_anchor_doc": "$SYNC_ANCHOR_DOC",
     "sync_checker": "$SYNC_CHECKER_PATH",
     "releaser_pointer_check": "$POINTER_CHECKER_PATH",
     "contract_bundle_runner": "$ROOT/scripts/run_core_contract_bundle.sh",
+    "release_status_export": "$RELEASE_STATUS_EXPORT_PATH",
     "strict_release_gate": "$STRICT_RELEASE_GATE_PATH",
     "release_lock_create": "$RELEASE_LOCK_CREATE_PATH",
     "release_lock_check": "$RELEASE_LOCK_CHECK_PATH",
@@ -326,6 +339,7 @@ cat > "$RC_CHAIN_OUT" <<EOF
     "sync_checker": "$SYNC_CHECKER_PATH",
     "releaser_pointer_check": "$POINTER_CHECKER_PATH",
     "contract_bundle": "$ROOT/scripts/run_core_contract_bundle.sh",
+    "release_status_export": "$RELEASE_STATUS_EXPORT_PATH",
     "strict_release_gate": "$STRICT_RELEASE_GATE_PATH",
     "release_lock_create": "$RELEASE_LOCK_CREATE_PATH",
     "release_lock_check": "$RELEASE_LOCK_CHECK_PATH",
@@ -334,6 +348,8 @@ cat > "$RC_CHAIN_OUT" <<EOF
   "release_readiness_docs": {
     "pointer": "$CORE_POINTER_DOC",
     "manifest": "$CORE_RELEASE_MANIFEST_DOC",
+    "release_status": "$CORE_RELEASE_STATUS_DOC",
+    "workspace_release_status": "$STATUS_OUT",
     "sync_anchor": "$SYNC_ANCHOR_DOC",
     "builder_handoff": "$CORE_BUILDER_HANDOFF_DOC",
     "review_packet": "$CORE_REVIEW_PACKET_DOC",
