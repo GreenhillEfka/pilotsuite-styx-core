@@ -1,6 +1,24 @@
 # Changelog
 
 
+
+## [v15.2.8] - 2026-03-28
+
+### Added
+- Zone-Editor/Zone-Workflow erweitert für Core-only Habitat: neues HA-Review API-Flow `POST /api/v1/zone-editor/ha/review` zur Topologieprüfung aus HA-Areas/Entities.
+- Core-Zone-Editor API ergänzt um stabiles Zone-Setup (`/api/v1/zone-automation/zones`) inkl. Zone-ID-Sanitizing, optionalem Persistenz-Scaffold (`habitus_sync`) und Mapping-Rückführung in Habitus-Engine.
+- Hub-Zone-Controller nimmt saubere neue Felder für Zone-Modelle an (`zone_type`, `enabled_modules`, `ha_entities`) und persistiert diese zuverlässig.
+
+### Changed
+- Datenmodellhärtung: Template-/Alias-Kompatibilität für `create_zone_from_template` (z. B. `badbereich`) reduziert Bruchstellen bei Legacy-Clients.
+
+### Fixed
+- Mehrere interne Pfade im Zone-Stack überarbeitet, um Core-First Zone-Truth für spätere UI-Tab-Implementierung ("Zonenkonfiguration"/"Habituszonen") vorzubereiten.
+- Alle Core-Versionsartefakte auf `15.2.8` angehoben.
+
+### Meta
+- Release vorbereitet als Zwischenrelease innerhalb der Core-only Restrukturierung; HA/HACS bleibt reine Runtime-/Konsummodell-Linie.
+
 ## [v15.2.7] - 2026-03-28
 
 ### Added

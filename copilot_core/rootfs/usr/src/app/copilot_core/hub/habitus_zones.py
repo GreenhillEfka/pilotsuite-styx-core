@@ -161,6 +161,33 @@ _ZONE_TEMPLATES = {
     },
 }
 
+_TEMPLATE_ID_ALIASES = {
+    # Backward-compatible legacy IDs kept from HA-era clients
+    "badbereich": "bath",
+    "wohnbereich": "living",
+    "schlafbereich": "bedroom",
+    "kuechenbereich": "kitchen",
+    "kuechen": "kitchen",
+    "küchenbereich": "kitchen",
+    "eingangsbereich": "hallway",
+    "aussenbereich": "outside",
+    "außenbereich": "outside",
+    "bürobereich": "office",
+    "arbeitsbereich": "office",
+    "terrassenbereich": "outside",
+    "terrassebereich": "outside",
+    "terrassen": "outside",
+    "terrass": "outside",
+    "terrasse": "outside",
+    "balkonbereich": "outside",
+}
+
+
+def _normalize_template_id(template_id: str) -> str:
+    """Resolve legacy template IDs to current canonical identifiers."""
+    normalized = template_id.strip().lower().replace(" ", "").replace("_", "").replace("ä", "ae").replace("ö", "oe").replace("ü", "ue").replace("ß", "ss")
+    return _TEMPLATE_ID_ALIASES.get(normalized, normalized)
+
 # Zone modes with descriptions
 _ZONE_MODES = {
     "active": {"name": "Aktiv", "icon": "mdi:play-circle", "automations": True},
@@ -268,8 +295,19 @@ class HabitusZoneEngine:
 
     def create_zone_from_template(self, template_id: str) -> HabitusZone | None:
         """Create a zone from a predefined template, auto-matching rooms."""
-        template = _ZONE_TEMPLATES.get(template_id)
-        if not template:
+        template_key = _normalize_template_id(template_id)
+        template = _ZONE_TEMPLATES.get(template_key)
+
+        # Backward compatibility: accept legacy names like "Badbereich" directly.
+        if template is None:
+            normalized = template_id.strip().lower().replace(" ", "").replace("_", "")
+            for tid, tpl in _ZONE_TEMPLATES.items():
+                if tpl.get("name", "").lower().replace(" ", "").replace("ä", "ae").replace("ö", "oe").replace("ü", "ue").replace("ß", "ss") == normalized:
+                    template_key = tid
+                    template = tpl
+                    break
+
+        if template is None:
             return None
 
         matched_rooms = []

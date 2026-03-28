@@ -1421,10 +1421,16 @@ def register_blueprints(app: Flask, services: dict) -> None:
 
     # Zone Editor (needs hub_zones)
     try:
-        from copilot_core.api.v1.zone_editor import zone_editor_bp, zone_editor_legacy_bp, init_zone_editor_api
+        from copilot_core.api.v1.zone_editor import (
+            zone_editor_bp,
+            zone_editor_legacy_bp,
+            zone_legacy_alias_bp,
+            init_zone_editor_api,
+        )
         init_zone_editor_api(services.get("hub_zones"))
-        app.register_blueprint(zone_editor_bp, url_prefix="/api/v1")
+        app.register_blueprint(zone_editor_bp)
         app.register_blueprint(zone_editor_legacy_bp)
+        app.register_blueprint(zone_legacy_alias_bp)
     except Exception:
         _LOGGER.exception("Failed to register zone_editor blueprints")
 

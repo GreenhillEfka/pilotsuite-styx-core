@@ -26,6 +26,7 @@ Endpoints:
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any, Optional
 
 from flask import Blueprint, jsonify, request
@@ -42,6 +43,19 @@ zone_automation_bp = Blueprint(
 _controller: Optional[Any] = None
 _zone_engine: Optional[Any] = None
 
+
+
+
+def _sanitize_zone_id(value: str) -> str:
+    """Normalize a human zone name into a stable zone_id.
+    Keeps lowercase a-z/0-9/underscores and hyphen fallback.
+    """
+    raw = str(value or "").strip().lower()
+    raw = re.sub(r"[^a-z0-9\-_]+", "_", raw)
+    raw = re.sub(r"_+", "_", raw).strip("_-")
+    if not raw:
+        return "zone"
+    return raw
 
 def _mirror_zone_truth_into_habitus_engine(zone: dict[str, Any], cfg: Any) -> None:
     """Mirror synced HA zone definitions into the HabitusZone truth engine."""
@@ -84,6 +98,83 @@ def get_dashboard():
 
 
 # ── Zone config & state ──────────────────────────────────────────────────────
+
+
+@zone_automation_bp.route("/zones", methods=["GET"])
+@optional_token
+def list_zones():
+    """List all known zone automation configs."""
+    if _controller is None:
+        return jsonify({"ok": False, "error": "Controller not initialized"}), 503
+
+    zones = list(_controller.get_all_configs().values())
+    return jsonify({"ok": True, "zones": zones, "count": len(zones)})
+
+
+@zone_automation_bp.route("/zones", methods=["POST"])
+@require_token
+def create_zone():
+    """Create a Core-owned Habitus zone scaffold.
+
+    Body:
+        {
+            "zone_id": "wohnzimmer",
+            "zone_name": "Wohnzimmer",
+            "zone_type": "living",
+            "enabled_modules": ["light", "presence"],
+            "habitus_sync": true
+        }
+    """
+    if _controller is None:
+        return jsonify({"ok": False, "error": "Controller not initialized"}), 503
+
+    data = request.get_json(silent=True) or {}
+    zone_name = str(data.get("zone_name", "")).strip()
+    zone_id = _sanitize_zone_id(data.get("zone_id") or zone_name)
+
+    if not zone_id:
+        return jsonify({"ok": False, "error": "zone_id is required"}), 400
+
+    if zone_id in getattr(_controller, "_configs", {}):
+        return jsonify({"ok": False, "error": f"Zone '{zone_id}' already exists"}), 409
+
+    cfg = _controller.get_zone_config(zone_id)
+
+    updates: dict[str, Any] = {}
+    if zone_name:
+        updates["zone_name"] = zone_name
+
+    zone_type = str(data.get("zone_type", "")).strip()
+    if zone_type:
+        updates["zone_type"] = zone_type
+
+    enabled_modules = data.get("enabled_modules")
+    if isinstance(enabled_modules, list):
+        updates["enabled_modules"] = [
+            str(module_id).strip()
+            for module_id in enabled_modules
+            if str(module_id).strip()
+        ]
+
+    if updates:
+        cfg = _controller.set_zone_config(zone_id, updates)
+
+    if bool(data.get("habitus_sync", True)):
+        try:
+            zone_payload = {
+                "zone_id": zone_id,
+                "name_de": zone_name or zone_id,
+                "name": zone_name or zone_id,
+                "zone_type": getattr(cfg, "zone_type", "room") or "room",
+                "area_id": zone_id,
+                "entities": [],
+            }
+            _controller.sync_habitus_zones(zones=[zone_payload], clear_missing=False)
+            _mirror_zone_truth_into_habitus_engine(zone_payload, cfg)
+        except Exception:
+            _LOGGER.debug("Core-owned zone scaffold sync failed for %s", zone_id, exc_info=True)
+
+    return jsonify({"ok": True, "zone": cfg.to_dict()}), 201
 
 
 @zone_automation_bp.route("/zones/<zone_id>", methods=["GET"])

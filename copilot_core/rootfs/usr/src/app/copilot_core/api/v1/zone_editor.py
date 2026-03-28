@@ -34,6 +34,7 @@ from flask import Blueprint, jsonify, request
 
 from copilot_core.api.security import require_token
 from copilot_core.hub.habitus_zones import HabitusZoneEngine
+from copilot_core.homeassistant.zone_matcher import map_homeassistant_topology
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -242,6 +243,52 @@ def get_overview():
             "unassigned_rooms": overview.unassigned_rooms,
         },
     })
+
+
+
+@zone_editor_bp.route("/ha/review", methods=["POST"])
+@require_token
+def review_homeassistant_topology():
+    """Review Home Assistant room/entity topology against Habitus templates.
+
+    Returns the same shape as zone-matcher mapping with zone buckets and review queue,
+    but framed for the Zone-Editor workstream as a dedicated UI surface.
+    """
+    payload = _parse_json_body()
+    if payload is None:
+        return jsonify({"ok": False, "error": "Invalid JSON"}), 400
+
+    areas = payload.get("areas")
+    entities = payload.get("entities")
+    if not isinstance(areas, list) or not isinstance(entities, list):
+        return jsonify({
+            "ok": False,
+            "error": "invalid_format",
+            "message": "'areas' und 'entities' must be arrays"
+        }), 400
+
+    review = map_homeassistant_topology(areas, entities)
+    zone_defs = []
+
+    for zone in review.get("zones", []):
+        zone_defs.append({
+            "zone_type": zone.get("zone_type"),
+            "zone_name_de": zone.get("zone_name_de"),
+            "zone_name_en": zone.get("zone_name_en"),
+            "avg_confidence": zone.get("avg_confidence", 0.0),
+            "area_count": zone.get("area_count", 0),
+            "entity_count": zone.get("entity_count", 0),
+        })
+
+    return jsonify({
+        "ok": True,
+        "source": "homeassistant",
+        "summary": review.get("summary", {}),
+        "zones": zone_defs,
+        "raw": review,
+        "unassigned": review.get("ungeordnet", {}),
+    })
+
 
 
 @zone_editor_bp.route("/templates", methods=["GET"])

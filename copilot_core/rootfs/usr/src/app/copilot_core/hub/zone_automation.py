@@ -393,7 +393,21 @@ class ZoneAutomationController:
         current = self.get_zone_config(zone_id)
 
         if "zone_name" in config_data:
-            current.zone_name = config_data["zone_name"]
+            current.zone_name = str(config_data["zone_name"] or "").strip()
+
+        if "zone_type" in config_data:
+            current.zone_type = str(config_data["zone_type"] or current.zone_type or "room").strip() or "room"
+
+        if "enabled_modules" in config_data and isinstance(config_data["enabled_modules"], (list, set, tuple)):
+            current.enabled_modules = {
+                str(module_id).strip()
+                for module_id in config_data["enabled_modules"]
+                if str(module_id).strip()
+            }
+
+        if "ha_entities" in config_data and isinstance(config_data["ha_entities"], list):
+            current.ha_entities = [str(entity_id).strip() for entity_id in config_data["ha_entities"] if str(entity_id).strip()]
+            current._ha_entities = list(current.ha_entities)
 
         if "automation_mode" in config_data:
             mode = config_data["automation_mode"]
