@@ -55,7 +55,7 @@ Before any actual release attempt, do **all** of the following in order:
 ## Abort conditions
 Abort the cut and push the lane back to builder/reviewer work if any of the following becomes true:
 - worktree becomes dirty
-- release manifest no longer matches the exact current HEAD
+- workspace release entrypoint no longer matches the exact current HEAD
 - contract bundle stops passing
 - paired-ref/readiness docs drift out of sync
 - another lane/repo already holds the release window

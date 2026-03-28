@@ -19,8 +19,9 @@ Diese Übergabe bündelt den aktuellen Core-Contract-Stand, damit die HA-Lane ei
 ```
 
 ### Letztes Ergebnis
-- **36 Tests grün**
+- **64 Tests grün**
 - **0 Warnings**
+- Strict release gate für reale Cut-Diskussionen vorhanden: `./scripts/check_15_2_0_release_gate.sh`
 - Kein Release, kein Install, kein Live-Test
 
 ### Enthaltene Suites
@@ -33,6 +34,21 @@ Diese Übergabe bündelt den aktuellen Core-Contract-Stand, damit die HA-Lane ei
 - `tests/test_event_processor_import_contract.py`
 - `tests/test_metrics_blueprint_contract.py`
 - `tests/test_zone_health_blueprint_contract.py`
+- `tests/test_zone_aggregates_blueprint_contract.py`
+- `tests/test_zone_aggregates_truth_contract.py`
+- `tests/test_scenes_blueprint_contract.py`
+- `tests/test_api_v1_syntax_contract.py`
+- `tests/test_optional_blueprint_wiring_contract.py`
+- `tests/test_flat_blueprint_registry_contract.py`
+- `tests/test_flat_blueprint_registry_attr_contract.py`
+- `tests/test_habitus_accept_contract.py`
+- `tests/test_anomaly_blueprint_contract.py`
+- `tests/test_conversation_blueprint_contract.py`
+- `tests/test_entity_assignment_blueprint_contract.py`
+- `tests/test_mcp_blueprint_contract.py`
+- `tests/test_onyx_bridge_blueprint_contract.py`
+- `tests/test_styx_voice_blueprint_contract.py`
+- `tests/test_weather_blueprint_contract.py`
 - `tests/integration/test_workspace_ha_core_contract.py`
 
 ## Was in der Core-Lane contract-seitig gehärtet wurde
@@ -101,7 +117,8 @@ Vor einem HA-Release-Kandidaten gegen die Core-Schnittstelle prüfen:
 4. Read-Model-/Dashboard-Consumer dürfen `enabled_modules`, `zone_type`, `entities_by_role`, `modules.by_zone` und `modules.zone_states` erwarten
 
 ### Empfohlener Review-Call für HA-Lane
-- Core-Contract-Bundle laufen lassen
+- `./scripts/run_core_contract_bundle.sh` laufen lassen
+- `./scripts/check_15_2_0_release_gate.sh` laufen lassen, wenn der aktuelle Core-Repo-Head als reale Handoff-/Cut-Basis diskutiert wird
 - HA-Release-Kandidat dagegen reviewen
 - erst danach Release-Gate / Install / Live-Test
 

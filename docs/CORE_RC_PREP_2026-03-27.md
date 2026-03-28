@@ -71,7 +71,7 @@ Contract-Härtung für:
 ```
 
 ### Latest result
-- **32 Tests grün**
+- **64 Tests grün**
 - **0 Warnings**
 
 ### Bundled suites
@@ -83,6 +83,23 @@ Contract-Härtung für:
 - `tests/test_core_wiring_contract.py`
 - `tests/test_event_processor_import_contract.py`
 - `tests/integration/test_workspace_ha_core_contract.py`
+- `tests/test_metrics_blueprint_contract.py`
+- `tests/test_zone_health_blueprint_contract.py`
+- `tests/test_zone_aggregates_blueprint_contract.py`
+- `tests/test_zone_aggregates_truth_contract.py`
+- `tests/test_scenes_blueprint_contract.py`
+- `tests/test_api_v1_syntax_contract.py`
+- `tests/test_optional_blueprint_wiring_contract.py`
+- `tests/test_flat_blueprint_registry_contract.py`
+- `tests/test_flat_blueprint_registry_attr_contract.py`
+- `tests/test_habitus_accept_contract.py`
+- `tests/test_anomaly_blueprint_contract.py`
+- `tests/test_conversation_blueprint_contract.py`
+- `tests/test_entity_assignment_blueprint_contract.py`
+- `tests/test_mcp_blueprint_contract.py`
+- `tests/test_onyx_bridge_blueprint_contract.py`
+- `tests/test_styx_voice_blueprint_contract.py`
+- `tests/test_weather_blueprint_contract.py`
 
 ## Risks / review focus
 ### 1) Wide touch surface in `dashboard_read_models.py`
@@ -104,6 +121,7 @@ Contract-Härtung für:
 - [x] HA-Release-Handoff erstellt
 - [x] Exakter Commit-Schnitt für den 15.2.0-Kandidaten erstellt (`8b017a74`)
 - [x] Final changelog/release note input vorbereiten (`docs/CORE_GITHUB_RELEASE_NOTES_INPUT_2026-03-27.md`)
+- [x] Release queue / governance / strict gate surfaces vorbereitet (`docs/CORE_RELEASE_QUEUE_STATUS_2026-03-28.md`, `docs/CORE_RELEASE_GOVERNANCE_CHECKLIST_2026-03-28.md`, `scripts/check_15_2_0_release_gate.sh`)
 
 ### Reviewer should verify
 - [ ] Truth chain passt zu `docs/ZONE_TRUTH_CONTRACT.md`
@@ -118,6 +136,7 @@ Contract-Härtung für:
 - Kein Live-Erfolg behauptet
 
 ## Recommended next step
-1. Review dieses RC-Preps gegen Commit **`8b017a74`** + Contract bundle
-2. Danach Review-/Release-Governance-Entscheidung, ob der Commit der RC-Anker bleibt oder ob die neueren, oberhalb liegenden Hardening-Slices als nächster koordinierter Cutover ref vorgeschlagen werden sollen
-3. Erst nach Review in Release-Governance übergehen
+1. Review dieses RC-Preps gegen Commit **`8b017a74`** + Contract bundle + aktuelle release-prep surfaces
+2. Für reale Cut-Diskussionen den aktuellen Repo-Head über `./scripts/check_15_2_0_release_gate.sh` validieren; dabei gilt der workspace release entrypoint als exakter Current-HEAD-Snapshot
+3. Danach Review-/Release-Governance-Entscheidung, ob `8b017a74` der koordinierte Pairing-Ref bleibt oder ob ein neuerer Ref explizit neu vorgeschlagen werden soll
+4. Erst nach Review in Release-Governance übergehen
