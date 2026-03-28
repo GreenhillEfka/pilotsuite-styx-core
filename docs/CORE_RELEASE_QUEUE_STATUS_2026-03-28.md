@@ -73,5 +73,5 @@ The committed repo-local release manifest is a generated packaging surface and c
 ## Exact next step
 - No release yet.
 - If governance wants a real cut next, follow `docs/CORE_REAL_RELEASE_RUNBOOK_2026-03-28.md` exactly.
-- The correct next visible move remains: `mache v15.2.0` in the group thread, then 5-minute wait + release lock + fresh validation rerun.
+- The correct next visible move remains: `mache v15.2.0` in the group thread, then 5-minute wait + release-status export/check + create/check release lock + fresh strict-gate rerun.
 - If governance does **not** want a cut next, continue builder work on the next hard Core slice without touching release/tag/install paths.

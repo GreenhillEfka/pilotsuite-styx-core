@@ -127,4 +127,4 @@ Manual fallback is only for an explicit workflow failure / GitHub Actions outage
 
 ## Exact next step from today’s posture
 - No release yet.
-- If governance wants the real cut next: `mache v15.2.0` → wait 5 minutes → release lock → rerun `./scripts/check_15_2_0_release_gate.sh` → dispatch the Release workflow with version `15.2.0`.
+- If governance wants the real cut next: `mache v15.2.0` → wait 5 minutes → `./scripts/export_15_2_0_release_status.sh` + `./scripts/check_15_2_0_release_status.sh` → `./scripts/create_15_2_0_release_lock.sh <owner> <announcement_at_utc>` + `./scripts/check_15_2_0_release_lock.sh` → rerun `./scripts/check_15_2_0_release_gate.sh` → dispatch the Release workflow with version `15.2.0` → `./scripts/clear_15_2_0_release_lock.sh` when the coordinated window is explicitly closed.

@@ -125,4 +125,4 @@ if [[ "$failures" -ne 0 ]]; then
 fi
 
 printf 'PASS strict release gate green\n'
-printf 'NEXT real release governance step would still be: mache v15.2.0 -> wait 5 minutes -> release lock -> rerun this gate\n'
+printf 'NEXT real release governance step would still be: mache v15.2.0 -> wait 5 minutes -> export/check release status -> create/check release lock -> rerun this gate -> workflow dispatch -> clear lock\n'
