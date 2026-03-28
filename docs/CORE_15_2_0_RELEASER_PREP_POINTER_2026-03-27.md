@@ -27,6 +27,7 @@ Give the Core repo a single repo-local pointer to the current authoritative Core
 - `docs/CORE_REVIEW_PACKET_2026-03-27.md`
 - `docs/CORE_RELEASE_INPUT_2026-03-27.md`
 - `docs/CORE_GITHUB_RELEASE_NOTES_INPUT_2026-03-27.md`
+- `docs/CORE_RELEASE_QUEUE_STATUS_2026-03-28.md`
 - `docs/HA_RELEASE_CONTRACT_HANDOFF_2026-03-27.md`
 
 ## Repo-local validation companions
@@ -48,6 +49,16 @@ Use this pointer as the single repo-local Core entrypoint for review/releaser/HA
 2. `./scripts/check_15_2_0_releaser_pointers.sh`
 3. `./scripts/check_15_2_0_sync_anchor_consistency.sh`
 4. `./scripts/run_core_contract_bundle.sh`
+
+Governance gate for any **real** release attempt:
+1. post the exact group-thread announcement `mache v15.2.0`
+2. wait **5 minutes**
+3. treat the lane as release-locked during that window
+4. rerun cleanliness/validation after the wait
+5. abort the cut if cleanliness/validation breaks
+
+Packaging note:
+- the committed repo-local manifest is a generated snapshot surface and can lag the newest docs-only HEAD by one commit after docs refreshes; before real handoff/cut discussion, refresh the export surfaces and treat the newly generated manifest/workspace entrypoint as authoritative for the exact current repo head.
 
 Only update this pointer when one of these exact fields changes:
 1. authoritative Core source/provenance

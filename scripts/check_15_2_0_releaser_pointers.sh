@@ -15,6 +15,7 @@ DOC_PATHS=(
   "docs/CORE_REVIEW_PACKET_2026-03-27.md"
   "docs/CORE_RELEASE_INPUT_2026-03-27.md"
   "docs/CORE_GITHUB_RELEASE_NOTES_INPUT_2026-03-27.md"
+  "docs/CORE_RELEASE_QUEUE_STATUS_2026-03-28.md"
   "docs/HA_RELEASE_CONTRACT_HANDOFF_2026-03-27.md"
 )
 
@@ -85,6 +86,24 @@ for path in "${EXPORT_PATHS[@]}"; do
   fi
   [[ -f "$path" ]] || { printf 'FAIL missing %s\n' "$path"; failures=$((failures + 1)); }
 done
+
+CURRENT_HEAD="$(git rev-parse --short=8 HEAD)"
+MANIFEST_HEAD="$(python3 - <<'PY'
+import json
+from pathlib import Path
+path = Path('docs/CORE_15_2_0_RELEASE_MANIFEST_2026-03-27.json')
+try:
+    print(json.loads(path.read_text(encoding='utf-8')).get('head_commit', ''))
+except Exception:
+    print('')
+PY
+)"
+
+if [[ -n "$MANIFEST_HEAD" && "$MANIFEST_HEAD" == "$CURRENT_HEAD" ]]; then
+  printf 'PASS manifest head matches current HEAD (%s)\n' "$CURRENT_HEAD"
+else
+  printf 'NOTE manifest snapshot head=%s differs from current HEAD=%s; rerun ./scripts/export_15_2_0_release_manifest.sh before real handoff/cut\n' "${MANIFEST_HEAD:-<missing>}" "$CURRENT_HEAD"
+fi
 
 if [[ "$failures" -ne 0 ]]; then
   exit 1
