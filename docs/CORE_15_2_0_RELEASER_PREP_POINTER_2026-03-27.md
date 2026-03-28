@@ -29,6 +29,7 @@ Give the Core repo a single repo-local pointer to the current authoritative Core
 - `docs/CORE_GITHUB_RELEASE_NOTES_INPUT_2026-03-27.md`
 - `docs/CORE_RELEASE_QUEUE_STATUS_2026-03-28.md`
 - `docs/CORE_RELEASE_GOVERNANCE_CHECKLIST_2026-03-28.md`
+- `docs/CORE_REAL_RELEASE_RUNBOOK_2026-03-28.md`
 - `docs/HA_RELEASE_CONTRACT_HANDOFF_2026-03-27.md`
 
 ## Repo-local validation companions
