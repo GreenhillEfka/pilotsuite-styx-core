@@ -21,39 +21,49 @@ if [[ -z "$ANNOUNCED_AT_UTC" ]]; then
   exit 2
 fi
 
-python3 - <<'PY' "$ANNOUNCED_AT_UTC"
+python3 - <<'PY' "$LOCK_PATH" "$REPO_ROOT" "$VERSION" "$OWNER" "$ANNOUNCE_TEXT" "$ANNOUNCED_AT_UTC" "$CREATED_AT_UTC" "$BRANCH" "$HEAD_COMMIT" "$PAIRED_REF"
 from datetime import datetime
+from pathlib import Path
 import sys
+
+(lock_path, repo_root, version, owner, announce_text, announced_at_utc,
+ created_at_utc, branch, head_commit, paired_ref) = sys.argv[1:11]
+
 try:
-    datetime.fromisoformat(sys.argv[1].replace('Z', '+00:00'))
+    announced = datetime.fromisoformat(announced_at_utc.replace('Z', '+00:00'))
+    created = datetime.fromisoformat(created_at_utc.replace('Z', '+00:00'))
 except Exception as exc:
-    print(f'Invalid announcement_at_utc: {sys.argv[1]} ({exc})', file=sys.stderr)
+    print(f'Invalid timestamp: {exc}', file=sys.stderr)
     raise SystemExit(2)
-PY
 
-cat > "$LOCK_PATH" <<EOF
-# Core Release Lock
+if announced > created:
+    print('announcement_at_utc cannot be later than created_at_utc', file=sys.stderr)
+    raise SystemExit(2)
 
-- repo: `$REPO_ROOT`
-- version: `v$VERSION`
-- owner: `$OWNER`
-- announcement_text: `$ANNOUNCE_TEXT`
-- announcement_at_utc: `$ANNOUNCED_AT_UTC`
-- created_at_utc: `$CREATED_AT_UTC`
-- branch: `$BRANCH`
-- head_commit: `$HEAD_COMMIT`
-- paired_cutover_ref: `$PAIRED_REF`
-- required_group_thread_announcement: `$ANNOUNCE_TEXT`
+content = f"""# Core Release Lock
+
+- repo: `{repo_root}`
+- version: `v{version}`
+- owner: `{owner}`
+- announcement_text: `{announce_text}`
+- announcement_at_utc: `{announced_at_utc}`
+- created_at_utc: `{created_at_utc}`
+- branch: `{branch}`
+- head_commit: `{head_commit}`
+- paired_cutover_ref: `{paired_ref}`
+- required_group_thread_announcement: `{announce_text}`
 - wait_rule: `5 minutes after announcement before any real release attempt`
 - status: `active`
 
 ## Intent
-This file marks the Core lane/repo as release-locked for the coordinated `v$VERSION` cut window.
+This file marks the Core lane/repo as release-locked for the coordinated `v{version}` cut window.
 
 ## Non-claims
 - no release has been cut by creating this file
 - no install has been performed
 - no live-test has been claimed
-EOF
+"""
+Path(lock_path).write_text(content, encoding='utf-8')
+PY
 
 printf '%s\n' "$LOCK_PATH"
