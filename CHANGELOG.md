@@ -13,6 +13,7 @@ Alle wesentlichen Aenderungen am PilotSuite Styx Core werden in dieser Datei dok
 
 ### Paired
 - Bereit für Paarung mit HA-Linie v15.2.4 (geplante Folgeveröffentlichung).
+- Bereit für Paarung mit HA-Linie v15.2.4.
 
 
 ## [v15.0.18] - 2026-03-25
