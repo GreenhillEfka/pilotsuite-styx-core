@@ -1,9 +1,9 @@
 {
-  "generated_at_utc": "2026-03-28T00:37:50Z",
+  "generated_at_utc": "2026-03-28T01:58:44Z",
   "kind": "core_release_readiness_manifest",
   "repo": "/config/clawd/team/repos/pilotsuite-styx-core",
   "branch": "main",
-  "head_commit": "c471af25",
+  "head_commit": "92dfd4b4",
   "candidate_version": "15.2.0",
   "paired_cutover_ref": "8b017a74",
   "single_entrypoint_doc": "/config/clawd/team/repos/pilotsuite-styx-core/docs/CORE_15_2_0_RELEASER_PREP_POINTER_2026-03-27.md",

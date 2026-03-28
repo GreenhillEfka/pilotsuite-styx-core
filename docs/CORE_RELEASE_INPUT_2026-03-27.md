@@ -56,7 +56,7 @@ Contract-Härtung der Core-Truth-Lane rund um:
 ```
 
 ### Result
-- **45 tests passed**
+- **64 tests passed**
 - **0 warnings**
 
 ## Proposed changelog input (draft, not applied)
@@ -75,8 +75,8 @@ Contract-Härtung der Core-Truth-Lane rund um:
 - **Startup / Ingest Wiring**: `events_ingest` bleibt kanonisch auf `/api/v1/events`, `event_processor` importiert wieder aus `copilot_core.core.brain_read_model`, und `map_homeassistant_topology()` ist wieder vorhanden.
 
 ### Tests
-- Contract-Bundle aktuell grün: 45 Tests.
-- Zusätzliche Hardening-/Truth-Suites für Zone Health, Zone Aggregates, Scenes, Calendar und HomeKit sind grün.
+- Contract-Bundle aktuell grün: 64 Tests.
+- Zusätzliche Hardening-/Truth-/Blueprint-Suites für Zone Health, Zone Aggregates, Scenes, Calendar, HomeKit, Conversation, MCP, Onyx, Weather, Styx Voice, Anomaly, Registry-Wiring und Habitus-Handoff sind grün.
 
 ### Documentation
 - HA-Release-Review-Handoff und Core-RC-Prep ergänzt.
@@ -104,7 +104,7 @@ Contract-Härtung der Core-Truth-Lane rund um:
 
 ## Release note input (short form)
 - Geschützte Core-Truth-Lane bleibt auf dem funktionalen Pairing-Ref `8b017a74` stabil.
-- Darüber hinaus wurden nächste Release-Slices für Zone Health, Zone Aggregates, Scenes, Calendar und HomeKit gehärtet bzw. auf Truth-Lane-Semantik gezogen.
+- Darüber hinaus wurden nächste Release-Slices für Zone Health, Zone Aggregates, Scenes, Calendar, HomeKit sowie einen größeren Optional-Blueprint-/Proposal-Hardening-Block gebaut.
 - Repo-lokale GitHub-Release-Notes-/manifest-/pointer-Surfaces sind vorbereitet, damit Reviewer/Releaser ohne Ref-Drift arbeiten können.
 
 ## Recommended next step

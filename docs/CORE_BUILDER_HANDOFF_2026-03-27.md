@@ -35,9 +35,14 @@ Run:
 ./scripts/run_core_contract_bundle.sh
 ```
 
-Current result:
+Current result for the protected pairing/candidate anchor (`8b017a74`):
 - **36 tests passed**
 - **0 warnings**
+
+Current packaging head above the protected pairing ref:
+- **Current packaging head:** `3e135e21`
+- **Current packaging validation:** `64 passed / 0 warnings`
+- **Rule:** packaging/docs may continue above `8b017a74`, but HA/releaser pairing stays on `8b017a74` until explicitly re-coordinated
 
 ## Modified/untracked artifact set
 ### Committed code files in `8b017a74`

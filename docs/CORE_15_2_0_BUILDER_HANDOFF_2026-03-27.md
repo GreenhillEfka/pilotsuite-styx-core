@@ -54,6 +54,11 @@ Result at handoff:
 - **36 tests passed**
 - **0 warnings**
 
+Current packaging head above the protected pairing ref:
+- **Current packaging head:** `3e135e21`
+- **Current packaging validation:** `64 passed / 0 warnings`
+- **Rule:** packaging/docs can continue above `8b017a74`, but HA/releaser pairing stays on `8b017a74` until explicitly re-coordinated
+
 ## Risks / watch-outs
 - This is still a builder candidate, not a release claim.
 - The touched dashboard read model surface is broad and should receive explicit review.
