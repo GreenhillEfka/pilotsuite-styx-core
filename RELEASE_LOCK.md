@@ -10,7 +10,7 @@
 - head_commit: `51d8eb84`
 - required_group_thread_announcement: `mache v15.2.9`
 - wait_rule: `5 minutes after announcement before any real release attempt`
-- status: `active`
+- status: `released`
 
 ## Intent
 This lock marks the Core repo as release-locked for coordinated `v15.2.9` cut window.
@@ -19,3 +19,6 @@ This lock marks the Core repo as release-locked for coordinated `v15.2.9` cut wi
 - no release has been cut by creating this file
 - no install has been performed
 - no live-test has been claimed
+
+- release_tag: `v15.2.9`
+- release_at_utc: `2026-03-29T09:28:55Z`
