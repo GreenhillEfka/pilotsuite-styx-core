@@ -12,7 +12,9 @@ Endpoints:
     POST /api/v1/zone-automation/zones/<zone_id>/override   — Toggle override switch
     POST /api/v1/zone-automation/zones/<zone_id>/mood       — Set mood state for zone
     GET  /api/v1/zone-automation/zones/<zone_id>/entities   — List zone entities
+    GET  /api/v1/zone-automation/zones/<zone_id>/entities/read-model — Deterministic zone entity read-model
     POST /api/v1/zone-automation/zones/<zone_id>/entities   — Add entity to zone
+    GET  /api/v1/zone-automation/entities/read-model         — Deterministic read-model for all assignments (?since=<revision>, deltas=true)
     DELETE /api/v1/zone-automation/zones/<zone_id>/entities/<entity_id> — Remove entity
     POST /api/v1/zone-automation/zones/<zone_id>/entities/<entity_id>/tags — Update entity tags
     POST /api/v1/zone-automation/zones/<zone_id>/entities/<entity_id>/role — Update entity role
@@ -389,6 +391,40 @@ def list_zone_entities(zone_id: str):
                     "entities": _controller.get_zone_entities(zone_id)})
 
 
+@zone_automation_bp.route("/zones/<zone_id>/entities/read-model", methods=["GET"])
+@require_token
+def get_zone_entities_read_model(zone_id: str):
+    """Return a deterministic read-model for all assignments in one zone.
+
+    Optional query param: ?since=<revision>
+    If since is equal-or-latest revision, returns changed=False.
+    """
+    if _controller is None:
+        return jsonify({"ok": False, "error": "Controller not initialized"}), 503
+
+    model = _controller.get_zone_entities_read_model(zone_id)
+    current_revision = model["revision"]
+
+    raw_since = request.args.get("since")
+    if raw_since is not None:
+        try:
+            since = int(raw_since)
+        except (TypeError, ValueError):
+            return jsonify({"ok": False, "error": "Invalid since parameter"}), 400
+        if since < 0:
+            return jsonify({"ok": False, "error": "since must be >= 0"}), 400
+
+        if since >= current_revision:
+            return jsonify({
+                "ok": True,
+                "changed": False,
+                "zone_id": zone_id,
+                "revision": current_revision,
+            })
+
+    return jsonify({"ok": True, "changed": True, **model})
+
+
 @zone_automation_bp.route("/zones/<zone_id>/entities", methods=["POST"])
 @require_token
 def add_entity(zone_id: str):
@@ -507,6 +543,73 @@ def search_entities():
 
     results = _controller.search_entities(query)
     return jsonify({"ok": True, "results": results, "count": len(results)})
+
+
+@zone_automation_bp.route("/entities/read-model", methods=["GET"])
+@require_token
+def get_entities_read_model():
+    """Return a deterministic read-model for all zone entity assignments.
+
+    Query params:
+      - since=<revision> (int, optional)
+      - deltas=true (boolean, optional; **requires since**)
+      - compact=true (boolean, optional)
+
+    If since is equal-or-latest revision, returns changed=False with compact payload.
+    With deltas=true and stale state, only zones changed since `since` are returned.
+    With compact=true, entity objects are omitted from zone entries.
+    """
+    if _controller is None:
+        return jsonify({"ok": False, "error": "Controller not initialized"}), 503
+
+    raw_since = request.args.get("since")
+    raw_deltas = request.args.get("deltas", "false").strip().lower()
+    want_deltas = raw_deltas in {"1", "true", "yes", "on"}
+    raw_compact = request.args.get("compact", "false").strip().lower()
+    want_compact = raw_compact in {"1", "true", "yes", "on"}
+
+    if want_deltas and raw_since is None:
+        return jsonify({"ok": False, "error": "deltas=true requires since parameter"}), 400
+
+    if raw_since is not None:
+        try:
+            since = int(raw_since)
+        except (TypeError, ValueError):
+            return jsonify({"ok": False, "error": "Invalid since parameter"}), 400
+        if since < 0:
+            return jsonify({"ok": False, "error": "since must be >= 0"}), 400
+
+        # If client cache is current, return compact unchanged payload.
+        current_model = _controller.get_all_entities_read_model(compact=want_compact)
+        current_revision = current_model["summary"]["revision"]
+        if since >= current_revision:
+            return jsonify({
+                "ok": True,
+                "changed": False,
+                "revision": current_revision,
+                "zones": [],
+                "summary": current_model["summary"],
+            })
+
+        model = _controller.get_all_entities_read_model(
+            since_revision=since,
+            deltas=want_deltas,
+            compact=want_compact,
+        )
+
+        if want_deltas and isinstance(model.get("summary", {}).get("returned_zone_count"), int):
+            if model["summary"]["returned_zone_count"] == 0:
+                return jsonify({
+                    "ok": True,
+                    "changed": False,
+                    "revision": model["summary"]["delta_to_revision"],
+                    "zones": [],
+                    "summary": model["summary"],
+                })
+    else:
+        model = _controller.get_all_entities_read_model(compact=want_compact)
+
+    return jsonify({"ok": True, "changed": True, **model})
 
 
 # ── Import ───────────────────────────────────────────────────────────────────
@@ -689,6 +792,65 @@ def sync_habitus_zones():
 # ── Sync Zone Definitions (HA → Core) ──────────────────────────────────────
 
 
+def _normalize_sync_zone_name(zone: dict[str, Any], zone_id: str) -> str:
+    """Resolve the best display name from HA/Core contract variants."""
+    for key in ("name", "name_de", "zone_name"):
+        value = zone.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return zone_id
+
+
+
+def _normalize_string_list(value: Any) -> list[str]:
+    """Coerce list-like payload values into a de-duplicated string list."""
+    if not isinstance(value, (list, tuple, set)):
+        return []
+
+    items: list[str] = []
+    seen: set[str] = set()
+    for raw in value:
+        item = str(raw).strip()
+        if not item or item in seen:
+            continue
+        seen.add(item)
+        items.append(item)
+    return items
+
+
+
+def _normalize_zone_entities(zone: dict[str, Any]) -> tuple[list[str], dict[str, str]]:
+    """Flatten HA zone payloads into entity_ids plus optional role hints.
+
+    Accepts both:
+    - entities: ["light.kitchen"]
+    - entities: {"lights": ["light.kitchen"], "motion": ["binary_sensor.kitchen_motion"]}
+    - entity_ids: ["light.kitchen", ...]
+    """
+    entity_ids: list[str] = []
+    role_by_entity: dict[str, str] = {}
+    seen: set[str] = set()
+
+    def _add_entities(values: Any, *, role: str | None = None) -> None:
+        for entity_id in _normalize_string_list(values):
+            if entity_id not in seen:
+                seen.add(entity_id)
+                entity_ids.append(entity_id)
+            if role and entity_id not in role_by_entity:
+                role_by_entity[entity_id] = role
+
+    entities_payload = zone.get("entities")
+    if isinstance(entities_payload, dict):
+        for raw_role, values in entities_payload.items():
+            role = str(raw_role).strip() or None
+            _add_entities(values, role=role)
+    else:
+        _add_entities(entities_payload)
+
+    _add_entities(zone.get("entity_ids"))
+    return entity_ids, role_by_entity
+
+
 @zone_automation_bp.route("/sync-definitions", methods=["POST"])
 @require_token
 def sync_zone_definitions():
@@ -698,8 +860,8 @@ def sync_zone_definitions():
     Brain/Neuron system has the full zone topology for categorization,
     habit learning, and suggestion generation.
 
-    Body: {"source": "ha", "zones": [{"zone_id": "...", "name_de": "...",
-                                       "entities": [...], "zone_type": "..."}]}
+    Body: {"source": "ha", "zones": [{"zone_id": "...", "name": "...",
+                                       "entity_ids": [...], "entities": {...}}]}
     """
     if _controller is None:
         return jsonify({"ok": False, "error": "Controller not initialized"}), 503
@@ -725,16 +887,63 @@ def sync_zone_definitions():
 
         cfg = _controller._configs.get(zone_id)
         if cfg:
+            zone_name = _normalize_sync_zone_name(zone, zone_id)
+            entity_ids, role_by_entity = _normalize_zone_entities(zone)
+            ha_sync_source = f"{source}_sync"
+
             # Store HA entity definitions + zone metadata on the config
-            cfg.zone_name = zone.get("name_de", zone_id)
-            cfg.zone_type = _normalize_zone_type(zone.get("zone_type", cfg.zone_type)) or cfg.zone_type or "living"
-            if "enabled_modules" in zone and isinstance(zone.get("enabled_modules"), list):
-                cfg.enabled_modules = set(str(mid) for mid in zone.get("enabled_modules", []) if str(mid).strip())
-            if "entities" in zone:
-                cfg.ha_entities = list(zone["entities"])
-                cfg._ha_entities = list(zone["entities"])  # backward-compatible HA context for Brain
-                if hasattr(_controller, "sync_entities_from_topology"):
-                    _controller.sync_entities_from_topology(zone_id, list(zone["entities"]))
+            cfg.zone_name = zone_name
+            candidate_zone_type = _normalize_zone_type(str(zone.get("zone_type", "") or ""))
+            cfg.zone_type = candidate_zone_type or getattr(cfg, "zone_type", "") or "room"
+
+            if "enabled_modules" in zone and isinstance(zone.get("enabled_modules"), (list, tuple, set)):
+                cfg.enabled_modules = {
+                    str(mid).strip()
+                    for mid in zone.get("enabled_modules", [])
+                    if str(mid).strip()
+                }
+
+            cfg.ha_entities = list(entity_ids)
+            cfg._ha_entities = {
+                "entity_ids": entity_ids,
+                "entities": zone.get("entities", {}),
+                "role_by_entity": role_by_entity,
+            }
+
+            # Replace only HA-synced assignments for this zone, while preserving
+            # manual/imported assignments created directly in Core.
+            existing_assignments = _controller._entity_assignments.get(zone_id, [])
+            _controller._entity_assignments[zone_id] = [
+                assignment
+                for assignment in existing_assignments
+                if assignment.source != ha_sync_source
+            ]
+
+            # Move HA-synced entities out of other zones before re-adding them.
+            incoming_entity_ids = set(entity_ids)
+            if incoming_entity_ids:
+                for other_zone_id, assignments in list(_controller._entity_assignments.items()):
+                    if other_zone_id == zone_id:
+                        continue
+                    _controller._entity_assignments[other_zone_id] = [
+                        assignment
+                        for assignment in assignments
+                        if not (
+                            assignment.source == ha_sync_source
+                            and assignment.entity_id in incoming_entity_ids
+                        )
+                    ]
+
+            for entity_id in entity_ids:
+                _controller.add_entity(
+                    zone_id,
+                    entity_id,
+                    role=role_by_entity.get(entity_id),
+                    source=ha_sync_source,
+                )
+
+            if hasattr(_controller, "sync_entities_from_topology"):
+                _controller.sync_entities_from_topology(zone_id, list(entity_ids))
 
             _mirror_zone_truth_into_habitus_engine(zone, cfg)
             synced.append(zone_id)

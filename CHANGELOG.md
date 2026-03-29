@@ -94,6 +94,25 @@
 
 ---
 
+## [v15.2.10] - 2026-03-29
+
+### Zone Assignment Read-Model Optimierung
+
+#### Added
+- Zone-Entity Assignment Read-Models als deterministische, cache-fähige API-Endpoints eingeführt (`zone_entities_read_model`, `get_all_entities_read_model`).
+- Revisions- und Timestamp-basiertes Delta-Verhalten für `entities/read-model` hinzugefügt (`since`, `deltas=true`, `compact=true`).
+- Zone-spezifische Read-Model-Anfrage `zones/<zone_id>/entities/read-model` mit `changed`-Signalisierung ergänzt.
+
+#### Changed
+- Entity-Mutationen sind idempotent optimiert, Revisionszähler werden nur bei echten Änderungen erhöht.
+- `sync-definitions` nimmt gemischte HA-Entity-Formate (`entities`-Dict/Liste, `entity_ids`) robuster auf.
+- Tests erweitert: neue Unit-/API-Abdeckung für Delta-/Compact-/Caching-Verhalten.
+
+#### Fixed
+- Read-Model-Payloads vermeiden unnötige Payload-Größe bei `compact=true` und liefern robuste Änderungs-Deltas.
+
+---
+
 ## [v15.0.4] - 2026-03-22
 
 ### Runtime Version Truth Repair

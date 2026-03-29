@@ -246,6 +246,83 @@ class TestEntityManagement:
         assert ctrl.remove_entity("living", "light.test") is True
         assert ctrl.remove_entity("living", "light.nonexistent") is False
 
+    def test_zone_entities_read_model(self):
+        ctrl = ZoneAutomationController()
+        ctrl.add_entity("living", "light.wohnzimmer_decke")
+        ctrl.add_entity("living", "binary_sensor.wohnung_motion", role="motion")
+        model = ctrl.get_zone_entities_read_model("living")
+
+        assert model["zone_id"] == "living"
+        assert model["entity_count"] == 2
+        assert model["role_count"]["lights"] == 1
+        assert model["role_count"]["motion"] == 1
+        assert [entity["role"] for entity in model["entities"]] == ["lights", "motion"]
+
+    def test_all_entities_read_model(self):
+        ctrl = ZoneAutomationController()
+        ctrl.set_zone_config("kitchen", {"zone_name": "Küche"})
+        ctrl.add_entity("living", "light.wohnzimmer_decke")
+
+        model = ctrl.get_all_entities_read_model()
+        assert model["summary"]["zone_count"] == 2
+        assert model["summary"]["entity_count"] == 1
+        assert model["summary"]["revision"] >= 1
+        assert model["summary"]["updated_at"] >= 0
+
+        zone_ids = [zone["zone_id"] for zone in model["zones"]]
+        assert zone_ids == sorted(zone_ids)
+        assert any(zone["zone_id"] == "kitchen" and zone["entity_count"] == 0 for zone in model["zones"])
+
+    def test_entity_revision_updates_on_changes(self):
+        ctrl = ZoneAutomationController()
+        initial = ctrl.get_zone_entities_read_model("living")
+        assert initial["revision"] == 0
+
+        ctrl.add_entity("living", "light.wohnzimmer_decke")
+        after_add = ctrl.get_zone_entities_read_model("living")
+        assert after_add["revision"] == 1
+        assert after_add["entities"][0]["role"] == "lights"
+
+        # idempotent add should not bump revision
+        ctrl.add_entity("living", "light.wohnzimmer_decke")
+        assert ctrl.get_zone_entities_read_model("living")["revision"] == 1
+
+        # actual mutation bumps revision
+        assert ctrl.update_entity_role("living", "light.wohnzimmer_decke", "energy") is True
+        assert ctrl.get_zone_entities_read_model("living")["revision"] == 2
+        assert ctrl.remove_entity("living", "light.wohnzimmer_decke") is True
+        assert ctrl.get_all_entities_read_model()["summary"]["revision"] == 3
+
+    def test_all_entities_read_model_deltas_empty(self):
+        ctrl = ZoneAutomationController()
+        model = ctrl.get_all_entities_read_model(since_revision=0, deltas=True)
+        assert model["zones"] == []
+        assert model["summary"]["returned_zone_count"] == 0
+        assert model["summary"]["returned_entity_count"] == 0
+
+    def test_all_entities_read_model_deltas(self):
+        ctrl = ZoneAutomationController()
+        ctrl.add_entity("living", "light.living_ceiling")
+        ctrl.add_entity("kitchen", "light.kitchen_ceiling")
+
+        base = ctrl.get_all_entities_read_model()
+        base_revision = base["summary"]["revision"]
+
+        # mutate living and kitchen
+        ctrl.update_entity_tags("living", "light.living_ceiling", ["licht", "styx"])
+        ctrl.add_entity("kitchen", "media_player.kitchen_spot")
+
+        delta = ctrl.get_all_entities_read_model(since_revision=base_revision, deltas=True)
+        assert delta["summary"]["delta_from_revision"] == base_revision
+        assert delta["summary"]["delta_to_revision"] >= base_revision
+        assert set(z["zone_id"] for z in delta["zones"]) == {"living", "kitchen"}
+        assert delta["summary"]["returned_zone_count"] == 2
+
+        compact_delta = ctrl.get_all_entities_read_model(since_revision=base_revision, deltas=True, compact=True)
+        assert "entities" not in compact_delta["zones"][0]
+        assert "entities_by_role" not in compact_delta["zones"][0]
+        assert compact_delta["summary"].get("compact") is True
+
     def test_get_zone_entities_by_role(self):
         ctrl = ZoneAutomationController()
         ctrl.add_entity("living", "light.decke")
@@ -461,6 +538,144 @@ class TestZoneAutomationAPI:
                 data = json.loads(resp.data)
                 assert data["ok"] is True
                 assert len(data["entities"]) == 1
+
+    def test_zone_entities_read_model(self):
+        app, ctrl = self._make_client()
+        with patch("copilot_core.api.v1.zone_automation.require_token", lambda f: f):
+            with app.test_client() as c:
+                c.post(
+                    "/api/v1/zone-automation/zones/living/entities",
+                    json={"entity_id": "light.test_lamp", "source": "manual"},
+                    content_type="application/json",
+                )
+                c.post(
+                    "/api/v1/zone-automation/zones/living/entities",
+                    json={"entity_id": "binary_sensor.motion_1", "role": "motion"},
+                    content_type="application/json",
+                )
+
+                resp = c.get("/api/v1/zone-automation/zones/living/entities/read-model")
+                assert resp.status_code == 200
+                data = json.loads(resp.data)
+                assert data["ok"] is True
+                assert data["changed"] is True
+                assert data["zone_id"] == "living"
+                assert data["entity_count"] == 2
+                assert data["role_count"]["lights"] == 1
+                assert data["role_count"]["motion"] == 1
+                assert data["entities"][0]["role"] == "lights"
+                assert data["revision"] >= 2
+                assert data["updated_at"] >= 0
+
+                rev = data["revision"]
+                fresh = c.get(f"/api/v1/zone-automation/zones/living/entities/read-model?since={rev}")
+                assert fresh.status_code == 200
+                zone_cached = json.loads(fresh.data)
+                assert zone_cached["changed"] is False
+                assert zone_cached["revision"] == rev
+                assert zone_cached["zone_id"] == "living"
+
+                bad = c.get("/api/v1/zone-automation/zones/living/entities/read-model?since=abc")
+                assert bad.status_code == 400
+
+    def test_all_entities_read_model(self):
+        app, ctrl = self._make_client()
+        ctrl.add_entity("kitchen", "light.kueche", role="lights", source="manual")
+        with patch("copilot_core.api.v1.zone_automation.require_token", lambda f: f):
+            with app.test_client() as c:
+                resp = c.get("/api/v1/zone-automation/entities/read-model")
+                assert resp.status_code == 200
+                data = json.loads(resp.data)
+                assert data["ok"] is True
+                assert data["changed"] is True
+                assert data["summary"]["zone_count"] >= 1
+                assert data["summary"]["entity_count"] >= 1
+                assert data["summary"]["revision"] >= 1
+                assert any(zone["zone_id"] == "kitchen" for zone in data["zones"])
+
+                # Compact projection omits entities but keeps deterministic counters.
+                compact = c.get("/api/v1/zone-automation/entities/read-model?compact=true")
+                assert compact.status_code == 200
+                compact_data = json.loads(compact.data)
+                assert compact_data["summary"].get("compact") is True
+                assert compact_data["zones"][0]["zone_id"] == "kitchen"
+                assert "entities" not in compact_data["zones"][0]
+                assert "entities_by_role" not in compact_data["zones"][0]
+                assert "role_count" in compact_data["zones"][0]
+
+                # Compact + deltas should also avoid entity payloads.
+                compact_delta = c.get(f"/api/v1/zone-automation/entities/read-model?since={data['summary']['revision']}&deltas=true&compact=true")
+                assert compact_delta.status_code == 200
+                compact_delta_data = json.loads(compact_delta.data)
+                assert compact_delta_data["ok"] is True
+                assert "zones" in compact_delta_data
+                if compact_delta_data["changed"]:
+                    assert "entities" not in compact_delta_data["zones"][0]
+
+                rev = data["summary"]["revision"]
+                fresh = c.get(f"/api/v1/zone-automation/entities/read-model?since={rev}")
+                assert fresh.status_code == 200
+                cached = json.loads(fresh.data)
+                assert cached["ok"] is True
+                assert cached["changed"] is False
+                assert cached["zones"] == []
+                assert cached["revision"] == rev
+
+                stale = c.get(f"/api/v1/zone-automation/entities/read-model?since={rev - 1}")
+                assert stale.status_code == 200
+                changed = json.loads(stale.data)
+                assert changed["ok"] is True
+                assert changed["changed"] is True
+                assert changed["summary"]["revision"] == rev
+
+                bad = c.get("/api/v1/zone-automation/entities/read-model?since=abc")
+                assert bad.status_code == 400
+
+                bad_deltas = c.get("/api/v1/zone-automation/entities/read-model?deltas=true")
+                assert bad_deltas.status_code == 400
+
+    def test_all_entities_read_model_deltas(self):
+        app, ctrl = self._make_client()
+        with patch("copilot_core.api.v1.zone_automation.require_token", lambda f: f):
+            with app.test_client() as c:
+                # Seed initial state (2 changes => revision > 0)
+                c.post(
+                    "/api/v1/zone-automation/zones/living/entities",
+                    json={"entity_id": "light.living_ceiling"},
+                    content_type="application/json",
+                )
+                c.post(
+                    "/api/v1/zone-automation/zones/kitchen/entities",
+                    json={"entity_id": "light.kitchen_ceiling"},
+                    content_type="application/json",
+                )
+
+                base = c.get("/api/v1/zone-automation/entities/read-model")
+                base_data = json.loads(base.data)
+                base_revision = base_data["summary"]["revision"]
+                assert base_data["changed"] is True
+
+                # Mutate kitchen assignments
+                resp = c.post(
+                    "/api/v1/zone-automation/zones/kitchen/entities/light.kitchen_ceiling/tags",
+                    json={"tags": ["licht", "styx"]},
+                    content_type="application/json",
+                )
+                assert resp.status_code == 200
+
+                # Request only changed zones since known revision
+                delta = c.get(f"/api/v1/zone-automation/entities/read-model?since={base_revision}&deltas=true")
+                assert delta.status_code == 200
+                data = json.loads(delta.data)
+                assert data["ok"] is True
+                assert data["changed"] is True
+                assert data["summary"]["returned_zone_count"] == 1
+                assert data["summary"]["delta_from_revision"] == base_revision
+                assert data["summary"]["delta_to_revision"] >= base_revision
+                assert data["delta"]["zone_ids"] == ["kitchen"]
+                assert len(data["zones"]) == 1
+                assert data["zones"][0]["zone_id"] == "kitchen"
+                assert any(entity["entity_id"] == "light.kitchen_ceiling" for entity in data["zones"][0]["entities"])
 
     def test_remove_entity(self):
         app, ctrl = self._make_client()

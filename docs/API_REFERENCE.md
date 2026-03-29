@@ -285,6 +285,8 @@ Authorization: Bearer your-token
 | POST | `/api/v1/zone-automation/ensure-zones` | Bulk-create zone configs (IDs only) |
 | POST | `/api/v1/zone-automation/sync-definitions` | Sync full zone definitions from HA (entities, metadata) |
 | GET | `/api/v1/zone-automation/module-schemas` | Get schemas for all zone modules (HA dynamic entity generation) |
+| GET | `/api/v1/zone-automation/zones/<zone_id>/entities/read-model` | Deterministic entity read-model for one zone (`?since=<revision>` for cache checks) |
+| GET | `/api/v1/zone-automation/entities/read-model` | Deterministic read-model for all assignments (`?since=<revision>&deltas=true` (requires `since`; returns changed zones only), `compact=true`) |
 | GET | `/api/v1/zone-automation/zones/<zone_id>/modules/<module_id>` | Get module config for zone |
 | POST | `/api/v1/zone-automation/zones/<zone_id>/modules/<module_id>` | Update module config for zone |
 | PUT | `/api/v1/zone-automation/zones/<zone_id>/mode` | Set automation mode (off/learning/autonomy) |
