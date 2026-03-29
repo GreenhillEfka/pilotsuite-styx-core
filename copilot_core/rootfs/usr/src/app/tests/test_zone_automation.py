@@ -539,6 +539,33 @@ class TestZoneAutomationAPI:
                 assert data["ok"] is True
                 assert len(data["entities"]) == 1
 
+    def test_list_entities_by_role_query_bool(self):
+        app, ctrl = self._make_client()
+        with patch("copilot_core.api.v1.zone_automation.require_token", lambda f: f):
+            with app.test_client() as c:
+                c.post(
+                    "/api/v1/zone-automation/zones/living/entities",
+                    json={"entity_id": "light.test_lamp"},
+                    content_type="application/json",
+                )
+                c.post(
+                    "/api/v1/zone-automation/zones/living/entities",
+                    json={"entity_id": "sensor.temp"},
+                    content_type="application/json",
+                )
+
+                # Explicit bool true with numeric token should be accepted
+                resp = c.get("/api/v1/zone-automation/zones/living/entities?by_role=1")
+                assert resp.status_code == 200
+                data = json.loads(resp.data)
+                assert data["ok"] is True
+                assert data["entities_by_role"]["lights"][0]["entity_id"] == "light.test_lamp"
+                assert data["entities_by_role"]["sensors"][0]["entity_id"] == "sensor.temp"
+
+                # Invalid bool value rejected for stable API contracts
+                bad = c.get("/api/v1/zone-automation/zones/living/entities?by_role=maybe")
+                assert bad.status_code == 400
+
     def test_zone_entities_read_model(self):
         app, ctrl = self._make_client()
         with patch("copilot_core.api.v1.zone_automation.require_token", lambda f: f):

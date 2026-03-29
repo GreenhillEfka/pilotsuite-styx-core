@@ -401,7 +401,13 @@ def list_zone_entities(zone_id: str):
     if _controller is None:
         return jsonify({"ok": False, "error": "Controller not initialized"}), 503
 
-    by_role = request.args.get("by_role", "false").lower() == "true"
+    try:
+        by_role = _parse_bool_query_param(
+            request.args.get("by_role"), param_name="by_role"
+        )
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+
     if by_role:
         return jsonify({"ok": True, "zone_id": zone_id,
                         "entities_by_role": _controller.get_zone_entities_by_role(zone_id)})
