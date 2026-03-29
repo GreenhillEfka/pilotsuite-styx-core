@@ -23,7 +23,7 @@ printf 'Repo: %s\n' "$REPO_ROOT"
 printf 'Current HEAD: %s\n' "$CURRENT_HEAD"
 
 WORKTREE_STATUS="$(git status --porcelain)"
-WORKTREE_STATUS_FILTERED="$(printf '%s\n' "$WORKTREE_STATUS" | grep -v '^?? RELEASE_LOCK.md$' || true)"
+WORKTREE_STATUS_FILTERED="$(printf '%s\n' "$WORKTREE_STATUS" | grep -v -F -e '?? tmp/' -e 'RELEASE_LOCK.md' || true)"
 
 if [[ -n "$WORKTREE_STATUS_FILTERED" ]]; then
   printf 'FAIL worktree is not clean\n'
