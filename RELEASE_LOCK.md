@@ -5,9 +5,9 @@
 - owner: `1616970089`
 - announcement_text: `mache v15.2.9`
 - announcement_at_utc: `2026-03-29T09:22:31Z`
-- created_at_utc: `2026-03-29T09:52:34Z`
+- created_at_utc: `2026-03-29T09:55:48Z`
 - branch: `main`
-- head_commit: `3fba9b01`
+- head_commit: `225b92af`
 - paired_cutover_ref: `8b017a74`
 - required_group_thread_announcement: `mache v15.2.9`
 - wait_rule: `5 minutes after announcement before any real release attempt`
