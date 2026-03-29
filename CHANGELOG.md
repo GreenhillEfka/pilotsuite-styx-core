@@ -104,6 +104,7 @@
 - Zone-spezifische Read-Model-Anfrage `zones/<zone_id>/entities/read-model` mit `changed`-Signalisierung ergänzt.
 
 #### Changed
+- Added test coverage and docs for `sync-definitions` mixed payload shapes (`entities` as role-map plus `entity_ids`) while ensuring deterministic role assignment for mixed-form zones.
 - Entity-Mutationen sind idempotent optimiert, Revisionszähler werden nur bei echten Änderungen erhöht.
 - `sync-definitions` nimmt gemischte HA-Entity-Formate (`entities`-Dict/Liste, `entity_ids`) robuster auf.
 - Tests erweitert: neue Unit-/API-Abdeckung für Delta-/Compact-/Caching-Verhalten.

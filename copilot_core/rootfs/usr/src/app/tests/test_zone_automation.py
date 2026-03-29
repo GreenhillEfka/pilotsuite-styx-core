@@ -846,6 +846,43 @@ class TestHubZoneSync:
                 assert resp.status_code == 200
                 assert ctrl._configs["terrace-zone"].zone_type == "terrace"
 
+    def test_sync_definitions_applies_role_mapping_and_entity_ids(self):
+        """sync-definitions should parse role-mapped entity dicts and plain entity_ids list."""
+        app, ctrl = self._make_client()
+        with patch("copilot_core.api.v1.zone_automation.require_token", lambda f: f):
+            with app.test_client() as c:
+                resp = c.post(
+                    "/api/v1/zone-automation/sync-definitions",
+                    json={
+                        "source": "ha",
+                        "zones": [
+                            {
+                                "zone_id": "wohnzimmer",
+                                "name": "Wohnzimmer",
+                                "entities": {
+                                    "lights": ["light.woon_1", "light.woon_2"],
+                                    "motion": ["binary_sensor.wohn_motion"],
+                                },
+                                "entity_ids": ["light.woon_1", "sensor.wohn_temp"],
+                            },
+                        ],
+                    },
+                    content_type="application/json",
+                )
+                assert resp.status_code == 200
+                assert resp.get_json()["ok"] is True
+
+                zone_entities = ctrl.get_zone_entities("wohnzimmer")
+                assignments = {a["entity_id"]: a for a in zone_entities}
+                assert len(assignments) == 4
+                assert assignments["light.woon_1"]["role"] == "lights"
+                assert [e["entity_id"] for e in zone_entities].count("light.woon_1") == 1
+                assert assignments["light.woon_2"]["role"] == "lights"
+                assert assignments["binary_sensor.wohn_motion"]["role"] == "motion"
+                assert assignments["sensor.wohn_temp"]["source"] == "ha_sync"
+                assert assignments["sensor.wohn_temp"]["role"] == "sensors"
+
+
     def test_sync_creates_hub_zones(self):
         """sync_habitus_zones should register rooms+zones in HubZoneEngine."""
         app, ctrl = self._make_client()

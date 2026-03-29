@@ -1068,7 +1068,7 @@ This document describes the legacy `/api/v1/habitus/zones/` endpoints which are 
 |---|---|---|
 | `/api/v1/zone-automation/zones` | GET | List all zone configs |
 | `/api/v1/zone-automation/ensure-zones` | POST | Bulk-create zone configs (IDs only) |
-| `/api/v1/zone-automation/sync-definitions` | POST | Sync full zone definitions from HA |
+| `/api/v1/zone-automation/sync-definitions` | POST | Sync full zone definitions from HA (`entities` as list or role-map, optional `entity_ids`, metadata) |
 | `/api/v1/zone-automation/zones/<zone_id>/entities/read-model` | GET | Deterministic entity read-model for one zone (`?since=<revision>`, `compact=true` for reduced payload) |
 | `/api/v1/zone-automation/entities/read-model` | GET | Deterministic read-model for all assignments (`?since=<revision>&deltas=true`, `compact=true`) |
 | `/api/v1/zone-automation/module-schemas` | GET | Get schemas for zone modules |
