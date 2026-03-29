@@ -78,15 +78,43 @@ def mock_zones():
 def client(app, mock_zones):
     """Create test client with mocked zones."""
     from copilot_core.api.v1 import zone_dashboard
-    
+
     # Reset mood data
     zone_dashboard._zone_mood_data.clear()
-    
+
+    def _read_model(_engine=None, example_data=None):
+        zones = []
+        for zone in zone_dashboard._get_habitus_zones():
+            zone_data = dict(zone)
+            zone_data.setdefault("entity_count", len(zone.get("entity_ids", [])))
+            zones.append(zone_data)
+        # Keep tests aligned to the mocked zone source used by this fixture.
+        return {
+            "zones": zones,
+            "freshness": "unit-test",
+            "source": "unit-test",
+        }
+
+    def _read_zone_detail(_engine, zone_id, **_kwargs):
+        zone_id = zone_id or ""
+        for zone in zone_dashboard._get_habitus_zones():
+            if zone.get("zone_id") == zone_id:
+                detail = dict(zone)
+                detail.setdefault("metadata", zone.get("metadata", {}))
+                detail.setdefault("status", zone_dashboard._get_zone_status(detail))
+                detail.setdefault("person_count", zone_dashboard._get_person_count(detail))
+                detail.setdefault("entity_count", len(detail.get("entity_ids", [])))
+                detail.setdefault("entity_counts_by_domain", zone_dashboard._get_entity_count(detail))
+                return detail
+        return None
+
     with patch.object(zone_dashboard, '_get_habitus_zones', return_value=mock_zones):
-        with patch.object(zone_dashboard, 'require_token', lambda f: f):
-            app.register_blueprint(zone_dashboard.zone_dashboard_bp)
-            with app.test_client() as test_client:
-                yield test_client
+        with patch.object(zone_dashboard, 'build_zone_summary_read_model', side_effect=_read_model):
+            with patch.object(zone_dashboard, 'build_zone_detail_read_model', side_effect=_read_zone_detail):
+                with patch.object(zone_dashboard, 'require_token', lambda f: f):
+                    app.register_blueprint(zone_dashboard.zone_dashboard_bp)
+                    with app.test_client() as test_client:
+                        yield test_client
 
 
 class TestZoneDashboardAPI:
@@ -174,6 +202,34 @@ class TestZoneDashboardAPI:
         zone_types = data["summary"]["zone_types"]
         assert "room" in zone_types
         assert zone_types["room"] == 3
+
+    def test_dashboard_filter_by_zone_type(self, client):
+        """Dashboard supports filtering by zone_type."""
+        custom_zones = [
+            {"zone_id": "zone:wohnzimmer", "name": "Wohnzimmer", "zone_type": "kitchen", "entity_ids": [], "entities": {}, "enabled": True},
+            {"zone_id": "zone:kuche", "name": "Küche", "zone_type": "living", "entity_ids": [], "entities": {}, "enabled": True},
+            {"zone_id": "zone:schlafzimmer", "name": "Schlafzimmer", "zone_type": "bath", "entity_ids": [], "entities": {}, "enabled": True},
+        ]
+        summary_payload = {"zones": custom_zones, "freshness": "ok", "source": "unit-test"}
+        from copilot_core.api.v1 import zone_dashboard
+
+        with patch.object(zone_dashboard, 'build_zone_summary_read_model', return_value=summary_payload):
+            response = client.get('/api/v1/zone/dashboard?zone_type=kitchen')
+
+            assert response.status_code == 200
+            data = json.loads(response.data)
+            assert data["ok"] is True
+            assert data["count"] == 1
+            assert data["zones"][0]["zone_type"] == "kitchen"
+
+    def test_dashboard_filter_by_zone_type_invalid(self, client):
+        """Dashboard rejects invalid zone_type filter values."""
+        response = client.get('/api/v1/zone/dashboard?zone_type=invalid-zone')
+        data = json.loads(response.data)
+
+        assert response.status_code == 400
+        assert data["ok"] is False
+        assert "Invalid zone_type" in data["error"]
 
     def test_get_mood_all_zones(self, client):
         """Test GET /api/v1/zone/dashboard/mood."""
@@ -381,17 +437,19 @@ class TestZoneDashboardEdgeCases:
         """Test dashboard with no zones."""
         from copilot_core.api.v1 import zone_dashboard
         
-        with patch.object(zone_dashboard, '_get_habitus_zones', return_value=[]):
-            with patch.object(zone_dashboard, 'require_token', lambda f: f):
-                app.register_blueprint(zone_dashboard.zone_dashboard_bp)
-                with app.test_client() as client:
-                    response = client.get('/api/v1/zone/dashboard')
-                    data = json.loads(response.data)
-                    
-                    assert response.status_code == 200
-                    assert data["ok"] is True
-                    assert len(data["zones"]) == 0
-                    assert data["count"] == 0
+        empty = []
+        with patch.object(zone_dashboard, '_get_habitus_zones', return_value=empty):
+            with patch.object(zone_dashboard, 'build_zone_summary_read_model', return_value={"zones": empty, "freshness": "unit-test", "source": "unit-test"}):
+                with patch.object(zone_dashboard, 'require_token', lambda f: f):
+                    app.register_blueprint(zone_dashboard.zone_dashboard_bp)
+                    with app.test_client() as client:
+                        response = client.get('/api/v1/zone/dashboard')
+                        data = json.loads(response.data)
+                        
+                        assert response.status_code == 200
+                        assert data["ok"] is True
+                        assert len(data["zones"]) == 0
+                        assert data["count"] == 0
 
     def test_zone_without_entities(self, app):
         """Test zone with no entities."""
@@ -405,16 +463,17 @@ class TestZoneDashboardEdgeCases:
         }]
         
         with patch.object(zone_dashboard, '_get_habitus_zones', return_value=empty_zone):
-            with patch.object(zone_dashboard, 'require_token', lambda f: f):
-                app.register_blueprint(zone_dashboard.zone_dashboard_bp)
-                with app.test_client() as client:
-                    response = client.get('/api/v1/zone/dashboard')
-                    data = json.loads(response.data)
-                    
-                    zone = data["zones"][0]
-                    assert zone["entity_count"] == 0
-                    assert zone["person_count"] == 0
-                    assert len(zone["quick_actions"]) > 0  # Still has toggle action
+            with patch.object(zone_dashboard, 'build_zone_summary_read_model', return_value={"zones": empty_zone, "freshness": "unit-test", "source": "unit-test"}):
+                with patch.object(zone_dashboard, 'require_token', lambda f: f):
+                    app.register_blueprint(zone_dashboard.zone_dashboard_bp)
+                    with app.test_client() as client:
+                        response = client.get('/api/v1/zone/dashboard')
+                        data = json.loads(response.data)
+                        
+                        zone = data["zones"][0]
+                        assert zone["entity_count"] == 0
+                        assert zone["person_count"] == 0
+                        assert len(zone["quick_actions"]) > 0  # Still has toggle action
 
     def test_zone_without_metadata(self, app):
         """Test zone without metadata field."""
@@ -427,14 +486,15 @@ class TestZoneDashboardEdgeCases:
         }]
         
         with patch.object(zone_dashboard, '_get_habitus_zones', return_value=zone_no_metadata):
-            with patch.object(zone_dashboard, 'require_token', lambda f: f):
-                app.register_blueprint(zone_dashboard.zone_dashboard_bp)
-                with app.test_client() as client:
-                    response = client.get('/api/v1/zone/dashboard')
-                    data = json.loads(response.data)
-                    
-                    assert response.status_code == 200
-                    assert len(data["zones"]) == 1
+            with patch.object(zone_dashboard, 'build_zone_summary_read_model', return_value={"zones": zone_no_metadata, "freshness": "unit-test", "source": "unit-test"}):
+                with patch.object(zone_dashboard, 'require_token', lambda f: f):
+                    app.register_blueprint(zone_dashboard.zone_dashboard_bp)
+                    with app.test_client() as client:
+                        response = client.get('/api/v1/zone/dashboard')
+                        data = json.loads(response.data)
+                        
+                        assert response.status_code == 200
+                        assert len(data["zones"]) == 1
 
     def test_mood_default_values(self, app, mock_zones):
         """Test default mood values for zones without explicit mood."""
@@ -517,6 +577,33 @@ class TestZoneDashboardSummary:
         summary = data["summary"]
         assert "zone_types" in summary
         assert isinstance(summary["zone_types"], dict)
+
+    def test_summary_filter_by_zone_type(self, client):
+        """Summary supports zone_type filter."""
+        summary_zones = [
+            {"zone_id": "zone:wohnzimmer", "zone_type": "kitchen", "entity_ids": ["light.1"], "entities": {"lights": ["light.1"]}, "enabled": True},
+            {"zone_id": "zone:kuche", "zone_type": "living", "entity_ids": ["light.2"], "entities": {"lights": ["light.2"]}, "enabled": True},
+            {"zone_id": "zone:schlafzimmer", "zone_type": "bath", "entity_ids": ["light.3"], "entities": {"lights": ["light.3"]}, "enabled": False},
+        ]
+        from copilot_core.api.v1 import zone_dashboard
+
+        with patch.object(zone_dashboard, '_get_habitus_zones', return_value=summary_zones):
+            response = client.get('/api/v1/zone/dashboard/summary?zone_type=kitchen')
+
+            assert response.status_code == 200
+            data = json.loads(response.data)
+            summary = data["summary"]
+            assert summary["total_zones"] == 1
+            assert summary["zone_types"]["kitchen"] == 1
+
+    def test_summary_filter_by_zone_type_invalid(self, client):
+        """Summary rejects invalid zone_type filter values."""
+        response = client.get('/api/v1/zone/dashboard/summary?zone_type=invalid-zone')
+        data = json.loads(response.data)
+
+        assert response.status_code == 400
+        assert data["ok"] is False
+        assert "Invalid zone_type" in data["error"]
 
     def test_summary_active_idle_split(self, client, mock_zones):
         """Test summary includes active/idle zone split."""
@@ -601,15 +688,16 @@ class TestZoneDashboardZoneDetail:
         from copilot_core.api.v1 import zone_dashboard
         
         with patch.object(zone_dashboard, '_get_habitus_zones', return_value=[]):
-            with patch.object(zone_dashboard, 'require_token', lambda f: f):
-                # Need to re-register blueprint with new mock
-                app2 = Flask(__name__)
-                app2.config["TESTING"] = True
-                app2.register_blueprint(zone_dashboard.zone_dashboard_bp)
-                
-                with app2.test_client() as new_client:
-                    response = new_client.get('/api/v1/zone/dashboard/zone:nonexistent')
-                    assert response.status_code == 404
+            with patch.object(zone_dashboard, 'build_zone_detail_read_model', return_value=None):
+                with patch.object(zone_dashboard, 'require_token', lambda f: f):
+                    # Need to re-register blueprint with new mock
+                    app2 = Flask(__name__)
+                    app2.config["TESTING"] = True
+                    app2.register_blueprint(zone_dashboard.zone_dashboard_bp)
+                    
+                    with app2.test_client() as new_client:
+                        response = new_client.get('/api/v1/zone/dashboard/zone:nonexistent')
+                        assert response.status_code == 404
 
 
 class TestZoneDashboardTimestamps:

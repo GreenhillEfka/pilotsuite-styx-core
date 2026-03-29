@@ -57,6 +57,16 @@ class TestZoneConfig:
         assert cfg.light.absence_delay_s == 120
         assert cfg.music.default_volume_pct == 30
 
+    def test_set_zone_config_zone_type(self):
+        ctrl = ZoneAutomationController()
+        cfg = ctrl.set_zone_config("living", {"zone_type": "kitchen"})
+        assert cfg.zone_type == "kitchen"
+
+    def test_set_zone_config_invalid_zone_type_keeps_previous(self):
+        ctrl = ZoneAutomationController()
+        cfg = ctrl.set_zone_config("living", {"zone_type": "not-a-zone"})
+        assert cfg.zone_type == "living"
+
     def test_config_to_dict_and_from_dict(self):
         cfg = ZoneAutomationConfig(zone_id="kitchen", zone_name="Kueche")
         cfg.light.brightness_target_pct = 70
@@ -360,12 +370,58 @@ class TestZoneAutomationAPI:
         app, ctrl = self._make_client()
         with patch("copilot_core.api.v1.zone_automation.require_token", lambda f: f):
             with app.test_client() as c:
-                resp = c.post("/api/v1/zone-automation/zones/living/config",
-                              json={"light": {"brightness_target_pct": 50}},
-                              content_type="application/json")
+                resp = c.post(
+                    "/api/v1/zone-automation/zones/living/config",
+                    json={"light": {"brightness_target_pct": 50}},
+                    content_type="application/json",
+                )
                 assert resp.status_code == 200
                 data = json.loads(resp.data)
                 assert data["config"]["light"]["brightness_target_pct"] == 50
+
+    def test_update_zone_config_with_invalid_zone_type(self):
+        app, ctrl = self._make_client()
+        with patch("copilot_core.api.v1.zone_automation.require_token", lambda f: f):
+            with app.test_client() as c:
+                resp = c.post(
+                    "/api/v1/zone-automation/zones/living/config",
+                    json={"zone_type": "not-a-zone"},
+                    content_type="application/json",
+                )
+                assert resp.status_code == 400
+                data = json.loads(resp.data)
+                assert data["ok"] is False
+
+    def test_create_zone_invalid_zone_type(self):
+        app, ctrl = self._make_client()
+        with patch("copilot_core.api.v1.zone_automation.require_token", lambda f: f):
+            with app.test_client() as c:
+                resp = c.post(
+                    "/api/v1/zone-automation/zones",
+                    json={"zone_id": "badzone", "zone_name": "Bad", "zone_type": "invalid"},
+                    content_type="application/json",
+                )
+                assert resp.status_code == 400
+                data = json.loads(resp.data)
+                assert data["ok"] is False
+
+    def test_delete_zone(self):
+        app, ctrl = self._make_client()
+        with patch("copilot_core.api.v1.zone_automation.require_token", lambda f: f):
+            with app.test_client() as c:
+                create = c.post(
+                    "/api/v1/zone-automation/zones",
+                    json={"zone_id": "tempzone", "zone_name": "Temp"},
+                    content_type="application/json",
+                )
+                assert create.status_code == 201
+                resp = c.delete("/api/v1/zone-automation/zones/tempzone")
+                assert resp.status_code == 200
+                data = json.loads(resp.data)
+                assert data["ok"] is True
+
+                resp = c.delete("/api/v1/zone-automation/zones/tempzone")
+                assert resp.status_code == 404
 
     def test_toggle_override(self):
         app, ctrl = self._make_client()
@@ -513,6 +569,45 @@ class TestHubZoneSync:
                 assert data["synced"] == 1
                 # ZoneAutomationController should have the config
                 assert "wohnbereich" in ctrl._configs
+
+    def test_sync_definitions_normalizes_zone_type(self):
+        app, ctrl = self._make_client()
+        with patch("copilot_core.api.v1.zone_automation.require_token", lambda f: f):
+            with app.test_client() as c:
+                resp = c.post(
+                    "/api/v1/zone-automation/sync-definitions",
+                    json={
+                        "source": "ha",
+                        "zones": [
+                            {
+                                "zone_id": "terrace-zone",
+                                "name_de": "Terasse",
+                                "zone_type": "terrace",
+                                "entities": ["light.terrace_1"],
+                            },
+                        ],
+                    },
+                    content_type="application/json",
+                )
+                assert resp.status_code == 200
+                assert "terrace-zone" in ctrl._configs
+                assert ctrl._configs["terrace-zone"].zone_type == "terrace"
+
+                resp = c.post(
+                    "/api/v1/zone-automation/sync-definitions",
+                    json={
+                        "zones": [
+                            {
+                                "zone_id": "terrace-zone",
+                                "name_de": "Terasse",
+                                "zone_type": "invalid-type",
+                            },
+                        ]
+                    },
+                    content_type="application/json",
+                )
+                assert resp.status_code == 200
+                assert ctrl._configs["terrace-zone"].zone_type == "terrace"
 
     def test_sync_creates_hub_zones(self):
         """sync_habitus_zones should register rooms+zones in HubZoneEngine."""

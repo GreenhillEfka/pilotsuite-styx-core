@@ -34,6 +34,7 @@ from flask import Blueprint, jsonify, request
 
 from copilot_core.api.security import require_token
 from copilot_core.hub.habitus_zones import HabitusZoneEngine
+from copilot_core.homeassistant.habitus_zones import ZoneType
 from copilot_core.homeassistant.zone_matcher import map_homeassistant_topology
 
 _LOGGER = logging.getLogger(__name__)
@@ -89,6 +90,28 @@ def _parse_json_body() -> dict[str, Any] | None:
     return data if isinstance(data, dict) else None
 
 
+def _normalize_enabled_modules(raw_modules: Any) -> set[str] | None:
+    """Normalize modules list payload into a stable, stripped set."""
+    if raw_modules is None:
+        return set()
+    if not isinstance(raw_modules, list):
+        return None
+
+    return {
+        str(module_id).strip()
+        for module_id in raw_modules
+        if str(module_id).strip()
+    }
+
+
+def _is_valid_zone_type(zone_type: str) -> bool:
+    """Validate zone type against the canonical enum values."""
+    normalized = (zone_type or "").strip().lower()
+    if not normalized:
+        return False
+    return normalized in {value.value for value in ZoneType}
+
+
 def _require_zone(engine: HabitusZoneEngine, zone_id: str):
     """Return zone or a 404 response tuple."""
     zone = engine.get_zone(zone_id)
@@ -110,12 +133,19 @@ def _zone_payload_response(engine: HabitusZoneEngine, zone_id: str, status: int 
 
 @zone_editor_bp.route("/zones", methods=["GET"])
 def list_zones():
-    """List all zones."""
+    """List all zones.
+
+    Supports optional filtering by canonical ``zone_type`` via query parameter.
+    """
     try:
         engine = get_zone_engine()
     except RuntimeError:
         return jsonify({"ok": False, "error": "Zone engine not initialized"}), 503
     
+    requested_zone_type = (request.args.get("zone_type") or "").strip().lower()
+    if requested_zone_type and not _is_valid_zone_type(requested_zone_type):
+        return jsonify({"ok": False, "error": f"Invalid zone_type: {requested_zone_type}"}), 400
+
     overview = engine.get_overview()
     
     if not overview:
@@ -124,8 +154,11 @@ def list_zones():
     zones_data = []
     for zone in overview.zones:
         zone_details = engine.get_zone(zone["zone_id"])
-        if zone_details:
-            zones_data.append(zone_details)
+        if not zone_details:
+            continue
+        if requested_zone_type and zone_details.get("zone_type") != requested_zone_type:
+            continue
+        zones_data.append(zone_details)
     
     return jsonify({
         "ok": True,
@@ -224,21 +257,38 @@ def get_room(room_id: str):
 
 @zone_editor_bp.route("/overview", methods=["GET"])
 def get_overview():
-    """Get zone overview."""
-    engine = get_zone_engine()
+    """Get zone overview.
+
+    Supports optional filtering by canonical ``zone_type`` via query parameter.
+    """
+    try:
+        engine = get_zone_engine()
+    except RuntimeError:
+        return jsonify({"ok": False, "error": "Zone engine not initialized"}), 503
+
+    requested_zone_type = (request.args.get("zone_type") or "").strip().lower()
+    if requested_zone_type and not _is_valid_zone_type(requested_zone_type):
+        return jsonify({"ok": False, "error": f"Invalid zone_type: {requested_zone_type}"}), 400
+
     overview = engine.get_overview()
     
     if not overview:
         return jsonify({"ok": False, "error": "Zone engine not initialized"}), 503
-    
+
+    zones = overview.zones
+    if requested_zone_type:
+        zones = [zone for zone in zones if zone.get("zone_type") == requested_zone_type]
+
+    active_zones = sum(1 for zone in zones if zone.get("enabled") is True)
+
     return jsonify({
         "ok": True,
         "overview": {
-            "total_zones": overview.total_zones,
+            "total_zones": len(zones),
             "total_rooms": overview.total_rooms,
             "total_entities": overview.total_entities,
-            "active_zones": overview.active_zones,
-            "zones": overview.zones,
+            "active_zones": active_zones,
+            "zones": zones,
             "modes": overview.modes,
             "unassigned_rooms": overview.unassigned_rooms,
         },
@@ -340,7 +390,26 @@ def create_zone():
     icon = str(data.get("icon") or "mdi:home-floor-1").strip() or "mdi:home-floor-1"
     priority = int(data.get("priority") or 0)
 
-    engine.create_zone(zone_id, name, room_ids, icon, priority)
+    zone_type = str(data.get("zone_type") or "living").strip().lower()
+    if not _is_valid_zone_type(zone_type):
+        return jsonify({"ok": False, "error": f"Invalid zone_type: {data.get('zone_type', 'living')}"}), 400
+
+    enabled_modules = None
+    if "enabled_modules" in data:
+        normalized_modules = _normalize_enabled_modules(data.get("enabled_modules"))
+        if normalized_modules is None:
+            return jsonify({"ok": False, "error": "Invalid field: enabled_modules"}), 400
+        enabled_modules = normalized_modules
+
+    engine.create_zone(
+        zone_id,
+        name,
+        room_ids,
+        icon,
+        priority,
+        zone_type=zone_type,
+        enabled_modules=enabled_modules,
+    )
     _LOGGER.info("Created zone via modern API: %s", zone_id)
     return _zone_payload_response(engine, zone_id, status=201)
 
@@ -364,10 +433,22 @@ def update_zone(zone_id: str):
         return jsonify({"ok": False, "error": "Invalid field: name"}), 400
     if "icon" in data and not engine.set_zone_icon(zone_id, str(data.get("icon") or "")):
         return jsonify({"ok": False, "error": "Invalid field: icon"}), 400
+    if "zone_type" in data:
+        zone_type = str(data.get("zone_type") or "").strip().lower()
+        if not _is_valid_zone_type(zone_type):
+            return jsonify({"ok": False, "error": f"Invalid zone_type: {data.get('zone_type')}"}), 400
+        if not engine.set_zone_type(zone_id, zone_type):
+            return jsonify({"ok": False, "error": "Failed to update zone_type"}), 400
     if "mode" in data and not engine.set_zone_mode(zone_id, str(data.get("mode") or "")):
         return jsonify({"ok": False, "error": f"Invalid mode: {data.get('mode')}"}), 400
     if "enabled" in data:
         engine.set_zone_enabled(zone_id, bool(data.get("enabled")))
+    if "enabled_modules" in data:
+        normalized_modules = _normalize_enabled_modules(data.get("enabled_modules"))
+        if normalized_modules is None:
+            return jsonify({"ok": False, "error": "Invalid field: enabled_modules"}), 400
+        if not engine.set_zone_enabled_modules(zone_id, normalized_modules):
+            return jsonify({"ok": False, "error": "Failed to update enabled_modules"}), 400
     if "priority" in data:
         engine.set_zone_priority(zone_id, int(data.get("priority") or 0))
 
@@ -473,8 +554,27 @@ def create_zone_legacy():
     
     room_ids = data.get("rooms", [])
     icon = data.get("icon", "mdi:home-floor-1")
+    priority = int(data.get("priority") or 0)
+    zone_type = str(data.get("zone_type") or "").strip().lower() or None
+    if zone_type is not None and not _is_valid_zone_type(zone_type):
+        return jsonify({"error": f"Invalid zone_type: {data.get('zone_type')}"}), 400
+
+    if "enabled_modules" in data:
+        normalized_modules = _normalize_enabled_modules(data.get("enabled_modules"))
+        if normalized_modules is None:
+            return jsonify({"error": "Invalid field: enabled_modules"}), 400
+    else:
+        normalized_modules = None
     
-    engine.create_zone(zone_id, data["name"], room_ids, icon)
+    kwargs = {}
+    if zone_type is not None:
+        kwargs["zone_type"] = zone_type
+    if normalized_modules is not None:
+        kwargs["enabled_modules"] = normalized_modules
+    if priority:
+        kwargs["priority"] = priority
+
+    engine.create_zone(zone_id, data["name"], room_ids, icon, **kwargs)
     created = engine.get_zone(zone_id)
     
     _LOGGER.info(f"Created zone: {zone_id}")
@@ -489,14 +589,25 @@ def create_zone_legacy():
 @require_token
 def list_zones_legacy():
     """List all zones (legacy endpoint)."""
-    engine = get_zone_engine()
+    try:
+        engine = get_zone_engine()
+    except RuntimeError:
+        return jsonify({"error": "Zone engine not initialized"}), 503
+
+    requested_zone_type = (request.args.get("zone_type") or "").strip().lower()
+    if requested_zone_type and not _is_valid_zone_type(requested_zone_type):
+        return jsonify({"error": f"Invalid zone_type: {requested_zone_type}"}), 400
+
     overview = engine.get_overview()
     
     zones_data = []
     for zone in overview.zones:
         zone_details = engine.get_zone(zone["zone_id"])
-        if zone_details:
-            zones_data.append(zone_details)
+        if not zone_details:
+            continue
+        if requested_zone_type and zone_details.get("zone_type") != requested_zone_type:
+            continue
+        zones_data.append(zone_details)
     
     return jsonify({
         "zones": zones_data,
@@ -549,7 +660,19 @@ def update_zone_legacy(zone_id: str):
     if "enabled" in data:
         engine.set_zone_enabled(zone_id, data["enabled"])
     if "priority" in data:
-        engine.set_zone_priority(zone_id, data["priority"])
+        engine.set_zone_priority(zone_id, int(data["priority"]) if data.get("priority") is not None else 0)
+    if "zone_type" in data:
+        zone_type = str(data["zone_type"] or "").strip().lower()
+        if not _is_valid_zone_type(zone_type):
+            return jsonify({"error": f"Invalid zone_type: {data.get('zone_type')}"}), 400
+        if not engine.set_zone_type(zone_id, zone_type):
+            return jsonify({"error": "Failed to update zone_type"}), 400
+    if "enabled_modules" in data:
+        normalized_modules = _normalize_enabled_modules(data["enabled_modules"])
+        if normalized_modules is None:
+            return jsonify({"error": "Invalid field: enabled_modules"}), 400
+        if not engine.set_zone_enabled_modules(zone_id, normalized_modules):
+            return jsonify({"error": "Failed to update enabled_modules"}), 400
     
     _LOGGER.info(f"Updated zone: {zone_id}")
     
@@ -656,7 +779,7 @@ def create_zone_alias():
     Redirects to /api/v1/zone/editor/create
     """
     from flask import redirect, url_for
-    return redirect(url_for("zone_editor_legacy_bp.create_zone"))
+    return redirect(url_for("zone_editor_legacy.create_zone_legacy"))
 
 
 @zone_legacy_alias_bp.route("/update", methods=["POST"])
@@ -669,13 +792,13 @@ def update_zone_alias(zone_id=None):
     """
     from flask import redirect, url_for
     if zone_id:
-        return redirect(url_for("zone_editor_legacy_bp.update_zone", zone_id=zone_id))
+        return redirect(url_for("zone_editor_legacy.update_zone_legacy", zone_id=zone_id))
     # For /api/v1/zone/update without zone_id, expect zone_id in body
     data = request.get_json(force=True) if request.is_json else {}
     zone_id = data.get("zone_id")
     if not zone_id:
         return jsonify({"error": "Missing zone_id"}), 400
-    return redirect(url_for("zone_editor_legacy_bp.update_zone", zone_id=zone_id))
+    return redirect(url_for("zone_editor_legacy.update_zone_legacy", zone_id=zone_id))
 
 
 @zone_legacy_alias_bp.route("/delete/<zone_id>", methods=["DELETE"])
@@ -686,4 +809,4 @@ def delete_zone_alias(zone_id: str):
     Redirects to /api/v1/zone/editor/<zone_id> (DELETE)
     """
     from flask import redirect, url_for
-    return redirect(url_for("zone_editor_legacy_bp.delete_zone", zone_id=zone_id))
+    return redirect(url_for("zone_editor_legacy.delete_zone_legacy", zone_id=zone_id))

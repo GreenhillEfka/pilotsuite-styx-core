@@ -188,6 +188,16 @@ def _normalize_template_id(template_id: str) -> str:
     normalized = template_id.strip().lower().replace(" ", "").replace("_", "").replace("ä", "ae").replace("ö", "oe").replace("ü", "ue").replace("ß", "ss")
     return _TEMPLATE_ID_ALIASES.get(normalized, normalized)
 
+
+def _normalize_zone_type(zone_type: str) -> str:
+    """Normalize and validate zone type against enum values."""
+    normalized = (zone_type or "").strip().lower()
+    if not normalized:
+        return ""
+    allowed = {item.value for item in ZoneTypeEnum}
+    return normalized if normalized in allowed else ""
+
+
 # Zone modes with descriptions
 _ZONE_MODES = {
     "active": {"name": "Aktiv", "icon": "mdi:play-circle", "automations": True},
@@ -353,6 +363,32 @@ class HabitusZoneEngine:
         if zone_id not in self._zones:
             return False
         del self._zones[zone_id]
+        return True
+
+    def set_zone_type(self, zone_id: str, zone_type: str) -> bool:
+        """Set zone archetype/type. Must be one of defined ZoneType values."""
+        zone = self._zones.get(zone_id)
+        normalized = _normalize_zone_type(zone_type)
+        if not zone or not normalized:
+            return False
+        zone.zone_type = normalized
+        return True
+
+    def set_zone_enabled_modules(self, zone_id: str, enabled_modules: list[str] | set[str] | tuple[str, ...] | None) -> bool:
+        """Set active modules for a zone as an explicit module-ID set."""
+        zone = self._zones.get(zone_id)
+        if not zone:
+            return False
+        if enabled_modules is None:
+            zone.enabled_modules = set()
+            return True
+
+        normalized_modules = {
+            str(module_id).strip()
+            for module_id in enabled_modules
+            if str(module_id).strip()
+        }
+        zone.enabled_modules = normalized_modules
         return True
 
     def set_zone_mode(self, zone_id: str, mode: str) -> bool:

@@ -32,6 +32,7 @@ from typing import Any, Optional
 from flask import Blueprint, jsonify, request
 
 from copilot_core.api.security import require_token, optional_token
+from copilot_core.homeassistant.habitus_zones import ZoneType
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -57,6 +58,13 @@ def _sanitize_zone_id(value: str) -> str:
         return "zone"
     return raw
 
+
+def _normalize_zone_type(zone_type: str) -> str:
+    """Normalize and validate zone_type values against ZoneType enum."""
+    normalized = str(zone_type or "").strip().lower()
+    return normalized if normalized in {item.value for item in ZoneType} else ""
+
+
 def _mirror_zone_truth_into_habitus_engine(zone: dict[str, Any], cfg: Any) -> None:
     """Mirror synced HA zone definitions into the HabitusZone truth engine."""
     if _zone_engine is None:
@@ -66,7 +74,7 @@ def _mirror_zone_truth_into_habitus_engine(zone: dict[str, Any], cfg: Any) -> No
         _zone_engine.sync_external_zone_topology(
             str(zone.get("zone_id", "")).strip(),
             name=str(zone.get("name_de") or zone.get("name") or getattr(cfg, "zone_name", "") or zone.get("zone_id", "")).strip(),
-            zone_type=str(zone.get("zone_type") or getattr(cfg, "zone_type", "room") or "room"),
+            zone_type=_normalize_zone_type(str(zone.get("zone_type") or getattr(cfg, "zone_type", "living") or "living")) or "living",
             enabled_modules=set(getattr(cfg, "enabled_modules", set()) or set()),
             entities=list(zone.get("entities", getattr(cfg, "ha_entities", [])) or []),
             icon=str(zone.get("icon", "")).strip() or None,
@@ -144,7 +152,9 @@ def create_zone():
     if zone_name:
         updates["zone_name"] = zone_name
 
-    zone_type = str(data.get("zone_type", "")).strip()
+    zone_type = _normalize_zone_type(data.get("zone_type", ""))
+    if data.get("zone_type") is not None and not zone_type:
+        return jsonify({"ok": False, "error": f"Invalid zone_type: {data.get('zone_type')}"}), 400
     if zone_type:
         updates["zone_type"] = zone_type
 
@@ -165,7 +175,7 @@ def create_zone():
                 "zone_id": zone_id,
                 "name_de": zone_name or zone_id,
                 "name": zone_name or zone_id,
-                "zone_type": getattr(cfg, "zone_type", "room") or "room",
+                "zone_type": getattr(cfg, "zone_type", "living") or "living",
                 "area_id": zone_id,
                 "entities": [],
             }
@@ -186,6 +196,26 @@ def get_zone_state(zone_id: str):
     return jsonify({"ok": True, **_controller.get_zone_state(zone_id)})
 
 
+@zone_automation_bp.route("/zones/<zone_id>", methods=["DELETE"])
+@require_token
+def delete_zone(zone_id: str):
+    """Delete a zone automation configuration and related runtime state."""
+    if _controller is None:
+        return jsonify({"ok": False, "error": "Controller not initialized"}), 503
+
+    removed = _controller.delete_zone(zone_id)
+    if not removed:
+        return jsonify({"ok": False, "error": f"Zone '{zone_id}' not found"}), 404
+
+    if _zone_engine is not None:
+        try:
+            _zone_engine.delete_zone(zone_id)
+        except Exception:
+            _LOGGER.debug("Failed to remove zone '%s' from Habitus engine", zone_id)
+
+    return jsonify({"ok": True, "zone_id": zone_id})
+
+
 @zone_automation_bp.route("/zones/<zone_id>/config", methods=["POST"])
 @require_token
 def update_zone_config(zone_id: str):
@@ -197,6 +227,13 @@ def update_zone_config(zone_id: str):
         return jsonify({"ok": False, "error": "Controller not initialized"}), 503
 
     data = request.get_json(silent=True) or {}
+
+    if "zone_type" in data:
+        normalized = _normalize_zone_type(data.get("zone_type"))
+        if not normalized:
+            return jsonify({"ok": False, "error": f"Invalid zone_type: {data.get('zone_type')}"}), 400
+        data["zone_type"] = normalized
+
     config = _controller.set_zone_config(zone_id, data)
     return jsonify({"ok": True, "config": config.to_dict()})
 
@@ -690,7 +727,7 @@ def sync_zone_definitions():
         if cfg:
             # Store HA entity definitions + zone metadata on the config
             cfg.zone_name = zone.get("name_de", zone_id)
-            cfg.zone_type = zone.get("zone_type", cfg.zone_type or "room")
+            cfg.zone_type = _normalize_zone_type(zone.get("zone_type", cfg.zone_type)) or cfg.zone_type or "living"
             if "enabled_modules" in zone and isinstance(zone.get("enabled_modules"), list):
                 cfg.enabled_modules = set(str(mid) for mid in zone.get("enabled_modules", []) if str(mid).strip())
             if "entities" in zone:
