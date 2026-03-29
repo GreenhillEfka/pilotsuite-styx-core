@@ -917,7 +917,9 @@ def sync_zone_definitions():
         return jsonify({"ok": False, "error": "Controller not initialized"}), 503
 
     data = request.get_json(silent=True) or {}
-    source = data.get("source", "ha")
+    source = str(data.get("source", "ha")).strip().lower() or "ha"
+    # Normalize source marker so callers can provide either "ha" or pre-suffixed "ha_sync"
+    source = "ha" if source == "" else source
     zones = data.get("zones", [])
 
     if not isinstance(zones, list):
@@ -939,7 +941,7 @@ def sync_zone_definitions():
         if cfg:
             zone_name = _normalize_sync_zone_name(zone, zone_id)
             entity_ids, role_by_entity = _normalize_zone_entities(zone)
-            ha_sync_source = f"{source}_sync"
+            ha_sync_source = source if source.endswith("_sync") else f"{source}_sync"
 
             # Store HA entity definitions + zone metadata on the config
             cfg.zone_name = zone_name

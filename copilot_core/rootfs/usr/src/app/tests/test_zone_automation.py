@@ -923,6 +923,31 @@ class TestHubZoneSync:
                 assert assignments["sensor.wohn_temp"]["role"] == "sensors"
 
 
+    def test_sync_definitions_accepts_prefixed_sync_source(self):
+        """sync-definitions should tolerate already-prefixed sync source markers."""
+        app, ctrl = self._make_client()
+        with patch("copilot_core.api.v1.zone_automation.require_token", lambda f: f):
+            with app.test_client() as c:
+                resp = c.post(
+                    "/api/v1/zone-automation/sync-definitions",
+                    json={
+                        "source": "ha_sync",
+                        "zones": [
+                            {
+                                "zone_id": "wohnzimmer",
+                                "name": "Wohnzimmer",
+                                "entity_ids": ["sensor.prefixed"],
+                            },
+                        ],
+                    },
+                    content_type="application/json",
+                )
+                assert resp.status_code == 200
+                assert resp.get_json()["ok"] is True
+
+                assignments = {a["entity_id"]: a for a in ctrl.get_zone_entities("wohnzimmer")}
+                assert assignments["sensor.prefixed"]["source"] == "ha_sync"
+
     def test_sync_creates_hub_zones(self):
         """sync_habitus_zones should register rooms+zones in HubZoneEngine."""
         app, ctrl = self._make_client()
