@@ -600,6 +600,11 @@ class TestZoneAutomationAPI:
                 bad = c.get("/api/v1/zone-automation/zones/living/entities/read-model?since=abc")
                 assert bad.status_code == 400
 
+                bad_compact = c.get(
+                    "/api/v1/zone-automation/zones/living/entities/read-model?compact=maybe"
+                )
+                assert bad_compact.status_code == 400
+
     def test_all_entities_read_model(self):
         app, ctrl = self._make_client()
         ctrl.add_entity("kitchen", "light.kueche", role="lights", source="manual")
@@ -655,6 +660,14 @@ class TestZoneAutomationAPI:
 
                 bad_deltas = c.get("/api/v1/zone-automation/entities/read-model?deltas=true")
                 assert bad_deltas.status_code == 400
+
+                bad_compact = c.get("/api/v1/zone-automation/entities/read-model?compact=maybe")
+                assert bad_compact.status_code == 400
+
+                bad_deltas_value = c.get(
+                    f"/api/v1/zone-automation/entities/read-model?deltas=maybe&since={rev}"
+                )
+                assert bad_deltas_value.status_code == 400
 
     def test_all_entities_read_model_deltas(self):
         app, ctrl = self._make_client()

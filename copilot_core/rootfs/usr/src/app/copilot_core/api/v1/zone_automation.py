@@ -49,6 +49,24 @@ _zone_engine: Optional[Any] = None
 
 
 
+TRUE_VALUES = {"1", "true", "yes", "on"}
+FALSE_VALUES = {"0", "false", "no", "off"}
+
+def _parse_bool_query_param(value: str | None, *, param_name: str) -> bool:
+    """Parse HTTP boolean query parameters with strict token validation."""
+    if value is None:
+        return False
+
+    normalized = str(value).strip().lower()
+    if normalized in TRUE_VALUES:
+        return True
+    if normalized in FALSE_VALUES:
+        return False
+
+    raise ValueError(f"Invalid boolean value for '{param_name}': {value!r}")
+
+
+
 def _sanitize_zone_id(value: str) -> str:
     """Normalize a human zone name into a stable zone_id.
     Keeps lowercase a-z/0-9/underscores and hyphen fallback.
@@ -402,8 +420,12 @@ def get_zone_entities_read_model(zone_id: str):
     if _controller is None:
         return jsonify({"ok": False, "error": "Controller not initialized"}), 503
 
-    raw_compact = request.args.get("compact", "false").strip().lower()
-    want_compact = raw_compact in {"1", "true", "yes", "on"}
+    try:
+        want_compact = _parse_bool_query_param(
+            request.args.get("compact"), param_name="compact"
+        )
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
 
     model = _controller.get_zone_entities_read_model(zone_id, compact=want_compact)
     current_revision = model["revision"]
@@ -576,10 +598,19 @@ def get_entities_read_model():
         return jsonify({"ok": False, "error": "Controller not initialized"}), 503
 
     raw_since = request.args.get("since")
-    raw_deltas = request.args.get("deltas", "false").strip().lower()
-    want_deltas = raw_deltas in {"1", "true", "yes", "on"}
-    raw_compact = request.args.get("compact", "false").strip().lower()
-    want_compact = raw_compact in {"1", "true", "yes", "on"}
+    try:
+        want_deltas = _parse_bool_query_param(
+            request.args.get("deltas"), param_name="deltas"
+        )
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+
+    try:
+        want_compact = _parse_bool_query_param(
+            request.args.get("compact"), param_name="compact"
+        )
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
 
     if want_deltas and raw_since is None:
         return jsonify({"ok": False, "error": "deltas=true requires since parameter"}), 400

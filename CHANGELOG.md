@@ -105,6 +105,7 @@
 
 #### Changed
 - Added test coverage and docs for `sync-definitions` mixed payload shapes (`entities` as role-map plus `entity_ids`) while ensuring deterministic role assignment for mixed-form zones.
+- Read-model endpoints now strictly parse `compact`/`deltas` boolean query flags (`true|false`, `1|0`, `yes|no`, `on|off`) and return 400 for invalid values.
 - Entity-Mutationen sind idempotent optimiert, Revisionszähler werden nur bei echten Änderungen erhöht.
 - `sync-definitions` nimmt gemischte HA-Entity-Formate (`entities`-Dict/Liste, `entity_ids`) robuster auf.
 - Tests erweitert: neue Unit-/API-Abdeckung für Delta-/Compact-/Caching-Verhalten.
