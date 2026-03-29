@@ -111,6 +111,8 @@
 #### Fixed
 - Read-Model-Payloads vermeiden unnötige Payload-Größe bei `compact=true` und liefern robuste Änderungs-Deltas.
 
+- `sync-definitions` überschreibt keine manuell erstellten Zone-Entity-Zuweisungen mehr (`source="manual"` bleibt erhalten), auch nicht bei Cross-Zone-Nachkommen.
+
 ---
 
 ## [v15.0.4] - 2026-03-22

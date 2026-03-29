@@ -935,15 +935,21 @@ def sync_zone_definitions():
                     ]
 
             for entity_id in entity_ids:
+                # Keep locally created manual/imported assignments in place.
+                existing_local = any(
+                    assignment.entity_id == entity_id and assignment.source != ha_sync_source
+                    for assignments in _controller._entity_assignments.values()
+                    for assignment in assignments
+                )
+                if existing_local:
+                    continue
+
                 _controller.add_entity(
                     zone_id,
                     entity_id,
                     role=role_by_entity.get(entity_id),
                     source=ha_sync_source,
                 )
-
-            if hasattr(_controller, "sync_entities_from_topology"):
-                _controller.sync_entities_from_topology(zone_id, list(entity_ids))
 
             _mirror_zone_truth_into_habitus_engine(zone, cfg)
             synced.append(zone_id)

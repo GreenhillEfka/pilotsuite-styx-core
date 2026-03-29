@@ -847,6 +847,39 @@ class TestHubZoneSync:
                 assert "kueche" in hub._zones, f"Zone 'kueche' not in hub_zones: {list(hub._zones.keys())}"
                 assert "kueche" in hub._rooms
 
+    def test_sync_definitions_preserves_manual_assignments(self):
+        """sync-definitions must not override manually assigned entities."""
+        app, ctrl = self._make_client()
+        with patch("copilot_core.api.v1.zone_automation.require_token", lambda f: f):
+            with app.test_client() as c:
+                # Seed a manual assignment that should be preserved.
+                ctrl.add_entity("kueche", "light.manual_anchor", source="manual")
+
+                resp = c.post(
+                    "/api/v1/zone-automation/sync-definitions",
+                    json={
+                        "source": "ha",
+                        "zones": [
+                            {
+                                "zone_id": "arbeitszimmer",
+                                "name": "Arbeitszimmer",
+                                "entities": ["light.manual_anchor", "light.ha_only"],
+                            },
+                        ],
+                    },
+                    content_type="application/json",
+                )
+                assert resp.status_code == 200
+                assert resp.get_json()["ok"] is True
+
+                kitchen_assignments = {a.entity_id: a.source for a in ctrl._entity_assignments.get("kueche", [])}
+                assert kitchen_assignments.get("light.manual_anchor") == "manual"
+
+                wb_assignments = {a.entity_id: a.source for a in ctrl._entity_assignments.get("arbeitszimmer", [])}
+                assert wb_assignments.get("light.ha_only") == "ha_sync"
+                assert "light.manual_anchor" not in wb_assignments
+
+
     def test_sync_returns_entity_zone_map(self):
         """sync response should include entity→zone mapping for HA."""
         app, ctrl = self._make_client()
