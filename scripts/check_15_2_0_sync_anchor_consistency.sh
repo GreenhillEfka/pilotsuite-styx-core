@@ -6,7 +6,7 @@ cd "$REPO_ROOT"
 
 EXPECTED_CORE_SOURCE="/config/clawd/team/repos/pilotsuite-styx-core"
 EXPECTED_PAIRED_CORE_REF="8b017a74"
-EXPECTED_VERSION="15.2.0"
+EXPECTED_VERSION="15.2.9"
 CURRENT_HEAD="$(git rev-parse --short=8 HEAD)"
 
 DOCS=(
@@ -30,7 +30,7 @@ PAIRED_REF_DOCS=(
 
 failures=0
 
-printf 'Core 15.2.0 sync-anchor consistency check\n'
+printf 'Core 15.2.9 sync-anchor consistency check\n'
 printf 'Repo: %s\n' "$REPO_ROOT"
 printf 'Current HEAD: %s\n' "$CURRENT_HEAD"
 printf 'Expected paired Core ref: %s\n' "$EXPECTED_PAIRED_CORE_REF"

@@ -4,9 +4,9 @@ set -euo pipefail
 REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
-VERSION="15.2.0"
+VERSION="15.2.9"
 PAIRED_REF="8b017a74"
-ANNOUNCE_TEXT="mache v15.2.0"
+ANNOUNCE_TEXT="mache v15.2.9"
 LOCK_PATH="$REPO_ROOT/RELEASE_LOCK.md"
 OWNER="${1:-${OPENCLAW_AGENT_ID:-${USER:-unknown}}}"
 ANNOUNCED_AT_UTC="${2:-${RELEASE_ANNOUNCED_AT_UTC:-}}"
