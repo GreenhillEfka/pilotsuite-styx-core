@@ -123,6 +123,25 @@ class TestZoneList:
         data = response.get_json()
         assert data["total"] == 2
 
+    def test_list_zones_filter_by_zone_type(self, client_with_engine, engine):
+        """Filter zone listing by zone_type query parameter."""
+        engine.create_zone("kuechenbereich", "Küchenbereich", ["kueche"], zone_type="kitchen")
+        response = client_with_engine.get("/api/v1/zone-editor/zones?zone_type=kitchen")
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["ok"] is True
+        assert data["total"] == 1
+        assert data["zones"][0]["zone_id"] == "kuechenbereich"
+        assert data["zones"][0]["zone_type"] == "kitchen"
+
+    def test_list_zones_filter_by_zone_type_invalid(self, client_with_engine):
+        """Reject invalid zone_type filter values."""
+        response = client_with_engine.get("/api/v1/zone-editor/zones?zone_type=invalid-zone")
+        assert response.status_code == 400
+        data = response.get_json()
+        assert data["ok"] is False
+        assert "Invalid zone_type" in data["error"]
+
 
 class TestZoneGet:
     def test_get_zone_not_initialized(self, client):
@@ -209,6 +228,26 @@ class TestOverview:
         assert overview["total_rooms"] == 4
         assert len(overview["unassigned_rooms"]) == 2
         assert "modes" in overview
+
+    def test_get_overview_filter_by_zone_type(self, client_with_engine, engine):
+        """Test overview filter by zone_type."""
+        engine.create_zone("kuechenbereich", "Küchenbereich", ["kueche"], zone_type="kitchen")
+        response = client_with_engine.get("/api/v1/zone-editor/overview?zone_type=kitchen")
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["ok"] is True
+        overview = data["overview"]
+        assert overview["total_zones"] == 1
+        assert overview["zones"][0]["zone_id"] == "kuechenbereich"
+        assert overview["zones"][0]["zone_type"] == "kitchen"
+
+    def test_get_overview_filter_by_zone_type_invalid(self, client_with_engine):
+        """Test invalid zone_type filter on overview."""
+        response = client_with_engine.get("/api/v1/zone-editor/overview?zone_type=invalid-zone")
+        assert response.status_code == 400
+        data = response.get_json()
+        assert data["ok"] is False
+        assert "Invalid zone_type" in data["error"]
 
     def test_get_zone_state(self, client_with_engine):
         """Test getting zone state."""
@@ -336,6 +375,46 @@ class TestZoneWriteApi:
         assert data["zone"]["priority"] == 9
         room_ids = [room["room_id"] for room in data["zone"]["rooms"]]
         assert room_ids == ["bad"]
+
+    def test_create_zone_modern_with_zone_type_and_modules(self, client_with_engine):
+        payload = {
+            "zone_id": "kuche_detail",
+            "name": "Küche Detail",
+            "rooms": ["kueche"],
+            "zone_type": "kitchen",
+            "enabled_modules": ["light", "climate", "camera"],
+        }
+        with patch("copilot_core.api.security.validate_token", return_value=True):
+            response = client_with_engine.post("/api/v1/zone-editor/zones", json=payload)
+        assert response.status_code == 201
+        data = response.get_json()
+        assert data["ok"] is True
+        assert data["zone"]["zone_type"] == "kitchen"
+        assert sorted(data["zone"]["enabled_modules"]) == ["camera", "climate", "light"]
+
+    def test_update_zone_modern_with_zone_type_and_modules(self, client_with_engine):
+        payload = {
+            "zone_type": "terrace",
+            "enabled_modules": ["light", "music"],
+        }
+        with patch("copilot_core.api.security.validate_token", return_value=True):
+            response = client_with_engine.put("/api/v1/zone-editor/zones/badbereich", json=payload)
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["ok"] is True
+        assert data["zone"]["zone_type"] == "terrace"
+        assert data["zone"]["enabled_modules"] == ["light", "music"]
+
+    def test_update_zone_modern_invalid_zone_type(self, client_with_engine):
+        payload = {
+            "zone_type": "not-a-zone",
+        }
+        with patch("copilot_core.api.security.validate_token", return_value=True):
+            response = client_with_engine.put("/api/v1/zone-editor/zones/badbereich", json=payload)
+        assert response.status_code == 400
+        data = response.get_json()
+        assert data["ok"] is False
+        assert "zone_type" in data["error"]
 
     def test_add_and_remove_room_modern(self, client_with_engine):
         with patch("copilot_core.api.security.validate_token", return_value=True):

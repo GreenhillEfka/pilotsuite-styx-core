@@ -65,7 +65,7 @@ def client(app, mock_zones):
         )
         # Make create_zone return the zone data that was passed in
         # Signature: create_zone(zone_id, name, room_ids, icon)
-        def mock_create_zone(zone_id, name, room_ids, icon):
+        def mock_create_zone(zone_id, name, room_ids, icon, **_):
             return {
                 "zone_id": zone_id,
                 "name": name,
@@ -85,9 +85,10 @@ def client(app, mock_zones):
         from copilot_core.api.v1 import zone_editor
         
         with patch('copilot_core.api.security.validate_token', return_value=True):
-            # Register both blueprints - legacy for /zone/editor/* routes
+            # Register legacy and modern zone editor routes
             app.register_blueprint(zone_editor.zone_editor_bp)
             app.register_blueprint(zone_editor.zone_editor_legacy_bp)
+            app.register_blueprint(zone_editor.zone_legacy_alias_bp)
             with app.test_client() as test_client:
                 yield test_client
 
@@ -115,6 +116,76 @@ class TestZoneEditorCreate:
         data = json.loads(response.data)
         assert data["ok"] is True
         assert "zone" in data
+
+    def test_create_zone_legacy_with_zone_type_and_modules(self, client):
+        """Legacy create accepts zone_type and enabled_modules."""
+        payload = {
+            "zone_id": "zone:test",
+            "name": "Test Zone",
+            "priority": 4,
+            "zone_type": "kitchen",
+            "enabled_modules": ["light", "climate"],
+        }
+
+        with patch('copilot_core.api.v1.zone_editor.get_zone_engine') as mock_engine:
+            engine = MagicMock()
+            engine.create_zone.return_value = None
+            calls = []
+            def _get_zone(zone_id):
+                calls.append(zone_id)
+                if len(calls) == 1:
+                    return None
+                return {
+                    "zone_id": "zone:test",
+                    "zone_type": "kitchen",
+                    "enabled_modules": ["light", "climate"],
+                }
+            engine.get_zone.side_effect = _get_zone
+            mock_engine.return_value = engine
+
+            response = client.post(
+                '/api/v1/zone/editor/create',
+                data=json.dumps(payload),
+                content_type='application/json'
+            )
+
+            assert response.status_code == 200
+            data = json.loads(response.data)
+            assert data["ok"] is True
+            assert data["zone"]["zone_type"] == "kitchen"
+            assert data["zone"]["enabled_modules"] == ["light", "climate"]
+            engine.create_zone.assert_called_once_with(
+                "zone:test",
+                "Test Zone",
+                [],
+                "mdi:home-floor-1",
+                priority=4,
+                zone_type="kitchen",
+                enabled_modules={"climate", "light"},
+            )
+
+    def test_create_zone_legacy_invalid_zone_type(self, client):
+        """Legacy create rejects invalid zone_type values."""
+        payload = {
+            "zone_id": "zone:test",
+            "name": "Test Zone",
+            "zone_type": "not-a-zone",
+        }
+
+        with patch('copilot_core.api.v1.zone_editor.get_zone_engine') as mock_engine:
+            engine = MagicMock()
+            engine.get_zone.return_value = None
+            mock_engine.return_value = engine
+
+            response = client.post(
+                '/api/v1/zone/editor/create',
+                data=json.dumps(payload),
+                content_type='application/json'
+            )
+
+            assert response.status_code == 400
+            data = json.loads(response.data)
+            assert "Invalid zone_type" in data["error"]
 
     def test_create_zone_missing_zone_id(self, client):
         """Test zone creation fails without zone_id."""
@@ -185,6 +256,43 @@ class TestZoneEditorList:
         data = json.loads(response.data)
         assert "zones" in data
         assert len(data["zones"]) == len(mock_zones)
+
+    def test_list_zones_filter_by_zone_type(self, client):
+        """Legacy list supports zone_type filtering."""
+        zones_by_id = {
+            "zone:kuechenbereich": {
+                "zone_id": "zone:kuechenbereich",
+                "zone_type": "kitchen",
+                "name": "Küche",
+                "rooms": [],
+            },
+            "zone:wohnbereich": {
+                "zone_id": "zone:wohnbereich",
+                "zone_type": "living",
+                "name": "Wohnbereich",
+                "rooms": [],
+            },
+        }
+
+        with patch('copilot_core.api.v1.zone_editor.get_zone_engine') as mock_engine:
+            engine = MagicMock()
+            engine.get_overview.return_value = MagicMock(zones=[{"zone_id": zid} for zid in zones_by_id.keys()])
+            engine.get_zone.side_effect = lambda zone_id: zones_by_id.get(zone_id)
+            mock_engine.return_value = engine
+
+            response = client.get('/api/v1/zone/editor/list?zone_type=kitchen')
+            assert response.status_code == 200
+            data = json.loads(response.data)
+            assert data["count"] == 1
+            assert data["zones"][0]["zone_id"] == "zone:kuechenbereich"
+            assert data["zones"][0]["zone_type"] == "kitchen"
+
+    def test_list_zones_filter_by_zone_type_invalid(self, client):
+        """Legacy list rejects invalid zone_type filter values."""
+        response = client.get('/api/v1/zone/editor/list?zone_type=invalid-zone')
+        assert response.status_code == 400
+        data = json.loads(response.data)
+        assert "Invalid zone_type" in data["error"]
 
     def test_list_zones_empty(self, client):
         """Test listing zones when none exist."""
@@ -264,6 +372,61 @@ class TestZoneEditorUpdate:
         assert response.status_code == 200
         data = json.loads(response.data)
         assert data["ok"] is True
+
+    def test_update_zone_legacy_with_zone_type_and_modules(self, client):
+        """Legacy update supports zone_type and enabled_modules."""
+        payload = {
+            "zone_type": "terrace",
+            "enabled_modules": ["light", "camera"],
+        }
+
+        with patch('copilot_core.api.v1.zone_editor.get_zone_engine') as mock_engine:
+            engine = MagicMock()
+            engine.get_zone.side_effect = [
+                {"zone_id": "zone:wohnzimmer", "zone_type": "kitchen", "enabled_modules": ["light"]},
+                {"zone_id": "zone:wohnzimmer", "zone_type": "terrace", "enabled_modules": ["light", "camera"]},
+            ]
+            engine.set_zone_type.return_value = True
+            engine.set_zone_enabled_modules.return_value = True
+            mock_engine.return_value = engine
+
+            response = client.put(
+                '/api/v1/zone/editor/zone:wohnzimmer',
+                data=json.dumps(payload),
+                content_type='application/json'
+            )
+
+            assert response.status_code == 200
+            data = json.loads(response.data)
+            assert data["ok"] is True
+            assert data["zone"]["zone_type"] == "terrace"
+            assert data["zone"]["enabled_modules"] == ["light", "camera"]
+            engine.set_zone_type.assert_called_once_with("zone:wohnzimmer", "terrace")
+            engine.set_zone_enabled_modules.assert_called_once_with(
+                "zone:wohnzimmer",
+                {"light", "camera"},
+            )
+
+    def test_update_zone_legacy_invalid_zone_type(self, client):
+        """Legacy update rejects invalid zone_type."""
+        payload = {
+            "zone_type": "not-a-zone",
+        }
+
+        with patch('copilot_core.api.v1.zone_editor.get_zone_engine') as mock_engine:
+            engine = MagicMock()
+            engine.get_zone.return_value = {"zone_id": "zone:wohnzimmer"}
+            mock_engine.return_value = engine
+
+            response = client.put(
+                '/api/v1/zone/editor/zone:wohnzimmer',
+                data=json.dumps(payload),
+                content_type='application/json'
+            )
+
+            assert response.status_code == 400
+            data = json.loads(response.data)
+            assert "Invalid zone_type" in data["error"]
 
     def test_update_zone_not_found(self, client):
         """Test update fails for non-existent zone."""
@@ -392,6 +555,54 @@ class TestZoneEditorRooms:
             response = client.delete('/api/v1/zone/editor/zone:nonexistent/rooms/room:test')
             
             assert response.status_code == 404
+
+
+class TestZoneLegacyAliases:
+    """Tests for /api/v1/zone compatibility alias routes."""
+
+    def test_alias_create_routes_to_legacy_endpoint(self, client):
+        """Alias /api/v1/zone/create forwards to legacy create endpoint."""
+        payload = {
+            "zone_id": "zone:alias",
+            "name": "Alias Zone",
+        }
+
+        response = client.post(
+            '/api/v1/zone/create',
+            data=json.dumps(payload),
+            content_type='application/json',
+            follow_redirects=False,
+        )
+
+        assert response.status_code in [301, 302, 307, 308]
+        assert response.headers["Location"].endswith('/api/v1/zone/editor/create')
+
+    def test_alias_update_routes_to_legacy_endpoint(self, client):
+        """Alias /api/v1/zone/update routes to legacy update endpoint."""
+        payload = {
+            "zone_id": "zone:badbereich",
+            "name": "Renamed",
+        }
+
+        response = client.post(
+            '/api/v1/zone/update',
+            data=json.dumps(payload),
+            content_type='application/json',
+            follow_redirects=False,
+        )
+
+        assert response.status_code in [301, 302, 307, 308]
+        assert response.headers["Location"].endswith('/api/v1/zone/editor/zone:badbereich')
+
+    def test_alias_delete_routes_to_legacy_endpoint(self, client):
+        """Alias /api/v1/zone/delete/<zone_id> routes to legacy delete endpoint."""
+        response = client.delete(
+            '/api/v1/zone/delete/zone:badbereich',
+            follow_redirects=False,
+        )
+
+        assert response.status_code in [301, 302, 307, 308]
+        assert response.headers["Location"].endswith('/api/v1/zone/editor/zone:badbereich')
 
 
 class TestZoneEditorEdgeCases:

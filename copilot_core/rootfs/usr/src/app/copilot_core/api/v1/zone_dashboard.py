@@ -23,6 +23,7 @@ from typing import Any, Callable, Dict, List, Optional
 from flask import Blueprint, jsonify, request
 
 from copilot_core.api.security import require_token
+from copilot_core.homeassistant.habitus_zones import ZoneType
 from copilot_core.core.dashboard_read_models import (
     build_zone_summary_read_model,
     build_zone_detail_read_model,
@@ -81,6 +82,14 @@ def _safe(fn: Callable[[], Any], default: Any = None) -> Any:
         return fn()
     except Exception:
         return default
+
+
+def _is_valid_zone_type(zone_type: str) -> bool:
+    """Validate zone type against canonical enum values."""
+    normalized = (zone_type or "").strip().lower()
+    if not normalized:
+        return False
+    return normalized in {value.value for value in ZoneType}
 
 
 def _attr_or_key(obj: Any, name: str, default: Any = ""):
@@ -926,17 +935,24 @@ def get_dashboard():
 
     Query params:
       - include_entities, include_mood, include_actions, include_modules (bool, default: true)
+      - zone_type (str, optional canonical zone type filter)
     """
     include_entities = _parse_bool_param("include_entities")
     include_mood = _parse_bool_param("include_mood")
     include_actions = _parse_bool_param("include_actions")
     include_modules = _parse_bool_param("include_modules")
 
+    requested_zone_type = (request.args.get("zone_type") or "").strip().lower()
+    if requested_zone_type and not _is_valid_zone_type(requested_zone_type):
+        return jsonify({"ok": False, "error": f"Invalid zone_type: {requested_zone_type}"}), 400
+
     # Slice 6: ZoneSummaryReadModel as truth base for zone list
     zone_engine = _svc.get("habitus_zones")
     example = _get_example()
     zone_summary = build_zone_summary_read_model(zone_engine, example_data=example)
     zones_rm = zone_summary.get("zones", [])
+    if requested_zone_type:
+        zones_rm = [zone for zone in zones_rm if zone.get("zone_type") == requested_zone_type]
     dashboard_zones = []
     for zone in zones_rm:
         zid = zone.get("zone_id", "")
@@ -987,7 +1003,13 @@ def get_dashboard():
 @require_token
 def get_dashboard_summary():
     """Leichtgewichtige Zusammenfassung (Counts, aktive Zonen, alle Modulstatus)."""
+    requested_zone_type = (request.args.get("zone_type") or "").strip().lower()
+    if requested_zone_type and not _is_valid_zone_type(requested_zone_type):
+        return jsonify({"ok": False, "error": f"Invalid zone_type: {requested_zone_type}"}), 400
+
     zones = _get_habitus_zones()
+    if requested_zone_type:
+        zones = [zone for zone in zones if zone.get("zone_type") == requested_zone_type]
 
     total_entities = 0
     active_zones = 0

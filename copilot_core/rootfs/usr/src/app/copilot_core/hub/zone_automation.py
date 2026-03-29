@@ -26,8 +26,20 @@ from typing import Any
 
 from copilot_core.hub.zone_modules import ZoneModuleRegistry
 from copilot_core.hub.zone_modules.base import ZoneModuleConfig
+from copilot_core.homeassistant.habitus_zones import ZoneType
 
 logger = logging.getLogger(__name__)
+
+# Canonical zone type whitelist used across Core and HA contract layer.
+_ALLOWED_ZONE_TYPES = {item.value for item in ZoneType}
+DEFAULT_ZONE_TYPE = "living"
+
+
+def _normalize_zone_type(zone_type: str) -> str:
+    """Normalize and validate zone type against canonical ZoneType enum."""
+    normalized = (zone_type or "").strip().lower()
+    return normalized if normalized in _ALLOWED_ZONE_TYPES else ""
+
 
 # Ensure all modules are registered
 ZoneModuleRegistry.ensure_loaded()
@@ -116,7 +128,7 @@ class ZoneAutomationConfig:
 
     zone_id: str
     zone_name: str = ""
-    zone_type: str = "room"
+    zone_type: str = DEFAULT_ZONE_TYPE
     enabled_modules: set[str] = field(default_factory=set)
     ha_entities: list[dict[str, Any]] = field(default_factory=list)
     automation_mode: str = "learning"  # off | learning | autonomy
@@ -164,7 +176,7 @@ class ZoneAutomationConfig:
         return cls(
             zone_id=data.get("zone_id", ""),
             zone_name=data.get("zone_name", ""),
-            zone_type=data.get("zone_type", "room"),
+            zone_type=_normalize_zone_type(data.get("zone_type", "")) or DEFAULT_ZONE_TYPE,
             enabled_modules=set(data.get("enabled_modules", [])),
             ha_entities=list(data.get("ha_entities", [])),
             automation_mode=mode,
@@ -396,7 +408,9 @@ class ZoneAutomationController:
             current.zone_name = str(config_data["zone_name"] or "").strip()
 
         if "zone_type" in config_data:
-            current.zone_type = str(config_data["zone_type"] or current.zone_type or "room").strip() or "room"
+            normalized = _normalize_zone_type(config_data.get("zone_type", ""))
+            if normalized:
+                current.zone_type = normalized
 
         if "enabled_modules" in config_data and isinstance(config_data["enabled_modules"], (list, set, tuple)):
             current.enabled_modules = {
@@ -438,6 +452,17 @@ class ZoneAutomationController:
                             setattr(mod, spec.key, mod_data[spec.key])
 
         return current
+
+    def delete_zone(self, zone_id: str) -> bool:
+        """Delete a zone config and all runtime/assignment state."""
+        removed = self._configs.pop(zone_id, None)
+        if removed is None:
+            return False
+
+        self._states.pop(zone_id, None)
+        self._entity_assignments.pop(zone_id, None)
+        self._zone_moods.pop(zone_id, None)
+        return True
 
     def get_all_configs(self) -> dict[str, dict[str, Any]]:
         """Get all zone configurations."""
@@ -508,6 +533,21 @@ class ZoneAutomationController:
             if is_new_config:
                 self.get_zone_config(zid)  # creates default ZoneAutomationConfig
                 result["created"] += 1
+
+            config_updates: dict[str, Any] = {}
+            normalized_zone_type = _normalize_zone_type(spec.get("zone_type"))
+            if normalized_zone_type:
+                config_updates["zone_type"] = normalized_zone_type
+            if "enabled_modules" in spec:
+                raw_modules = spec.get("enabled_modules")
+                if isinstance(raw_modules, (list, set, tuple)):
+                    config_updates["enabled_modules"] = {
+                        str(module_id).strip()
+                        for module_id in raw_modules
+                        if str(module_id).strip()
+                    }
+            if config_updates:
+                self.set_zone_config(zid, config_updates)
 
             # ── Register in HubZoneEngine ─────────────────────────────
             room = hub._rooms.get(area_id)

@@ -149,6 +149,21 @@ class TestZoneModes:
     def test_set_mode_nonexistent_zone(self, engine):
         assert engine.set_zone_mode("fake", "active") is False
 
+    def test_set_zone_type(self, populated_engine):
+        assert populated_engine.set_zone_type("badbereich", "terrace") is True
+        assert populated_engine._zones["badbereich"].zone_type == "terrace"
+
+    def test_set_zone_type_invalid(self, populated_engine):
+        assert populated_engine.set_zone_type("badbereich", "not-a-zone") is False
+        assert populated_engine._zones["badbereich"].zone_type == "living"
+
+    def test_set_enabled_modules(self, populated_engine):
+        assert populated_engine.set_zone_enabled_modules("badbereich", ["light", "music", "music", " "]) is True
+        assert populated_engine._zones["badbereich"].enabled_modules == {"light", "music"}
+
+    def test_set_enabled_modules_nonexistent_zone(self, engine):
+        assert engine.set_zone_enabled_modules("fake", ["light"]) is False
+
     def test_set_enabled(self, populated_engine):
         populated_engine.set_zone_enabled("badbereich", False)
         assert populated_engine._zones["badbereich"].enabled is False

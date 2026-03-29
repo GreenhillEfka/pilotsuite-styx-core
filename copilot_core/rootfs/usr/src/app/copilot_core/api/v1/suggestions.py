@@ -30,7 +30,7 @@ suggestions_bp = Blueprint(
 # Module-level service reference, set by init_suggestions_api()
 _suggestion_engine: Optional[Any] = None
 
-# In-memory store for suggestion states (fallback when no engine is available)
+# In-memory state for offline fallback mode (without engine)
 _suggestion_states: Dict[str, str] = {}
 _states_lock = threading.Lock()
 
@@ -42,12 +42,97 @@ def init_suggestions_api(suggestion_engine=None) -> None:
     _LOGGER.info("Suggestions API initialized")
 
 
+def _accept_with_engine(suggestion_id: str) -> tuple[dict[str, Any], int] | None:
+    engine = _suggestion_engine
+    if not engine:
+        return None
+
+    # Preferred path: proposal-aware lifecycle
+    if hasattr(engine, "propose_suggestion"):
+        proposal = engine.propose_suggestion(suggestion_id)
+        if proposal is None:
+            return {"ok": False, "error": "Suggestion not found"}, 404
+        return {
+            "ok": True,
+            "id": suggestion_id,
+            "status": "accepted",
+            "proposal_id": proposal["proposal_id"],
+            "proposal": proposal,
+        }, 200
+
+    # Backward-compatible path
+    if hasattr(engine, "accept_suggestion"):
+        data = engine.accept_suggestion(suggestion_id)
+        if data is None:
+            return {"ok": False, "error": "Suggestion not found"}, 404
+        return {"ok": True, "id": suggestion_id, "status": "accepted", "suggestion": data}, 200
+
+    return {"ok": False, "error": "Engine has no accept method"}, 500
+
+
+def _reject_with_engine(suggestion_id: str) -> tuple[dict[str, Any], int] | None:
+    engine = _suggestion_engine
+    if not engine:
+        return None
+
+    if hasattr(engine, "dismiss_suggestion"):
+        rejected = engine.dismiss_suggestion(suggestion_id)
+    elif hasattr(engine, "reject_suggestion"):
+        rejected = engine.reject_suggestion(suggestion_id)
+    else:
+        rejected = None
+
+    if rejected is None:
+        return {"ok": False, "error": "Suggestion not found"}, 404
+    return {"ok": True, "id": suggestion_id, "status": "rejected"}, 200
+
+
+def _snooze_with_engine(suggestion_id: str) -> tuple[dict[str, Any], int] | None:
+    engine = _suggestion_engine
+    if not engine:
+        return None
+
+    data = request.get_json(silent=True) or {}
+    minutes = data.get("minutes", 15)
+
+    if hasattr(engine, "snooze_suggestion"):
+        snoozed = engine.snooze_suggestion(suggestion_id, minutes=minutes)
+    else:
+        snoozed = None
+
+    if snoozed is None:
+        return {"ok": False, "error": "Suggestion not found"}, 404
+    return {"ok": True, "id": suggestion_id, "status": "snoozed", "minutes": int(minutes or 15)}, 200
+
+
+def _list_with_engine() -> List[Dict[str, Any]]:
+    if _suggestion_engine is None:
+        return []
+
+    # Primary path: explicit pending helper used by older clients
+    if hasattr(_suggestion_engine, "get_pending"):
+        try:
+            return list(_suggestion_engine.get_pending(limit=20))
+        except Exception:
+            pass
+
+    # Backward compatibility: filter suggestions manually from get_suggestions
+    try:
+        suggestions = _suggestion_engine.get_suggestions(
+            include_dismissed=False,
+            include_accepted=False,
+        )
+        return suggestions
+    except Exception:
+        return []
+
+
 @suggestions_bp.route("", methods=["GET"])
 def list_suggestions():
     """List pending suggestions."""
     if _suggestion_engine:
         try:
-            pending = _suggestion_engine.get_pending(limit=20)
+            pending = _list_with_engine()
             return jsonify({"ok": True, "suggestions": pending})
         except Exception as exc:
             _LOGGER.exception("Failed to get pending suggestions")
@@ -72,20 +157,19 @@ def list_suggestions():
 @suggestions_bp.route("/accept", methods=["POST"])
 @require_token
 def accept_suggestion():
-    """Accept a suggestion and create the corresponding automation."""
+    """Accept a suggestion and create the corresponding proposal."""
     data = request.get_json(silent=True) or {}
-    suggestion_id = data.get("id", "").strip()
+    suggestion_id = str(data.get("id", "")).strip()
 
     if not suggestion_id:
         return jsonify({"ok": False, "error": "Missing 'id'"}), 400
 
     if _suggestion_engine:
-        try:
-            _suggestion_engine.accept(suggestion_id)
-            return jsonify({"ok": True, "id": suggestion_id, "status": "accepted"})
-        except Exception as exc:
-            _LOGGER.exception("Failed to accept suggestion %s", suggestion_id)
-            return jsonify({"ok": False, "error": str(exc)}), 500
+        result = _accept_with_engine(suggestion_id)
+        if result is None:
+            return jsonify({"ok": False, "error": "Engine has no accept path"}), 500
+        payload, status = result
+        return jsonify(payload), status
 
     with _states_lock:
         _suggestion_states[suggestion_id] = "accepted"
@@ -97,18 +181,17 @@ def accept_suggestion():
 def reject_suggestion():
     """Reject a suggestion permanently."""
     data = request.get_json(silent=True) or {}
-    suggestion_id = data.get("id", "").strip()
+    suggestion_id = str(data.get("id", "")).strip()
 
     if not suggestion_id:
         return jsonify({"ok": False, "error": "Missing 'id'"}), 400
 
     if _suggestion_engine:
-        try:
-            _suggestion_engine.reject(suggestion_id)
-            return jsonify({"ok": True, "id": suggestion_id, "status": "rejected"})
-        except Exception as exc:
-            _LOGGER.exception("Failed to reject suggestion %s", suggestion_id)
-            return jsonify({"ok": False, "error": str(exc)}), 500
+        result = _reject_with_engine(suggestion_id)
+        if result is None:
+            return jsonify({"ok": False, "error": "Engine has no reject path"}), 500
+        payload, status = result
+        return jsonify(payload), status
 
     with _states_lock:
         _suggestion_states[suggestion_id] = "rejected"
@@ -120,18 +203,17 @@ def reject_suggestion():
 def snooze_suggestion():
     """Snooze a suggestion (show again later)."""
     data = request.get_json(silent=True) or {}
-    suggestion_id = data.get("id", "").strip()
+    suggestion_id = str(data.get("id", "")).strip()
 
     if not suggestion_id:
         return jsonify({"ok": False, "error": "Missing 'id'"}), 400
 
     if _suggestion_engine:
-        try:
-            _suggestion_engine.snooze(suggestion_id)
-            return jsonify({"ok": True, "id": suggestion_id, "status": "snoozed"})
-        except Exception as exc:
-            _LOGGER.exception("Failed to snooze suggestion %s", suggestion_id)
-            return jsonify({"ok": False, "error": str(exc)}), 500
+        result = _snooze_with_engine(suggestion_id)
+        if result is None:
+            return jsonify({"ok": False, "error": "Engine has no snooze path"}), 500
+        payload, status = result
+        return jsonify(payload), status
 
     with _states_lock:
         _suggestion_states[suggestion_id] = "snoozed"
