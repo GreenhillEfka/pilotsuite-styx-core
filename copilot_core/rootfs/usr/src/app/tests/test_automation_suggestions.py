@@ -223,3 +223,63 @@ class TestManagement:
         items = engine.get_suggestions()
         confidences = [i["confidence"] for i in items]
         assert confidences == sorted(confidences, reverse=True)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Persistence
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestSuggestionPersistence:
+    def test_state_survives_restart(self, tmp_path):
+        state_path = tmp_path / "suggestion_engine_state.json"
+        engine = AutomationSuggestionEngine(persist_state=True, storage_path=state_path)
+
+        s = engine.suggest_from_schedule("washer", 6, 8)
+        proposal = engine.accept_suggestion(s.id)
+        assert proposal is not None
+        proposal_id = proposal["proposal_id"]
+
+        intent = engine.execute_proposal(proposal_id, dry_run=True)
+        assert intent is not None
+
+        assert state_path.exists()
+
+        restarted = AutomationSuggestionEngine(persist_state=True, storage_path=state_path)
+        restored_suggestions = restarted.get_suggestions(include_accepted=True)
+        restored_proposals = restarted.get_proposals(include_executed=True)
+        restored_intent = restarted.get_action_intent(intent["intent_id"])
+
+        assert len(restored_suggestions) == 1
+        assert restored_suggestions[0]["id"] == s.id
+        assert restored_suggestions[0]["accepted"] is True
+        assert len(restored_proposals) == 1
+        assert restored_proposals[0]["proposal_id"] == proposal_id
+        assert restored_proposals[0]["action_intent_id"] == intent["intent_id"]
+        assert restored_intent is not None
+        assert restored_intent["status"] == "ready"
+
+        # ensure counters continue after restore
+        another = restarted.suggest_from_solar("ev_charger")
+        assert another.id != s.id
+        assert another.id.startswith("auto-")
+
+    def test_proposal_intent_link_restored(self, tmp_path):
+        state_path = tmp_path / "proposal_state.json"
+        engine = AutomationSuggestionEngine(persist_state=True, storage_path=state_path)
+
+        s = engine.suggest_from_comfort("co2", 1000, "switch.ventilation")
+        proposal = engine.propose_suggestion(s.id)
+        assert proposal is not None
+        proposal_id = proposal["proposal_id"]
+        intent = engine.create_action_intent(proposal_id)
+        assert intent is not None
+
+        restarted = AutomationSuggestionEngine(persist_state=True, storage_path=state_path)
+        persisted = restarted.get_proposal(proposal_id)
+        assert persisted is not None
+        assert persisted["action_intent_id"] == intent["intent_id"]
+
+        persisted_intent = restarted.get_action_intent(persisted["action_intent_id"])
+        assert persisted_intent is not None
+        assert persisted_intent["params"]["suggestion_id"] == s.id

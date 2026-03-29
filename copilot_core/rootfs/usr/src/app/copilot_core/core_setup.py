@@ -1310,8 +1310,22 @@ async def init_services(hass=None, config: dict = None):
     # Initialize Suggestion Engine
     try:
         from copilot_core.automations.suggestion_engine import AutomationSuggestionEngine
-        services["suggestion_engine"] = AutomationSuggestionEngine()
-        _LOGGER.info("AutomationSuggestionEngine initialized")
+
+        persist_state = config.get("suggestion_engine_persist", True)
+        if isinstance(persist_state, str):
+            persist_state = persist_state.strip().lower() not in {"0", "false", "off", "no"}
+
+        storage_path = config.get("suggestion_engine_state_path")
+
+        services["suggestion_engine"] = AutomationSuggestionEngine(
+            persist_state=persist_state,
+            storage_path=storage_path,
+        )
+        _LOGGER.info(
+            "AutomationSuggestionEngine initialized (persist_state=%s, storage_path=%s)",
+            persist_state,
+            storage_path,
+        )
     except Exception:
         _LOGGER.exception("Failed to init AutomationSuggestionEngine")
 
