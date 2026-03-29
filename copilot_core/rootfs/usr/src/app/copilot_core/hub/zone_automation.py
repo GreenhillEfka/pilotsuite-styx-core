@@ -1073,7 +1073,7 @@ class ZoneAutomationController:
             for zid, assignments in self._entity_assignments.items()
         }
 
-    def get_zone_entities_read_model(self, zone_id: str) -> dict[str, Any]:
+    def get_zone_entities_read_model(self, zone_id: str, *, compact: bool = False) -> dict[str, Any]:
         """Return a deterministic read-model payload for entity assignments in one zone."""
         zone_config = self.get_zone_config(zone_id)
         assignments = self._entity_assignments.get(zone_id, [])
@@ -1088,17 +1088,23 @@ class ZoneAutomationController:
             source = assignment.get("source", "manual")
             source_counts[source] = source_counts.get(source, 0) + 1
 
-        return {
+        model = {
             "zone_id": zone_id,
             "zone_name": zone_config.zone_name,
             "entity_count": len(serialized),
-            "entities": serialized,
-            "entities_by_role": by_role,
             "role_count": {role: len(entities) for role, entities in by_role.items()},
             "source_count": source_counts,
             "revision": self._zone_entity_revisions.get(zone_id, 0),
             "updated_at": self._zone_entity_updated_at.get(zone_id, 0.0),
+            "compact": compact,
         }
+
+        if compact:
+            return model
+
+        model["entities"] = serialized
+        model["entities_by_role"] = by_role
+        return model
 
     def _compact_zone_payloads(self, zones: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Return a compact deterministic zone payload for transport-sensitive consumers."""

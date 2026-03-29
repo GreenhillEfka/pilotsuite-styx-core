@@ -112,6 +112,7 @@
 - Read-Model-Payloads vermeiden unnötige Payload-Größe bei `compact=true` und liefern robuste Änderungs-Deltas.
 
 - `sync-definitions` überschreibt keine manuell erstellten Zone-Entity-Zuweisungen mehr (`source="manual"` bleibt erhalten), auch nicht bei Cross-Zone-Nachkommen.
+- Zone-Level Read-Model-API `/zones/<zone_id>/entities/read-model` unterstützt nun `compact=true` für cache-sichere, transportarme Payloads (symmetrisch zum globalen Endpoint).
 
 ---
 

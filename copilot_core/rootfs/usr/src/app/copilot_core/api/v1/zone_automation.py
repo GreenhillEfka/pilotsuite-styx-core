@@ -396,13 +396,16 @@ def list_zone_entities(zone_id: str):
 def get_zone_entities_read_model(zone_id: str):
     """Return a deterministic read-model for all assignments in one zone.
 
-    Optional query param: ?since=<revision>
+    Optional query param: ?since=<revision>&compact=true
     If since is equal-or-latest revision, returns changed=False.
     """
     if _controller is None:
         return jsonify({"ok": False, "error": "Controller not initialized"}), 503
 
-    model = _controller.get_zone_entities_read_model(zone_id)
+    raw_compact = request.args.get("compact", "false").strip().lower()
+    want_compact = raw_compact in {"1", "true", "yes", "on"}
+
+    model = _controller.get_zone_entities_read_model(zone_id, compact=want_compact)
     current_revision = model["revision"]
 
     raw_since = request.args.get("since")
@@ -415,12 +418,22 @@ def get_zone_entities_read_model(zone_id: str):
             return jsonify({"ok": False, "error": "since must be >= 0"}), 400
 
         if since >= current_revision:
-            return jsonify({
+            response = {
                 "ok": True,
                 "changed": False,
                 "zone_id": zone_id,
                 "revision": current_revision,
-            })
+            }
+            if want_compact:
+                response.update({
+                    "zone_name": model.get("zone_name"),
+                    "entity_count": model.get("entity_count"),
+                    "role_count": model.get("role_count"),
+                    "source_count": model.get("source_count"),
+                    "updated_at": model.get("updated_at"),
+                    "compact": True,
+                })
+            return jsonify(response)
 
     return jsonify({"ok": True, "changed": True, **model})
 

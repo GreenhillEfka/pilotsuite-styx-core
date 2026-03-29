@@ -575,6 +575,28 @@ class TestZoneAutomationAPI:
                 assert zone_cached["revision"] == rev
                 assert zone_cached["zone_id"] == "living"
 
+                # Compact read-model: cache-aware projection
+                fresh_compact = c.get(f"/api/v1/zone-automation/zones/living/entities/read-model?since={rev}&compact=true")
+                assert fresh_compact.status_code == 200
+                zone_cached_compact = json.loads(fresh_compact.data)
+                assert zone_cached_compact["changed"] is False
+                assert zone_cached_compact["revision"] == rev
+                assert zone_cached_compact["zone_id"] == "living"
+                assert zone_cached_compact["compact"] is True
+                assert "entities" not in zone_cached_compact
+                assert zone_cached_compact["entity_count"] == 2
+
+                compact = c.get("/api/v1/zone-automation/zones/living/entities/read-model?compact=true")
+                assert compact.status_code == 200
+                compact_data = json.loads(compact.data)
+                assert compact_data["ok"] is True
+                assert compact_data["changed"] is True
+                assert compact_data["zone_id"] == "living"
+                assert compact_data["compact"] is True
+                assert "entities" not in compact_data
+                assert "entities_by_role" not in compact_data
+                assert compact_data["role_count"]["lights"] == 1
+
                 bad = c.get("/api/v1/zone-automation/zones/living/entities/read-model?since=abc")
                 assert bad.status_code == 400
 
