@@ -24,10 +24,43 @@ fi
 python3 - <<'PY' "$LOCK_PATH" "$REPO_ROOT" "$VERSION" "$OWNER" "$ANNOUNCE_TEXT" "$ANNOUNCED_AT_UTC" "$CREATED_AT_UTC" "$BRANCH" "$HEAD_COMMIT" "$PAIRED_REF"
 from datetime import datetime
 from pathlib import Path
+import re
 import sys
 
 (lock_path, repo_root, version, owner, announce_text, announced_at_utc,
  created_at_utc, branch, head_commit, paired_ref) = sys.argv[1:11]
+
+text = Path(lock_path).read_text(encoding='utf-8') if Path(lock_path).exists() else ""
+
+def extract(key: str, default: str = "") -> str:
+    m = re.search(rf"^- {re.escape(key)}: `([^`]*)`$", text, re.M)
+    return m.group(1) if m else default
+
+existing = {
+    "repo": extract('repo'),
+    "version": extract('version'),
+    "owner": extract('owner'),
+    "announcement_text": extract('announcement_text'),
+    "paired_cutover_ref": extract('paired_cutover_ref'),
+    "required_group_thread_announcement": extract('required_group_thread_announcement'),
+    "status": extract('status'),
+    "head_commit": extract('head_commit'),
+    "announcement_at_utc": extract('announcement_at_utc'),
+}
+
+if all(existing.values()) and existing["status"] == 'active':
+    if (
+        existing["version"] == f"v{version}"
+        and existing["owner"] == owner
+        and existing["announcement_text"] == announce_text
+        and existing["paired_cutover_ref"] == paired_ref
+        and existing["required_group_thread_announcement"] == announce_text
+        and existing["announcement_at_utc"] == announced_at_utc
+        and existing["head_commit"] == head_commit
+        and existing["repo"] == repo_root
+    ):
+        print(lock_path)
+        raise SystemExit(0)
 
 try:
     announced = datetime.fromisoformat(announced_at_utc.replace('Z', '+00:00'))
@@ -64,6 +97,7 @@ This file marks the Core lane/repo as release-locked for the coordinated `v{vers
 - no live-test has been claimed
 """
 Path(lock_path).write_text(content, encoding='utf-8')
+print(lock_path)
 PY
 
 printf '%s\n' "$LOCK_PATH"
