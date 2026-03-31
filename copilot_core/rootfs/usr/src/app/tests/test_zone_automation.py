@@ -246,6 +246,83 @@ class TestEntityManagement:
         assert ctrl.remove_entity("living", "light.test") is True
         assert ctrl.remove_entity("living", "light.nonexistent") is False
 
+    def test_zone_entities_read_model(self):
+        ctrl = ZoneAutomationController()
+        ctrl.add_entity("living", "light.wohnzimmer_decke")
+        ctrl.add_entity("living", "binary_sensor.wohnung_motion", role="motion")
+        model = ctrl.get_zone_entities_read_model("living")
+
+        assert model["zone_id"] == "living"
+        assert model["entity_count"] == 2
+        assert model["role_count"]["lights"] == 1
+        assert model["role_count"]["motion"] == 1
+        assert [entity["role"] for entity in model["entities"]] == ["lights", "motion"]
+
+    def test_all_entities_read_model(self):
+        ctrl = ZoneAutomationController()
+        ctrl.set_zone_config("kitchen", {"zone_name": "Küche"})
+        ctrl.add_entity("living", "light.wohnzimmer_decke")
+
+        model = ctrl.get_all_entities_read_model()
+        assert model["summary"]["zone_count"] == 2
+        assert model["summary"]["entity_count"] == 1
+        assert model["summary"]["revision"] >= 1
+        assert model["summary"]["updated_at"] >= 0
+
+        zone_ids = [zone["zone_id"] for zone in model["zones"]]
+        assert zone_ids == sorted(zone_ids)
+        assert any(zone["zone_id"] == "kitchen" and zone["entity_count"] == 0 for zone in model["zones"])
+
+    def test_entity_revision_updates_on_changes(self):
+        ctrl = ZoneAutomationController()
+        initial = ctrl.get_zone_entities_read_model("living")
+        assert initial["revision"] == 0
+
+        ctrl.add_entity("living", "light.wohnzimmer_decke")
+        after_add = ctrl.get_zone_entities_read_model("living")
+        assert after_add["revision"] == 1
+        assert after_add["entities"][0]["role"] == "lights"
+
+        # idempotent add should not bump revision
+        ctrl.add_entity("living", "light.wohnzimmer_decke")
+        assert ctrl.get_zone_entities_read_model("living")["revision"] == 1
+
+        # actual mutation bumps revision
+        assert ctrl.update_entity_role("living", "light.wohnzimmer_decke", "energy") is True
+        assert ctrl.get_zone_entities_read_model("living")["revision"] == 2
+        assert ctrl.remove_entity("living", "light.wohnzimmer_decke") is True
+        assert ctrl.get_all_entities_read_model()["summary"]["revision"] == 3
+
+    def test_all_entities_read_model_deltas_empty(self):
+        ctrl = ZoneAutomationController()
+        model = ctrl.get_all_entities_read_model(since_revision=0, deltas=True)
+        assert model["zones"] == []
+        assert model["summary"]["returned_zone_count"] == 0
+        assert model["summary"]["returned_entity_count"] == 0
+
+    def test_all_entities_read_model_deltas(self):
+        ctrl = ZoneAutomationController()
+        ctrl.add_entity("living", "light.living_ceiling")
+        ctrl.add_entity("kitchen", "light.kitchen_ceiling")
+
+        base = ctrl.get_all_entities_read_model()
+        base_revision = base["summary"]["revision"]
+
+        # mutate living and kitchen
+        ctrl.update_entity_tags("living", "light.living_ceiling", ["licht", "styx"])
+        ctrl.add_entity("kitchen", "media_player.kitchen_spot")
+
+        delta = ctrl.get_all_entities_read_model(since_revision=base_revision, deltas=True)
+        assert delta["summary"]["delta_from_revision"] == base_revision
+        assert delta["summary"]["delta_to_revision"] >= base_revision
+        assert set(z["zone_id"] for z in delta["zones"]) == {"living", "kitchen"}
+        assert delta["summary"]["returned_zone_count"] == 2
+
+        compact_delta = ctrl.get_all_entities_read_model(since_revision=base_revision, deltas=True, compact=True)
+        assert "entities" not in compact_delta["zones"][0]
+        assert "entities_by_role" not in compact_delta["zones"][0]
+        assert compact_delta["summary"].get("compact") is True
+
     def test_get_zone_entities_by_role(self):
         ctrl = ZoneAutomationController()
         ctrl.add_entity("living", "light.decke")
@@ -462,6 +539,206 @@ class TestZoneAutomationAPI:
                 assert data["ok"] is True
                 assert len(data["entities"]) == 1
 
+    def test_list_entities_by_role_query_bool(self):
+        app, ctrl = self._make_client()
+        with patch("copilot_core.api.v1.zone_automation.require_token", lambda f: f):
+            with app.test_client() as c:
+                c.post(
+                    "/api/v1/zone-automation/zones/living/entities",
+                    json={"entity_id": "light.test_lamp"},
+                    content_type="application/json",
+                )
+                c.post(
+                    "/api/v1/zone-automation/zones/living/entities",
+                    json={"entity_id": "sensor.temp"},
+                    content_type="application/json",
+                )
+
+                # Explicit bool true with numeric token should be accepted
+                resp = c.get("/api/v1/zone-automation/zones/living/entities?by_role=1")
+                assert resp.status_code == 200
+                data = json.loads(resp.data)
+                assert data["ok"] is True
+                assert data["entities_by_role"]["lights"][0]["entity_id"] == "light.test_lamp"
+                assert data["entities_by_role"]["sensors"][0]["entity_id"] == "sensor.temp"
+
+                # Invalid bool value rejected for stable API contracts
+                bad = c.get("/api/v1/zone-automation/zones/living/entities?by_role=maybe")
+                assert bad.status_code == 400
+
+    def test_zone_entities_read_model(self):
+        app, ctrl = self._make_client()
+        with patch("copilot_core.api.v1.zone_automation.require_token", lambda f: f):
+            with app.test_client() as c:
+                c.post(
+                    "/api/v1/zone-automation/zones/living/entities",
+                    json={"entity_id": "light.test_lamp", "source": "manual"},
+                    content_type="application/json",
+                )
+                c.post(
+                    "/api/v1/zone-automation/zones/living/entities",
+                    json={"entity_id": "binary_sensor.motion_1", "role": "motion"},
+                    content_type="application/json",
+                )
+
+                resp = c.get("/api/v1/zone-automation/zones/living/entities/read-model")
+                assert resp.status_code == 200
+                data = json.loads(resp.data)
+                assert data["ok"] is True
+                assert data["changed"] is True
+                assert data["zone_id"] == "living"
+                assert data["entity_count"] == 2
+                assert data["role_count"]["lights"] == 1
+                assert data["role_count"]["motion"] == 1
+                assert data["entities"][0]["role"] == "lights"
+                assert data["revision"] >= 2
+                assert data["updated_at"] >= 0
+
+                rev = data["revision"]
+                fresh = c.get(f"/api/v1/zone-automation/zones/living/entities/read-model?since={rev}")
+                assert fresh.status_code == 200
+                zone_cached = json.loads(fresh.data)
+                assert zone_cached["changed"] is False
+                assert zone_cached["revision"] == rev
+                assert zone_cached["zone_id"] == "living"
+
+                # Compact read-model: cache-aware projection
+                fresh_compact = c.get(f"/api/v1/zone-automation/zones/living/entities/read-model?since={rev}&compact=true")
+                assert fresh_compact.status_code == 200
+                zone_cached_compact = json.loads(fresh_compact.data)
+                assert zone_cached_compact["changed"] is False
+                assert zone_cached_compact["revision"] == rev
+                assert zone_cached_compact["zone_id"] == "living"
+                assert zone_cached_compact["compact"] is True
+                assert "entities" not in zone_cached_compact
+                assert zone_cached_compact["entity_count"] == 2
+
+                compact = c.get("/api/v1/zone-automation/zones/living/entities/read-model?compact=true")
+                assert compact.status_code == 200
+                compact_data = json.loads(compact.data)
+                assert compact_data["ok"] is True
+                assert compact_data["changed"] is True
+                assert compact_data["zone_id"] == "living"
+                assert compact_data["compact"] is True
+                assert "entities" not in compact_data
+                assert "entities_by_role" not in compact_data
+                assert compact_data["role_count"]["lights"] == 1
+
+                bad = c.get("/api/v1/zone-automation/zones/living/entities/read-model?since=abc")
+                assert bad.status_code == 400
+
+                bad_compact = c.get(
+                    "/api/v1/zone-automation/zones/living/entities/read-model?compact=maybe"
+                )
+                assert bad_compact.status_code == 400
+
+    def test_all_entities_read_model(self):
+        app, ctrl = self._make_client()
+        ctrl.add_entity("kitchen", "light.kueche", role="lights", source="manual")
+        with patch("copilot_core.api.v1.zone_automation.require_token", lambda f: f):
+            with app.test_client() as c:
+                resp = c.get("/api/v1/zone-automation/entities/read-model")
+                assert resp.status_code == 200
+                data = json.loads(resp.data)
+                assert data["ok"] is True
+                assert data["changed"] is True
+                assert data["summary"]["zone_count"] >= 1
+                assert data["summary"]["entity_count"] >= 1
+                assert data["summary"]["revision"] >= 1
+                assert any(zone["zone_id"] == "kitchen" for zone in data["zones"])
+
+                # Compact projection omits entities but keeps deterministic counters.
+                compact = c.get("/api/v1/zone-automation/entities/read-model?compact=true")
+                assert compact.status_code == 200
+                compact_data = json.loads(compact.data)
+                assert compact_data["summary"].get("compact") is True
+                assert compact_data["zones"][0]["zone_id"] == "kitchen"
+                assert "entities" not in compact_data["zones"][0]
+                assert "entities_by_role" not in compact_data["zones"][0]
+                assert "role_count" in compact_data["zones"][0]
+
+                # Compact + deltas should also avoid entity payloads.
+                compact_delta = c.get(f"/api/v1/zone-automation/entities/read-model?since={data['summary']['revision']}&deltas=true&compact=true")
+                assert compact_delta.status_code == 200
+                compact_delta_data = json.loads(compact_delta.data)
+                assert compact_delta_data["ok"] is True
+                assert "zones" in compact_delta_data
+                if compact_delta_data["changed"]:
+                    assert "entities" not in compact_delta_data["zones"][0]
+
+                rev = data["summary"]["revision"]
+                fresh = c.get(f"/api/v1/zone-automation/entities/read-model?since={rev}")
+                assert fresh.status_code == 200
+                cached = json.loads(fresh.data)
+                assert cached["ok"] is True
+                assert cached["changed"] is False
+                assert cached["zones"] == []
+                assert cached["revision"] == rev
+
+                stale = c.get(f"/api/v1/zone-automation/entities/read-model?since={rev - 1}")
+                assert stale.status_code == 200
+                changed = json.loads(stale.data)
+                assert changed["ok"] is True
+                assert changed["changed"] is True
+                assert changed["summary"]["revision"] == rev
+
+                bad = c.get("/api/v1/zone-automation/entities/read-model?since=abc")
+                assert bad.status_code == 400
+
+                bad_deltas = c.get("/api/v1/zone-automation/entities/read-model?deltas=true")
+                assert bad_deltas.status_code == 400
+
+                bad_compact = c.get("/api/v1/zone-automation/entities/read-model?compact=maybe")
+                assert bad_compact.status_code == 400
+
+                bad_deltas_value = c.get(
+                    f"/api/v1/zone-automation/entities/read-model?deltas=maybe&since={rev}"
+                )
+                assert bad_deltas_value.status_code == 400
+
+    def test_all_entities_read_model_deltas(self):
+        app, ctrl = self._make_client()
+        with patch("copilot_core.api.v1.zone_automation.require_token", lambda f: f):
+            with app.test_client() as c:
+                # Seed initial state (2 changes => revision > 0)
+                c.post(
+                    "/api/v1/zone-automation/zones/living/entities",
+                    json={"entity_id": "light.living_ceiling"},
+                    content_type="application/json",
+                )
+                c.post(
+                    "/api/v1/zone-automation/zones/kitchen/entities",
+                    json={"entity_id": "light.kitchen_ceiling"},
+                    content_type="application/json",
+                )
+
+                base = c.get("/api/v1/zone-automation/entities/read-model")
+                base_data = json.loads(base.data)
+                base_revision = base_data["summary"]["revision"]
+                assert base_data["changed"] is True
+
+                # Mutate kitchen assignments
+                resp = c.post(
+                    "/api/v1/zone-automation/zones/kitchen/entities/light.kitchen_ceiling/tags",
+                    json={"tags": ["licht", "styx"]},
+                    content_type="application/json",
+                )
+                assert resp.status_code == 200
+
+                # Request only changed zones since known revision
+                delta = c.get(f"/api/v1/zone-automation/entities/read-model?since={base_revision}&deltas=true")
+                assert delta.status_code == 200
+                data = json.loads(delta.data)
+                assert data["ok"] is True
+                assert data["changed"] is True
+                assert data["summary"]["returned_zone_count"] == 1
+                assert data["summary"]["delta_from_revision"] == base_revision
+                assert data["summary"]["delta_to_revision"] >= base_revision
+                assert data["delta"]["zone_ids"] == ["kitchen"]
+                assert len(data["zones"]) == 1
+                assert data["zones"][0]["zone_id"] == "kitchen"
+                assert any(entity["entity_id"] == "light.kitchen_ceiling" for entity in data["zones"][0]["entities"])
+
     def test_remove_entity(self):
         app, ctrl = self._make_client()
         ctrl.add_entity("living", "light.test")
@@ -609,6 +886,68 @@ class TestHubZoneSync:
                 assert resp.status_code == 200
                 assert ctrl._configs["terrace-zone"].zone_type == "terrace"
 
+    def test_sync_definitions_applies_role_mapping_and_entity_ids(self):
+        """sync-definitions should parse role-mapped entity dicts and plain entity_ids list."""
+        app, ctrl = self._make_client()
+        with patch("copilot_core.api.v1.zone_automation.require_token", lambda f: f):
+            with app.test_client() as c:
+                resp = c.post(
+                    "/api/v1/zone-automation/sync-definitions",
+                    json={
+                        "source": "ha",
+                        "zones": [
+                            {
+                                "zone_id": "wohnzimmer",
+                                "name": "Wohnzimmer",
+                                "entities": {
+                                    "lights": ["light.woon_1", "light.woon_2"],
+                                    "motion": ["binary_sensor.wohn_motion"],
+                                },
+                                "entity_ids": ["light.woon_1", "sensor.wohn_temp"],
+                            },
+                        ],
+                    },
+                    content_type="application/json",
+                )
+                assert resp.status_code == 200
+                assert resp.get_json()["ok"] is True
+
+                zone_entities = ctrl.get_zone_entities("wohnzimmer")
+                assignments = {a["entity_id"]: a for a in zone_entities}
+                assert len(assignments) == 4
+                assert assignments["light.woon_1"]["role"] == "lights"
+                assert [e["entity_id"] for e in zone_entities].count("light.woon_1") == 1
+                assert assignments["light.woon_2"]["role"] == "lights"
+                assert assignments["binary_sensor.wohn_motion"]["role"] == "motion"
+                assert assignments["sensor.wohn_temp"]["source"] == "ha_sync"
+                assert assignments["sensor.wohn_temp"]["role"] == "sensors"
+
+
+    def test_sync_definitions_accepts_prefixed_sync_source(self):
+        """sync-definitions should tolerate already-prefixed sync source markers."""
+        app, ctrl = self._make_client()
+        with patch("copilot_core.api.v1.zone_automation.require_token", lambda f: f):
+            with app.test_client() as c:
+                resp = c.post(
+                    "/api/v1/zone-automation/sync-definitions",
+                    json={
+                        "source": "ha_sync",
+                        "zones": [
+                            {
+                                "zone_id": "wohnzimmer",
+                                "name": "Wohnzimmer",
+                                "entity_ids": ["sensor.prefixed"],
+                            },
+                        ],
+                    },
+                    content_type="application/json",
+                )
+                assert resp.status_code == 200
+                assert resp.get_json()["ok"] is True
+
+                assignments = {a["entity_id"]: a for a in ctrl.get_zone_entities("wohnzimmer")}
+                assert assignments["sensor.prefixed"]["source"] == "ha_sync"
+
     def test_sync_creates_hub_zones(self):
         """sync_habitus_zones should register rooms+zones in HubZoneEngine."""
         app, ctrl = self._make_client()
@@ -631,6 +970,39 @@ class TestHubZoneSync:
                 assert hub is not None, "HubZoneEngine should be created on first sync"
                 assert "kueche" in hub._zones, f"Zone 'kueche' not in hub_zones: {list(hub._zones.keys())}"
                 assert "kueche" in hub._rooms
+
+    def test_sync_definitions_preserves_manual_assignments(self):
+        """sync-definitions must not override manually assigned entities."""
+        app, ctrl = self._make_client()
+        with patch("copilot_core.api.v1.zone_automation.require_token", lambda f: f):
+            with app.test_client() as c:
+                # Seed a manual assignment that should be preserved.
+                ctrl.add_entity("kueche", "light.manual_anchor", source="manual")
+
+                resp = c.post(
+                    "/api/v1/zone-automation/sync-definitions",
+                    json={
+                        "source": "ha",
+                        "zones": [
+                            {
+                                "zone_id": "arbeitszimmer",
+                                "name": "Arbeitszimmer",
+                                "entities": ["light.manual_anchor", "light.ha_only"],
+                            },
+                        ],
+                    },
+                    content_type="application/json",
+                )
+                assert resp.status_code == 200
+                assert resp.get_json()["ok"] is True
+
+                kitchen_assignments = {a.entity_id: a.source for a in ctrl._entity_assignments.get("kueche", [])}
+                assert kitchen_assignments.get("light.manual_anchor") == "manual"
+
+                wb_assignments = {a.entity_id: a.source for a in ctrl._entity_assignments.get("arbeitszimmer", [])}
+                assert wb_assignments.get("light.ha_only") == "ha_sync"
+                assert "light.manual_anchor" not in wb_assignments
+
 
     def test_sync_returns_entity_zone_map(self):
         """sync response should include entity→zone mapping for HA."""

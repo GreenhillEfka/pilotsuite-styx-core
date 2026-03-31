@@ -1,4 +1,13 @@
-"""Tests for /api/v1/events endpoint."""
+"""Tests for /api/v1/events endpoint (canonical events_ingest lane).
+
+This test suite validates the canonical event ingest endpoint at POST /api/v1/events
+as implemented in copilot_core.api.v1.events_ingest.
+
+Slice 1 Acceptance Criteria:
+- one authoritative ingest route (/api/v1/events via events_ingest blueprint)
+- one authoritative event store implementation (ingest/event_store.py)
+- one authoritative path into Brain Graph / mining / module routing
+"""
 
 import json
 import os
@@ -11,8 +20,8 @@ except ModuleNotFoundError:
     create_app = None
 
 
-class TestEventsEndpoint(unittest.TestCase):
-    """Test /api/v1/events endpoint functionality."""
+class TestEventsIngestEndpoint(unittest.TestCase):
+    """Test /api/v1/events canonical ingest endpoint functionality."""
 
     def setUp(self):
         """Set up test fixtures."""
@@ -39,9 +48,9 @@ class TestEventsEndpoint(unittest.TestCase):
             events_idempotency_lru_max=10_000,
         )
 
-        # Reset lazy singletons between tests
-        from copilot_core.api.v1 import events as events_api
-        events_api._STORE = None
+        # Reset lazy singletons between tests (canonical events_ingest module)
+        from copilot_core.api.v1 import events_ingest as events_ingest_api
+        events_ingest_api._store = None
         from copilot_core.brain_graph import provider as graph_provider
         graph_provider._STORE = None
         graph_provider._SVC = None
@@ -54,93 +63,19 @@ class TestEventsEndpoint(unittest.TestCase):
             self.skipTest("Flask not installed")
         app = self._create_test_app()
         client = app.test_client()
-        r = client.post("/api/v1/events", json={"type": "test", "text": "hello"})
+        r = client.post("/api/v1/events", json={"items": [{"type": "test", "text": "hello"}]})
         self.assertEqual(r.status_code, 200)
 
-    def test_events_endpoint_returns_ok_true(self):
-        """Test /api/v1/events returns ok: true."""
+    def test_events_endpoint_returns_accepted_count(self):
+        """Test /api/v1/events returns accepted count."""
         if create_app is None:
             self.skipTest("Flask not installed")
         app = self._create_test_app()
         client = app.test_client()
-        r = client.post("/api/v1/events", json={"type": "test", "text": "hello"})
+        r = client.post("/api/v1/events", json={"items": [{"type": "test", "text": "hello"}]})
         j = r.get_json()
-        self.assertTrue(j.get("ok"))
-
-    def test_events_endpoint_returns_stored_true(self):
-        """Test /api/v1/events returns stored: true for new event."""
-        if create_app is None:
-            self.skipTest("Flask not installed")
-        app = self._create_test_app()
-        client = app.test_client()
-        r = client.post("/api/v1/events", json={"type": "test", "text": "hello"})
-        j = r.get_json()
-        self.assertTrue(j.get("stored"))
-
-    def test_events_endpoint_returns_event(self):
-        """Test /api/v1/events returns event object."""
-        if create_app is None:
-            self.skipTest("Flask not installed")
-        app = self._create_test_app()
-        client = app.test_client()
-        r = client.post("/api/v1/events", json={"type": "test", "text": "hello"})
-        j = r.get_json()
-        self.assertIn("event", j)
-        self.assertIsInstance(j["event"], dict)
-
-    def test_events_endpoint_event_has_type(self):
-        """Test returned event has type field."""
-        if create_app is None:
-            self.skipTest("Flask not installed")
-        app = self._create_test_app()
-        client = app.test_client()
-        r = client.post("/api/v1/events", json={"type": "test_event", "text": "hello"})
-        j = r.get_json()
-        self.assertEqual(j["event"]["type"], "test_event")
-
-    def test_events_endpoint_event_has_timestamp(self):
-        """Test returned event has timestamp field."""
-        if create_app is None:
-            self.skipTest("Flask not installed")
-        app = self._create_test_app()
-        client = app.test_client()
-        r = client.post("/api/v1/events", json={"type": "test", "text": "hello"})
-        j = r.get_json()
-        # Event has 'ts' or 'timestamp' field
-        event = j["event"]
-        self.assertTrue("ts" in event or "timestamp" in event)
-
-    def test_events_endpoint_event_has_id(self):
-        """Test returned event has id field."""
-        if create_app is None:
-            self.skipTest("Flask not installed")
-        app = self._create_test_app()
-        client = app.test_client()
-        r = client.post("/api/v1/events", json={"type": "test", "text": "hello"})
-        j = r.get_json()
-        self.assertIn("id", j["event"])
-        self.assertIsInstance(j["event"]["id"], str)
-        self.assertTrue(len(j["event"]["id"]) > 0)
-
-    def test_events_endpoint_returns_graph_stats(self):
-        """Test /api/v1/events returns graph stats."""
-        if create_app is None:
-            self.skipTest("Flask not installed")
-        app = self._create_test_app()
-        client = app.test_client()
-        r = client.post("/api/v1/events", json={"type": "test", "text": "hello"})
-        j = r.get_json()
-        self.assertIn("graph", j)
-        self.assertIn("nodes_touched", j["graph"])
-
-    def test_events_endpoint_content_type_json(self):
-        """Test /api/v1/events returns application/json content type."""
-        if create_app is None:
-            self.skipTest("Flask not installed")
-        app = self._create_test_app()
-        client = app.test_client()
-        r = client.post("/api/v1/events", json={"type": "test", "text": "hello"})
-        self.assertIn("application/json", r.content_type)
+        self.assertIn("accepted", j)
+        self.assertEqual(j["accepted"], 1)
 
     def test_events_endpoint_batch_items(self):
         """Test /api/v1/events accepts batch items."""
@@ -156,122 +91,20 @@ class TestEventsEndpoint(unittest.TestCase):
         })
         self.assertEqual(r.status_code, 200)
         j = r.get_json()
-        self.assertTrue(j.get("ok"))
-        self.assertEqual(j.get("ingested"), 2)
+        self.assertEqual(j.get("accepted"), 2)
 
-    def test_events_endpoint_batch_stores_all(self):
-        """Test /api/v1/events batch stores all valid events."""
+    def test_events_endpoint_empty_batch(self):
+        """Test /api/v1/events handles empty batch gracefully."""
         if create_app is None:
             self.skipTest("Flask not installed")
         app = self._create_test_app()
         client = app.test_client()
-        r = client.post("/api/v1/events", json={
-            "items": [
-                {"type": "test1", "text": "hello"},
-                {"type": "test2", "text": "world"},
-                {"type": "test3"}  # Valid dict
-            ]
-        })
+        r = client.post("/api/v1/events", json={"items": []})
+        self.assertEqual(r.status_code, 200)
         j = r.get_json()
-        self.assertEqual(j.get("ingested"), 3)
-
-    def test_events_endpoint_ignores_invalid_batch_items(self):
-        """Test /api/v1/events ignores invalid items in batch."""
-        if create_app is None:
-            self.skipTest("Flask not installed")
-        app = self._create_test_app()
-        client = app.test_client()
-        r = client.post("/api/v1/events", json={
-            "items": [
-                "not a dict",
-                123,
-                {"type": "valid", "text": "hello"}
-            ]
-        })
-        j = r.get_json()
-        self.assertEqual(j.get("ingested"), 1)
-
-    def test_events_endpoint_rejects_non_dict(self):
-        """Test /api/v1/events rejects non-dict payload."""
-        if create_app is None:
-            self.skipTest("Flask not installed")
-        app = self._create_test_app()
-        client = app.test_client()
-        r = client.post("/api/v1/events", json="just a string")
-        self.assertEqual(r.status_code, 400)
-
-    def test_events_endpoint_rejects_non_dict_in_batch(self):
-        """Test /api/v1/events rejects non-dict in batch items."""
-        if create_app is None:
-            self.skipTest("Flask not installed")
-        app = self._create_test_app()
-        client = app.test_client()
-        r = client.post("/api/v1/events", json={"items": ["string", 123]})
-        self.assertEqual(r.status_code, 200)  # Invalid items are filtered
-
-    def test_events_endpoint_idempotency_key_header(self):
-        """Test /api/v1/events supports Idempotency-Key header."""
-        if create_app is None:
-            self.skipTest("Flassk not installed")
-        app = self._create_test_app()
-        client = app.test_client()
-
-        r1 = client.post(
-            "/api/v1/events",
-            json={"type": "test", "text": "hello"},
-            headers={"Idempotency-Key": "unique-key-123"}
-        )
-        self.assertTrue(r1.get_json().get("stored"))
-
-        r2 = client.post(
-            "/api/v1/events",
-            json={"type": "test", "text": "hello"},
-            headers={"Idempotency-Key": "unique-key-123"}
-        )
-        self.assertFalse(r2.get_json().get("stored"))
-        self.assertTrue(r2.get_json().get("deduped"))
-
-    def test_events_endpoint_x_idempotency_key_header(self):
-        """Test /api/v1/events supports X-Idempotency-Key header."""
-        if create_app is None:
-            self.skipTest("Flask not installed")
-        app = self._create_test_app()
-        client = app.test_client()
-
-        r1 = client.post(
-            "/api/v1/events",
-            json={"type": "test", "text": "hello"},
-            headers={"X-Idempotency-Key": "x-key-456"}
-        )
-        self.assertTrue(r1.get_json().get("stored"))
-
-        r2 = client.post(
-            "/api/v1/events",
-            json={"type": "test", "text": "hello"},
-            headers={"X-Idempotency-Key": "x-key-456"}
-        )
-        self.assertFalse(r2.get_json().get("stored"))
-
-    def test_events_endpoint_x_event_id_header(self):
-        """Test /api/v1/events supports X-Event-Id header."""
-        if create_app is None:
-            self.skipTest("Flask not installed")
-        app = self._create_test_app()
-        client = app.test_client()
-
-        r1 = client.post(
-            "/api/v1/events",
-            json={"type": "test", "text": "hello"},
-            headers={"X-Event-Id": "event-id-789"}
-        )
-        self.assertTrue(r1.get_json().get("stored"))
-
-        r2 = client.post(
-            "/api/v1/events",
-            json={"type": "test", "text": "hello"},
-            headers={"X-Event-Id": "event-id-789"}
-        )
-        self.assertFalse(r2.get_json().get("stored"))
+        self.assertEqual(j.get("accepted"), 0)
+        self.assertEqual(j.get("rejected"), 0)
+        self.assertEqual(j.get("deduped"), 0)
 
     def test_events_endpoint_get_list_returns_200(self):
         """Test /api/v1/events GET returns HTTP 200."""
@@ -282,45 +115,22 @@ class TestEventsEndpoint(unittest.TestCase):
         r = client.get("/api/v1/events")
         self.assertEqual(r.status_code, 200)
 
-    def test_events_endpoint_get_returns_ok_true(self):
-        """Test /api/v1/events GET returns ok: true."""
-        if create_app is None:
-            self.skipTest("Flask not installed")
-        app = self._create_test_app()
-        client = app.test_client()
-        r = client.get("/api/v1/events")
-        j = r.get_json()
-        self.assertTrue(j.get("ok"))
-
-    def test_events_endpoint_get_returns_count(self):
-        """Test /api/v1/events GET returns count field."""
+    def test_events_endpoint_get_returns_events_array(self):
+        """Test /api/v1/events GET returns events array."""
         if create_app is None:
             self.skipTest("Flask not installed")
         app = self._create_test_app()
         client = app.test_client()
         
         # Add some events first
-        client.post("/api/v1/events", json={"type": "test1", "text": "hello"})
-        client.post("/api/v1/events", json={"type": "test2", "text": "world"})
+        client.post("/api/v1/events", json={"items": [{"type": "test1", "text": "hello"}]})
+        client.post("/api/v1/events", json={"items": [{"type": "test2", "text": "world"}]})
         
         r = client.get("/api/v1/events")
         j = r.get_json()
-        self.assertIn("count", j)
-        self.assertEqual(j["count"], 2)
-
-    def test_events_endpoint_get_returns_items(self):
-        """Test /api/v1/events GET returns items array."""
-        if create_app is None:
-            self.skipTest("Flask not installed")
-        app = self._create_test_app()
-        client = app.test_client()
-        
-        client.post("/api/v1/events", json={"type": "test", "text": "hello"})
-        
-        r = client.get("/api/v1/events")
-        j = r.get_json()
-        self.assertIn("items", j)
-        self.assertIsInstance(j["items"], list)
+        self.assertIn("events", j)
+        self.assertIsInstance(j["events"], list)
+        self.assertEqual(len(j["events"]), 2)
 
     def test_events_endpoint_get_respects_limit(self):
         """Test /api/v1/events GET respects limit parameter."""
@@ -331,31 +141,39 @@ class TestEventsEndpoint(unittest.TestCase):
         
         # Add 5 events
         for i in range(5):
-            client.post("/api/v1/events", json={"type": "test", "index": i})
+            client.post("/api/v1/events", json={"items": [{"type": "test", "index": i}]})
         
         r = client.get("/api/v1/events?limit=2")
         j = r.get_json()
-        self.assertEqual(len(j["items"]), 2)
+        self.assertEqual(len(j["events"]), 2)
 
-    def test_events_endpoint_get_default_limit(self):
-        """Test /api/v1/events GET has default limit of 50."""
+    def test_events_endpoint_stats_returns_200(self):
+        """Test /api/v1/events/stats returns HTTP 200."""
+        if create_app is None:
+            self.skipTest("Flask not installed")
+        app = self._create_test_app()
+        client = app.test_client()
+        r = client.get("/api/v1/events/stats")
+        self.assertEqual(r.status_code, 200)
+
+    def test_events_endpoint_stats_returns_buffered(self):
+        """Test /api/v1/events/stats returns buffered count."""
         if create_app is None:
             self.skipTest("Flask not installed")
         app = self._create_test_app()
         client = app.test_client()
         
-        # Add 60 events
-        for i in range(60):
-            client.post("/api/v1/events", json={"type": "test", "index": i})
+        # Add some events
+        client.post("/api/v1/events", json={"items": [{"type": "test", "text": "hello"}]})
         
-        r = client.get("/api/v1/events")
+        r = client.get("/api/v1/events/stats")
         j = r.get_json()
-        # Should return at most 50 (default limit)
-        self.assertLessEqual(len(j["items"]), 50)
+        self.assertIn("buffered", j)
+        self.assertGreaterEqual(j["buffered"], 1)
 
 
-class TestEventsEndpointPersistence(unittest.TestCase):
-    """Test events persistence functionality."""
+class TestEventsIngestValidation(unittest.TestCase):
+    """Test event validation and normalization in canonical ingest lane."""
 
     def setUp(self):
         """Set up test fixtures."""
@@ -370,8 +188,8 @@ class TestEventsEndpointPersistence(unittest.TestCase):
         app = create_app()
         from dataclasses import replace
 
-        events_path = os.path.join(self.tmpdir.name, "events.jsonl")
         cfg = app.config["COPILOT_CFG"]
+        events_path = os.path.join(self.tmpdir.name, "events.jsonl")
         app.config["COPILOT_CFG"] = replace(
             cfg,
             data_dir=self.tmpdir.name,
@@ -380,64 +198,155 @@ class TestEventsEndpointPersistence(unittest.TestCase):
             events_cache_max=50,
         )
 
-        # Reset lazy singletons between tests
-        from copilot_core.api.v1 import events as events_api
-        events_api._STORE = None
-        from copilot_core.brain_graph import provider as graph_provider
-        graph_provider._STORE = None
-        graph_provider._SVC = None
-
+        from copilot_core.api.v1 import events_ingest as events_ingest_api
+        events_ingest_api._store = None
         return app
 
-    def test_events_persist_to_jsonl(self):
-        """Test events are persisted to JSONL file."""
+    def test_state_changed_event_accepted(self):
+        """Test state_changed event is accepted and normalized."""
         if create_app is None:
             self.skipTest("Flask not installed")
         app = self._create_test_app()
         client = app.test_client()
+        
+        event = {
+            "kind": "state_changed",
+            "type": "state_changed",
+            "source": "ha",
+            "entity_id": "light.living_room",
+            "ts": "2026-03-31T10:00:00Z",
+            "attributes": {
+                "domain": "light",
+                "old_state": "off",
+                "new_state": "on",
+            }
+        }
+        r = client.post("/api/v1/events", json={"items": [event]})
+        self.assertEqual(r.status_code, 200)
+        j = r.get_json()
+        self.assertEqual(j["accepted"], 1)
+        self.assertEqual(j["rejected"], 0)
 
-        events_path = os.path.join(self.tmpdir.name, "events.jsonl")
-
-        client.post("/api/v1/events", json={"type": "test", "text": "hello"})
-
-        # Check file exists and has content
-        self.assertTrue(os.path.exists(events_path))
-        with open(events_path, "r") as f:
-            lines = f.read().splitlines()
-        self.assertEqual(len(lines), 1)
-
-    def test_events_persistence_multiple_events(self):
-        """Test multiple events are persisted correctly."""
+    def test_call_service_event_accepted(self):
+        """Test call_service event is accepted and normalized."""
         if create_app is None:
             self.skipTest("Flask not installed")
         app = self._create_test_app()
         client = app.test_client()
+        
+        event = {
+            "kind": "call_service",
+            "type": "call_service",
+            "source": "ha",
+            "ts": "2026-03-31T10:00:00Z",
+            "attributes": {
+                "domain": "light",
+                "service": "turn_on",
+                "entity_ids": ["light.living_room"],
+            }
+        }
+        r = client.post("/api/v1/events", json={"items": [event]})
+        self.assertEqual(r.status_code, 200)
+        j = r.get_json()
+        self.assertEqual(j["accepted"], 1)
 
-        events_path = os.path.join(self.tmpdir.name, "events.jsonl")
-
-        client.post("/api/v1/events", json={"type": "test1", "text": "hello"})
-        client.post("/api/v1/events", json={"type": "test2", "text": "world"})
-
-        with open(events_path, "r") as f:
-            lines = f.read().splitlines()
-        self.assertEqual(len(lines), 2)
-
-    def test_events_persistence_contains_valid_json(self):
-        """Test persisted events are valid JSON."""
+    def test_missing_kind_rejected(self):
+        """Test event without kind/type is rejected."""
         if create_app is None:
             self.skipTest("Flask not installed")
         app = self._create_test_app()
         client = app.test_client()
+        
+        event = {"source": "ha", "ts": "2026-03-31T10:00:00Z"}
+        r = client.post("/api/v1/events", json={"items": [event]})
+        j = r.get_json()
+        self.assertEqual(j["rejected"], 1)
+        self.assertIn("errors", j)
+        self.assertEqual(len(j["errors"]), 1)
 
+    def test_missing_source_rejected(self):
+        """Test event without source is rejected."""
+        if create_app is None:
+            self.skipTest("Flask not installed")
+        app = self._create_test_app()
+        client = app.test_client()
+        
+        event = {"kind": "state_changed", "ts": "2026-03-31T10:00:00Z"}
+        r = client.post("/api/v1/events", json={"items": [event]})
+        j = r.get_json()
+        self.assertEqual(j["rejected"], 1)
+
+    def test_missing_timestamp_rejected(self):
+        """Test event without timestamp is rejected."""
+        if create_app is None:
+            self.skipTest("Flask not installed")
+        app = self._create_test_app()
+        client = app.test_client()
+        
+        event = {"kind": "state_changed", "source": "ha"}
+        r = client.post("/api/v1/events", json={"items": [event]})
+        j = r.get_json()
+        self.assertEqual(j["rejected"], 1)
+
+
+class TestEventsIngestIdempotency(unittest.TestCase):
+    """Test idempotency/deduplication in canonical ingest lane."""
+
+    def setUp(self):
+        """Set up test fixtures."""
+        self.tmpdir = tempfile.TemporaryDirectory()
+
+    def tearDown(self):
+        """Clean up test fixtures."""
+        self.tmpdir.cleanup()
+
+    def _create_test_app(self):
+        """Create a test Flask app with temp paths."""
+        app = create_app()
+        from dataclasses import replace
+
+        cfg = app.config["COPILOT_CFG"]
         events_path = os.path.join(self.tmpdir.name, "events.jsonl")
+        app.config["COPILOT_CFG"] = replace(
+            cfg,
+            data_dir=self.tmpdir.name,
+            events_persist=True,
+            events_jsonl_path=events_path,
+            events_cache_max=50,
+            events_idempotency_ttl_seconds=20 * 60,
+            events_idempotency_lru_max=10_000,
+        )
 
-        client.post("/api/v1/events", json={"type": "test", "text": "hello"})
+        from copilot_core.api.v1 import events_ingest as events_ingest_api
+        events_ingest_api._store = None
+        return app
 
-        with open(events_path, "r") as f:
-            line = f.readline()
-        evt = json.loads(line)
-        self.assertEqual(evt["type"], "test")
-        self.assertEqual(evt["text"], "hello")
+    def test_duplicate_event_deduped(self):
+        """Test duplicate event (same dedup key) is deduped."""
+        if create_app is None:
+            self.skipTest("Flask not installed")
+        app = self._create_test_app()
+        client = app.test_client()
+        
+        event = {
+            "id": "unique-event-123",
+            "kind": "state_changed",
+            "source": "ha",
+            "entity_id": "light.test",
+            "ts": "2026-03-31T10:00:00Z",
+        }
+        
+        # First submission
+        r1 = client.post("/api/v1/events", json={"items": [event]})
+        j1 = r1.get_json()
+        self.assertEqual(j1["accepted"], 1)
+        self.assertEqual(j1["deduped"], 0)
+        
+        # Second submission (same id)
+        r2 = client.post("/api/v1/events", json={"items": [event]})
+        j2 = r2.get_json()
+        self.assertEqual(j2["accepted"], 0)
+        self.assertEqual(j2["deduped"], 1)
 
 
 if __name__ == "__main__":

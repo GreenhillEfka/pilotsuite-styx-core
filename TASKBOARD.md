@@ -9,6 +9,85 @@
 
 ## Status summary
 
+### Completed Slices (2026-03-31)
+- [x] **Slice 1 — Canonical Ingest Lane** (v15.2.10)
+  - Unified `POST /api/v1/events` implementation
+  - Retired legacy `api/v1/events.py`
+  - Standardized on `ingest/event_store.py` + `EventProcessor`
+  - Commit: `fbaefd4f`
+
+- [x] **Slice 2 — Zone Truth Layer** (v15.2.11)
+  - `ZoneDefinitionSyncV1` model and storage
+  - Canonical topology sync endpoint
+  - Provenance, revision, freshness metadata
+  - Zone archetype separated from zone instance
+  - Commit: `ada33607`
+
+- [x] **Slice 3 — First-Class Module Model** (v15.2.12)
+  - Canonical module metadata/snapshot model
+  - Module applicability mapped to Habitus zones
+  - All modules aligned on one input/output contract
+  - Module state/config/summary/freshness in read models
+  - Commit: `1408e74b`
+
+- [x] **Slice 4 — HA Connection Module** (v15.2.13)
+  - Connection-module contract formalized
+  - `HomeAssistantModuleEngine` + `ModuleRouter` aligned
+  - Transport/pipeline health as diagnostics
+  - Commit: `013e2a60`
+
+- [x] **Slice 5 — Brain Growth Unification** (v15.2.14)
+  - Explicit transfer model (inputs → graph/neuron/module)
+  - Read model for brain activity/growth summary
+  - Zone/entity/module truth linked to neuron evaluation
+  - Commit: `109bdfc0`
+
+- [x] **Slice 6 — Truth-Backed Dashboard Read Models** (v15.2.15)
+  - Zone summary/detail read models
+  - Module read model + system overview
+  - Freshness/provenance fields on all blocks
+  - `example_config` is demo/test-only
+  - Commit: `6f9e0dc4`
+
+- [x] **Slice 7 — Unified Proposal Lifecycle** (v15.2.16)
+  - One lifecycle state machine
+  - Primary proposal storage model
+  - Consistent accept/reject/snooze APIs
+  - `ProposalIntentV1` + `ActionIntentV1` first-class
+  - Evidence/explanation attached by default
+  - Commit: `1c2cb4b4`
+
+- [x] **Slice 8 — Classification Authority** (v15.2.17)
+  - Unified entity role/tag/category logic
+  - Canonical taxonomy layer (`taxonomy.py`)
+  - Role/tag/module-bucket outputs for all downstream systems
+  - Commit: `06e4f77c`
+
+- [x] **Slice 9 — RAG/Chat Alignment** (v15.2.18)
+  - Formal chat context blocks from truth/read models
+  - Retrieval provenance improvements
+  - Mapping between modules/zones/brain and chat explanations
+  - Tests for source-grounded responses + memory
+  - Commit: `eff1e4e7`
+
+- [x] **Slice 10 — Decision/Execution Separation** (v15.2.19)
+  - HA adapter command outputs formalized
+  - Direct execution paths audited
+  - Behavioral log / audit trail consistent
+  - Policy NOT duplicated in HA adapter
+  - Commit: `ac6b2c8d`
+
+- [x] **Slice 11 — Contract and Regression Coverage** (v15.2.20)
+  - Ingest contract tests
+  - Topology sync contract tests
+  - Module contract tests
+  - Brain/read-model snapshot tests
+  - Dashboard read-model snapshot tests
+  - Proposal lifecycle tests
+  - Autonomy/policy gate tests
+  - E2E checks against truth-backed dashboard
+  - Commit: `cc591ab8`
+
 ### Completed in this concept pass
 - [x] Read `TASKBOARD.md` first.
 - [x] Re-read the high-signal docs for Core/HA boundary and product intent:
@@ -449,13 +528,115 @@ These should **not** become primary Core responsibilities:
 
 ---
 
+## Consolidation Findings (2026-03-31)
+
+### What is now solid
+1. **Semantic Truth Engine** — Core is explicitly the semantic owner
+2. **11 Slices Delivered** — All P0/P1 slices complete (v15.2.10 → v15.2.20)
+3. **Contract Tests** — Future changes cannot silently re-fragment semantics
+4. **Decision/Execution Separation** — Core decides, HA executes (thin adapter)
+5. **Truth-Backed Read Models** — Dashboard, Chat, Brain all consume same truth
+
+### What needs hardening (Refinement Priority)
+1. **Edge Cases in Ingest** — Dedup TTL boundaries, malformed envelopes
+2. **Zone Sync Robustness** — HA topology change detection, conflict resolution
+3. **Module State Machine** — Transition edge cases (off→learning→active)
+4. **Brain Growth Performance** — Graph pruning, neuron expiry, memory limits
+5. **Policy Gate Coverage** — All action intents must pass through policy
+
+### New Slices (Post-Consolidation)
+These are **P2/P3** — only start after refinement is complete:
+
+## Slice 12 — Anomaly Detection + Alerting
+**Priority:** P2
+**Status:** not started
+
+**Goal**
+Detect anomalous zone/module behavior and alert user.
+
+### Deliverables
+- [ ] anomaly detection engine (statistical + rule-based)
+- [ ] alert routing (Telegram, HA notification, email)
+- [ ] anomaly history + trend analysis
+- [ ] false-positive suppression (learning)
+
+### Acceptance criteria
+- anomalies are detected before user notices
+- alerts are actionable with clear explanation
+- false positives decrease over time
+
+---
+
+## Slice 13 — Energy Optimization
+**Priority:** P2
+**Status:** not started
+
+**Goal**
+Optimize energy consumption across all zones/modules.
+
+### Deliverables
+- [ ] energy monitoring per module/zone
+- [ ] optimization suggestions (policy-gated)
+- [ ] tariff-aware scheduling (time-of-use pricing)
+- [ ] energy reports + savings tracking
+
+### Acceptance criteria
+- energy consumption is visible per zone/module
+- optimization suggestions are actionable
+- savings are measurable
+
+---
+
+## Slice 14 — Predictive Automation
+**Priority:** P3
+**Status:** not started
+
+**Goal**
+Predict user intent and pre-emptively prepare automations.
+
+### Deliverables
+- [ ] pattern recognition (time, presence, weather, calendar)
+- [ ] predictive proposals (before user asks)
+- [ ] confidence scoring + user feedback loop
+- [ ] seasonal adaptation
+
+### Acceptance criteria
+- predictions are accurate (>80% acceptance rate)
+- user can easily override/correct predictions
+- system learns from corrections
+
+---
+
+## Slice 15 — Multi-Zone Coordination
+**Priority:** P2
+**Status:** not started
+
+**Goal**
+Coordinate actions across multiple zones (scenes, routines, events).
+
+### Deliverables
+- [ ] cross-zone action coordination
+- [ ] scene composition (multi-zone scenes)
+- [ ] routine engine (time/event-triggered multi-zone actions)
+- [ ] conflict detection + resolution
+
+### Acceptance criteria
+- multi-zone scenes work reliably
+- routines are easy to define
+- conflicts are detected and resolved gracefully
+
+---
+
 ## Ready signal for next implementation agent
-Concept work is complete.
 
-**Do next, in order:**
-1. **Slice 1 — canonical ingest lane**
-2. **Slice 2 — zone truth layer + canonical topology sync**
-3. **Slice 3 — first-class module model + end-to-end wiring**
-4. **Slice 5 — brain growth unification**
+**Phase 1 Complete:** Slices 1-11 delivered (v15.2.10 → v15.2.20)
 
-Those slices remove the biggest semantic ambiguity and make the rest of the product architecture honest.
+**Next Phase:** Consolidation + Refinement
+1. **Edge Case Hardening** — Ingest, Zone Sync, Module State Machine
+2. **Performance Optimization** — Brain Growth, Read Models, Query Latency
+3. **Policy Gate Coverage** — 100% of action intents through policy
+4. **Documentation** — API docs, architecture diagrams, runbooks
+
+**After Refinement:** Start Slice 12+ (Anomaly, Energy, Predictive, Multi-Zone)
+
+**Core is now stable enough for HA/HACS lane reactivation.**

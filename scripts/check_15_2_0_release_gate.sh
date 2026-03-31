@@ -4,7 +4,7 @@ set -euo pipefail
 REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
-EXPECTED_VERSION="15.2.9"
+EXPECTED_VERSION="15.2.0"
 QUEUE_DOC="docs/CORE_RELEASE_QUEUE_STATUS_2026-03-28.md"
 GOVERNANCE_DOC="docs/CORE_RELEASE_GOVERNANCE_CHECKLIST_2026-03-28.md"
 MANIFEST_PATH="docs/CORE_15_2_0_RELEASE_MANIFEST_2026-03-27.json"
@@ -18,12 +18,12 @@ CURRENT_HEAD="$(git rev-parse --short=8 HEAD)"
 
 failures=0
 
-printf 'Core 15.2.9 strict release gate\n'
+printf 'Core 15.2.0 strict release gate\n'
 printf 'Repo: %s\n' "$REPO_ROOT"
 printf 'Current HEAD: %s\n' "$CURRENT_HEAD"
 
 WORKTREE_STATUS="$(git status --porcelain)"
-WORKTREE_STATUS_FILTERED="$(printf '%s\n' "$WORKTREE_STATUS" | grep -v -F -e '?? tmp/' -e 'RELEASE_LOCK.md' || true)"
+WORKTREE_STATUS_FILTERED="$(printf '%s\n' "$WORKTREE_STATUS" | grep -v '^?? RELEASE_LOCK.md$' || true)"
 
 if [[ -n "$WORKTREE_STATUS_FILTERED" ]]; then
   printf 'FAIL worktree is not clean\n'
@@ -125,4 +125,4 @@ if [[ "$failures" -ne 0 ]]; then
 fi
 
 printf 'PASS strict release gate green\n'
-printf 'NEXT real release governance step would still be: mache v15.2.9 -> wait 5 minutes -> export/check release status -> create/check release lock -> rerun this gate -> workflow dispatch -> clear lock\n'
+printf 'NEXT real release governance step would still be: mache v15.2.0 -> wait 5 minutes -> export/check release status -> create/check release lock -> rerun this gate -> workflow dispatch -> clear lock\n'

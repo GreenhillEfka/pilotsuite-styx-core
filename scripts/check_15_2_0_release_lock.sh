@@ -5,14 +5,14 @@ REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
 LOCK_PATH="$REPO_ROOT/RELEASE_LOCK.md"
-EXPECTED_VERSION="v15.2.9"
+EXPECTED_VERSION="v15.2.0"
 EXPECTED_PAIRED_REF="8b017a74"
-EXPECTED_ANNOUNCE='mache v15.2.9'
+EXPECTED_ANNOUNCE='mache v15.2.0'
 CURRENT_HEAD="$(git rev-parse --short=8 HEAD)"
 
 failures=0
 
-printf 'Core 15.2.9 release-lock check\n'
+printf 'Core 15.2.0 release-lock check\n'
 printf 'Repo: %s\n' "$REPO_ROOT"
 
 if [[ ! -f "$LOCK_PATH" ]]; then

@@ -345,12 +345,37 @@ class ZoneAutomationController:
 
         # Entity assignments per zone: zone_id -> list[ZoneEntityAssignment]
         self._entity_assignments: dict[str, list[ZoneEntityAssignment]] = {}
+        self._entity_assignments_revision: int = 0
+        self._zone_entity_revisions: dict[str, int] = {}
+        self._zone_entity_updated_at: dict[str, float] = {}
 
         # Optional MusikwolkeBridge for executing music actions
         self._music_bridge: Any | None = None
 
         # Per-zone mood state (mood name string, default "neutral")
         self._zone_moods: dict[str, str] = {}
+
+    def _touch_entity_assignments(self, zone_id: str) -> None:
+        """Update revision + timestamp counters for entity assignments.
+
+        `zone_entity_revisions` mirrors the global revision value so consumers can
+        safely do `changed_since` comparisons with the same revision counter.
+        """
+        self._entity_assignments_revision += 1
+        self._zone_entity_revisions[zone_id] = self._entity_assignments_revision
+        self._zone_entity_updated_at[zone_id] = time.time()
+
+    def _normalize_entity_tags(self, tags: list[str] | None) -> list[str]:
+        """Normalize tag lists to deterministic unique order."""
+        if tags is None:
+            return []
+
+        normalized = []
+        for raw in tags:
+            tag = str(raw).strip()
+            if tag and tag not in normalized:
+                normalized.append(tag)
+        return normalized
 
     def set_music_bridge(self, bridge: Any) -> None:
         """Attach a MusikwolkeBridge to auto-execute music actions."""
@@ -903,14 +928,14 @@ class ZoneAutomationController:
         """Add an entity to a zone with auto-detected role and tags."""
         if role is None:
             role = detect_entity_role(entity_id)
-        if tags is None:
-            tags = detect_entity_tags(entity_id)
+
+        normalized_tags = self._normalize_entity_tags(detect_entity_tags(entity_id) if tags is None else tags)
 
         assignment = ZoneEntityAssignment(
             entity_id=entity_id,
             zone_id=zone_id,
             role=role,
-            tags=tags,
+            tags=normalized_tags,
             display_name=display_name or entity_id.split(".")[-1].replace("_", " ").title(),
             source=source,
         )
@@ -918,13 +943,24 @@ class ZoneAutomationController:
         if zone_id not in self._entity_assignments:
             self._entity_assignments[zone_id] = []
 
-        # Remove existing assignment for same entity in same zone
-        self._entity_assignments[zone_id] = [
-            a for a in self._entity_assignments[zone_id]
-            if a.entity_id != entity_id
-        ]
-        self._entity_assignments[zone_id].append(assignment)
+        for existing in self._entity_assignments[zone_id]:
+            if existing.entity_id == entity_id:
+                if (
+                    existing.role == assignment.role
+                    and existing.tags == assignment.tags
+                    and existing.display_name == assignment.display_name
+                    and existing.source == assignment.source
+                ):
+                    return existing
+                existing.role = assignment.role
+                existing.tags = assignment.tags
+                existing.display_name = assignment.display_name
+                existing.source = assignment.source
+                self._touch_entity_assignments(zone_id)
+                return existing
 
+        self._entity_assignments[zone_id].append(assignment)
+        self._touch_entity_assignments(zone_id)
         return assignment
 
     def sync_entities_from_topology(self, zone_id: str, entities: list[Any]) -> list[ZoneEntityAssignment]:
@@ -983,7 +1019,10 @@ class ZoneAutomationController:
             a for a in self._entity_assignments[zone_id]
             if a.entity_id != entity_id
         ]
-        return len(self._entity_assignments[zone_id]) < before
+        removed = len(self._entity_assignments[zone_id]) < before
+        if removed:
+            self._touch_entity_assignments(zone_id)
+        return removed
 
     def get_zone_entities(self, zone_id: str) -> list[dict[str, Any]]:
         """Get all entities assigned to a zone."""
@@ -1001,10 +1040,14 @@ class ZoneAutomationController:
     def update_entity_tags(self, zone_id: str, entity_id: str,
                            tags: list[str]) -> bool:
         """Update tags for an entity in a zone."""
+        normalized_tags = self._normalize_entity_tags(tags)
         assignments = self._entity_assignments.get(zone_id, [])
         for a in assignments:
             if a.entity_id == entity_id:
-                a.tags = tags
+                if a.tags == normalized_tags:
+                    return True
+                a.tags = normalized_tags
+                self._touch_entity_assignments(zone_id)
                 return True
         return False
 
@@ -1016,7 +1059,10 @@ class ZoneAutomationController:
         assignments = self._entity_assignments.get(zone_id, [])
         for a in assignments:
             if a.entity_id == entity_id:
+                if a.role == role:
+                    return True
                 a.role = role
+                self._touch_entity_assignments(zone_id)
                 return True
         return False
 
@@ -1025,6 +1071,107 @@ class ZoneAutomationController:
         return {
             zid: [asdict(a) for a in assignments]
             for zid, assignments in self._entity_assignments.items()
+        }
+
+    def get_zone_entities_read_model(self, zone_id: str, *, compact: bool = False) -> dict[str, Any]:
+        """Return a deterministic read-model payload for entity assignments in one zone."""
+        zone_config = self.get_zone_config(zone_id)
+        assignments = self._entity_assignments.get(zone_id, [])
+
+        sorted_assignments = sorted(assignments, key=lambda a: (a.role, a.entity_id))
+        by_role: dict[str, list[dict[str, Any]]] = {}
+        source_counts: dict[str, int] = {}
+
+        serialized = [asdict(a) for a in sorted_assignments]
+        for assignment in serialized:
+            by_role.setdefault(assignment["role"], []).append(assignment)
+            source = assignment.get("source", "manual")
+            source_counts[source] = source_counts.get(source, 0) + 1
+
+        model = {
+            "zone_id": zone_id,
+            "zone_name": zone_config.zone_name,
+            "entity_count": len(serialized),
+            "role_count": {role: len(entities) for role, entities in by_role.items()},
+            "source_count": source_counts,
+            "revision": self._zone_entity_revisions.get(zone_id, 0),
+            "updated_at": self._zone_entity_updated_at.get(zone_id, 0.0),
+            "compact": compact,
+        }
+
+        if compact:
+            return model
+
+        model["entities"] = serialized
+        model["entities_by_role"] = by_role
+        return model
+
+    def _compact_zone_payloads(self, zones: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Return a compact deterministic zone payload for transport-sensitive consumers."""
+        compact_zones: list[dict[str, Any]] = []
+        for zone in zones:
+            compact_zones.append({
+                "zone_id": zone["zone_id"],
+                "zone_name": zone["zone_name"],
+                "revision": zone["revision"],
+                "updated_at": zone["updated_at"],
+                "entity_count": zone["entity_count"],
+                "role_count": zone.get("role_count", {}),
+                "source_count": zone.get("source_count", {}),
+            })
+        return compact_zones
+
+    def get_all_entities_read_model(
+        self, *,
+        since_revision: int | None = None,
+        deltas: bool = False,
+        compact: bool = False,
+    ) -> dict[str, Any]:
+        """Return a deterministic read-model for all zone entity assignments.
+
+        If `since_revision` is set and `deltas=True`, only zones whose entity
+        assignment revision is newer than `since_revision` are returned.
+
+        If `compact=True`, entity lists are removed and each zone is reduced to
+        deterministic metadata and counters for lower payload consumers.
+        """
+        zone_ids = sorted(set(self._configs.keys()) | set(self._entity_assignments.keys()))
+        all_zones = [self.get_zone_entities_read_model(zid) for zid in zone_ids]
+        all_entity_count = sum(z["entity_count"] for z in all_zones)
+        max_updated_at = max((zone["updated_at"] for zone in all_zones), default=0.0)
+
+        summary = {
+            "zone_count": len(all_zones),
+            "entity_count": all_entity_count,
+            "revision": self._entity_assignments_revision,
+            "updated_at": max_updated_at,
+            "compact": compact,
+        }
+
+        if since_revision is not None and deltas:
+            changed_zones = [
+                zone for zone in all_zones if zone["revision"] > since_revision
+            ]
+            payload_zones = self._compact_zone_payloads(changed_zones) if compact else changed_zones
+            return {
+                "zones": payload_zones,
+                "summary": {
+                    **summary,
+                    "returned_zone_count": len(payload_zones),
+                    "returned_entity_count": sum(zone["entity_count"] for zone in changed_zones),
+                    "delta_from_revision": since_revision,
+                    "delta_to_revision": self._entity_assignments_revision,
+                },
+                "delta": {
+                    "enabled": True,
+                    "zone_ids": [zone["zone_id"] for zone in changed_zones],
+                },
+            }
+
+        payload_zones = self._compact_zone_payloads(all_zones) if compact else all_zones
+        return {
+            "zones": payload_zones,
+            "summary": summary,
         }
 
     def import_from_example_config(self, zone_entities: dict[str, dict[str, list[str]]]) -> int:

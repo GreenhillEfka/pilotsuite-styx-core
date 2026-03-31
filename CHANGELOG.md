@@ -94,6 +94,30 @@
 
 ---
 
+## [v15.2.10] - 2026-03-29
+
+### Zone Assignment Read-Model Optimierung
+
+#### Added
+- Zone-Entity Assignment Read-Models als deterministische, cache-fähige API-Endpoints eingeführt (`zone_entities_read_model`, `get_all_entities_read_model`).
+- Revisions- und Timestamp-basiertes Delta-Verhalten für `entities/read-model` hinzugefügt (`since`, `deltas=true`, `compact=true`).
+- Zone-spezifische Read-Model-Anfrage `zones/<zone_id>/entities/read-model` mit `changed`-Signalisierung ergänzt.
+
+#### Changed
+- Added test coverage and docs for `sync-definitions` mixed payload shapes (`entities` as role-map plus `entity_ids`) while ensuring deterministic role assignment for mixed-form zones.
+- Read-model endpoints now strictly parse `compact`/`deltas` boolean query flags (`true|false`, `1|0`, `yes|no`, `on|off`) and return 400 for invalid values.
+- Entity-Mutationen sind idempotent optimiert, Revisionszähler werden nur bei echten Änderungen erhöht.
+- `sync-definitions` nimmt gemischte HA-Entity-Formate (`entities`-Dict/Liste, `entity_ids`) robuster auf.
+- Tests erweitert: neue Unit-/API-Abdeckung für Delta-/Compact-/Caching-Verhalten.
+
+#### Fixed
+- Read-Model-Payloads vermeiden unnötige Payload-Größe bei `compact=true` und liefern robuste Änderungs-Deltas.
+
+- `sync-definitions` überschreibt keine manuell erstellten Zone-Entity-Zuweisungen mehr (`source="manual"` bleibt erhalten), auch nicht bei Cross-Zone-Nachkommen.
+- Zone-Level Read-Model-API `/zones/<zone_id>/entities/read-model` unterstützt nun `compact=true` für cache-sichere, transportarme Payloads (symmetrisch zum globalen Endpoint).
+
+---
+
 ## [v15.0.4] - 2026-03-22
 
 ### Runtime Version Truth Repair

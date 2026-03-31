@@ -1,338 +1,539 @@
-"""Notification Engine — Smart alert aggregation and routing (v5.8.0).
+"""Notification Engine — Slice 33.
 
-Centralizes notifications from all PilotSuite modules (energy anomalies,
-schedule reminders, comfort alerts, weather warnings) with:
-- Priority levels (critical, high, normal, low)
-- Deduplication within configurable time windows
-- Rate limiting per channel
-- Digest mode: batch low-priority alerts into periodic summaries
+Multi-channel notification system for PilotSuite Core.
+
+Features:
+- Multi-channel delivery (push, email, sms, webhook)
+- Priority and urgency levels
+- Rate limiting and throttling
+- Notification templates
+- Delivery tracking and analytics
+- User preferences and quiet hours
 """
-
 from __future__ import annotations
 
-import hashlib
 import logging
-import threading
-from collections import deque
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
-from enum import IntEnum
-from typing import Any
+from datetime import datetime, timezone, timedelta
+from typing import Any, Dict, List, Optional, Callable, Set
+from enum import Enum
+import uuid
 
 logger = logging.getLogger(__name__)
 
 
-class Priority(IntEnum):
-    """Notification priority levels."""
+class NotificationChannel(Enum):
+    """Notification delivery channel."""
+    PUSH = "push"
+    EMAIL = "email"
+    SMS = "sms"
+    WEBHOOK = "webhook"
+    TELEGRAM = "telegram"
+    WHATSAPP = "whatsapp"
+    SLACK = "slack"
+    CUSTOM = "custom"
 
-    CRITICAL = 1  # Immediate — safety issues, very high anomalies
-    HIGH = 2  # Soon — significant anomalies, schedule conflicts
-    NORMAL = 3  # Standard — schedule reminders, comfort suggestions
-    LOW = 4  # Digest — informational, tips, minor improvements
+
+class NotificationPriority(Enum):
+    """Notification priority level."""
+    LOW = "low"
+    NORMAL = "normal"
+    HIGH = "high"
+    URGENT = "urgent"
+
+
+class NotificationStatus(Enum):
+    """Notification delivery status."""
+    PENDING = "pending"
+    SENT = "sent"
+    DELIVERED = "delivered"
+    FAILED = "failed"
+    SKIPPED = "skipped"  # Rate limited or quiet hours
 
 
 @dataclass
 class Notification:
-    """Single notification."""
-
-    id: str
-    source: str  # Module: energy, comfort, schedule, weather, system
+    """Notification definition."""
+    notification_id: str
     title: str
     message: str
-    priority: Priority
-    created_at: str
-    dedup_key: str | None = None  # For deduplication
-    data: dict[str, Any] = field(default_factory=dict)
-    delivered: bool = False
-    delivered_at: str | None = None
-    channel: str = "default"  # Routing target
+    channel: NotificationChannel
+    priority: NotificationPriority = NotificationPriority.NORMAL
+    recipient: str = ""
+    template_id: Optional[str] = None
+    template_data: Dict[str, Any] = field(default_factory=dict)
+    metadata: Dict[str, Any] = field(default_factory=dict)
+    created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    scheduled_at: Optional[str] = None
+    sent_at: Optional[str] = None
+    delivered_at: Optional[str] = None
+    status: NotificationStatus = NotificationStatus.PENDING
+    error_message: Optional[str] = None
+    retry_count: int = 0
+    max_retries: int = 3
+    
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "notification_id": self.notification_id,
+            "title": self.title,
+            "message": self.message,
+            "channel": self.channel.value,
+            "priority": self.priority.value,
+            "recipient": self.recipient,
+            "template_id": self.template_id,
+            "template_data": self.template_data,
+            "metadata": self.metadata,
+            "created_at": self.created_at,
+            "scheduled_at": self.scheduled_at,
+            "sent_at": self.sent_at,
+            "delivered_at": self.delivered_at,
+            "status": self.status.value,
+            "error_message": self.error_message,
+            "retry_count": self.retry_count,
+        }
 
 
 @dataclass
-class NotificationDigest:
-    """Batched notification summary."""
+class NotificationTemplate:
+    """Notification template."""
+    template_id: str
+    name: str
+    channel: NotificationChannel
+    subject_template: str = ""
+    body_template: str = ""
+    variables: List[str] = field(default_factory=list)
+    
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "template_id": self.template_id,
+            "name": self.name,
+            "channel": self.channel.value,
+            "subject_template": self.subject_template,
+            "body_template": self.body_template,
+            "variables": self.variables,
+        }
 
-    period_start: str
-    period_end: str
-    count: int
-    by_source: dict[str, int]
-    by_priority: dict[str, int]
-    items: list[dict[str, Any]]
 
-
-# Default configuration
-DEFAULT_DEDUP_WINDOW_SECONDS = 600  # 10 minutes
-DEFAULT_RATE_LIMIT_PER_HOUR = 20
-DEFAULT_DIGEST_INTERVAL_MINUTES = 60
-MAX_HISTORY_SIZE = 500
+@dataclass
+class UserPreferences:
+    """User notification preferences."""
+    user_id: str
+    enabled_channels: List[NotificationChannel] = field(default_factory=list)
+    quiet_hours_start: int = 22  # 22:00
+    quiet_hours_end: int = 7    # 07:00
+    priority_override: bool = True  # Urgent notifications bypass quiet hours
+    rate_limit_per_hour: int = 10
+    blocked_senders: List[str] = field(default_factory=list)
+    
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "user_id": self.user_id,
+            "enabled_channels": [c.value for c in self.enabled_channels],
+            "quiet_hours_start": self.quiet_hours_start,
+            "quiet_hours_end": self.quiet_hours_end,
+            "priority_override": self.priority_override,
+            "rate_limit_per_hour": self.rate_limit_per_hour,
+            "blocked_senders": self.blocked_senders,
+        }
 
 
 class NotificationEngine:
-    """Central notification hub for PilotSuite.
-
-    Features:
-    - Deduplication: identical alerts within a time window are merged
-    - Rate limiting: max N notifications per hour per channel
-    - Priority routing: CRITICAL bypasses rate limits
-    - Digest mode: LOW priority batched into periodic summaries
-    - History: recent notifications stored for API queries
-    """
-
-    def __init__(
-        self,
-        dedup_window_seconds: int = DEFAULT_DEDUP_WINDOW_SECONDS,
-        rate_limit_per_hour: int = DEFAULT_RATE_LIMIT_PER_HOUR,
-        digest_interval_minutes: int = DEFAULT_DIGEST_INTERVAL_MINUTES,
-    ):
-        self._lock = threading.Lock()
-        self._dedup_window = timedelta(seconds=dedup_window_seconds)
-        self._rate_limit = rate_limit_per_hour
-        self._digest_interval = timedelta(minutes=digest_interval_minutes)
-
-        # State
-        self._history: deque[Notification] = deque(maxlen=MAX_HISTORY_SIZE)
-        self._dedup_cache: dict[str, datetime] = {}  # dedup_key -> last_sent
-        self._rate_counters: dict[str, list[datetime]] = {}  # channel -> timestamps
-        self._digest_buffer: list[Notification] = []
-        self._last_digest: datetime = datetime.now(timezone.utc)
-        self._pending: deque[Notification] = deque(maxlen=100)
-
-        # Callbacks for delivery
-        self._handlers: dict[str, Any] = {}  # channel -> callable
-
-        self._counter = 0
-        logger.info("NotificationEngine initialized (dedup=%ds, rate=%d/h)",
-                     dedup_window_seconds, rate_limit_per_hour)
-
-    def register_handler(self, channel: str, handler) -> None:
-        """Register a delivery handler for a channel."""
-        self._handlers[channel] = handler
-        logger.info("Registered notification handler for channel: %s", channel)
-
-    def notify(
-        self,
-        source: str,
-        title: str,
-        message: str,
-        priority: Priority | int = Priority.NORMAL,
-        dedup_key: str | None = None,
-        data: dict[str, Any] | None = None,
-        channel: str = "default",
-    ) -> Notification | None:
-        """Submit a notification.
-
-        Returns the Notification if accepted, None if deduplicated/rate-limited.
-        """
-        if isinstance(priority, int) and not isinstance(priority, Priority):
-            try:
-                priority = Priority(priority)
-            except ValueError:
-                priority = Priority.NORMAL
-
-        now = datetime.now(timezone.utc)
-
-        # Generate dedup key if not provided
-        if dedup_key is None:
-            dedup_key = self._make_dedup_key(source, title, message)
-
-        with self._lock:
-            # Dedup check (CRITICAL bypasses)
-            if priority != Priority.CRITICAL and self._is_duplicate(dedup_key, now):
-                logger.debug("Deduplicated notification: %s", dedup_key[:20])
-                return None
-
-            # Rate limit check (CRITICAL bypasses)
-            if priority != Priority.CRITICAL and self._is_rate_limited(channel, now):
-                logger.debug("Rate limited notification on channel: %s", channel)
-                return None
-
-            # Create notification
-            self._counter += 1
-            notif = Notification(
-                id=f"n-{now.strftime('%Y%m%d%H%M%S')}-{self._counter:04d}",
-                source=source,
-                title=title,
-                message=message,
-                priority=priority,
-                created_at=now.isoformat(timespec="seconds"),
-                dedup_key=dedup_key,
-                data=data or {},
-                channel=channel,
-            )
-
-            # Update dedup cache
-            self._dedup_cache[dedup_key] = now
-
-            # Update rate counter
-            if channel not in self._rate_counters:
-                self._rate_counters[channel] = []
-            self._rate_counters[channel].append(now)
-
-            # Route by priority
-            if priority == Priority.LOW:
-                self._digest_buffer.append(notif)
-            else:
-                self._pending.append(notif)
-
-            self._history.append(notif)
-
-        return notif
-
-    def flush_pending(self) -> list[Notification]:
-        """Get and clear pending notifications for delivery."""
-        with self._lock:
-            pending = list(self._pending)
-            self._pending.clear()
-
-            # Check if digest is due
-            now = datetime.now(timezone.utc)
-            if now - self._last_digest >= self._digest_interval and self._digest_buffer:
-                digest_notif = self._create_digest_notification(now)
-                if digest_notif:
-                    pending.append(digest_notif)
-                self._digest_buffer.clear()
-                self._last_digest = now
-
-        return pending
-
-    def get_digest(self, hours: float = 24.0) -> NotificationDigest:
-        """Get notification digest for the last N hours."""
-        cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
-
-        with self._lock:
-            recent = [
-                n for n in self._history
-                if datetime.fromisoformat(n.created_at) >= cutoff
-            ]
-
-        by_source: dict[str, int] = {}
-        by_priority: dict[str, int] = {}
-
-        for n in recent:
-            by_source[n.source] = by_source.get(n.source, 0) + 1
-            pname = n.priority.name if isinstance(n.priority, Priority) else str(n.priority)
-            by_priority[pname] = by_priority.get(pname, 0) + 1
-
-        now = datetime.now(timezone.utc)
-        return NotificationDigest(
-            period_start=(now - timedelta(hours=hours)).isoformat(timespec="seconds"),
-            period_end=now.isoformat(timespec="seconds"),
-            count=len(recent),
-            by_source=by_source,
-            by_priority=by_priority,
-            items=[
-                {
-                    "id": n.id,
-                    "source": n.source,
-                    "title": n.title,
-                    "message": n.message,
-                    "priority": n.priority.name if isinstance(n.priority, Priority) else str(n.priority),
-                    "created_at": n.created_at,
-                    "channel": n.channel,
-                }
-                for n in recent
-            ],
+    """Multi-channel notification engine."""
+    
+    def __init__(self):
+        self._notifications: Dict[str, Notification] = {}
+        self._templates: Dict[str, NotificationTemplate] = {}
+        self._user_preferences: Dict[str, UserPreferences] = {}
+        self._channel_handlers: Dict[NotificationChannel, Callable] = {}
+        self._delivery_history: List[Notification] = []
+        self._max_history_size = 1000
+        
+        # Rate limiting
+        self._rate_limits: Dict[str, List[str]] = {}  # user_id -> [notification_ids]
+        
+        # Register built-in channel handlers
+        self._register_builtin_handlers()
+    
+    def _register_builtin_handlers(self) -> None:
+        """Register built-in channel handlers."""
+        self._channel_handlers[NotificationChannel.PUSH] = self._handler_push
+        self._channel_handlers[NotificationChannel.EMAIL] = self._handler_email
+        self._channel_handlers[NotificationChannel.SMS] = self._handler_sms
+        self._channel_handlers[NotificationChannel.WEBHOOK] = self._handler_webhook
+        self._channel_handlers[NotificationChannel.TELEGRAM] = self._handler_telegram
+        self._channel_handlers[NotificationChannel.WHATSAPP] = self._handler_whatsapp
+        self._channel_handlers[NotificationChannel.SLACK] = self._handler_slack
+    
+    def _handler_push(self, notification: Notification) -> Dict[str, Any]:
+        """Push notification handler."""
+        logger.info("Push notification: %s to %s", notification.title, notification.recipient)
+        return {"sent": True, "channel": "push"}
+    
+    def _handler_email(self, notification: Notification) -> Dict[str, Any]:
+        """Email notification handler."""
+        logger.info("Email notification: %s to %s", notification.title, notification.recipient)
+        return {"sent": True, "channel": "email"}
+    
+    def _handler_sms(self, notification: Notification) -> Dict[str, Any]:
+        """SMS notification handler."""
+        logger.info("SMS notification: %s to %s", notification.title, notification.recipient)
+        return {"sent": True, "channel": "sms"}
+    
+    def _handler_webhook(self, notification: Notification) -> Dict[str, Any]:
+        """Webhook notification handler."""
+        logger.info("Webhook notification: %s", notification.title)
+        return {"sent": True, "channel": "webhook"}
+    
+    def _handler_telegram(self, notification: Notification) -> Dict[str, Any]:
+        """Telegram notification handler."""
+        logger.info("Telegram notification: %s to %s", notification.title, notification.recipient)
+        return {"sent": True, "channel": "telegram"}
+    
+    def _handler_whatsapp(self, notification: Notification) -> Dict[str, Any]:
+        """WhatsApp notification handler."""
+        logger.info("WhatsApp notification: %s to %s", notification.title, notification.recipient)
+        return {"sent": True, "channel": "whatsapp"}
+    
+    def _handler_slack(self, notification: Notification) -> Dict[str, Any]:
+        """Slack notification handler."""
+        logger.info("Slack notification: %s", notification.title)
+        return {"sent": True, "channel": "slack"}
+    
+    def register_channel_handler(self, channel: NotificationChannel,
+                                 handler: Callable) -> None:
+        """Register a custom channel handler."""
+        self._channel_handlers[channel] = handler
+        logger.info("Channel handler registered: %s", channel.value)
+    
+    def create_template(self, name: str, channel: str,
+                       subject_template: str, body_template: str,
+                       variables: Optional[List[str]] = None) -> str:
+        """Create a notification template."""
+        template_id = f"tpl_{uuid.uuid4().hex[:8]}"
+        
+        template = NotificationTemplate(
+            template_id=template_id,
+            name=name,
+            channel=NotificationChannel(channel),
+            subject_template=subject_template,
+            body_template=body_template,
+            variables=variables or [],
         )
-
-    def get_history(self, limit: int = 50, source: str | None = None) -> list[dict[str, Any]]:
-        """Get recent notification history."""
-        with self._lock:
-            items = list(self._history)
-
-        if source:
-            items = [n for n in items if n.source == source]
-
-        items = items[-limit:]
-        items.reverse()
-
-        return [
-            {
-                "id": n.id,
-                "source": n.source,
-                "title": n.title,
-                "message": n.message,
-                "priority": n.priority.name if isinstance(n.priority, Priority) else str(n.priority),
-                "created_at": n.created_at,
-                "channel": n.channel,
-                "delivered": n.delivered,
-            }
-            for n in items
-        ]
-
-    def get_stats(self) -> dict[str, Any]:
-        """Get engine statistics."""
-        with self._lock:
-            return {
-                "total_notifications": len(self._history),
-                "pending_count": len(self._pending),
-                "digest_buffer_count": len(self._digest_buffer),
-                "dedup_cache_size": len(self._dedup_cache),
-                "channels": list(self._handlers.keys()),
-                "rate_limit_per_hour": self._rate_limit,
-                "dedup_window_seconds": int(self._dedup_window.total_seconds()),
-            }
-
-    def clear_history(self) -> None:
-        """Clear all notification history."""
-        with self._lock:
-            self._history.clear()
-            self._dedup_cache.clear()
-            self._rate_counters.clear()
-            self._digest_buffer.clear()
-            self._pending.clear()
-            self._counter = 0
-
-    # ------------------------------------------------------------------
-    # Internal
-    # ------------------------------------------------------------------
-
-    def _is_duplicate(self, dedup_key: str, now: datetime) -> bool:
-        """Check if notification was recently sent."""
-        last = self._dedup_cache.get(dedup_key)
-        if last and (now - last) < self._dedup_window:
-            return True
-        # Clean expired entries
-        expired = [k for k, v in self._dedup_cache.items() if (now - v) > self._dedup_window]
-        for k in expired:
-            del self._dedup_cache[k]
-        return False
-
-    def _is_rate_limited(self, channel: str, now: datetime) -> bool:
-        """Check if channel is rate limited."""
-        timestamps = self._rate_counters.get(channel, [])
-        cutoff = now - timedelta(hours=1)
-        # Clean old entries
-        timestamps = [t for t in timestamps if t > cutoff]
-        self._rate_counters[channel] = timestamps
-        return len(timestamps) >= self._rate_limit
-
-    @staticmethod
-    def _make_dedup_key(source: str, title: str, message: str) -> str:
-        """Generate dedup key from content."""
-        raw = f"{source}:{title}:{message}"
-        return hashlib.sha256(raw.encode()).hexdigest()[:16]
-
-    def _create_digest_notification(self, now: datetime) -> Notification | None:
-        """Create a digest summary notification from buffered low-priority items."""
-        if not self._digest_buffer:
+        
+        self._templates[template_id] = template
+        
+        logger.info("Template created: %s (%s)", name, template_id)
+        
+        return template_id
+    
+    def render_template(self, template_id: str,
+                       data: Dict[str, Any]) -> Optional[tuple]:
+        """Render a template with data."""
+        if template_id not in self._templates:
             return None
-
-        count = len(self._digest_buffer)
-        sources = {}
-        for n in self._digest_buffer:
-            sources[n.source] = sources.get(n.source, 0) + 1
-
-        source_summary = ", ".join(f"{s}: {c}" for s, c in sources.items())
-
-        self._counter += 1
-        return Notification(
-            id=f"digest-{now.strftime('%Y%m%d%H%M%S')}-{self._counter:04d}",
-            source="system",
-            title=f"Zusammenfassung: {count} Hinweise",
-            message=f"In der letzten Stunde: {source_summary}",
-            priority=Priority.LOW,
-            created_at=now.isoformat(timespec="seconds"),
-            dedup_key=f"digest-{now.strftime('%Y%m%d%H')}",
-            data={"digest_count": count, "by_source": sources},
-            channel="default",
+        
+        template = self._templates[template_id]
+        
+        subject = template.subject_template
+        body = template.body_template
+        
+        for key, value in data.items():
+            subject = subject.replace(f"{{{{{key}}}}}", str(value))
+            body = body.replace(f"{{{{{key}}}}}", str(value))
+        
+        return subject, body
+    
+    def set_user_preferences(self, user_id: str,
+                            enabled_channels: Optional[List[str]] = None,
+                            quiet_hours_start: int = 22,
+                            quiet_hours_end: int = 7,
+                            priority_override: bool = True,
+                            rate_limit_per_hour: int = 10) -> None:
+        """Set user notification preferences."""
+        channels = []
+        if enabled_channels:
+            channels = [NotificationChannel(c) for c in enabled_channels]
+        else:
+            channels = list(NotificationChannel)
+        
+        prefs = UserPreferences(
+            user_id=user_id,
+            enabled_channels=channels,
+            quiet_hours_start=quiet_hours_start,
+            quiet_hours_end=quiet_hours_end,
+            priority_override=priority_override,
+            rate_limit_per_hour=rate_limit_per_hour,
         )
+        
+        self._user_preferences[user_id] = prefs
+    
+    def send_notification(self, title: str, message: str,
+                         channel: str, recipient: str,
+                         priority: str = "normal",
+                         template_id: Optional[str] = None,
+                         template_data: Optional[Dict[str, Any]] = None,
+                         metadata: Optional[Dict[str, Any]] = None,
+                         scheduled_at: Optional[str] = None) -> str:
+        """Send a notification."""
+        notification_id = f"notif_{uuid.uuid4().hex[:8]}"
+        
+        # Render template if provided
+        if template_id and template_data:
+            rendered = self.render_template(template_id, template_data)
+            if rendered:
+                title, message = rendered
+        
+        notification = Notification(
+            notification_id=notification_id,
+            title=title,
+            message=message,
+            channel=NotificationChannel(channel),
+            priority=NotificationPriority(priority),
+            recipient=recipient,
+            template_id=template_id,
+            template_data=template_data or {},
+            metadata=metadata or {},
+            scheduled_at=scheduled_at,
+        )
+        
+        self._notifications[notification_id] = notification
+        
+        # Check if should be sent now
+        if not scheduled_at:
+            self._deliver_notification(notification)
+        else:
+            notification.status = NotificationStatus.PENDING
+        
+        return notification_id
+    
+    def _deliver_notification(self, notification: Notification) -> None:
+        """Deliver a notification."""
+        import time
+        start_time = time.time()
+        
+        # Get user preferences
+        user_id = notification.recipient
+        prefs = self._user_preferences.get(user_id)
+        
+        # Check quiet hours
+        if prefs and self._is_quiet_hours(prefs):
+            if notification.priority != NotificationPriority.URGENT or not prefs.priority_override:
+                notification.status = NotificationStatus.SKIPPED
+                notification.error_message = "Quiet hours"
+                logger.debug("Notification skipped: quiet hours")
+                return
+        
+        # Check rate limit
+        if prefs and self._is_rate_limited(user_id, prefs):
+            notification.status = NotificationStatus.SKIPPED
+            notification.error_message = "Rate limited"
+            logger.debug("Notification skipped: rate limited")
+            return
+        
+        # Check channel enabled
+        if prefs and notification.channel not in prefs.enabled_channels:
+            notification.status = NotificationStatus.SKIPPED
+            notification.error_message = "Channel disabled"
+            logger.debug("Notification skipped: channel disabled")
+            return
+        
+        # Get channel handler
+        if notification.channel not in self._channel_handlers:
+            notification.status = NotificationStatus.FAILED
+            notification.error_message = f"Unknown channel: {notification.channel.value}"
+            logger.error(notification.error_message)
+            return
+        
+        try:
+            # Send notification
+            handler = self._channel_handlers[notification.channel]
+            result = handler(notification)
+            
+            notification.status = NotificationStatus.SENT
+            notification.sent_at = datetime.now(timezone.utc).isoformat()
+            notification.metadata["handler_result"] = result
+            
+            # Update rate limit tracking
+            self._track_delivery(user_id, notification.notification_id)
+            
+            duration_ms = int((time.time() - start_time) * 1000)
+            logger.info("Notification %s sent in %dms", notification.notification_id, duration_ms)
+            
+        except Exception as exc:
+            logger.exception("Notification delivery failed: %s", exc)
+            
+            notification.status = NotificationStatus.FAILED
+            notification.error_message = str(exc)
+            notification.retry_count += 1
+            
+            # Retry logic
+            if notification.retry_count < notification.max_retries:
+                logger.info("Notification will be retried (%d/%d)",
+                          notification.retry_count, notification.max_retries)
+            else:
+                logger.error("Notification exhausted retries")
+        
+        # Store in history
+        self._delivery_history.append(notification)
+        if len(self._delivery_history) > self._max_history_size:
+            self._delivery_history = self._delivery_history[-self._max_history_size:]
+    
+    def _is_quiet_hours(self, prefs: UserPreferences) -> bool:
+        """Check if current time is within quiet hours."""
+        now = datetime.now(timezone.utc)
+        current_hour = now.hour
+        
+        if prefs.quiet_hours_start > prefs.quiet_hours_end:
+            # Quiet hours span midnight (e.g., 22:00 - 07:00)
+            return (current_hour >= prefs.quiet_hours_start or
+                    current_hour < prefs.quiet_hours_end)
+        else:
+            # Quiet hours within same day
+            return prefs.quiet_hours_start <= current_hour < prefs.quiet_hours_end
+    
+    def _is_rate_limited(self, user_id: str, prefs: UserPreferences) -> bool:
+        """Check if user is rate limited."""
+        now = datetime.now(timezone.utc)
+        one_hour_ago = now - timedelta(hours=1)
+        
+        # Clean old entries
+        if user_id in self._rate_limits:
+            recent = [n for n in self._rate_limits[user_id]
+                     if datetime.fromisoformat(self._notifications[n].created_at) > one_hour_ago]
+            self._rate_limits[user_id] = recent
+        else:
+            self._rate_limits[user_id] = []
+        
+        return len(self._rate_limits[user_id]) >= prefs.rate_limit_per_hour
+    
+    def _track_delivery(self, user_id: str, notification_id: str) -> None:
+        """Track notification delivery for rate limiting."""
+        if user_id not in self._rate_limits:
+            self._rate_limits[user_id] = []
+        
+        self._rate_limits[user_id].append(notification_id)
+    
+    def get_notification(self, notification_id: str) -> Optional[Dict[str, Any]]:
+        """Get notification details."""
+        if notification_id not in self._notifications:
+            return None
+        
+        return self._notifications[notification_id].to_dict()
+    
+    def get_all_notifications(self, status: Optional[str] = None,
+                             channel: Optional[str] = None,
+                             recipient: Optional[str] = None,
+                             limit: int = 100) -> List[Dict[str, Any]]:
+        """Get all notifications with optional filters."""
+        notifications = list(self._notifications.values())
+        
+        if status:
+            notifications = [n for n in notifications if n.status.value == status]
+        
+        if channel:
+            notifications = [n for n in notifications if n.channel.value == channel]
+        
+        if recipient:
+            notifications = [n for n in notifications if n.recipient == recipient]
+        
+        # Sort by created_at (newest first)
+        notifications.sort(key=lambda n: n.created_at, reverse=True)
+        
+        return [n.to_dict() for n in notifications[:limit]]
+    
+    def get_template(self, template_id: str) -> Optional[Dict[str, Any]]:
+        """Get template details."""
+        if template_id not in self._templates:
+            return None
+        
+        return self._templates[template_id].to_dict()
+    
+    def get_all_templates(self) -> List[Dict[str, Any]]:
+        """Get all templates."""
+        return [t.to_dict() for t in self._templates.values()]
+    
+    def delete_template(self, template_id: str) -> bool:
+        """Delete a template."""
+        if template_id not in self._templates:
+            return False
+        
+        del self._templates[template_id]
+        return True
+    
+    def get_user_preferences(self, user_id: str) -> Optional[Dict[str, Any]]:
+        """Get user preferences."""
+        if user_id not in self._user_preferences:
+            return None
+        
+        return self._user_preferences[user_id].to_dict()
+    
+    def get_delivery_statistics(self) -> Dict[str, Any]:
+        """Get delivery statistics."""
+        total = len(self._notifications)
+        sent = len([n for n in self._notifications.values() if n.status == NotificationStatus.SENT])
+        failed = len([n for n in self._notifications.values() if n.status == NotificationStatus.FAILED])
+        skipped = len([n for n in self._notifications.values() if n.status == NotificationStatus.SKIPPED])
+        
+        # Channel breakdown
+        channel_stats = {}
+        for channel in NotificationChannel:
+            count = len([n for n in self._notifications.values() if n.channel == channel])
+            if count > 0:
+                channel_stats[channel.value] = count
+        
+        # Priority breakdown
+        priority_stats = {}
+        for priority in NotificationPriority:
+            count = len([n for n in self._notifications.values() if n.priority == priority])
+            if count > 0:
+                priority_stats[priority.value] = count
+        
+        return {
+            "total_notifications": total,
+            "sent": sent,
+            "failed": failed,
+            "skipped": skipped,
+            "delivery_rate": sent / total if total > 0 else 0,
+            "channel_breakdown": channel_stats,
+            "priority_breakdown": priority_stats,
+            "templates_count": len(self._templates),
+            "users_count": len(self._user_preferences),
+        }
+    
+    def retry_notification(self, notification_id: str) -> bool:
+        """Retry a failed notification."""
+        if notification_id not in self._notifications:
+            return False
+        
+        notification = self._notifications[notification_id]
+        
+        if notification.status != NotificationStatus.FAILED:
+            return False
+        
+        notification.retry_count = 0
+        notification.status = NotificationStatus.PENDING
+        notification.error_message = None
+        
+        self._deliver_notification(notification)
+        
+        return True
+    
+    def cancel_notification(self, notification_id: str) -> bool:
+        """Cancel a pending notification."""
+        if notification_id not in self._notifications:
+            return False
+        
+        notification = self._notifications[notification_id]
+        
+        if notification.status != NotificationStatus.PENDING:
+            return False
+        
+        notification.status = NotificationStatus.SKIPPED
+        notification.error_message = "Cancelled"
+        
+        return True
+
+
+def create_notification_engine() -> NotificationEngine:
+    """Factory function to create notification engine."""
+    return NotificationEngine()

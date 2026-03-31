@@ -12,12 +12,9 @@ Lifecycle handling:
 
 from __future__ import annotations
 
-import json
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from pathlib import Path
-from threading import RLock
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -78,9 +75,7 @@ class SuggestionActionIntent:
 class AutomationSuggestionEngine:
     """Generate automation suggestions from PilotSuite data."""
 
-    _STATE_SCHEMA_VERSION = 1
-
-    def __init__(self, *, persist_state: bool = False, storage_path: str | Path | None = None):
+    def __init__(self):
         self._suggestions: dict[str, AutomationSuggestion] = {}
         self._proposals: dict[str, SuggestionProposal] = {}
         self._intents: dict[str, SuggestionActionIntent] = {}
@@ -89,321 +84,161 @@ class AutomationSuggestionEngine:
         self._counter = 0
         self._proposal_counter = 0
         self._intent_counter = 0
-        self._persist_state = persist_state
-        self._storage_path = Path(storage_path or "/data/suggestion_engine_state.json")
-        self._lock = RLock()
-
-        if self._persist_state:
-            self._load_from_disk()
-
-        logger.info("AutomationSuggestionEngine initialized (persist_state=%s)", self._persist_state)
-
-    @staticmethod
-    def _extract_counter(raw_id: str) -> int:
-        """Return numeric suffix used by our *_id formats."""
-        if not raw_id:
-            return 0
-        tail = str(raw_id).rsplit("-", 1)[-1]
-        return int(tail) if tail.isdigit() else 0
+        logger.info("AutomationSuggestionEngine initialized")
 
     def _next_suggestion_id(self, prefix: str) -> str:
-        with self._lock:
-            self._counter += 1
-            return f"{prefix}-{self._counter:04d}"
+        self._counter += 1
+        return f"{prefix}-{self._counter:04d}"
 
     def _next_proposal_id(self) -> str:
-        with self._lock:
-            self._proposal_counter += 1
-            return f"proposal-{self._proposal_counter:04d}"
+        self._proposal_counter += 1
+        return f"proposal-{self._proposal_counter:04d}"
 
     def _next_intent_id(self) -> str:
-        with self._lock:
-            self._intent_counter += 1
-            return f"intent-{self._intent_counter:04d}"
-
-    def _snapshot(self) -> dict[str, Any]:
-        return {
-            "schema_version": self._STATE_SCHEMA_VERSION,
-            "saved_at": _now_iso(),
-            "counter": self._counter,
-            "proposal_counter": self._proposal_counter,
-            "intent_counter": self._intent_counter,
-            "suggestions": [self._to_dict(s) for s in self._suggestions.values()],
-            "proposals": [self._proposal_to_dict(p) for p in self._proposals.values()],
-            "intents": [self._intent_to_dict(i) for i in self._intents.values()],
-            "proposal_of_suggestion": dict(self._proposal_of_suggestion),
-            "suggestion_of_proposal": dict(self._suggestion_of_proposal),
-        }
-
-    def _serialize(self) -> dict[str, Any]:
-        return self._snapshot()
-
-    def _apply_snapshot(self, payload: dict[str, Any]) -> None:
-        suggestions = payload.get("suggestions", []) or []
-        proposals = payload.get("proposals", []) or []
-        intents = payload.get("intents", []) or []
-
-        self._suggestions = {
-            str(item.get("id", "")): self._suggestion_from_dict(item)
-            for item in suggestions
-            if isinstance(item, dict) and item.get("id")
-        }
-        self._proposals = {
-            str(item.get("proposal_id", "")): self._proposal_from_dict(item)
-            for item in proposals
-            if isinstance(item, dict) and item.get("proposal_id")
-        }
-        self._intents = {
-            str(item.get("intent_id", "")): self._intent_from_dict(item)
-            for item in intents
-            if isinstance(item, dict) and item.get("intent_id")
-        }
-
-        proposal_of = payload.get("proposal_of_suggestion", {})
-        suggestion_of = payload.get("suggestion_of_proposal", {})
-        self._proposal_of_suggestion = {
-            str(k): str(v)
-            for k, v in proposal_of.items()
-            if k is not None and v is not None
-        }
-        self._suggestion_of_proposal = {
-            str(k): str(v)
-            for k, v in suggestion_of.items()
-            if k is not None and v is not None
-        }
-
-        self._counter = int(payload.get("counter", 0) or 0)
-        self._proposal_counter = int(payload.get("proposal_counter", 0) or 0)
-        self._intent_counter = int(payload.get("intent_counter", 0) or 0)
-
-        # fallback to observed IDs if payload counters are stale
-        for value in self._suggestions:
-            self._counter = max(self._counter, self._extract_counter(value))
-
-        for value in self._proposals:
-            self._proposal_counter = max(self._proposal_counter, self._extract_counter(value))
-
-        for value in self._intents:
-            self._intent_counter = max(self._intent_counter, self._extract_counter(value))
-
-    def _load_from_disk(self) -> None:
-        if not self._storage_path.exists():
-            return
-        try:
-            raw = self._storage_path.read_text(encoding="utf-8")
-            payload = json.loads(raw)
-            if not isinstance(payload, dict):
-                logger.warning("Invalid suggestion-engine state payload")
-                return
-            self._apply_snapshot(payload)
-            logger.info("Loaded suggestion-engine state from %s", self._storage_path)
-        except Exception:
-            logger.exception("Failed loading suggestion-engine state from %s", self._storage_path)
-
-    def _save_to_disk(self) -> None:
-        try:
-            self._storage_path.parent.mkdir(parents=True, exist_ok=True)
-            tmp_file = self._storage_path.with_suffix(self._storage_path.suffix + ".tmp")
-            tmp_file.write_text(json.dumps(self._serialize(), sort_keys=True, indent=2), encoding="utf-8")
-            tmp_file.replace(self._storage_path)
-            logger.debug("Suggestion-engine state saved to %s", self._storage_path)
-        except Exception:
-            logger.exception("Failed writing suggestion-engine state to %s", self._storage_path)
-
-    def _persist_state_if_enabled(self) -> None:
-        if self._persist_state:
-            self._save_to_disk()
-
-    @staticmethod
-    def _suggestion_from_dict(data: dict[str, Any]) -> AutomationSuggestion:
-        return AutomationSuggestion(
-            id=str(data.get("id", "")),
-            title=str(data.get("title", "")),
-            description=str(data.get("description", "")),
-            category=str(data.get("category", "")),
-            confidence=float(data.get("confidence", 0.0) or 0.0),
-            estimated_savings_eur=data.get("estimated_savings_eur"),
-            automation_yaml=data.get("automation_yaml", {}) if isinstance(data.get("automation_yaml"), dict) else {},
-            source_pattern=data.get("source_pattern"),
-            accepted=bool(data.get("accepted", False)),
-            dismissed=bool(data.get("dismissed", False)),
-            snoozed_until=data.get("snoozed_until"),
-        )
-
-    @staticmethod
-    def _proposal_from_dict(data: dict[str, Any]) -> SuggestionProposal:
-        return SuggestionProposal(
-            proposal_id=str(data.get("proposal_id", "")),
-            suggestion_id=str(data.get("suggestion_id", "")),
-            action_type=str(data.get("action_type", "create_automation")),
-            action_config=data.get("action_config", {}) if isinstance(data.get("action_config"), dict) else {},
-            explanation=str(data.get("explanation", "")),
-            confidence=float(data.get("confidence", 0.0) or 0.0),
-            created_at=str(data.get("created_at", _now_iso())),
-            accepted_at=data.get("accepted_at"),
-            executed_at=data.get("executed_at"),
-            status=str(data.get("status", "proposed")),
-            action_intent_id=data.get("action_intent_id"),
-        )
-
-    @staticmethod
-    def _intent_from_dict(data: dict[str, Any]) -> SuggestionActionIntent:
-        return SuggestionActionIntent(
-            intent_id=str(data.get("intent_id", "")),
-            proposal_id=str(data.get("proposal_id", "")),
-            action=str(data.get("action", "create_automation")),
-            params=data.get("params", {}) if isinstance(data.get("params"), dict) else {},
-            status=str(data.get("status", "pending")),
-            created_at=str(data.get("created_at", _now_iso())),
-            executed_at=data.get("executed_at"),
-            result=data.get("result"),
-        )
+        self._intent_counter += 1
+        return f"intent-{self._intent_counter:04d}"
 
     # ── Suggestion creation --------------------------------------------------
     def suggest_from_schedule(
         self, device_type: str, start_hour: int, end_hour: int, days: str = "weekday"
     ) -> AutomationSuggestion:
         """Generate time-based automation from schedule pattern."""
-        with self._lock:
-            sid = self._next_suggestion_id("auto-sched")
+        sid = self._next_suggestion_id("auto-sched")
 
-            trigger_time = f"{start_hour:02d}:00:00"
-            entity_map = {
-                "washer": "switch.washing_machine",
-                "dryer": "switch.dryer",
-                "dishwasher": "switch.dishwasher",
-                "ev_charger": "switch.ev_charger",
-            }
-            entity = entity_map.get(device_type, f"switch.{device_type}")
+        trigger_time = f"{start_hour:02d}:00:00"
+        entity_map = {
+            "washer": "switch.washing_machine",
+            "dryer": "switch.dryer",
+            "dishwasher": "switch.dishwasher",
+            "ev_charger": "switch.ev_charger",
+        }
+        entity = entity_map.get(device_type, f"switch.{device_type}")
 
-            weekdays = (
-                ["mon", "tue", "wed", "thu", "fri"]
-                if days == "weekday"
-                else ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
-            )
+        weekdays = (
+            ["mon", "tue", "wed", "thu", "fri"]
+            if days == "weekday"
+            else ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+        )
 
-            device_names = {
-                "washer": "Waschmaschine",
-                "dryer": "Trockner",
-                "dishwasher": "Geschirrspueler",
-                "ev_charger": "E-Auto Laden",
-            }
-            name = device_names.get(device_type, device_type.title())
+        device_names = {
+            "washer": "Waschmaschine",
+            "dryer": "Trockner",
+            "dishwasher": "Geschirrspueler",
+            "ev_charger": "E-Auto Laden",
+        }
+        name = device_names.get(device_type, device_type.title())
 
-            automation = {
-                "alias": f"PilotSuite: {name} automatisch starten",
-                "description": f"Startet {name} zum optimalen Zeitpunkt ({start_hour}:00-{end_hour}:00)",
-                "trigger": [
-                    {
-                        "platform": "time",
-                        "at": trigger_time,
-                    }
-                ],
-                "condition": [
-                    {
-                        "condition": "time",
-                        "weekday": weekdays,
-                    }
-                ],
-                "action": [
-                    {
-                        "service": "switch.turn_on",
-                        "target": {"entity_id": entity},
-                    },
-                    {
-                        "delay": {"hours": max(0, end_hour - start_hour), "minutes": 0},
-                    },
-                    {
-                        "service": "switch.turn_off",
-                        "target": {"entity_id": entity},
-                    },
-                ],
-                "mode": "single",
-            }
+        automation = {
+            "alias": f"PilotSuite: {name} automatisch starten",
+            "description": f"Startet {name} zum optimalen Zeitpunkt ({start_hour}:00-{end_hour}:00)",
+            "trigger": [
+                {
+                    "platform": "time",
+                    "at": trigger_time,
+                }
+            ],
+            "condition": [
+                {
+                    "condition": "time",
+                    "weekday": weekdays,
+                }
+            ],
+            "action": [
+                {
+                    "service": "switch.turn_on",
+                    "target": {"entity_id": entity},
+                },
+                {
+                    "delay": {"hours": max(0, end_hour - start_hour), "minutes": 0},
+                },
+                {
+                    "service": "switch.turn_off",
+                    "target": {"entity_id": entity},
+                },
+            ],
+            "mode": "single",
+        }
 
-            suggestion = AutomationSuggestion(
-                id=sid,
-                title=f"{name} automatisch um {start_hour}:00 starten",
-                description=(
-                    f"Basierend auf dem Energiezeitplan: {name} laeuft optimal "
-                    f"zwischen {start_hour}:00 und {end_hour}:00 ({days})."
-                ),
-                category="time",
-                confidence=0.8,
-                estimated_savings_eur=0.15,
-                automation_yaml=automation,
-                source_pattern=f"schedule:{device_type}:{start_hour}-{end_hour}",
-            )
+        suggestion = AutomationSuggestion(
+            id=sid,
+            title=f"{name} automatisch um {start_hour}:00 starten",
+            description=(
+                f"Basierend auf dem Energiezeitplan: {name} laeuft optimal "
+                f"zwischen {start_hour}:00 und {end_hour}:00 ({days})."
+            ),
+            category="time",
+            confidence=0.8,
+            estimated_savings_eur=0.15,
+            automation_yaml=automation,
+            source_pattern=f"schedule:{device_type}:{start_hour}-{end_hour}",
+        )
 
-            self._suggestions[sid] = suggestion
-            self._persist_state_if_enabled()
-            return suggestion
+        self._suggestions[sid] = suggestion
+        return suggestion
 
     def suggest_from_solar(
         self, device_type: str, surplus_threshold_kwh: float = 5.0
     ) -> AutomationSuggestion:
         """Generate energy-based automation from solar surplus pattern."""
-        with self._lock:
-            sid = self._next_suggestion_id("auto-solar")
+        sid = self._next_suggestion_id("auto-solar")
 
-            entity_map = {
-                "washer": "switch.washing_machine",
-                "dryer": "switch.dryer",
-                "dishwasher": "switch.dishwasher",
-                "ev_charger": "switch.ev_charger",
-            }
-            entity = entity_map.get(device_type, f"switch.{device_type}")
-            device_names = {
-                "washer": "Waschmaschine",
-                "dryer": "Trockner",
-                "dishwasher": "Geschirrspueler",
-                "ev_charger": "E-Auto Laden",
-            }
-            name = device_names.get(device_type, device_type.title())
+        entity_map = {
+            "washer": "switch.washing_machine",
+            "dryer": "switch.dryer",
+            "dishwasher": "switch.dishwasher",
+            "ev_charger": "switch.ev_charger",
+        }
+        entity = entity_map.get(device_type, f"switch.{device_type}")
+        device_names = {
+            "washer": "Waschmaschine",
+            "dryer": "Trockner",
+            "dishwasher": "Geschirrspueler",
+            "ev_charger": "E-Auto Laden",
+        }
+        name = device_names.get(device_type, device_type.title())
 
-            automation = {
-                "alias": f"PilotSuite: {name} bei Solarueberschuss",
-                "description": f"Startet {name} wenn Solarueberschuss > {surplus_threshold_kwh} kWh",
-                "trigger": [
-                    {
-                        "platform": "numeric_state",
-                        "entity_id": "sensor.pilotsuite_energy_production",
-                        "above": surplus_threshold_kwh,
-                    }
-                ],
-                "condition": [
-                    {
-                        "condition": "state",
-                        "entity_id": entity,
-                        "state": "off",
-                    }
-                ],
-                "action": [
-                    {
-                        "service": "switch.turn_on",
-                        "target": {"entity_id": entity},
-                    }
-                ],
-                "mode": "single",
-            }
+        automation = {
+            "alias": f"PilotSuite: {name} bei Solarueberschuss",
+            "description": f"Startet {name} wenn Solarueberschuss > {surplus_threshold_kwh} kWh",
+            "trigger": [
+                {
+                    "platform": "numeric_state",
+                    "entity_id": "sensor.pilotsuite_energy_production",
+                    "above": surplus_threshold_kwh,
+                }
+            ],
+            "condition": [
+                {
+                    "condition": "state",
+                    "entity_id": entity,
+                    "state": "off",
+                }
+            ],
+            "action": [
+                {
+                    "service": "switch.turn_on",
+                    "target": {"entity_id": entity},
+                }
+            ],
+            "mode": "single",
+        }
 
-            suggestion = AutomationSuggestion(
-                id=sid,
-                title=f"{name} bei Solarueberschuss starten",
-                description=(
-                    f"Wenn die Solarproduktion {surplus_threshold_kwh} kWh uebersteigt, "
-                    f"wird {name} automatisch gestartet."
-                ),
-                category="energy",
-                confidence=0.75,
-                estimated_savings_eur=0.25,
-                automation_yaml=automation,
-                source_pattern=f"solar:{device_type}:>{surplus_threshold_kwh}kwh",
-            )
+        suggestion = AutomationSuggestion(
+            id=sid,
+            title=f"{name} bei Solarueberschuss starten",
+            description=(
+                f"Wenn die Solarproduktion {surplus_threshold_kwh} kWh uebersteigt, "
+                f"wird {name} automatisch gestartet."
+            ),
+            category="energy",
+            confidence=0.75,
+            estimated_savings_eur=0.25,
+            automation_yaml=automation,
+            source_pattern=f"solar:{device_type}:>{surplus_threshold_kwh}kwh",
+        )
 
-            self._suggestions[sid] = suggestion
-            self._persist_state_if_enabled()
-            return suggestion
+        self._suggestions[sid] = suggestion
+        return suggestion
 
     def suggest_from_comfort(
         self,
@@ -413,90 +248,88 @@ class AutomationSuggestionEngine:
         action_service: str = "switch.turn_on",
     ) -> AutomationSuggestion:
         """Generate comfort-based automation."""
-        with self._lock:
-            sid = self._next_suggestion_id("auto-comfort")
+        sid = self._next_suggestion_id("auto-comfort")
 
-            factor_config = {
-                "co2": {
-                    "sensor": "sensor.co2",
-                    "name": "CO2-Wert",
-                    "unit": "ppm",
-                    "action_name": "Lueftung einschalten",
-                },
-                "temperature_high": {
-                    "sensor": "sensor.temperature",
-                    "name": "Temperatur",
-                    "unit": "C",
-                    "action_name": "Klimaanlage einschalten",
-                },
-                "temperature_low": {
-                    "sensor": "sensor.temperature",
-                    "name": "Temperatur",
-                    "unit": "C",
-                    "action_name": "Heizung erhoehen",
-                },
-                "humidity_high": {
-                    "sensor": "sensor.humidity",
-                    "name": "Luftfeuchtigkeit",
-                    "unit": "%",
-                    "action_name": "Entfeuchter einschalten",
-                },
-            }
+        factor_config = {
+            "co2": {
+                "sensor": "sensor.co2",
+                "name": "CO2-Wert",
+                "unit": "ppm",
+                "action_name": "Lueftung einschalten",
+            },
+            "temperature_high": {
+                "sensor": "sensor.temperature",
+                "name": "Temperatur",
+                "unit": "C",
+                "action_name": "Klimaanlage einschalten",
+            },
+            "temperature_low": {
+                "sensor": "sensor.temperature",
+                "name": "Temperatur",
+                "unit": "C",
+                "action_name": "Heizung erhoehen",
+            },
+            "humidity_high": {
+                "sensor": "sensor.humidity",
+                "name": "Luftfeuchtigkeit",
+                "unit": "%",
+                "action_name": "Entfeuchter einschalten",
+            },
+        }
 
-            config = factor_config.get(
-                factor,
+        config = factor_config.get(
+            factor,
+            {
+                "sensor": f"sensor.{factor}",
+                "name": factor.title(),
+                "unit": "",
+                "action_name": f"{action_entity} schalten",
+            },
+        )
+
+        is_below = factor in ("temperature_low",)
+
+        trigger = {
+            "platform": "numeric_state",
+            "entity_id": config["sensor"],
+        }
+        if is_below:
+            trigger["below"] = threshold
+        else:
+            trigger["above"] = threshold
+
+        automation = {
+            "alias": f"PilotSuite: {config['action_name']}",
+            "description": (
+                f"Automatisch {config['action_name']} wenn "
+                f"{config['name']} {'unter' if is_below else 'ueber'} "
+                f"{threshold} {config['unit']}"
+            ),
+            "trigger": [trigger],
+            "action": [
                 {
-                    "sensor": f"sensor.{factor}",
-                    "name": factor.title(),
-                    "unit": "",
-                    "action_name": f"{action_entity} schalten",
-                },
-            )
+                    "service": action_service,
+                    "target": {"entity_id": action_entity},
+                }
+            ],
+            "mode": "single",
+        }
 
-            is_below = factor in ("temperature_low",)
+        suggestion = AutomationSuggestion(
+            id=sid,
+            title=(
+                f"{config['action_name']} bei {config['name']} {'<' if is_below else '>'} "
+                f"{threshold}{config['unit']}"
+            ),
+            description=automation["description"],
+            category="comfort",
+            confidence=0.7,
+            automation_yaml=automation,
+            source_pattern=f"comfort:{factor}:{'<' if is_below else '>'}{threshold}",
+        )
 
-            trigger = {
-                "platform": "numeric_state",
-                "entity_id": config["sensor"],
-            }
-            if is_below:
-                trigger["below"] = threshold
-            else:
-                trigger["above"] = threshold
-
-            automation = {
-                "alias": f"PilotSuite: {config['action_name']}",
-                "description": (
-                    f"Automatisch {config['action_name']} wenn "
-                    f"{config['name']} {'unter' if is_below else 'ueber'} "
-                    f"{threshold} {config['unit']}"
-                ),
-                "trigger": [trigger],
-                "action": [
-                    {
-                        "service": action_service,
-                        "target": {"entity_id": action_entity},
-                    }
-                ],
-                "mode": "single",
-            }
-
-            suggestion = AutomationSuggestion(
-                id=sid,
-                title=(
-                    f"{config['action_name']} bei {config['name']} {'<' if is_below else '>'} "
-                    f"{threshold}{config['unit']}"
-                ),
-                description=automation["description"],
-                category="comfort",
-                confidence=0.7,
-                automation_yaml=automation,
-                source_pattern=f"comfort:{factor}:{'<' if is_below else '>'}{threshold}",
-            )
-
-            self._suggestions[sid] = suggestion
-            self._persist_state_if_enabled()
-            return suggestion
+        self._suggestions[sid] = suggestion
+        return suggestion
 
     def suggest_from_presence(
         self,
@@ -504,49 +337,47 @@ class AutomationSuggestionEngine:
         entities: list[str] | None = None,
     ) -> AutomationSuggestion:
         """Generate presence-based automation (away mode)."""
-        with self._lock:
-            sid = self._next_suggestion_id("auto-presence")
+        sid = self._next_suggestion_id("auto-presence")
 
-            target_entities = entities or [
-                "light.living_room", "light.kitchen", "light.bedroom",
-            ]
+        target_entities = entities or [
+            "light.living_room", "light.kitchen", "light.bedroom",
+        ]
 
-            automation = {
-                "alias": "PilotSuite: Alles aus bei Abwesenheit",
-                "description": (
-                    f"Schaltet Lichter aus wenn niemand fuer {away_minutes} Min. zu Hause ist"
-                ),
-                "trigger": [
-                    {
-                        "platform": "state",
-                        "entity_id": "group.all_persons",
-                        "to": "not_home",
-                        "for": {"minutes": away_minutes},
-                    }
-                ],
-                "action": [
-                    {
-                        "service": "light.turn_off",
-                        "target": {"entity_id": target_entities},
-                    }
-                ],
-                "mode": "single",
-            }
+        automation = {
+            "alias": "PilotSuite: Alles aus bei Abwesenheit",
+            "description": (
+                f"Schaltet Lichter aus wenn niemand fuer {away_minutes} Min. zu Hause ist"
+            ),
+            "trigger": [
+                {
+                    "platform": "state",
+                    "entity_id": "group.all_persons",
+                    "to": "not_home",
+                    "for": {"minutes": away_minutes},
+                }
+            ],
+            "action": [
+                {
+                    "service": "light.turn_off",
+                    "target": {"entity_id": target_entities},
+                }
+            ],
+            "mode": "single",
+        }
 
-            suggestion = AutomationSuggestion(
-                id=sid,
-                title=f"Lichter aus nach {away_minutes} Min. Abwesenheit",
-                description=automation["description"],
-                category="presence",
-                confidence=0.85,
-                estimated_savings_eur=0.10,
-                automation_yaml=automation,
-                source_pattern=f"presence:away:{away_minutes}min",
-            )
+        suggestion = AutomationSuggestion(
+            id=sid,
+            title=f"Lichter aus nach {away_minutes} Min. Abwesenheit",
+            description=automation["description"],
+            category="presence",
+            confidence=0.85,
+            estimated_savings_eur=0.10,
+            automation_yaml=automation,
+            source_pattern=f"presence:away:{away_minutes}min",
+        )
 
-            self._suggestions[sid] = suggestion
-            self._persist_state_if_enabled()
-            return suggestion
+        self._suggestions[sid] = suggestion
+        return suggestion
 
     # ── Query APIs -----------------------------------------------------------
     def get_suggestions(
@@ -558,23 +389,22 @@ class AutomationSuggestionEngine:
         limit: int | None = None,
     ) -> list[dict[str, Any]]:
         """Get all suggestions, optionally filtered."""
-        with self._lock:
-            results = []
-            for s in self._suggestions.values():
-                if not include_dismissed and s.dismissed:
-                    continue
-                if not include_accepted and s.accepted:
-                    continue
-                if not include_snoozed and s.snoozed_until is not None:
-                    continue
-                if category and s.category != category:
-                    continue
-                results.append(self._to_dict(s))
+        results = []
+        for s in self._suggestions.values():
+            if not include_dismissed and s.dismissed:
+                continue
+            if not include_accepted and s.accepted:
+                continue
+            if not include_snoozed and s.snoozed_until is not None:
+                continue
+            if category and s.category != category:
+                continue
+            results.append(self._to_dict(s))
 
-            results.sort(key=lambda x: x["confidence"], reverse=True)
-            if limit is not None:
-                results = results[:max(0, int(limit))]
-            return results
+        results.sort(key=lambda x: x["confidence"], reverse=True)
+        if limit is not None:
+            results = results[:max(0, int(limit))]
+        return results
 
     def get_pending(self, limit: int = 20) -> list[dict[str, Any]]:
         """Backward-compatible helper returning non-accepted suggestions."""
@@ -587,28 +417,25 @@ class AutomationSuggestionEngine:
     # ── Lifecycle transitions ------------------------------------------------
     def accept_suggestion(self, suggestion_id: str) -> dict[str, Any] | None:
         """Mark suggestion accepted and emit lifecycle proposal."""
-        with self._lock:
-            proposal = self.propose_suggestion(suggestion_id)
-            if not proposal:
-                return None
+        proposal = self.propose_suggestion(suggestion_id)
+        if not proposal:
+            return None
 
-            suggestion = self._suggestions.get(suggestion_id)
-            if not suggestion:
-                return None
-            payload = self._to_dict(suggestion)
-            payload["proposal_id"] = proposal["proposal_id"]
-            payload["proposal_status"] = proposal["status"]
-            return payload
+        suggestion = self._suggestions.get(suggestion_id)
+        if not suggestion:
+            return None
+        payload = self._to_dict(suggestion)
+        payload["proposal_id"] = proposal["proposal_id"]
+        payload["proposal_status"] = proposal["status"]
+        return payload
 
     def dismiss_suggestion(self, suggestion_id: str) -> dict[str, Any] | None:
         """Mark a suggestion as dismissed (user rejected)."""
-        with self._lock:
-            s = self._suggestions.get(suggestion_id)
-            if s:
-                s.dismissed = True
-                self._persist_state_if_enabled()
-                return self._to_dict(s)
-            return None
+        s = self._suggestions.get(suggestion_id)
+        if s:
+            s.dismissed = True
+            return self._to_dict(s)
+        return None
 
     def reject_suggestion(self, suggestion_id: str) -> dict[str, Any] | None:
         """Alias for dismiss_suggestion."""
@@ -620,104 +447,95 @@ class AutomationSuggestionEngine:
         minutes: int = 15,
     ) -> dict[str, Any] | None:
         """Snooze suggestion for N minutes."""
-        with self._lock:
-            s = self._suggestions.get(suggestion_id)
-            if not s:
-                return None
-            try:
-                from datetime import timedelta
-
-                now = datetime.now(timezone.utc)
-                s.snoozed_until = (now + timedelta(minutes=max(1, int(minutes)))).timestamp()
-            except Exception:
-                # Always keep behavior simple and permissive on bad args
-                pass
-            self._persist_state_if_enabled()
-            return self._to_dict(s)
+        s = self._suggestions.get(suggestion_id)
+        if not s:
+            return None
+        try:
+            from datetime import timedelta
+            now = datetime.now(timezone.utc)
+            s.snoozed_until = (now + timedelta(minutes=max(1, int(minutes)))).timestamp()
+        except Exception:
+            # Always keep behavior simple and permissive on bad args
+            pass
+        return self._to_dict(s)
 
     def propose_suggestion(self, suggestion_id: str) -> dict[str, Any] | None:
         """Convert accepted suggestion into a proposal."""
-        with self._lock:
-            suggestion = self._suggestions.get(suggestion_id)
-            if not suggestion or suggestion.dismissed:
-                return None
+        suggestion = self._suggestions.get(suggestion_id)
+        if not suggestion or suggestion.dismissed:
+            return None
 
-            existing_proposal_id = self._proposal_of_suggestion.get(suggestion_id)
-            if existing_proposal_id:
-                existing = self._proposals.get(existing_proposal_id)
-                if existing and existing.status != "cancelled":
-                    return self._proposal_to_dict(existing)
+        existing_proposal_id = self._proposal_of_suggestion.get(suggestion_id)
+        if existing_proposal_id:
+            existing = self._proposals.get(existing_proposal_id)
+            if existing and existing.status != "cancelled":
+                return self._proposal_to_dict(existing)
 
-            proposal_id = self._next_proposal_id()
-            proposal = SuggestionProposal(
-                proposal_id=proposal_id,
-                suggestion_id=suggestion_id,
-                action_type="create_automation",
-                action_config=suggestion.automation_yaml,
-                explanation=suggestion.description,
-                confidence=suggestion.confidence,
-                created_at=_now_iso(),
-                accepted_at=_now_iso(),
-                status="proposed",
-            )
+        proposal_id = self._next_proposal_id()
+        proposal = SuggestionProposal(
+            proposal_id=proposal_id,
+            suggestion_id=suggestion_id,
+            action_type="create_automation",
+            action_config=suggestion.automation_yaml,
+            explanation=suggestion.description,
+            confidence=suggestion.confidence,
+            created_at=_now_iso(),
+            accepted_at=_now_iso(),
+            status="proposed",
+        )
 
-            suggestion.accepted = True
+        suggestion.accepted = True
 
-            self._proposals[proposal_id] = proposal
-            self._proposal_of_suggestion[suggestion_id] = proposal_id
-            self._suggestion_of_proposal[proposal_id] = suggestion_id
-            self._persist_state_if_enabled()
-            return self._proposal_to_dict(proposal)
+        self._proposals[proposal_id] = proposal
+        self._proposal_of_suggestion[suggestion_id] = proposal_id
+        self._suggestion_of_proposal[proposal_id] = suggestion_id
+        return self._proposal_to_dict(proposal)
 
     def get_proposals(self, include_executed: bool = False) -> list[dict[str, Any]]:
         """List proposals."""
-        with self._lock:
-            proposals = list(self._proposals.values())
-            if not include_executed:
-                proposals = [p for p in proposals if p.status != "executed"]
-            proposals.sort(key=lambda p: p.created_at, reverse=True)
-            return [self._proposal_to_dict(p) for p in proposals]
+        proposals = list(self._proposals.values())
+        if not include_executed:
+            proposals = [p for p in proposals if p.status != "executed"]
+        proposals.sort(key=lambda p: p.created_at, reverse=True)
+        return [self._proposal_to_dict(p) for p in proposals]
 
     def get_proposal(self, proposal_id: str) -> dict[str, Any] | None:
         """Get proposal by id."""
-        with self._lock:
-            proposal = self._proposals.get(proposal_id)
-            if not proposal:
-                return None
-            return self._proposal_to_dict(proposal)
+        proposal = self._proposals.get(proposal_id)
+        if not proposal:
+            return None
+        return self._proposal_to_dict(proposal)
 
     def create_action_intent(self, proposal_id: str) -> dict[str, Any] | None:
         """Create an action intent for a proposal."""
-        with self._lock:
-            proposal = self._proposals.get(proposal_id)
-            if not proposal:
-                return None
+        proposal = self._proposals.get(proposal_id)
+        if not proposal:
+            return None
 
-            # Reuse latest prepared intent if it is still pending
-            if proposal.action_intent_id:
-                old = self._intents.get(proposal.action_intent_id)
-                if old and old.status in {"pending", "ready"}:
-                    return self._intent_to_dict(old)
+        # Reuse latest prepared intent if it is still pending
+        if proposal.action_intent_id:
+            old = self._intents.get(proposal.action_intent_id)
+            if old and old.status in {"pending", "ready"}:
+                return self._intent_to_dict(old)
 
-            intent_id = self._next_intent_id()
-            params = {
-                "action_config": dict(proposal.action_config),
-                "proposal_id": proposal_id,
-                "suggestion_id": proposal.suggestion_id,
-                "explanation": proposal.explanation,
-            }
-            intent = SuggestionActionIntent(
-                intent_id=intent_id,
-                proposal_id=proposal_id,
-                action="create_automation",
-                params=params,
-                status="pending",
-            )
+        intent_id = self._next_intent_id()
+        params = {
+            "action_config": dict(proposal.action_config),
+            "proposal_id": proposal_id,
+            "suggestion_id": proposal.suggestion_id,
+            "explanation": proposal.explanation,
+        }
+        intent = SuggestionActionIntent(
+            intent_id=intent_id,
+            proposal_id=proposal_id,
+            action="create_automation",
+            params=params,
+            status="pending",
+        )
 
-            proposal.action_intent_id = intent_id
-            self._intents[intent_id] = intent
-            self._persist_state_if_enabled()
-            return self._intent_to_dict(intent)
+        proposal.action_intent_id = intent_id
+        self._intents[intent_id] = intent
+        return self._intent_to_dict(intent)
 
     def execute_proposal(
         self,
@@ -726,47 +544,43 @@ class AutomationSuggestionEngine:
         dry_run: bool = False,
     ) -> dict[str, Any] | None:
         """Materialize proposal into action intent. No external execution is performed."""
-        with self._lock:
-            proposal = self._proposals.get(proposal_id)
-            if not proposal:
-                return None
+        proposal = self._proposals.get(proposal_id)
+        if not proposal:
+            return None
 
-            intent_dict = self.create_action_intent(proposal_id)
-            if not intent_dict:
-                return None
+        intent_dict = self.create_action_intent(proposal_id)
+        if not intent_dict:
+            return None
 
-            intent = self._intents[intent_dict["intent_id"]]
-            if proposal.status == "executed":
-                intent_dict["status"] = intent.status
-                return intent_dict
+        intent = self._intents[intent_dict["intent_id"]]
+        if proposal.status == "executed":
+            intent_dict["status"] = intent.status
+            return intent_dict
 
-            if dry_run:
-                intent.status = "ready"
-                proposal.status = "ready_to_execute"
-            else:
-                intent.status = "executed"
-                intent.executed_at = _now_iso()
-                intent.result = {"ok": True, "message": "Action intent acknowledged"}
-                proposal.status = "executed"
-                proposal.executed_at = _now_iso()
+        if dry_run:
+            intent.status = "ready"
+            proposal.status = "ready_to_execute"
+        else:
+            intent.status = "executed"
+            intent.executed_at = _now_iso()
+            intent.result = {"ok": True, "message": "Action intent acknowledged"}
+            proposal.status = "executed"
+            proposal.executed_at = _now_iso()
 
-            self._persist_state_if_enabled()
-            return self._intent_to_dict(intent)
+        return self._intent_to_dict(intent)
 
     def get_action_intent(self, intent_id: str) -> dict[str, Any] | None:
-        with self._lock:
-            intent = self._intents.get(intent_id)
-            if not intent:
-                return None
-            return self._intent_to_dict(intent)
+        intent = self._intents.get(intent_id)
+        if not intent:
+            return None
+        return self._intent_to_dict(intent)
 
     def get_suggestion_yaml(self, suggestion_id: str) -> dict[str, Any] | None:
         """Get the raw automation YAML for a suggestion."""
-        with self._lock:
-            s = self._suggestions.get(suggestion_id)
-            if s:
-                return s.automation_yaml
-            return None
+        s = self._suggestions.get(suggestion_id)
+        if s:
+            return s.automation_yaml
+        return None
 
     @staticmethod
     def _to_dict(s: AutomationSuggestion) -> dict[str, Any]:

@@ -100,7 +100,7 @@ if lock_file.exists():
         lock["remaining_seconds"] = None
         lock["wait_elapsed"] = False
     lock["valid"] = (
-        lock["announcement_text"] == 'mache v15.2.9'
+        lock["announcement_text"] == 'mache v15.2.0'
         and lock["head_commit"] == head_commit
         and lock["announcement_at_utc"] is not None
         and lock["created_at_utc"] is not None
@@ -110,7 +110,7 @@ status["release_lock"] = lock
 
 if not lock["present"]:
     status["queue_state"] = "unlocked"
-    status["next_visible_step"] = "mache v15.2.9"
+    status["next_visible_step"] = "mache v15.2.0"
 elif lock["present"] and not lock["valid"]:
     status["queue_state"] = "locked-invalid"
     status["next_visible_step"] = "fix or clear RELEASE_LOCK.md before any cut discussion"

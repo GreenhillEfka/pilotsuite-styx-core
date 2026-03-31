@@ -12,7 +12,9 @@ Endpoints:
     POST /api/v1/zone-automation/zones/<zone_id>/override   — Toggle override switch
     POST /api/v1/zone-automation/zones/<zone_id>/mood       — Set mood state for zone
     GET  /api/v1/zone-automation/zones/<zone_id>/entities   — List zone entities
+    GET  /api/v1/zone-automation/zones/<zone_id>/entities/read-model — Deterministic zone entity read-model
     POST /api/v1/zone-automation/zones/<zone_id>/entities   — Add entity to zone
+    GET  /api/v1/zone-automation/entities/read-model         — Deterministic read-model for all assignments (?since=<revision>, deltas=true)
     DELETE /api/v1/zone-automation/zones/<zone_id>/entities/<entity_id> — Remove entity
     POST /api/v1/zone-automation/zones/<zone_id>/entities/<entity_id>/tags — Update entity tags
     POST /api/v1/zone-automation/zones/<zone_id>/entities/<entity_id>/role — Update entity role
@@ -47,6 +49,24 @@ _zone_engine: Optional[Any] = None
 
 
 
+TRUE_VALUES = {"1", "true", "yes", "on"}
+FALSE_VALUES = {"0", "false", "no", "off"}
+
+def _parse_bool_query_param(value: str | None, *, param_name: str) -> bool:
+    """Parse HTTP boolean query parameters with strict token validation."""
+    if value is None:
+        return False
+
+    normalized = str(value).strip().lower()
+    if normalized in TRUE_VALUES:
+        return True
+    if normalized in FALSE_VALUES:
+        return False
+
+    raise ValueError(f"Invalid boolean value for '{param_name}': {value!r}")
+
+
+
 def _sanitize_zone_id(value: str) -> str:
     """Normalize a human zone name into a stable zone_id.
     Keeps lowercase a-z/0-9/underscores and hyphen fallback.
@@ -65,47 +85,13 @@ def _normalize_zone_type(zone_type: str) -> str:
     return normalized if normalized in {item.value for item in ZoneType} else ""
 
 
-def _parse_bool_query_param(value: str | None, *, default: bool = False, param_name: str = "by_role") -> tuple[bool, str | None]:
-    """Parse a boolean-like query parameter with strict validation.
-
-    Accepts common true/false tokens only and rejects ambiguous values.
-    """
-    if value is None:
-        return default, None
-
-    normalized = str(value).strip().lower()
-    if normalized in {"1", "true", "yes", "on"}:
-        return True, None
-    if normalized in {"0", "false", "no", "off"}:
-        return False, None
-
-    return default, f"Invalid value for '{param_name}': {value}. Use one of: true, false, 1, 0, yes, no, on, off."
-
-
-
-def _parse_bool_body_param(value: object, *, default: bool = False, param_name: str = "flag") -> tuple[bool, str | None]:
-    """Parse a boolean-like JSON body field with strict validation.
-
-    Accepts booleans plus textual tokens and rejects ambiguous values.
-    """
-    if value is None:
-        return default, None
-
-    if isinstance(value, bool):
-        return value, None
-
-    if isinstance(value, int):
-        if value in (0, 1):
-            return bool(value), None
-        return default, f"Invalid value for '{param_name}': {value}. Use one of: true, false, 1, 0, yes, no, on, off."
-
-    normalized = str(value).strip().lower()
-    if normalized in {"1", "true", "yes", "on"}:
-        return True, None
-    if normalized in {"0", "false", "no", "off"}:
-        return False, None
-
-    return default, f"Invalid value for '{param_name}': {value}. Use one of: true, false, 1, 0, yes, no, on, off."
+def _get_zone_truth_store() -> Any:
+    """Lazy import ZoneTruthStore to avoid circular dependencies."""
+    try:
+        from copilot_core.storage.zone_truth import get_zone_truth_store
+        return get_zone_truth_store()
+    except Exception:
+        return None
 
 
 def _mirror_zone_truth_into_habitus_engine(zone: dict[str, Any], cfg: Any) -> None:
@@ -126,6 +112,84 @@ def _mirror_zone_truth_into_habitus_engine(zone: dict[str, Any], cfg: Any) -> No
         )
     except Exception as exc:
         _LOGGER.warning("Failed to mirror synced zone '%s' into Habitus engine: %s", zone.get("zone_id"), exc)
+
+
+def _sync_zone_to_truth_store(zone: dict[str, Any], cfg: Any) -> None:
+    """Sync zone definition to the ZoneTruthStore (Single Source of Truth)."""
+    store = _get_zone_truth_store()
+    if store is None:
+        return
+
+    try:
+        zone_id = str(zone.get("zone_id", "")).strip()
+        if not zone_id:
+            return
+
+        # Normalize entities from various input formats
+        entities_payload = zone.get("entities")
+        entity_items: list[dict[str, Any]] = []
+
+        if isinstance(entities_payload, dict):
+            # Role-map format: {"lights": [...], "motion": [...]}
+            for role, ids in entities_payload.items():
+                for eid in ids if isinstance(ids, list) else []:
+                    entity_items.append({"entity_id": str(eid).strip(), "role": str(role).strip()})
+        elif isinstance(entities_payload, list):
+            # List format: ["light.x"] or [{"entity_id": "...", "role": "..."}]
+            for item in entities_payload:
+                if isinstance(item, str):
+                    entity_items.append({"entity_id": item.strip(), "role": "other"})
+                elif isinstance(item, dict):
+                    entity_items.append({
+                        "entity_id": str(item.get("entity_id", "")).strip(),
+                        "role": str(item.get("role", "other")).strip(),
+                    })
+
+        # Check if zone exists in truth store
+        existing = store.get_zone(zone_id)
+
+        enabled_modules = set()
+        raw_modules = zone.get("enabled_modules")
+        if isinstance(raw_modules, (list, set, tuple)):
+            enabled_modules = {str(m).strip() for m in raw_modules if str(m).strip()}
+
+        if existing is None:
+            # Create new zone in truth store
+            store.create_zone(
+                zone_id=zone_id,
+                name=str(zone.get("name") or zone.get("name_de") or zone_id).strip(),
+                zone_type=_normalize_zone_type(str(zone.get("zone_type") or "living")) or "living",
+                icon=str(zone.get("icon") or "mdi:room").strip(),
+                priority=int(zone.get("priority") or 0),
+                enabled_modules=enabled_modules,
+                source="ha_sync",
+                ha_area_id=str(zone.get("ha_area_id") or zone.get("area_id") or "").strip() or None,
+            )
+            # Add entities
+            for item in entity_items:
+                if item["entity_id"]:
+                    store.add_entity(
+                        zone_id=zone_id,
+                        entity_id=item["entity_id"],
+                        role=item["role"] or "other",
+                        source="ha_sync",
+                    )
+        else:
+            # Update existing zone
+            store.update_zone(
+                zone_id=zone_id,
+                name=str(zone.get("name") or zone.get("name_de") or existing.name).strip(),
+                zone_type=_normalize_zone_type(str(zone.get("zone_type") or existing.zone_type)) or existing.zone_type,
+                icon=str(zone.get("icon") or existing.icon).strip(),
+                priority=int(zone.get("priority") or existing.priority),
+                enabled_modules=enabled_modules if enabled_modules else None,
+                ha_context={"area_id": zone.get("area_id"), "icon": zone.get("icon")},
+                source="ha_sync",
+            )
+
+        _LOGGER.debug("Zone '%s' synced to ZoneTruthStore", zone_id)
+    except Exception as exc:
+        _LOGGER.warning("Failed to sync zone '%s' to ZoneTruthStore: %s", zone.get("zone_id"), exc)
 
 
 def init_zone_automation_api(controller=None, zone_engine=None) -> None:
@@ -212,11 +276,7 @@ def create_zone():
     if updates:
         cfg = _controller.set_zone_config(zone_id, updates)
 
-    habitus_sync, parse_error = _parse_bool_body_param(data.get("habitus_sync", True), default=True, param_name="habitus_sync")
-    if parse_error:
-        return jsonify({"ok": False, "error": "invalid_body_param", "message": parse_error}), 400
-
-    if habitus_sync:
+    if bool(data.get("habitus_sync", True)):
         try:
             zone_payload = {
                 "zone_id": zone_id,
@@ -298,15 +358,9 @@ def toggle_override(zone_id: str):
     data = request.get_json(silent=True) or {}
     updates = {}
     if "light_enabled" in data:
-        light_enabled, parse_error = _parse_bool_body_param(data.get("light_enabled"), default=False, param_name="light_enabled")
-        if parse_error:
-            return jsonify({"ok": False, "error": "invalid_body_param", "message": parse_error}), 400
-        updates["light"] = {"enabled": light_enabled}
+        updates["light"] = {"enabled": bool(data["light_enabled"])}
     if "music_enabled" in data:
-        music_enabled, parse_error = _parse_bool_body_param(data.get("music_enabled"), default=False, param_name="music_enabled")
-        if parse_error:
-            return jsonify({"ok": False, "error": "invalid_body_param", "message": parse_error}), 400
-        updates["music"] = {"enabled": music_enabled}
+        updates["music"] = {"enabled": bool(data["music_enabled"])}
 
     config = _controller.set_zone_config(zone_id, updates)
     return jsonify({"ok": True, "config": config.to_dict()})
@@ -358,9 +412,7 @@ def report_presence(zone_id: str):
         return jsonify({"ok": False, "error": "Controller not initialized"}), 503
 
     data = request.get_json(silent=True) or {}
-    detected, parse_error = _parse_bool_body_param(data.get("detected", True), default=True, param_name="detected")
-    if parse_error:
-        return jsonify({"ok": False, "error": "invalid_body_param", "message": parse_error}), 400
+    detected = data.get("detected", True)
 
     if detected:
         actions = _controller.on_presence_detected(zone_id)
@@ -436,15 +488,69 @@ def list_zone_entities(zone_id: str):
     if _controller is None:
         return jsonify({"ok": False, "error": "Controller not initialized"}), 503
 
-    by_role, parse_error = _parse_bool_query_param(request.args.get("by_role"), default=False)
-    if parse_error:
-        return jsonify({"ok": False, "error": "invalid_query_param", "message": parse_error}), 400
+    try:
+        by_role = _parse_bool_query_param(
+            request.args.get("by_role"), param_name="by_role"
+        )
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
 
     if by_role:
         return jsonify({"ok": True, "zone_id": zone_id,
                         "entities_by_role": _controller.get_zone_entities_by_role(zone_id)})
     return jsonify({"ok": True, "zone_id": zone_id,
                     "entities": _controller.get_zone_entities(zone_id)})
+
+
+@zone_automation_bp.route("/zones/<zone_id>/entities/read-model", methods=["GET"])
+@require_token
+def get_zone_entities_read_model(zone_id: str):
+    """Return a deterministic read-model for all assignments in one zone.
+
+    Optional query param: ?since=<revision>&compact=true
+    If since is equal-or-latest revision, returns changed=False.
+    """
+    if _controller is None:
+        return jsonify({"ok": False, "error": "Controller not initialized"}), 503
+
+    try:
+        want_compact = _parse_bool_query_param(
+            request.args.get("compact"), param_name="compact"
+        )
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+
+    model = _controller.get_zone_entities_read_model(zone_id, compact=want_compact)
+    current_revision = model["revision"]
+
+    raw_since = request.args.get("since")
+    if raw_since is not None:
+        try:
+            since = int(raw_since)
+        except (TypeError, ValueError):
+            return jsonify({"ok": False, "error": "Invalid since parameter"}), 400
+        if since < 0:
+            return jsonify({"ok": False, "error": "since must be >= 0"}), 400
+
+        if since >= current_revision:
+            response = {
+                "ok": True,
+                "changed": False,
+                "zone_id": zone_id,
+                "revision": current_revision,
+            }
+            if want_compact:
+                response.update({
+                    "zone_name": model.get("zone_name"),
+                    "entity_count": model.get("entity_count"),
+                    "role_count": model.get("role_count"),
+                    "source_count": model.get("source_count"),
+                    "updated_at": model.get("updated_at"),
+                    "compact": True,
+                })
+            return jsonify(response)
+
+    return jsonify({"ok": True, "changed": True, **model})
 
 
 @zone_automation_bp.route("/zones/<zone_id>/entities", methods=["POST"])
@@ -567,6 +673,82 @@ def search_entities():
     return jsonify({"ok": True, "results": results, "count": len(results)})
 
 
+@zone_automation_bp.route("/entities/read-model", methods=["GET"])
+@require_token
+def get_entities_read_model():
+    """Return a deterministic read-model for all zone entity assignments.
+
+    Query params:
+      - since=<revision> (int, optional)
+      - deltas=true (boolean, optional; **requires since**)
+      - compact=true (boolean, optional)
+
+    If since is equal-or-latest revision, returns changed=False with compact payload.
+    With deltas=true and stale state, only zones changed since `since` are returned.
+    With compact=true, entity objects are omitted from zone entries.
+    """
+    if _controller is None:
+        return jsonify({"ok": False, "error": "Controller not initialized"}), 503
+
+    raw_since = request.args.get("since")
+    try:
+        want_deltas = _parse_bool_query_param(
+            request.args.get("deltas"), param_name="deltas"
+        )
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+
+    try:
+        want_compact = _parse_bool_query_param(
+            request.args.get("compact"), param_name="compact"
+        )
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+
+    if want_deltas and raw_since is None:
+        return jsonify({"ok": False, "error": "deltas=true requires since parameter"}), 400
+
+    if raw_since is not None:
+        try:
+            since = int(raw_since)
+        except (TypeError, ValueError):
+            return jsonify({"ok": False, "error": "Invalid since parameter"}), 400
+        if since < 0:
+            return jsonify({"ok": False, "error": "since must be >= 0"}), 400
+
+        # If client cache is current, return compact unchanged payload.
+        current_model = _controller.get_all_entities_read_model(compact=want_compact)
+        current_revision = current_model["summary"]["revision"]
+        if since >= current_revision:
+            return jsonify({
+                "ok": True,
+                "changed": False,
+                "revision": current_revision,
+                "zones": [],
+                "summary": current_model["summary"],
+            })
+
+        model = _controller.get_all_entities_read_model(
+            since_revision=since,
+            deltas=want_deltas,
+            compact=want_compact,
+        )
+
+        if want_deltas and isinstance(model.get("summary", {}).get("returned_zone_count"), int):
+            if model["summary"]["returned_zone_count"] == 0:
+                return jsonify({
+                    "ok": True,
+                    "changed": False,
+                    "revision": model["summary"]["delta_to_revision"],
+                    "zones": [],
+                    "summary": model["summary"],
+                })
+    else:
+        model = _controller.get_all_entities_read_model(compact=want_compact)
+
+    return jsonify({"ok": True, "changed": True, **model})
+
+
 # ── Import ───────────────────────────────────────────────────────────────────
 
 
@@ -642,10 +824,7 @@ def ensure_zones():
     if not isinstance(zone_ids, list):
         return jsonify({"ok": False, "error": "'zone_ids' must be a list"}), 400
 
-    habitus_sync, parse_error = _parse_bool_body_param(data.get("habitus_sync", False), default=False, param_name="habitus_sync")
-    if parse_error:
-        return jsonify({"ok": False, "error": "invalid_body_param", "message": parse_error}), 400
-
+    habitus_sync = bool(data.get("habitus_sync", False))
     created = []
     for zid in zone_ids:
         zid = str(zid).strip()
@@ -719,9 +898,7 @@ def sync_habitus_zones():
 
     data = request.get_json(silent=True) or {}
     zones = data.get("zones", [])
-    clear_missing, parse_error = _parse_bool_body_param(data.get("clear_missing", False), default=False, param_name="clear_missing")
-    if parse_error:
-        return jsonify({"ok": False, "error": "invalid_body_param", "message": parse_error}), 400
+    clear_missing = bool(data.get("clear_missing", False))
 
     if not isinstance(zones, list):
         return jsonify({"ok": False, "error": "'zones' must be a list"}), 400
@@ -752,6 +929,65 @@ def sync_habitus_zones():
 # ── Sync Zone Definitions (HA → Core) ──────────────────────────────────────
 
 
+def _normalize_sync_zone_name(zone: dict[str, Any], zone_id: str) -> str:
+    """Resolve the best display name from HA/Core contract variants."""
+    for key in ("name", "name_de", "zone_name"):
+        value = zone.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return zone_id
+
+
+
+def _normalize_string_list(value: Any) -> list[str]:
+    """Coerce list-like payload values into a de-duplicated string list."""
+    if not isinstance(value, (list, tuple, set)):
+        return []
+
+    items: list[str] = []
+    seen: set[str] = set()
+    for raw in value:
+        item = str(raw).strip()
+        if not item or item in seen:
+            continue
+        seen.add(item)
+        items.append(item)
+    return items
+
+
+
+def _normalize_zone_entities(zone: dict[str, Any]) -> tuple[list[str], dict[str, str]]:
+    """Flatten HA zone payloads into entity_ids plus optional role hints.
+
+    Accepts both:
+    - entities: ["light.kitchen"]
+    - entities: {"lights": ["light.kitchen"], "motion": ["binary_sensor.kitchen_motion"]}
+    - entity_ids: ["light.kitchen", ...]
+    """
+    entity_ids: list[str] = []
+    role_by_entity: dict[str, str] = {}
+    seen: set[str] = set()
+
+    def _add_entities(values: Any, *, role: str | None = None) -> None:
+        for entity_id in _normalize_string_list(values):
+            if entity_id not in seen:
+                seen.add(entity_id)
+                entity_ids.append(entity_id)
+            if role and entity_id not in role_by_entity:
+                role_by_entity[entity_id] = role
+
+    entities_payload = zone.get("entities")
+    if isinstance(entities_payload, dict):
+        for raw_role, values in entities_payload.items():
+            role = str(raw_role).strip() or None
+            _add_entities(values, role=role)
+    else:
+        _add_entities(entities_payload)
+
+    _add_entities(zone.get("entity_ids"))
+    return entity_ids, role_by_entity
+
+
 @zone_automation_bp.route("/sync-definitions", methods=["POST"])
 @require_token
 def sync_zone_definitions():
@@ -761,14 +997,16 @@ def sync_zone_definitions():
     Brain/Neuron system has the full zone topology for categorization,
     habit learning, and suggestion generation.
 
-    Body: {"source": "ha", "zones": [{"zone_id": "...", "name_de": "...",
-                                       "entities": [...], "zone_type": "..."}]}
+    Body: {"source": "ha", "zones": [{"zone_id": "...", "name": "...",
+                                       "entity_ids": [...], "entities": {...}}]}
     """
     if _controller is None:
         return jsonify({"ok": False, "error": "Controller not initialized"}), 503
 
     data = request.get_json(silent=True) or {}
-    source = data.get("source", "ha")
+    source = str(data.get("source", "ha")).strip().lower() or "ha"
+    # Normalize source marker so callers can provide either "ha" or pre-suffixed "ha_sync"
+    source = "ha" if source == "" else source
     zones = data.get("zones", [])
 
     if not isinstance(zones, list):
@@ -788,18 +1026,72 @@ def sync_zone_definitions():
 
         cfg = _controller._configs.get(zone_id)
         if cfg:
+            zone_name = _normalize_sync_zone_name(zone, zone_id)
+            entity_ids, role_by_entity = _normalize_zone_entities(zone)
+            ha_sync_source = source if source.endswith("_sync") else f"{source}_sync"
+
             # Store HA entity definitions + zone metadata on the config
-            cfg.zone_name = zone.get("name_de", zone_id)
-            cfg.zone_type = _normalize_zone_type(zone.get("zone_type", cfg.zone_type)) or cfg.zone_type or "living"
-            if "enabled_modules" in zone and isinstance(zone.get("enabled_modules"), list):
-                cfg.enabled_modules = set(str(mid) for mid in zone.get("enabled_modules", []) if str(mid).strip())
-            if "entities" in zone:
-                cfg.ha_entities = list(zone["entities"])
-                cfg._ha_entities = list(zone["entities"])  # backward-compatible HA context for Brain
-                if hasattr(_controller, "sync_entities_from_topology"):
-                    _controller.sync_entities_from_topology(zone_id, list(zone["entities"]))
+            cfg.zone_name = zone_name
+            candidate_zone_type = _normalize_zone_type(str(zone.get("zone_type", "") or ""))
+            cfg.zone_type = candidate_zone_type or getattr(cfg, "zone_type", "") or "room"
+
+            if "enabled_modules" in zone and isinstance(zone.get("enabled_modules"), (list, tuple, set)):
+                cfg.enabled_modules = {
+                    str(mid).strip()
+                    for mid in zone.get("enabled_modules", [])
+                    if str(mid).strip()
+                }
+
+            cfg.ha_entities = list(entity_ids)
+            cfg._ha_entities = {
+                "entity_ids": entity_ids,
+                "entities": zone.get("entities", {}),
+                "role_by_entity": role_by_entity,
+            }
+
+            # Replace only HA-synced assignments for this zone, while preserving
+            # manual/imported assignments created directly in Core.
+            existing_assignments = _controller._entity_assignments.get(zone_id, [])
+            _controller._entity_assignments[zone_id] = [
+                assignment
+                for assignment in existing_assignments
+                if assignment.source != ha_sync_source
+            ]
+
+            # Move HA-synced entities out of other zones before re-adding them.
+            incoming_entity_ids = set(entity_ids)
+            if incoming_entity_ids:
+                for other_zone_id, assignments in list(_controller._entity_assignments.items()):
+                    if other_zone_id == zone_id:
+                        continue
+                    _controller._entity_assignments[other_zone_id] = [
+                        assignment
+                        for assignment in assignments
+                        if not (
+                            assignment.source == ha_sync_source
+                            and assignment.entity_id in incoming_entity_ids
+                        )
+                    ]
+
+            for entity_id in entity_ids:
+                # Keep locally created manual/imported assignments in place.
+                existing_local = any(
+                    assignment.entity_id == entity_id and assignment.source != ha_sync_source
+                    for assignments in _controller._entity_assignments.values()
+                    for assignment in assignments
+                )
+                if existing_local:
+                    continue
+
+                _controller.add_entity(
+                    zone_id,
+                    entity_id,
+                    role=role_by_entity.get(entity_id),
+                    source=ha_sync_source,
+                )
 
             _mirror_zone_truth_into_habitus_engine(zone, cfg)
+            _sync_zone_to_truth_store(zone, cfg)
             synced.append(zone_id)
 
     _LOGGER.info(
@@ -893,4 +1185,151 @@ def get_zone_module_entities(zone_id: str, module_id: str):
         "module_id": module_id,
         "entities": matching,
         "count": len(matching),
+    })
+
+
+# ── Zone Truth Store API ─────────────────────────────────────────────────────
+
+
+@zone_automation_bp.route("/truth/zones", methods=["GET"])
+@optional_token
+def get_zone_truth_zones():
+    """Get all zones from the Zone Truth Store.
+
+    Query params:
+      - since=<revision> (int, optional)
+      - deltas=true (boolean, optional; requires since)
+      - compact=true (boolean, optional)
+
+    Returns deterministic read-model with revision tracking.
+    """
+    store = _get_zone_truth_store()
+    if store is None:
+        return jsonify({"ok": False, "error": "Zone Truth Store not available"}), 503
+
+    raw_since = request.args.get("since")
+    try:
+        want_deltas = _parse_bool_query_param(
+            request.args.get("deltas"), param_name="deltas"
+        )
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+
+    try:
+        want_compact = _parse_bool_query_param(
+            request.args.get("compact"), param_name="compact"
+        )
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+
+    since_revision = None
+    if raw_since is not None:
+        try:
+            since_revision = int(raw_since)
+        except (TypeError, ValueError):
+            return jsonify({"ok": False, "error": "Invalid since parameter"}), 400
+        if since_revision < 0:
+            return jsonify({"ok": False, "error": "since must be >= 0"}), 400
+
+    model = store.get_all_entities_read_model(
+        since_revision=since_revision,
+        deltas=want_deltas,
+        compact=want_compact,
+    )
+
+    return jsonify({"ok": True, **model})
+
+
+@zone_automation_bp.route("/truth/zones/<zone_id>", methods=["GET"])
+@optional_token
+def get_zone_truth_zone(zone_id: str):
+    """Get a single zone from the Zone Truth Store."""
+    store = _get_zone_truth_store()
+    if store is None:
+        return jsonify({"ok": False, "error": "Zone Truth Store not available"}), 503
+
+    zone = store.get_zone(zone_id)
+    if zone is None:
+        return jsonify({"ok": False, "error": "Zone not found"}), 404
+
+    return jsonify({"ok": True, "zone": zone.to_dict()})
+
+
+@zone_automation_bp.route("/truth/zones/<zone_id>/entities", methods=["GET"])
+@optional_token
+def get_zone_truth_entities(zone_id: str):
+    """Get entities for a zone from the Zone Truth Store, grouped by role."""
+    store = _get_zone_truth_store()
+    if store is None:
+        return jsonify({"ok": False, "error": "Zone Truth Store not available"}), 503
+
+    zone = store.get_zone(zone_id)
+    if zone is None:
+        return jsonify({"ok": False, "error": "Zone not found"}), 404
+
+    by_role = zone.get_entities_by_role()
+    return jsonify({
+        "ok": True,
+        "zone_id": zone_id,
+        "entities_by_role": {
+            role: [e.to_dict() for e in entities]
+            for role, entities in by_role.items()
+        },
+    })
+
+
+@zone_automation_bp.route("/truth/revision", methods=["GET"])
+@optional_token
+def get_zone_truth_revision():
+    """Get current revision and recent revision history.
+
+    Query params:
+      - limit=<N> (int, optional, default 50)
+      - zone_id=<zone_id> (string, optional, filter by zone)
+      - since_revision=<N> (int, optional, only revisions after this)
+    """
+    store = _get_zone_truth_store()
+    if store is None:
+        return jsonify({"ok": False, "error": "Zone Truth Store not available"}), 503
+
+    try:
+        limit = int(request.args.get("limit", 50))
+    except (TypeError, ValueError):
+        limit = 50
+
+    zone_id = request.args.get("zone_id")
+    raw_since = request.args.get("since_revision")
+    since_revision = None
+    if raw_since is not None:
+        try:
+            since_revision = int(raw_since)
+        except (TypeError, ValueError):
+            return jsonify({"ok": False, "error": "Invalid since_revision parameter"}), 400
+
+    history = store.get_revision_history(
+        zone_id=zone_id,
+        limit=limit,
+        since_revision=since_revision,
+    )
+
+    return jsonify({
+        "ok": True,
+        "current_revision": store.get_current_revision(),
+        "history": [h.to_dict() for h in history],
+    })
+
+
+@zone_automation_bp.route("/truth/archetypes", methods=["GET"])
+@optional_token
+def get_zone_truth_archetypes():
+    """Get all registered zone archetypes."""
+    store = _get_zone_truth_store()
+    if store is None:
+        return jsonify({"ok": False, "error": "Zone Truth Store not available"}), 503
+
+    archetypes = store.get_all_archetypes()
+    return jsonify({
+        "ok": True,
+        "archetypes": [a.to_dict() for a in archetypes],
+        "count": len(archetypes),
     })

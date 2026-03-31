@@ -12,7 +12,7 @@ EXPECTED_PAIRED_REF="8b017a74"
 
 failures=0
 
-printf 'Core 15.2.9 release-status check\n'
+printf 'Core 15.2.0 release-status check\n'
 printf 'Repo: %s\n' "$REPO_ROOT"
 printf 'Current HEAD: %s\n' "$CURRENT_HEAD"
 
@@ -49,7 +49,7 @@ queue_state = workspace_status.get('queue_state')
 next_step = workspace_status.get('next_visible_step')
 if not lock.get('present'):
     assert queue_state == 'unlocked'
-    assert next_step == 'mache v15.2.9'
+    assert next_step == 'mache v15.2.0'
 elif not lock.get('valid'):
     assert queue_state == 'locked-invalid'
     assert next_step == 'fix or clear RELEASE_LOCK.md before any cut discussion'
