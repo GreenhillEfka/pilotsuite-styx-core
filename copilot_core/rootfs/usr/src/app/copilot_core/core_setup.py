@@ -2038,11 +2038,13 @@ from copilot_core.api.v1.backend_ui import backend_ui_bp
 from copilot_core.api.v1.neurons_ui import neurons_ui_bp
 from copilot_core.api.v1.rag_ui import rag_ui_bp
 from copilot_core.api.v1.habitus import habitus_bp
+from copilot_core.api.v1.chat import chat_bp
 from copilot_core.api.v1.media_ui import media_ui_bp
 app.register_blueprint(backend_ui_bp)  # 10-tab Backend UI
 app.register_blueprint(neurons_ui_bp)  # Neuron Visualisierung
 app.register_blueprint(rag_ui_bp)  # RAG Visualisierung
 app.register_blueprint(habitus_bp)  # Habitus Life-Long-Learning
+app.register_blueprint(chat_bp)  # Chat API (externer Zugang)
 app.register_blueprint(media_ui_bp)  # Media UI (Sonos, Musikwolke, Cameras)
     except Exception:
         _LOGGER.exception("Failed to register mcp_bp")
