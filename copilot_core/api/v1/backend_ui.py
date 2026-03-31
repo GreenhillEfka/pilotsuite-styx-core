@@ -20,18 +20,21 @@ from flask import Blueprint, jsonify, request
 from typing import Any, Dict, List
 from datetime import datetime, timezone
 
-# Import ZoneType Enum als Single Source of Truth
+# Import existing HubZoneEngine (BEST implementation)
 try:
-    from copilot_core.homeassistant.habitus_zones_sync import (
-        ZoneType, ZoneMode, ModuleAutonomyState,
-        ZoneConfig, ModuleConfig,
-        get_default_zone_config, get_all_zone_types,
-        get_all_module_states, get_all_zone_modes,
-        TagRegistry,
+    from copilot_core.hub.habitus_zones import (
+        HabitusZoneEngine,
+        HabitusZone,
+        RoomConfig,
+        ZoneState,
+        ZoneOverview,
+        _ZONE_TEMPLATES,
+        _ZONE_MODES,
     )
-    HAS_SYNC = True
+    from copilot_core.homeassistant.habitus_zones import ZoneType
+    HAS_ENGINE = True
 except ImportError:
-    HAS_SYNC = False
+    HAS_ENGINE = False
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -83,25 +86,30 @@ def get_dashboard():
 @backend_ui_bp.route("/zones", methods=["GET"])
 def get_zones():
     """Zones data — Habituszonen, Entity-Mapping, Module pro Zone."""
-    if not HAS_SYNC:
-        return jsonify({"error": "Sync module not available"}), 503
+    if not HAS_ENGINE:
+        return jsonify({"error": "HubZoneEngine not available"}), 503
     
-    # Alle ZoneTypes mit Metadata
-    zone_types = get_all_zone_types()
-    zone_modes = get_all_zone_modes()
-    module_states = get_all_module_states()
+    # Use existing HubZoneEngine (BEST implementation)
+    engine = HabitusZoneEngine()
+    overview = engine.get_overview()
     
-    # TODO: Echte Zones aus Storage laden (stub for now)
-    zones = [
-        get_default_zone_config(zt).to_dict()
-        for zt in ZoneType
+    # ZoneTypes from templates
+    zone_types = [
+        {"id": tid, "name": t["name"], "icon": t["icon"], "default_modules": list(t.get("enabled_modules", []))}
+        for tid, t in _ZONE_TEMPLATES.items()
+    ]
+    
+    # Zone modes
+    zone_modes = [
+        {"id": mid, "name": m["name"], "icon": m["icon"], "automations": m["automations"]}
+        for mid, m in _ZONE_MODES.items()
     ]
     
     return jsonify({
-        "zones": zones,
+        "zones": overview.get("zones", []),
         "zone_types": zone_types,
         "zone_modes": zone_modes,
-        "module_states": module_states,
+        "overview": overview,
     })
 
 
