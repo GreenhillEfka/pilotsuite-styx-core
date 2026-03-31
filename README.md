@@ -2,7 +2,7 @@
 
 [![Release](https://img.shields.io/github/v/release/GreenhillEfka/pilotsuite-styx-core)](https://github.com/GreenhillEfka/pilotsuite-styx-core/releases)
 
-**PilotSuite Core** — Das Gehirn + Stimme der PilotSuite-Plattform. Home Assistant Add-on mit Brain Graph, RAG Chat, Mood Engine, Zone Automation und bundled Ollama LLM. Aktuelle Core/Add-on-Release-Linie: **v15.2.8**. **Dieses Repo ist nicht die HACS-Integration.**
+**PilotSuite Core** — Das Gehirn + Stimme der PilotSuite-Plattform. Home Assistant Add-on mit Brain Graph, RAG Chat, Mood Engine, Zone Automation und bundled Ollama LLM. Aktuelle Core/Add-on-Release-Linie: **v15.2.93**. **Dieses Repo ist nicht die HACS-Integration.**
 
 ---
 
@@ -11,9 +11,10 @@
 PilotSuite Core ist das **Backend Add-on** für Home Assistant mit:
 
 - **Brain Graph Engine** — Neuronales Netzwerk mit 25+ Neuronen in 3 Schichten
-- **RAG Chat** — Lokaler KI-Chat mit Ollama LLM (qwen3:0.6b)
+- **RAG Chat** — Lokaler KI-Chat mit Ollama LLM (qwen3.5:397b-cloud)
 - **Mood Engine v3.0** — 6 diskrete Zustände + 5 kontinuierliche Dimensionen
 - **Zone Automation** — Präsenzabhängige Licht-/Musiksteuerung
+- **Intelligence Modules** — Presence, Light, Climate, Humidity, Energy, TimeOfDay, Rules (Slices 67-82)
 - **Privacy-first** — Alles lokal, kein Cloud-API-Call
 
 ---
@@ -65,15 +66,24 @@ PilotSuite Core benötigt die **PilotSuite HACS Integration** (Sinne + Hände):
 | **Habitus Miner** | Association Rule Mining, Wilson-Confidence, zone-basiert |
 | **Mood Engine v3.0** | 6 diskrete Zustände (Softmax + EMA Hysterese) + 5 Dimensionen |
 | **Neurons** | 25+ Neuronen in 3 Schichten (Context → State → Mood), 60s Intervall |
-| **RAG Chat** | Hybrid Search mit RRF, Ollama LLM (qwen3:0.6b) |
+| **RAG Chat** | Hybrid Search mit RRF, Ollama LLM (qwen3.5:397b-cloud) |
 | **Zone Automation** | Präsenz → Licht → Musik Controller pro Zone |
+
+### **Intelligence Modules (Slices 67-82) — NEU in v15.2.93**
+
+| Module | Slice | Beschreibung | HA Entities |
+|--------|-------|-------------|-------------|
+| **Presence Intelligence** | 67,70,75 | Person-Tracking, Room-Transitions, Occupancy | Sensors, Buttons, Selects |
+| **Light Intelligence** | 68,71,76 | Sun-Tracking, Lux-Normalisierung, Mood Scenes | Sensors, Buttons, Selects |
+| **TimeOfDay Intelligence** | 69,72,77 | Zirkadiane Rhythmen, time-basierte Automation | Sensors, Selects |
+| **Rules Engine** | 73,78 | Policy Engine, Governance, Action Intents | Sensors, Buttons |
+| **Climate/HVAC** | 80 | Temperatur, Preheating, Eco-Mode | Sensors, Buttons, Selects |
+| **Humidity** | 81 | Luftfeuchtigkeit, Ventilation, Schimmel-Warnung | Sensors |
+| **Energy** | 82 | Verbrauch, Forecast, Preis-Optimierung | Sensors, Buttons |
 
 ### **Hub Module (10+)**
 
-- **Presence Intelligence** — Person-Tracking, Room-Transitions, Occupancy Heatmaps
-- **Light Intelligence** — Sun-Tracking, Lux-Normalisierung, Mood Scenes
 - **Zone Automation** — Entity-Management mit 11 Rollen, 13 Tags
-- **Energy Advisor** — Verbrauchsanalyse und Beratung
 - **Sonos Client** — Audio-follows-user via jishi API
 - **Scene Intelligence** — Szenen-Verwaltung mit Presets
 - **Anomaly Detection** — Erkennt ungewöhnliches Verhalten
