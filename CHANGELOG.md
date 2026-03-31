@@ -1,5 +1,34 @@
 # Changelog
 
+## [v15.3.0] - 2026-04-01
+
+### Added
+- **Zone Sync System** — Bidirectional sync between Core HubZoneEngine ↔ HA Store V2
+- **Backend UI API (10 Tabs)** — Dashboard, Zones, Modules, Brain, Mood, Automation, RAG, Media, Hardware, System
+- **Neurons UI API** — 3-Layer visualization (CONTEXT 12, STATE 8, MOOD 5) + Dimensions + History
+- **RAG UI API** — Vector-Store Browser, Embeddings, SearXNG integration, Voice-Assistent
+- **Media UI API** — Sonos HTTP-API, Musikwolke (zone-based), Favorites per zone, Cameras
+- **Tag System** — 9 domain tags + 10 zone tags + 3 status tags for automatic entity assignment
+- **Module Autonomy States** — active (auto-apply), learning (suggest only), off (disabled)
+
+### Changed
+- **Backend UI uses existing engines** — HubZoneEngine (25.782 lines), NeuronManager, VectorIndexer, SonosClient
+- **Zone Configuration** — Module states configurable per zone (active/learning/off)
+- **Entity Assignment** — Tag-based automatic zone assignment (domain:light, zone_living, auto_assign)
+- **Removed redundant code** — habitus_zones_sync.py replaced with HubZoneEngine (BEST implementation)
+
+### Fixed
+- **Core ↔ HA synchronization** — Bidirectional sync for zones, modules, entity tags
+- **Backend UI stub data** — Now uses real engines (HubZoneEngine, NeuronManager, etc.)
+- **Module configuration** — Proper state sync between Core and HA
+
+### Meta
+- Release v15.3.0 — Complete Backend UI with 10 tabs, Zone Sync, ~190.000 lines preserved
+- GitHub: GreenhillEfka/pilotsuite-styx-core
+- Tags: v15.3.0
+
+---
+
 ## [v15.2.93] - 2026-03-31
 
 ### Added
