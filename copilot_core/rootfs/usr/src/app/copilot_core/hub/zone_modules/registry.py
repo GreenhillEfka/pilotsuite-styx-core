@@ -55,6 +55,6 @@ class ZoneModuleRegistry:
     @staticmethod
     def ensure_loaded() -> None:
         """Import all module configs to trigger @zone_module decorators."""
-        from . import light_config, music_config  # noqa: F401
+        from . import light_config, music_config, motion_config  # noqa: F401
         from . import climate_config, cover_config  # noqa: F401
         from . import energy_config, scene_config, security_config  # noqa: F401
