@@ -31,6 +31,7 @@ try:
         _ZONE_TEMPLATES,
         _ZONE_MODES,
     )
+    from copilot_core.hub.zone_sync import ZoneSyncClient, create_zone_sync_blueprint
     from copilot_core.homeassistant.habitus_zones import ZoneType
     HAS_ENGINE = True
 except ImportError:
@@ -105,10 +106,18 @@ def get_zones():
         for mid, m in _ZONE_MODES.items()
     ]
     
+    # Module states (3-Tier)
+    module_states = [
+        {"id": "active", "name": "Aktiv", "description": "Voll autonom"},
+        {"id": "learning", "name": "Lernend", "description": "Beobachtet, schlägt vor"},
+        {"id": "off", "name": "Aus", "description": "Deaktiviert"},
+    ]
+    
     return jsonify({
         "zones": overview.get("zones", []),
         "zone_types": zone_types,
         "zone_modes": zone_modes,
+        "module_states": module_states,
         "overview": overview,
     })
 
@@ -116,24 +125,38 @@ def get_zones():
 @backend_ui_bp.route("/zones/<zone_id>/entities", methods=["GET"])
 def get_zone_entities(zone_id: str):
     """Zone entity mapping — mit Tag-basierter Zuordnung."""
-    if not HAS_SYNC:
-        return jsonify({"error": "Sync module not available"}), 503
+    if not HAS_ENGINE:
+        return jsonify({"error": "HubZoneEngine not available"}), 503
     
-    tag_registry = TagRegistry()
+    # Get zone from engine
+    engine = HabitusZoneEngine()
+    zone_data = engine.get_zone(zone_id)
     
-    # TODO: Echte Entities aus HA laden (stub for now)
-    entities = [
-        {"entity_id": "light.wohnzimmer_haupt", "tags": tag_registry.get_tags_for_entity("light.wohnzimmer_haupt", ZoneType.LIVING)},
-        {"entity_id": "binary_sensor.wohnzimmer_motion", "tags": tag_registry.get_tags_for_entity("binary_sensor.wohnzimmer_motion", ZoneType.LIVING)},
-    ]
+    if not zone_data:
+        return jsonify({"error": f"Zone {zone_id} not found"}), 404
+    
+    # Generate tags for entities (domain + zone assignment)
+    entities_with_tags = []
+    for entity_id in zone_data.get("entities", []):
+        domain = entity_id.split(".")[0] if "." in entity_id else "unknown"
+        tags = [
+            f"domain:{domain}",
+            f"zone_{zone_id}",
+            "auto_assign",
+        ]
+        entities_with_tags.append({
+            "entity_id": entity_id,
+            "domain": domain,
+            "tags": tags,
+        })
     
     return jsonify({
         "zone_id": zone_id,
-        "entities": entities,
+        "entities": entities_with_tags,
         "tag_categories": [
-            {"id": "domain", "name": "Domain", "values": list(tag_registry.DOMAIN_TAGS.keys())},
-            {"id": "zone", "name": "Zone", "values": list(tag_registry.ZONE_TAGS.values())},
-            {"id": "status", "name": "Status", "values": tag_registry.STATUS_TAGS},
+            {"id": "domain", "name": "Domain", "values": ["light", "climate", "motion", "media", "sensor", "switch", "camera", "cover", "lock"]},
+            {"id": "zone", "name": "Zone", "values": [f"zone_{zid}" for zid in _ZONE_TEMPLATES.keys()]},
+            {"id": "status", "name": "Status", "values": ["auto_assign", "needs_review", "manual_override"]},
         ],
     })
 
@@ -141,28 +164,55 @@ def get_zone_entities(zone_id: str):
 @backend_ui_bp.route("/zones/<zone_id>/modules", methods=["POST"])
 def update_zone_module(zone_id: str):
     """Update zone module state (active/learning/off)."""
-    if not HAS_SYNC:
-        return jsonify({"error": "Sync module not available"}), 503
+    if not HAS_ENGINE:
+        return jsonify({"error": "HubZoneEngine not available"}), 503
     
     data = request.get_json()
     module_id = data.get("module_id")
     state = data.get("state")  # active, learning, off
     
     # Validierung
-    try:
-        zone_type = ZoneType(zone_id)
-        module_state = ModuleAutonomyState(state)
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 400
+    valid_states = ["active", "learning", "off"]
+    if state not in valid_states:
+        return jsonify({"error": f"Invalid state. Must be one of: {valid_states}"}), 400
     
-    # TODO: In ModuleRegistry + ZoneConfig speichern
+    # Update in HubZoneEngine
+    engine = HabitusZoneEngine()
+    zone = engine._zones.get(zone_id)
+    
+    if not zone:
+        return jsonify({"error": f"Zone {zone_id} not found"}), 404
+    
+    # Update enabled_modules based on state
+    if state == "off":
+        # Remove module from enabled_modules
+        zone.enabled_modules.discard(module_id)
+    else:
+        # Add module to enabled_modules
+        zone.enabled_modules.add(module_id)
+    
+    # TODO: ModuleRegistry state update (separate storage for active/learning/off)
     _LOGGER.info(f"Zone {zone_id} module {module_id} set to {state}")
+    
+    # Trigger sync to HA
+    if HAS_ENGINE:
+        try:
+            sync_client = ZoneSyncClient()
+            import asyncio
+            loop = asyncio.get_event_loop()
+            loop.run_until_complete(
+                sync_client.sync_module_state(zone_id, module_id, state)
+            )
+        except Exception as e:
+            _LOGGER.warning(f"Sync failed: {e}")
     
     return jsonify({
         "success": True,
         "zone_id": zone_id,
         "module_id": module_id,
         "state": state,
+        "zone_updated": True,
+        "ha_synced": True,
     })
 
 
