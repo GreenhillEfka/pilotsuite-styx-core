@@ -493,6 +493,44 @@ class HabitusZoneEngine:
 
         return zone
 
+    def sync_from_ha(self, ha_zones: list[dict[str, Any]]) -> int:
+        """Sync zone definitions from Home Assistant.
+
+        Args:
+            ha_zones: List of HA area definitions with zone_id, name, metadata
+
+        Returns:
+            Number of zones created/updated
+        """
+        updated_count = 0
+        
+        for ha_zone in ha_zones:
+            zone_id = ha_zone.get("zone_id") or ha_zone.get("area_id")
+            if not zone_id:
+                continue
+                
+            name = ha_zone.get("name", zone_id)
+            zone_type = ha_zone.get("zone_type", "living")
+            icon = ha_zone.get("icon", "mdi:home-floor-1")
+            priority = ha_zone.get("priority", 0)
+            enabled = ha_zone.get("enabled", True)
+            
+            zone = self.sync_external_zone_topology(
+                zone_id=zone_id,
+                name=name,
+                zone_type=zone_type,
+                entities=ha_zone.get("entities", []),
+                icon=icon,
+                priority=priority,
+                enabled=enabled,
+            )
+            
+            if zone:
+                updated_count += 1
+        
+        logger.info("Synced %d zones from Home Assistant", updated_count)
+        return updated_count
+
     # ── Entity state tracking ───────────────────────────────────────────
 
     def update_entity_state(self, entity_id: str, value: Any) -> None:

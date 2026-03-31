@@ -4,14 +4,16 @@ Provides health status, entity availability checks, and diagnostic
 information for each Habitus zone.
 
 Endpoints:
-  GET /api/v1/zone/health              - Health overview for all zones
-  GET /api/v1/zone/health/<zone_id>    - Detailed health for a specific zone
+  GET /api/v1/zone/health                    - Health overview for all zones
+  GET /api/v1/zone/health/<zone_id>          - Detailed health for a specific zone
+  GET /api/v1/zone/health/correlations       - Presence/health correlations per zone
+  GET /api/v1/zone/health/<zone_id>/correlation - Presence-health correlation per zone
+  GET /api/v1/zone/health/correlations/insights - Aggregated correlation summary
 """
 from __future__ import annotations
 
 import logging
 import os
-import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
@@ -515,6 +517,126 @@ def _get_checker() -> ZoneHealthChecker:
     return _checker
 
 
+def _safe_parse_iso8601(value: str | None) -> datetime | None:
+    """Parse iso8601 timestamps from HA states / presence records."""
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+
+
+def _normalize_zone_id(requested_zone_id: str) -> list[str]:
+    """Return all zone-id variants that should match a request."""
+    normalized = str(requested_zone_id or "").strip()
+    if not normalized:
+        return []
+    if normalized.startswith("zone:"):
+        return [normalized, normalized.removeprefix("zone:")]
+    return [normalized, f"zone:{normalized}"]
+
+
+def _find_zone_by_id(zones: list[dict[str, Any]], requested_zone_id: str) -> dict[str, Any] | None:
+    """Find zone definition by plain or namespaced zone ID."""
+    allowed = set(_normalize_zone_id(requested_zone_id))
+    return next((z for z in zones if z.get("zone_id") in allowed), None)
+
+
+def _build_zone_health_metric(
+    checker: ZoneHealthChecker,
+    zone: dict[str, Any],
+    entity_states: dict[str, dict[str, Any]] | None = None,
+):
+    """Build or refresh zone health metrics from latest entity states."""
+    from copilot_core.zone_health import get_store, ZoneHealthMetrics
+
+    zone_id = str(zone.get("zone_id", "")).strip()
+    zone_name = str(zone.get("name_de", zone.get("name", zone_id)))
+    if not zone_id:
+        return None
+
+    store = get_store()
+    cached = store.get(zone_id)
+    if cached is not None:
+        return cached
+
+    entity_ids = _normalize_entity_ids(zone)
+    if not entity_ids:
+        return None
+
+    states = entity_states
+    if states is None:
+        states = checker._fetch_all_states()
+    snapshot = {
+        entity_id: states[entity_id]
+        for entity_id in entity_ids
+        if isinstance(states, dict) and entity_id in states
+    }
+    if not snapshot:
+        return None
+
+    metric = ZoneHealthMetrics.from_entity_snapshot(zone_id, zone_name, snapshot)
+    store.update(zone_id, metric)
+    return metric
+
+
+def _presence_state_for_zone(zone_id: str, now: datetime) -> tuple[float, bool, float]:
+    """Read presence state for zone. Returns (confidence, occupied, absence_minutes)."""
+    presence_manager = _svc.get("zone_presence_manager")
+    if presence_manager is None:
+        try:
+            from copilot_core.neurons.presence import get_zone_presence_manager
+
+            presence_manager = get_zone_presence_manager()
+        except Exception:
+            return 0.0, False, 9999.0
+
+    try:
+        data = presence_manager.get_zone_presence(zone_id)
+    except Exception:
+        return 0.0, False, 9999.0
+
+    if not isinstance(data, dict):
+        return 0.0, False, 9999.0
+
+    confidence = float(data.get("confidence", 0.0) or 0.0)
+    is_occupied = bool(data.get("presence", False))
+
+    last_seen = _safe_parse_iso8601(data.get("last_seen"))
+    if last_seen is None:
+        return confidence, is_occupied, 9999.0
+
+    absence_minutes = max(0.0, (now - last_seen).total_seconds() / 60.0)
+    return confidence, is_occupied, absence_minutes
+
+
+def _presence_health_correlation_payload(
+    zone: dict[str, Any],
+    metric: Any,
+) -> dict[str, Any]:
+    """Build presence-health correlation payload for a zone."""
+    from copilot_core.zone_health import correlate_presence_health
+
+    now = datetime.now(timezone.utc)
+    zone_id = str(zone.get("zone_id", ""))
+    zone_name = str(zone.get("name_de", zone.get("name", zone_id)))
+    presence_confidence, is_occupied, absence_minutes = _presence_state_for_zone(zone_id, now)
+
+    return correlate_presence_health(
+        zone_id=zone_id,
+        zone_name=zone_name,
+        presence_confidence=presence_confidence,
+        is_occupied=is_occupied,
+        absence_minutes=absence_minutes,
+        health_score=metric.health_score,
+        temperature=metric.temperature,
+        humidity=metric.humidity,
+        co2=metric.co2,
+        air_quality=metric.air_quality,
+    ).to_dict()
+
+
 @zone_health_bp.route("", methods=["GET"])
 @require_token
 def get_all_zone_health():
@@ -536,6 +658,138 @@ def get_all_zone_health():
             "avg_score": round(sum(r.health_score for r in results) / len(results)) if results else 0,
         },
         "checked_at": datetime.now(timezone.utc).isoformat(),
+    })
+
+
+@zone_health_bp.route("/correlations", methods=["GET"])
+@require_token
+def get_zone_health_correlations():
+    """Presence-health correlations for all configured zones."""
+    if not _zone_health_dependency_ready():
+        return _zone_health_dependency_error()
+
+    checker = _get_checker()
+    zones = checker._get_zones()
+    all_states = checker._fetch_all_states()
+
+    correlations: dict[str, dict[str, Any]] = {}
+    for zone in zones:
+        metric = _build_zone_health_metric(checker, zone, entity_states=all_states)
+        if metric is None:
+            continue
+
+        payload = _presence_health_correlation_payload(zone, metric)
+        correlations[str(zone.get("zone_id", ""))] = payload
+
+    return jsonify({
+        "ok": True,
+        "correlations": correlations,
+        "summary": _presence_health_summary(correlations),
+        "checked_at": datetime.now(timezone.utc).isoformat(),
+    })
+
+
+def _presence_health_summary(correlations: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    """Build aggregate summary over per-zone correlations."""
+    if not correlations:
+        return {
+            "total_zones": 0,
+            "occupied_zones": 0,
+            "zones_with_poor_health": 0,
+            "zones_needing_action": 0,
+            "recommendations": [],
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+
+    occupied = sum(1 for item in correlations.values() if item.get("is_occupied"))
+    poor_health = sum(
+        1 for item in correlations.values() if float(item.get("health_score", 0.0)) < 50
+    )
+    needing_action = sum(1 for item in correlations.values() if item.get("recommended_action") != "none")
+
+    recommendations = []
+    for item in correlations.values():
+        action = item.get("recommended_action")
+        if action != "none":
+            recommendations.append({
+                "zone_id": item.get("zone_id"),
+                "zone_name": item.get("zone_name"),
+                "action": action,
+                "reason": (
+                    f"health={float(item.get('health_score', 0.0)):.0f}, "
+                    f"presence={float(item.get('presence_confidence', 0.0)):.0%}, "
+                    f"impact={item.get('occupancy_impact')}"
+                ),
+                "confidence": item.get("confidence"),
+            })
+    recommendations.sort(key=lambda item: float(item.get("confidence", 0.0)), reverse=True)
+
+    return {
+        "total_zones": len(correlations),
+        "occupied_zones": occupied,
+        "zones_with_poor_health": poor_health,
+        "zones_needing_action": needing_action,
+        "recommendations": recommendations,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@zone_health_bp.route("/correlations/insights", methods=["GET"])
+@require_token
+def get_zone_health_correlation_insights():
+    """Presence-health insights across all zones."""
+    if not _zone_health_dependency_ready():
+        return _zone_health_dependency_error()
+
+    checker = _get_checker()
+    zones = checker._get_zones()
+    all_states = checker._fetch_all_states()
+
+    correlations = {}
+    for zone in zones:
+        metric = _build_zone_health_metric(checker, zone, entity_states=all_states)
+        if metric is None:
+            continue
+
+        payload = _presence_health_correlation_payload(zone, metric)
+        correlations[str(zone.get("zone_id", ""))] = payload
+
+    return jsonify({
+        "ok": True,
+        "summary": _presence_health_summary(correlations),
+        "checked_at": datetime.now(timezone.utc).isoformat(),
+    })
+
+
+@zone_health_bp.route("/<zone_id>/correlation", methods=["GET"])
+@require_token
+def get_zone_health_correlation(zone_id: str):
+    """Presence-health correlation for a single zone."""
+    if not _zone_health_dependency_ready():
+        return _zone_health_dependency_error()
+
+    checker = _get_checker()
+    zones = checker._get_zones()
+    zone = _find_zone_by_id(zones, zone_id)
+    if zone is None:
+        return jsonify({"ok": False, "error": f"Zone '{zone_id}' nicht gefunden"}), 404
+
+    all_states = checker._fetch_all_states()
+    metric = _build_zone_health_metric(checker, zone, entity_states=all_states)
+    if metric is None:
+        return jsonify({
+            "ok": True,
+            "zone_id": zone_id,
+            "zone_name": zone.get("name_de", zone_id),
+            "correlation": None,
+            "message": "No health metrics available yet for this zone",
+        })
+
+    return jsonify({
+        "ok": True,
+        "zone_id": str(zone.get("zone_id", zone_id)),
+        "zone_name": zone.get("name_de", zone_id),
+        "correlation": _presence_health_correlation_payload(zone, metric),
     })
 
 

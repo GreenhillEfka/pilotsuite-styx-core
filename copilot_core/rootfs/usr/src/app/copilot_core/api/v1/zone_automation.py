@@ -65,6 +65,49 @@ def _normalize_zone_type(zone_type: str) -> str:
     return normalized if normalized in {item.value for item in ZoneType} else ""
 
 
+def _parse_bool_query_param(value: str | None, *, default: bool = False, param_name: str = "by_role") -> tuple[bool, str | None]:
+    """Parse a boolean-like query parameter with strict validation.
+
+    Accepts common true/false tokens only and rejects ambiguous values.
+    """
+    if value is None:
+        return default, None
+
+    normalized = str(value).strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True, None
+    if normalized in {"0", "false", "no", "off"}:
+        return False, None
+
+    return default, f"Invalid value for '{param_name}': {value}. Use one of: true, false, 1, 0, yes, no, on, off."
+
+
+
+def _parse_bool_body_param(value: object, *, default: bool = False, param_name: str = "flag") -> tuple[bool, str | None]:
+    """Parse a boolean-like JSON body field with strict validation.
+
+    Accepts booleans plus textual tokens and rejects ambiguous values.
+    """
+    if value is None:
+        return default, None
+
+    if isinstance(value, bool):
+        return value, None
+
+    if isinstance(value, int):
+        if value in (0, 1):
+            return bool(value), None
+        return default, f"Invalid value for '{param_name}': {value}. Use one of: true, false, 1, 0, yes, no, on, off."
+
+    normalized = str(value).strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True, None
+    if normalized in {"0", "false", "no", "off"}:
+        return False, None
+
+    return default, f"Invalid value for '{param_name}': {value}. Use one of: true, false, 1, 0, yes, no, on, off."
+
+
 def _mirror_zone_truth_into_habitus_engine(zone: dict[str, Any], cfg: Any) -> None:
     """Mirror synced HA zone definitions into the HabitusZone truth engine."""
     if _zone_engine is None:
@@ -169,7 +212,11 @@ def create_zone():
     if updates:
         cfg = _controller.set_zone_config(zone_id, updates)
 
-    if bool(data.get("habitus_sync", True)):
+    habitus_sync, parse_error = _parse_bool_body_param(data.get("habitus_sync", True), default=True, param_name="habitus_sync")
+    if parse_error:
+        return jsonify({"ok": False, "error": "invalid_body_param", "message": parse_error}), 400
+
+    if habitus_sync:
         try:
             zone_payload = {
                 "zone_id": zone_id,
@@ -251,9 +298,15 @@ def toggle_override(zone_id: str):
     data = request.get_json(silent=True) or {}
     updates = {}
     if "light_enabled" in data:
-        updates["light"] = {"enabled": bool(data["light_enabled"])}
+        light_enabled, parse_error = _parse_bool_body_param(data.get("light_enabled"), default=False, param_name="light_enabled")
+        if parse_error:
+            return jsonify({"ok": False, "error": "invalid_body_param", "message": parse_error}), 400
+        updates["light"] = {"enabled": light_enabled}
     if "music_enabled" in data:
-        updates["music"] = {"enabled": bool(data["music_enabled"])}
+        music_enabled, parse_error = _parse_bool_body_param(data.get("music_enabled"), default=False, param_name="music_enabled")
+        if parse_error:
+            return jsonify({"ok": False, "error": "invalid_body_param", "message": parse_error}), 400
+        updates["music"] = {"enabled": music_enabled}
 
     config = _controller.set_zone_config(zone_id, updates)
     return jsonify({"ok": True, "config": config.to_dict()})
@@ -305,7 +358,9 @@ def report_presence(zone_id: str):
         return jsonify({"ok": False, "error": "Controller not initialized"}), 503
 
     data = request.get_json(silent=True) or {}
-    detected = data.get("detected", True)
+    detected, parse_error = _parse_bool_body_param(data.get("detected", True), default=True, param_name="detected")
+    if parse_error:
+        return jsonify({"ok": False, "error": "invalid_body_param", "message": parse_error}), 400
 
     if detected:
         actions = _controller.on_presence_detected(zone_id)
@@ -381,7 +436,10 @@ def list_zone_entities(zone_id: str):
     if _controller is None:
         return jsonify({"ok": False, "error": "Controller not initialized"}), 503
 
-    by_role = request.args.get("by_role", "false").lower() == "true"
+    by_role, parse_error = _parse_bool_query_param(request.args.get("by_role"), default=False)
+    if parse_error:
+        return jsonify({"ok": False, "error": "invalid_query_param", "message": parse_error}), 400
+
     if by_role:
         return jsonify({"ok": True, "zone_id": zone_id,
                         "entities_by_role": _controller.get_zone_entities_by_role(zone_id)})
@@ -584,7 +642,10 @@ def ensure_zones():
     if not isinstance(zone_ids, list):
         return jsonify({"ok": False, "error": "'zone_ids' must be a list"}), 400
 
-    habitus_sync = bool(data.get("habitus_sync", False))
+    habitus_sync, parse_error = _parse_bool_body_param(data.get("habitus_sync", False), default=False, param_name="habitus_sync")
+    if parse_error:
+        return jsonify({"ok": False, "error": "invalid_body_param", "message": parse_error}), 400
+
     created = []
     for zid in zone_ids:
         zid = str(zid).strip()
@@ -658,7 +719,9 @@ def sync_habitus_zones():
 
     data = request.get_json(silent=True) or {}
     zones = data.get("zones", [])
-    clear_missing = bool(data.get("clear_missing", False))
+    clear_missing, parse_error = _parse_bool_body_param(data.get("clear_missing", False), default=False, param_name="clear_missing")
+    if parse_error:
+        return jsonify({"ok": False, "error": "invalid_body_param", "message": parse_error}), 400
 
     if not isinstance(zones, list):
         return jsonify({"ok": False, "error": "'zones' must be a list"}), 400
