@@ -1,191 +1,184 @@
-# PilotSuite — Styx: Core Backend
+# PilotSuite Styx Core
 
-[![Release](https://img.shields.io/github/v/release/GreenhillEfka/pilotsuite-styx-core)](https://github.com/GreenhillEfka/pilotsuite-styx-core/releases)
-
-**PilotSuite Core** — Das Gehirn + Stimme der PilotSuite-Plattform. Home Assistant Add-on mit Brain Graph, RAG Chat, Mood Engine, Zone Automation und bundled Ollama LLM. Aktuelle Core/Add-on-Release-Linie: **v15.2.93**. **Dieses Repo ist nicht die HACS-Integration.**
-
----
-
-## Was ist PilotSuite Core?
-
-PilotSuite Core ist das **Backend Add-on** für Home Assistant mit:
-
-- **Brain Graph Engine** — Neuronales Netzwerk mit 25+ Neuronen in 3 Schichten
-- **RAG Chat** — Lokaler KI-Chat mit Ollama LLM (qwen3.5:397b-cloud)
-- **Mood Engine v3.0** — 6 diskrete Zustände + 5 kontinuierliche Dimensionen
-- **Zone Automation** — Präsenzabhängige Licht-/Musiksteuerung
-- **Intelligence Modules** — Presence, Light, Climate, Humidity, Energy, TimeOfDay, Rules (Slices 67-82)
-- **Privacy-first** — Alles lokal, kein Cloud-API-Call
+**Version:** 15.3.0  
+**Status:** ✅ Life-Long-Learning Dachsystem
 
 ---
 
-## Installation
+## 🎯 VISION
 
-### **Option 1: Home Assistant Add-on (Empfohlen)**
+**"Ein SmartHome, das CLEVERER ist als sein Nutzer"**
 
-1. **Repository hinzufügen**
-   - Home Assistant → Einstellungen → Add-ons → Add-on Store
-   - ⋮ (Menü) → Repositories → URL hinzufügen:
-     ```
-     https://github.com/GreenhillEfka/pilotsuite-styx-core
-     ```
+PilotSuite ist ein **Life-Long-Learning Dachsystem**, das:
+- **Modular** lernt (jede Komponente verbessert sich)
+- **Nutzer kennt** (über ALLE Schnittstellen hinweg)
+- **Habitus speichert** (gelernte Patterns zentral)
+- **Proaktiv** handelt (kommt Nutzer zuvor)
+- **Zugänglich** ist (Chat/API für externe Dienste)
 
-2. **PilotSuite Core installieren**
-   - Add-on Store → Refresh
-   - PilotSuite Core installieren und starten
-
-3. **Port**
-   - Core API läuft auf Port **8909**
-   - Ollama LLM intern auf Port **11435**
+📖 **Vollständige Vision:** [docs/VISION.md](docs/VISION.md)
 
 ---
 
-## Voraussetzungen
+## 🚀 WHAT'S NEW IN v15.3.0
 
-### **HA Integration (ERFORDERLICH)**
+### Life-Long-Learning System
 
-PilotSuite Core benötigt die **PilotSuite HACS Integration** (Sinne + Hände):
-
-- **Repository:** https://github.com/GreenhillEfka/pilotsuite-styx-ha
-- Siehe [pilotsuite-styx-ha README](https://github.com/GreenhillEfka/pilotsuite-styx-ha) für Installation
-
-### **Abhängigkeiten**
-
-- Home Assistant >= 2024.1.0
-- Docker (wird durch HA Add-on System bereitgestellt)
-
----
-
-## Features
-
-### **Intelligence Engines**
-
-| Engine | Beschreibung |
-|--------|-------------|
-| **Brain Graph** | SQLite WAL, exponential Decay, max 500 Nodes / 1500 Edges |
-| **Habitus Miner** | Association Rule Mining, Wilson-Confidence, zone-basiert |
-| **Mood Engine v3.0** | 6 diskrete Zustände (Softmax + EMA Hysterese) + 5 Dimensionen |
-| **Neurons** | 25+ Neuronen in 3 Schichten (Context → State → Mood), 60s Intervall |
-| **RAG Chat** | Hybrid Search mit RRF, Ollama LLM (qwen3.5:397b-cloud) |
-| **Zone Automation** | Präsenz → Licht → Musik Controller pro Zone |
-
-### **Intelligence Modules (Slices 67-82) — NEU in v15.2.93**
-
-| Module | Slice | Beschreibung | HA Entities |
-|--------|-------|-------------|-------------|
-| **Presence Intelligence** | 67,70,75 | Person-Tracking, Room-Transitions, Occupancy | Sensors, Buttons, Selects |
-| **Light Intelligence** | 68,71,76 | Sun-Tracking, Lux-Normalisierung, Mood Scenes | Sensors, Buttons, Selects |
-| **TimeOfDay Intelligence** | 69,72,77 | Zirkadiane Rhythmen, time-basierte Automation | Sensors, Selects |
-| **Rules Engine** | 73,78 | Policy Engine, Governance, Action Intents | Sensors, Buttons |
-| **Climate/HVAC** | 80 | Temperatur, Preheating, Eco-Mode | Sensors, Buttons, Selects |
-| **Humidity** | 81 | Luftfeuchtigkeit, Ventilation, Schimmel-Warnung | Sensors |
-| **Energy** | 82 | Verbrauch, Forecast, Preis-Optimierung | Sensors, Buttons |
-
-### **Hub Module (10+)**
-
-- **Zone Automation** — Entity-Management mit 11 Rollen, 13 Tags
-- **Sonos Client** — Audio-follows-user via jishi API
-- **Scene Intelligence** — Szenen-Verwaltung mit Presets
-- **Anomaly Detection** — Erkennt ungewöhnliches Verhalten
-- **Predictive Maintenance** — Vorhersagende Wartung
-- **Open-Meteo Weather** — Lokale Wetterdaten
-- **Wecker Module** — Alarm/Wecker-Steuerung
-
-### **v15.0.0: Autonomie-Execution + Sammelentitaeten + Zone Health**
-
-- **AutonomyExecutor** — Mood-getriebene Auto-Execution mit Double-Safety Governance
-- **MoodActionMapper** — Stimmung-zu-Aktion-Tabellen (Licht-Szenen, Musik, Wetter)
-- **HABridge** — Direkte HA Service Calls aus Core
-- **DeviceClassAggregator** — Geraeteklassen-basierte Entitaets-Aggregation (11 Kategorien)
-- **ZoneHealthChecker** — Per-Zone Gesundheitsmonitoring (Score 0-100)
-- **BehavioralLog** — RAG-indexierte Autonomie-Aktionshistorie (BM25, 30 Tage Retention)
-
-### **Styx Dashboard SPA**
-
-9-Tab Dashboard mit:
-- Overview, Zonen, Musikwolke, Vorschläge, Automation, KI/LLM, Module, Neuronen, Chat
-- Keyboard Shortcuts (1-9), Auto-Refresh (30s)
-- Brain-Visualization (Canvas mit Signal-Partikeln)
-- Zone-Detail-Modal (Entities, Mood-Ringe, Szenen, Medien)
+| Feature | API | Beschreibung |
+|---------|-----|--------------|
+| **Habitus Storage** | `/api/v1/habitus` | Zentrales Pattern-Lernen |
+| **Chat API** | `/api/v1/chat` | Externer Zugang (Telegram, WhatsApp, REST) |
+| **Learning Viz** | `/api/v1/learning` | Zeigt Nutzer was System lernt |
+| **Backend UI** | `/api/v1/backend` | 10-Tabs Dashboard |
+| **Neurons UI** | `/api/v1/neurons` | 3-Layer Visualisierung |
+| **RAG UI** | `/api/v1/rag` | Vector-Store + SearXNG + Voice |
+| **Media UI** | `/api/v1/media` | Sonos + Musikwolke |
+| **Zone Sync** | `/api/v1/hub/zones` | Core ↔ HA Sync |
 
 ---
 
-## API Endpoints
+## 📦 INSTALLATION
 
-| Endpoint | Beschreibung |
-|----------|-------------|
-| `/api/styx/chat` | Chat mit RAG |
-| `/api/styx/health` | Health Check |
-| `/api/v1/habitus/*` | Habitus Zones |
-| `/api/v1/brain/*` | Brain Graph |
-| `/api/v1/mood/*` | Mood Engine |
-| `/api/v1/zone-automation/*` | Zone Automation (16 Endpoints) |
-| `/api/v1/sonos/*` | Sonos-Steuerung (20+ Endpoints) |
-| `/api/v1/neurons/*` | Neuron Manager |
-| `/health` | Legacy Health (deprecated) |
+### Als Home Assistant Add-on
 
-Vollständige API-Dokumentation: [docs/API_REFERENCE.md](docs/API_REFERENCE.md)
+```yaml
+# HA Add-on Repository hinzufügen
+https://github.com/GreenhillEfka/pilotsuite-styx-core
 
----
-
-
-## State of the Art (2026-03-28)
-
-- **Aktive Line:** 15.2.x
-- **Aktueller Tag:** [v15.2.2](https://github.com/GreenhillEfka/pilotsuite-styx-core/releases/tag/v15.2.2)
-- **Konsolidierungsstand für das nächste Paket:**
-  - PR **#157** (Zone-Sync) ist technisch prinzipiell mergebar, aber CI stoppt aktuell an `ModuleNotFoundError: prometheus_client`.
-  - PR **#156** ist CONFLICTING/legacy (`release-prep/v14.7.3`), nicht für den aktuellen Head geeignet.
-- Zielzustand: Kern-Release stabilisieren, danach Pair-Release mit HA auf `update.ai_home_copilot_update`-fähig setzen.
-
-## Architecture
-
+# Installieren
+Add-on: PilotSuite Core
+Version: 15.3.0
+Start: ✅
 ```
-PilotSuite Core Add-on (Port 8909)
-├── Flask/Waitress REST-API
-│   ├── 60+ Blueprints (22 nested + 40+ standalone)
-│   ├── Token-Auth (X-Auth-Token / Bearer)
-│   └── Circuit Breaker (HA Supervisor + Ollama)
-├── Intelligence Engines
-│   ├── Brain Graph (SQLite WAL)
-│   ├── Habitus Miner
-│   ├── Mood Engine v3.0
-│   └── Neuron Pipeline (25+ Neuronen)
-├── Hub Modules (10+)
-│   ├── Zone Automation, Presence, Light
-│   ├── Sonos, Energy, Scenes
-│   └── Anomaly, Weather, Wecker
-├── Ollama LLM (Port 11435, qwen3:0.6b)
-└── Styx Dashboard SPA (9 Tabs)
-        ↕
-Home Assistant ← PilotSuite HACS Integration (copilot_ha)
+
+### Config
+
+```yaml
+ollama_url: http://127.0.0.1:11434
+ha_url: http://homeassistant.local:8123
+ha_token: YOUR_LONG_LIVED_ACCESS_TOKEN
+searxng_url: http://localhost:8080  # Optional
 ```
 
 ---
 
-## Links
+## 🔗 API-ENDPOINTS
+
+### Life-Long-Learning
+
+```
+GET  /api/v1/habitus              — Overview + Stats
+GET  /api/v1/habitus/patterns     — Gelernte Patterns
+POST /api/v1/habitus/feedback     — Feedback geben
+GET  /api/v1/habitus/preferences  — Nutzer-Präferenzen
+GET  /api/v1/habitus/routines     — Nutzer-Routinen
+```
+
+### Chat (Externer Zugang)
+
+```
+POST /api/v1/chat/sessions                 — Session erstellen
+POST /api/v1/chat/sessions/<id>/messages   — Nachricht senden
+POST /api/v1/chat/webhooks/telegram        — Telegram Webhook
+POST /api/v1/chat/webhooks/rest            — REST Webhook
+```
+
+### Learning Visualization
+
+```
+GET  /api/v1/learning/overview    — Lern-Übersicht
+GET  /api/v1/learning/patterns    — Patterns (visualisiert)
+GET  /api/v1/learning/progress    — Fortschritt pro Zone/Modul
+POST /api/v1/learning/correct     — Manuelle Korrektur
+```
+
+### Backend UI (10 Tabs)
+
+```
+GET  /api/v1/backend/dashboard    — System-Status
+GET  /api/v1/backend/zones        — Habituszonen + Module
+GET  /api/v1/backend/brain         — Neuronen + Graph
+GET  /api/v1/backend/mood          — Mood + Dimensions
+GET  /api/v1/backend/automation    — Vorschläge + Regeln
+GET  /api/v1/backend/rag           — Vector-Store + SearXNG
+GET  /api/v1/backend/media         — Sonos + Musikwolke
+```
+
+---
+
+## 🏗️ ARCHITEKTUR
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    PILOTSUITE CORE                           │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
+│  │   Habitus    │  │   Neurons    │  │    Chat      │      │
+│  │   Storage    │  │   Manager    │  │   Handler    │      │
+│  └──────────────┘  └──────────────┘  └──────────────┘      │
+│         ↓                   ↓                   ↓           │
+│  ┌────────────────────────────────────────────────────┐    │
+│  │              API Gateway (Flask)                    │    │
+│  └────────────────────────────────────────────────────┘    │
+│         ↓                   ↓                   ↓           │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
+│  │   Zones      │  │   Modules    │  │     RAG      │      │
+│  │   Engine     │  │   Registry   │  │   + SearXNG  │      │
+│  └──────────────┘  └──────────────┘  └──────────────┘      │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+                            ↓
+            ┌───────────────┴───────────────┐
+            ↓                               ↓
+    ┌──────────────┐              ┌──────────────┐
+    │   HA Store   │              │   External   │
+    │     V2       │              │   Services   │
+    └──────────────┘              └──────────────┘
+```
+
+---
+
+## 📊 STATISTICS (v15.3.0)
+
+| Metric | Value |
+|--------|-------|
+| **Code Lines** | ~190.000 |
+| **API Endpoints** | 50+ |
+| **Modules** | 25+ |
+| **Zone Types** | 10 |
+| **Neuron Layers** | 3 (CONTEXT, STATE, MOOD) |
+| **Mood Dimensions** | 5 |
+| **Patterns** | Unbegrenzt (SQLite) |
+
+---
+
+## 🔗 LINKS
 
 | Resource | URL |
 |----------|-----|
-| **GitHub (Core)** | https://github.com/GreenhillEfka/pilotsuite-styx-core |
-| **GitHub (HA)** | https://github.com/GreenhillEfka/pilotsuite-styx-ha |
-| **Issues** | https://github.com/GreenhillEfka/pilotsuite-styx-core/issues |
-| **API Docs** | [docs/API_REFERENCE.md](docs/API_REFERENCE.md) |
+| **GitHub** | https://github.com/GreenhillEfka/pilotsuite-styx-core |
+| **Releases** | https://github.com/GreenhillEfka/pilotsuite-styx-core/releases |
+| **HA Integration** | https://github.com/GreenhillEfka/pilotsuite-styx-ha |
+| **Vision** | [docs/VISION.md](docs/VISION.md) |
+| **Changelog** | [CHANGELOG.md](CHANGELOG.md) |
 
 ---
 
-## Changelog
+## 🎉 RELEASE v15.3.0
 
-Siehe [CHANGELOG.md](CHANGELOG.md) für alle Änderungen.
+**Datum:** 2026-04-01  
+**Tag:** v15.3.0  
+**Status:** ✅ READY FOR PRODUCTION
+
+**Key Features:**
+- ✅ Life-Long-Learning System (Habitus Storage)
+- ✅ Chat API (Telegram, WhatsApp, REST)
+- ✅ Learning Visualization (für Nutzer-Vertrauen)
+- ✅ Zone Sync (Core ↔ HA)
+- ✅ Backend UI (10 Tabs)
+- ✅ ~190.000 Zeilen Code bewahrt
 
 ---
 
-## Credits
-
-- **Developer:** GreenhillEfka
-- **License:** MIT
-- **Community:** Home Assistant Forum
-
----
-
-**PilotSuite Core — Brain Graph, RAG Chat, Mood Engine & Zone Automation**
+**🚀 PILOTSUITE — DAS DACHSYSTEM.**
