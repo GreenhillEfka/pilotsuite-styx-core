@@ -1186,3 +1186,150 @@ def get_zone_module_entities(zone_id: str, module_id: str):
         "entities": matching,
         "count": len(matching),
     })
+
+
+# ── Zone Truth Store API ─────────────────────────────────────────────────────
+
+
+@zone_automation_bp.route("/truth/zones", methods=["GET"])
+@optional_token
+def get_zone_truth_zones():
+    """Get all zones from the Zone Truth Store.
+
+    Query params:
+      - since=<revision> (int, optional)
+      - deltas=true (boolean, optional; requires since)
+      - compact=true (boolean, optional)
+
+    Returns deterministic read-model with revision tracking.
+    """
+    store = _get_zone_truth_store()
+    if store is None:
+        return jsonify({"ok": False, "error": "Zone Truth Store not available"}), 503
+
+    raw_since = request.args.get("since")
+    try:
+        want_deltas = _parse_bool_query_param(
+            request.args.get("deltas"), param_name="deltas"
+        )
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+
+    try:
+        want_compact = _parse_bool_query_param(
+            request.args.get("compact"), param_name="compact"
+        )
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+
+    since_revision = None
+    if raw_since is not None:
+        try:
+            since_revision = int(raw_since)
+        except (TypeError, ValueError):
+            return jsonify({"ok": False, "error": "Invalid since parameter"}), 400
+        if since_revision < 0:
+            return jsonify({"ok": False, "error": "since must be >= 0"}), 400
+
+    model = store.get_all_entities_read_model(
+        since_revision=since_revision,
+        deltas=want_deltas,
+        compact=want_compact,
+    )
+
+    return jsonify({"ok": True, **model})
+
+
+@zone_automation_bp.route("/truth/zones/<zone_id>", methods=["GET"])
+@optional_token
+def get_zone_truth_zone(zone_id: str):
+    """Get a single zone from the Zone Truth Store."""
+    store = _get_zone_truth_store()
+    if store is None:
+        return jsonify({"ok": False, "error": "Zone Truth Store not available"}), 503
+
+    zone = store.get_zone(zone_id)
+    if zone is None:
+        return jsonify({"ok": False, "error": "Zone not found"}), 404
+
+    return jsonify({"ok": True, "zone": zone.to_dict()})
+
+
+@zone_automation_bp.route("/truth/zones/<zone_id>/entities", methods=["GET"])
+@optional_token
+def get_zone_truth_entities(zone_id: str):
+    """Get entities for a zone from the Zone Truth Store, grouped by role."""
+    store = _get_zone_truth_store()
+    if store is None:
+        return jsonify({"ok": False, "error": "Zone Truth Store not available"}), 503
+
+    zone = store.get_zone(zone_id)
+    if zone is None:
+        return jsonify({"ok": False, "error": "Zone not found"}), 404
+
+    by_role = zone.get_entities_by_role()
+    return jsonify({
+        "ok": True,
+        "zone_id": zone_id,
+        "entities_by_role": {
+            role: [e.to_dict() for e in entities]
+            for role, entities in by_role.items()
+        },
+    })
+
+
+@zone_automation_bp.route("/truth/revision", methods=["GET"])
+@optional_token
+def get_zone_truth_revision():
+    """Get current revision and recent revision history.
+
+    Query params:
+      - limit=<N> (int, optional, default 50)
+      - zone_id=<zone_id> (string, optional, filter by zone)
+      - since_revision=<N> (int, optional, only revisions after this)
+    """
+    store = _get_zone_truth_store()
+    if store is None:
+        return jsonify({"ok": False, "error": "Zone Truth Store not available"}), 503
+
+    try:
+        limit = int(request.args.get("limit", 50))
+    except (TypeError, ValueError):
+        limit = 50
+
+    zone_id = request.args.get("zone_id")
+    raw_since = request.args.get("since_revision")
+    since_revision = None
+    if raw_since is not None:
+        try:
+            since_revision = int(raw_since)
+        except (TypeError, ValueError):
+            return jsonify({"ok": False, "error": "Invalid since_revision parameter"}), 400
+
+    history = store.get_revision_history(
+        zone_id=zone_id,
+        limit=limit,
+        since_revision=since_revision,
+    )
+
+    return jsonify({
+        "ok": True,
+        "current_revision": store.get_current_revision(),
+        "history": [h.to_dict() for h in history],
+    })
+
+
+@zone_automation_bp.route("/truth/archetypes", methods=["GET"])
+@optional_token
+def get_zone_truth_archetypes():
+    """Get all registered zone archetypes."""
+    store = _get_zone_truth_store()
+    if store is None:
+        return jsonify({"ok": False, "error": "Zone Truth Store not available"}), 503
+
+    archetypes = store.get_all_archetypes()
+    return jsonify({
+        "ok": True,
+        "archetypes": [a.to_dict() for a in archetypes],
+        "count": len(archetypes),
+    })

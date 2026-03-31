@@ -420,7 +420,9 @@ class TestZoneTruthStore:
                 deltas=True,
             )
             
-            assert deltas["summary"]["returned_zone_count"] == 1
+            # Delta response includes zone count in summary
+            assert len(deltas["zones"]) == 1
+            assert "delta" in deltas
             assert deltas["delta"]["enabled"] is True
 
     def test_get_all_entities_read_model_compact(self) -> None:

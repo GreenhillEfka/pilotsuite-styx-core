@@ -142,9 +142,13 @@ class ZoneDefinitionV1:
             ha_context=dict(data.get("ha_context") or {}),
         )
 
-    def touch(self) -> None:
-        """Update revision and timestamps."""
-        self.revision += 1
+    def touch(self, global_revision: int = None) -> None:
+        """Update revision and timestamps.
+        
+        Args:
+            global_revision: Optional global revision counter to sync with.
+        """
+        self.revision = global_revision if global_revision is not None else (self.revision + 1)
         self.updated_at = _now_iso()
 
     def add_entity(self, entity_id: str, role: str, tags: List[str] = None,
@@ -403,7 +407,7 @@ class ZoneTruthStore:
             source=source,
             ha_area_id=ha_area_id,
         )
-        zone.touch()
+        zone.touch(self._revision_counter)
         
         self._zones[zone_id] = zone
         self._record_revision(
@@ -465,7 +469,7 @@ class ZoneTruthStore:
         if source != zone.source:
             zone.source = source
         
-        zone.touch()
+        zone.touch(self._revision_counter)
         
         if ha_context:
             zone.ha_context = ha_context
@@ -511,6 +515,7 @@ class ZoneTruthStore:
         if zone is None:
             raise ValueError(f"Zone '{zone_id}' not found")
         
+        self._revision_counter += 1
         assignment = zone.add_entity(
             entity_id=entity_id,
             role=role,
@@ -518,6 +523,7 @@ class ZoneTruthStore:
             display_name=display_name,
             source=source,
         )
+        zone.touch(self._revision_counter)
         
         self._record_revision(
             zone_id=zone_id,
