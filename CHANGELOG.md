@@ -1,6 +1,31 @@
 # Changelog
 
+## [v15.2.93] - 2026-03-31
 
+### Added
+- **Slice 67-73:** Zone-Aware Pipeline (Base) — Presence, Light, TimeOfDay, Rules Grundmodule
+- **Slice 75-79:** Module Extensions — Presence Extended, Light Extended, TimeOfDay Extended, Rules Extended, Module Registry
+- **Slice 80:** Climate/HVAC Module — Vollständige Klima-/Heizungssteuerung mit Präsenz-Abhängigkeit
+- **Slice 81:** Humidity Module — Luftfeuchtigkeits-Überwachung mit Ventilations-Automatik und Schimmel-Warnung
+- **Slice 82:** Energy Module — Energie-Verbrauchsanalyse, Forecast und Preis-Optimierung
+- **Slice 83:** Integration Tests — Umfassende Tests für alle Module (Slices 67-82) mit Cross-Module-Szenarien
+
+### Changed
+- Alle Module folgen einheitlichem Contract (Event Ingest → Zone Truth → Module Processing → Read Models)
+- Module Registry entdeckt und verwaltet alle Fachmodule zentral
+- Integration Tests decken Good-Morning, Leaving-Home, Movie-Night Szenarien ab
+
+### Fixed
+- Module duplikate bereinigt (neue Module ab Slice 67 sind sauber, alte Duplikate bekannt als Technical Debt)
+- Event Propagation zwischen Modulen konsolidiert
+- Zone-State-Änderungen propagieren korrekt an alle interessierten Module
+
+### Meta
+- Release v15.2.93 — Slices 67-83 complete, installierbar als Home Assistant Add-on
+- GitHub: GreenhillEfka/pilotsuite-styx-core
+- HACS-Installation: Repository URL hinzufügen, PilotSuite Core installieren
+
+---
 
 ## [v15.2.8] - 2026-03-28
 
