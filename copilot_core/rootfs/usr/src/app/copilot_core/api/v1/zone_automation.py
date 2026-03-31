@@ -85,6 +85,15 @@ def _normalize_zone_type(zone_type: str) -> str:
     return normalized if normalized in {item.value for item in ZoneType} else ""
 
 
+def _get_zone_truth_store() -> Any:
+    """Lazy import ZoneTruthStore to avoid circular dependencies."""
+    try:
+        from copilot_core.storage.zone_truth import get_zone_truth_store
+        return get_zone_truth_store()
+    except Exception:
+        return None
+
+
 def _mirror_zone_truth_into_habitus_engine(zone: dict[str, Any], cfg: Any) -> None:
     """Mirror synced HA zone definitions into the HabitusZone truth engine."""
     if _zone_engine is None:
@@ -103,6 +112,84 @@ def _mirror_zone_truth_into_habitus_engine(zone: dict[str, Any], cfg: Any) -> No
         )
     except Exception as exc:
         _LOGGER.warning("Failed to mirror synced zone '%s' into Habitus engine: %s", zone.get("zone_id"), exc)
+
+
+def _sync_zone_to_truth_store(zone: dict[str, Any], cfg: Any) -> None:
+    """Sync zone definition to the ZoneTruthStore (Single Source of Truth)."""
+    store = _get_zone_truth_store()
+    if store is None:
+        return
+
+    try:
+        zone_id = str(zone.get("zone_id", "")).strip()
+        if not zone_id:
+            return
+
+        # Normalize entities from various input formats
+        entities_payload = zone.get("entities")
+        entity_items: list[dict[str, Any]] = []
+
+        if isinstance(entities_payload, dict):
+            # Role-map format: {"lights": [...], "motion": [...]}
+            for role, ids in entities_payload.items():
+                for eid in ids if isinstance(ids, list) else []:
+                    entity_items.append({"entity_id": str(eid).strip(), "role": str(role).strip()})
+        elif isinstance(entities_payload, list):
+            # List format: ["light.x"] or [{"entity_id": "...", "role": "..."}]
+            for item in entities_payload:
+                if isinstance(item, str):
+                    entity_items.append({"entity_id": item.strip(), "role": "other"})
+                elif isinstance(item, dict):
+                    entity_items.append({
+                        "entity_id": str(item.get("entity_id", "")).strip(),
+                        "role": str(item.get("role", "other")).strip(),
+                    })
+
+        # Check if zone exists in truth store
+        existing = store.get_zone(zone_id)
+
+        enabled_modules = set()
+        raw_modules = zone.get("enabled_modules")
+        if isinstance(raw_modules, (list, set, tuple)):
+            enabled_modules = {str(m).strip() for m in raw_modules if str(m).strip()}
+
+        if existing is None:
+            # Create new zone in truth store
+            store.create_zone(
+                zone_id=zone_id,
+                name=str(zone.get("name") or zone.get("name_de") or zone_id).strip(),
+                zone_type=_normalize_zone_type(str(zone.get("zone_type") or "living")) or "living",
+                icon=str(zone.get("icon") or "mdi:room").strip(),
+                priority=int(zone.get("priority") or 0),
+                enabled_modules=enabled_modules,
+                source="ha_sync",
+                ha_area_id=str(zone.get("ha_area_id") or zone.get("area_id") or "").strip() or None,
+            )
+            # Add entities
+            for item in entity_items:
+                if item["entity_id"]:
+                    store.add_entity(
+                        zone_id=zone_id,
+                        entity_id=item["entity_id"],
+                        role=item["role"] or "other",
+                        source="ha_sync",
+                    )
+        else:
+            # Update existing zone
+            store.update_zone(
+                zone_id=zone_id,
+                name=str(zone.get("name") or zone.get("name_de") or existing.name).strip(),
+                zone_type=_normalize_zone_type(str(zone.get("zone_type") or existing.zone_type)) or existing.zone_type,
+                icon=str(zone.get("icon") or existing.icon).strip(),
+                priority=int(zone.get("priority") or existing.priority),
+                enabled_modules=enabled_modules if enabled_modules else None,
+                ha_context={"area_id": zone.get("area_id"), "icon": zone.get("icon")},
+                source="ha_sync",
+            )
+
+        _LOGGER.debug("Zone '%s' synced to ZoneTruthStore", zone_id)
+    except Exception as exc:
+        _LOGGER.warning("Failed to sync zone '%s' to ZoneTruthStore: %s", zone.get("zone_id"), exc)
 
 
 def init_zone_automation_api(controller=None, zone_engine=None) -> None:
@@ -1004,6 +1091,7 @@ def sync_zone_definitions():
                 )
 
             _mirror_zone_truth_into_habitus_engine(zone, cfg)
+            _sync_zone_to_truth_store(zone, cfg)
             synced.append(zone_id)
 
     _LOGGER.info(
