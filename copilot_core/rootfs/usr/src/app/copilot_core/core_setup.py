@@ -2034,6 +2034,8 @@ def register_blueprints(app: Flask, services: dict) -> None:
     try:
         from copilot_core.mcp_server import mcp_bp
         app.register_blueprint(mcp_bp)
+from copilot_core.api.v1.backend_ui import backend_ui_bp
+app.register_blueprint(backend_ui_bp)  # 10-tab Backend UI
     except Exception:
         _LOGGER.exception("Failed to register mcp_bp")
 
