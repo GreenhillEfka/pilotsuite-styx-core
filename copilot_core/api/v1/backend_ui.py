@@ -16,9 +16,22 @@ Provides structured data for each backend tab:
 from __future__ import annotations
 
 import logging
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, request
 from typing import Any, Dict, List
 from datetime import datetime, timezone
+
+# Import ZoneType Enum als Single Source of Truth
+try:
+    from copilot_core.homeassistant.habitus_zones_sync import (
+        ZoneType, ZoneMode, ModuleAutonomyState,
+        ZoneConfig, ModuleConfig,
+        get_default_zone_config, get_all_zone_types,
+        get_all_module_states, get_all_zone_modes,
+        TagRegistry,
+    )
+    HAS_SYNC = True
+except ImportError:
+    HAS_SYNC = False
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -70,88 +83,49 @@ def get_dashboard():
 @backend_ui_bp.route("/zones", methods=["GET"])
 def get_zones():
     """Zones data — Habituszonen, Entity-Mapping, Module pro Zone."""
+    if not HAS_SYNC:
+        return jsonify({"error": "Sync module not available"}), 503
+    
+    # Alle ZoneTypes mit Metadata
+    zone_types = get_all_zone_types()
+    zone_modes = get_all_zone_modes()
+    module_states = get_all_module_states()
+    
+    # TODO: Echte Zones aus Storage laden (stub for now)
+    zones = [
+        get_default_zone_config(zt).to_dict()
+        for zt in ZoneType
+    ]
+    
     return jsonify({
-        "zones": [
-            {
-                "zone_id": "living",
-                "zone_type": "living",
-                "name": "Wohnbereich",
-                "icon": "mdi:sofa",
-                "mode": "active",  # active, idle, sleeping, party, away
-                "rooms": ["wohnzimmer", "esszimmer"],
-                "entity_count": 25,
-                "enabled_modules": ["light", "motion", "music", "climate"],
-                "module_states": {
-                    "light": "active",
-                    "motion": "active",
-                    "music": "learning",
-                    "climate": "active",
-                },
-                "musicwolke": {
-                    "enabled": True,
-                    "sonos_favorites": ["Jazz", "Chillout"],
-                    "player": "sonos_wohnzimmer",
-                    "volume": 40,
-                },
-            },
-            {
-                "zone_id": "bath",
-                "zone_type": "bath",
-                "name": "Badbereich",
-                "icon": "mdi:shower-head",
-                "mode": "active",
-                "rooms": ["bad_og", "gaeste_wc"],
-                "entity_count": 12,
-                "enabled_modules": ["light", "motion", "climate", "humidity"],
-                "module_states": {
-                    "light": "active",
-                    "motion": "active",
-                    "climate": "learning",
-                    "humidity": "active",
-                },
-                "musicwolke": {
-                    "enabled": False,
-                    "sonos_favorites": [],
-                    "player": None,
-                    "volume": 0,
-                },
-            },
-            # ... mehr Zonen
-        ],
-        "zone_types": [
-            {"id": "living", "name": "Wohnbereich", "icon": "mdi:sofa"},
-            {"id": "bath", "name": "Badbereich", "icon": "mdi:shower-head"},
-            {"id": "kitchen", "name": "Kochbereich", "icon": "mdi:stove"},
-            {"id": "office", "name": "Bürobereich", "icon": "mdi:desk"},
-            {"id": "hallway", "name": "Flur/Durchgang", "icon": "mdi:door-open"},
-            {"id": "bedroom", "name": "Schlafbereich", "icon": "mdi:bed"},
-            {"id": "room_mira", "name": "Kinderzimmer Mira", "icon": "mdi:baby-face-outline"},
-            {"id": "room_paul", "name": "Kinderzimmer Paul", "icon": "mdi:teddy-bear"},
-            {"id": "terrace", "name": "Terrasse/Balkon", "icon": "mdi:tree"},
-            {"id": "outside", "name": "Außenbereich", "icon": "mdi:home-outline"},
-        ],
-        "zone_modes": [
-            {"id": "active", "name": "Aktiv", "icon": "mdi:play"},
-            {"id": "idle", "name": "Inaktiv", "icon": "mdi:pause"},
-            {"id": "sleeping", "name": "Schlafmodus", "icon": "mdi:sleep"},
-            {"id": "party", "name": "Party", "icon": "mdi:party-popper"},
-            {"id": "away", "name": "Abwesend", "icon": "mdi:home-outline"},
-        ],
+        "zones": zones,
+        "zone_types": zone_types,
+        "zone_modes": zone_modes,
+        "module_states": module_states,
     })
 
 
 @backend_ui_bp.route("/zones/<zone_id>/entities", methods=["GET"])
 def get_zone_entities(zone_id: str):
-    """Zone entity mapping."""
+    """Zone entity mapping — mit Tag-basierter Zuordnung."""
+    if not HAS_SYNC:
+        return jsonify({"error": "Sync module not available"}), 503
+    
+    tag_registry = TagRegistry()
+    
+    # TODO: Echte Entities aus HA laden (stub for now)
+    entities = [
+        {"entity_id": "light.wohnzimmer_haupt", "tags": tag_registry.get_tags_for_entity("light.wohnzimmer_haupt", ZoneType.LIVING)},
+        {"entity_id": "binary_sensor.wohnzimmer_motion", "tags": tag_registry.get_tags_for_entity("binary_sensor.wohnzimmer_motion", ZoneType.LIVING)},
+    ]
+    
     return jsonify({
         "zone_id": zone_id,
-        "entities": [
-            {"entity_id": "light.wohnzimmer_haupt", "domain": "light", "tags": ["zone_living", "auto_assign"]},
-            {"entity_id": "binary_sensor.wohnzimmer_motion", "domain": "motion", "tags": ["zone_living", "auto_assign"]},
-            # ... mehr Entities
-        ],
-        "unassigned_entities": [
-            {"entity_id": "light.neuer_sensor", "domain": "light", "suggested_zone": "living"},
+        "entities": entities,
+        "tag_categories": [
+            {"id": "domain", "name": "Domain", "values": list(tag_registry.DOMAIN_TAGS.keys())},
+            {"id": "zone", "name": "Zone", "values": list(tag_registry.ZONE_TAGS.values())},
+            {"id": "status", "name": "Status", "values": tag_registry.STATUS_TAGS},
         ],
     })
 
@@ -159,15 +133,29 @@ def get_zone_entities(zone_id: str):
 @backend_ui_bp.route("/zones/<zone_id>/modules", methods=["POST"])
 def update_zone_module(zone_id: str):
     """Update zone module state (active/learning/off)."""
-    from flask import request
+    if not HAS_SYNC:
+        return jsonify({"error": "Sync module not available"}), 503
+    
     data = request.get_json()
     module_id = data.get("module_id")
     state = data.get("state")  # active, learning, off
     
-    # TODO: Update ModuleRegistry
+    # Validierung
+    try:
+        zone_type = ZoneType(zone_id)
+        module_state = ModuleAutonomyState(state)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    
+    # TODO: In ModuleRegistry + ZoneConfig speichern
     _LOGGER.info(f"Zone {zone_id} module {module_id} set to {state}")
     
-    return jsonify({"success": True, "zone_id": zone_id, "module_id": module_id, "state": state})
+    return jsonify({
+        "success": True,
+        "zone_id": zone_id,
+        "module_id": module_id,
+        "state": state,
+    })
 
 
 # =============================================================================
