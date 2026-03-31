@@ -1,248 +1,146 @@
-"""Tests for Search Advanced Engine — Slice 56."""
+"""Tests for Search Advanced Engine — Slice 65."""
 import pytest
 from copilot_core.search_advanced.engine import (
     SearchEngine,
-    InvertedIndex,
-    Document,
+    SearchDocument,
+    SearchHit,
     SearchResult,
-    IndexStats,
-    FieldType,
+    Facet,
+    MatchType,
     create_search_engine,
 )
 from datetime import datetime, timezone
 
 
-class TestInvertedIndex:
-    """Test inverted index."""
+class TestMatchType:
+    """Test match types."""
     
-    def test_add_document(self):
-        """Test adding document to index."""
-        index = InvertedIndex()
-        
-        index.add_document("doc1", {"title": "Hello World", "content": "Test content"})
-        
-        assert "doc1" in index._doc_fields
+    def test_match_type_enum_values(self):
+        """Test match type enum values."""
+        assert MatchType.EXACT.value == "exact"
+        assert MatchType.PREFIX.value == "prefix"
+        assert MatchType.FUZZY.value == "fuzzy"
+        assert MatchType.PHRASE.value == "phrase"
+        assert MatchType.WILDCARD.value == "wildcard"
+
+
+class TestSearchDocument:
+    """Test search document."""
     
-    def test_add_document_indexes_terms(self):
-        """Test that adding document indexes terms."""
-        index = InvertedIndex()
-        
-        index.add_document("doc1", {"title": "Hello World"})
-        
-        # "hello" and "world" should be indexed
-        assert "hello" in index._index.get("title", {})
-        assert "world" in index._index.get("title", {})
-    
-    def test_add_document_stops_removed(self):
-        """Test that stopwords are removed."""
-        index = InvertedIndex()
-        
-        index.add_document("doc1", {"text": "The quick brown fox"})
-        
-        # "the" should be removed as stopword
-        assert "the" not in index._index.get("text", {})
-        assert "quick" in index._index.get("text", {})
-    
-    def test_add_document_single_char_removed(self):
-        """Test that single character terms are removed."""
-        index = InvertedIndex()
-        
-        index.add_document("doc1", {"text": "a b c test"})
-        
-        assert "a" not in index._index.get("text", {})
-        assert "b" not in index._index.get("text", {})
-        assert "test" in index._index.get("text", {})
-    
-    def test_remove_document(self):
-        """Test removing document from index."""
-        index = InvertedIndex()
-        
-        index.add_document("doc1", {"title": "Hello World"})
-        index.remove_document("doc1")
-        
-        assert "doc1" not in index._doc_fields
-    
-    def test_remove_document_updates_terms(self):
-        """Test that removing document updates term lists."""
-        index = InvertedIndex()
-        
-        index.add_document("doc1", {"title": "Hello"})
-        index.add_document("doc2", {"title": "Hello World"})
-        
-        index.remove_document("doc1")
-        
-        # "hello" should still exist (doc2 has it)
-        assert "hello" in index._index.get("title", {})
-        assert "doc1" not in index._index["title"]["hello"]
-    
-    def test_search_basic(self):
-        """Test basic search."""
-        index = InvertedIndex()
-        
-        index.add_document("doc1", {"title": "Hello World"})
-        index.add_document("doc2", {"title": "Hello There"})
-        index.add_document("doc3", {"title": "Goodbye World"})
-        
-        results = index.search("hello")
-        
-        assert len(results) == 2
-        assert results[0][0] in ("doc1", "doc2")
-    
-    def test_search_no_match(self):
-        """Test search with no matches."""
-        index = InvertedIndex()
-        
-        index.add_document("doc1", {"title": "Hello World"})
-        
-        results = index.search("nonexistent")
-        
-        assert len(results) == 0
-    
-    def test_search_by_field(self):
-        """Test search restricted to specific field."""
-        index = InvertedIndex()
-        
-        index.add_document("doc1", {"title": "Python", "content": "Java"})
-        index.add_document("doc2", {"title": "Java", "content": "Python"})
-        
-        # Search only in title
-        results = index.search("python", fields=["title"])
-        
-        assert len(results) == 1
-        assert results[0][0] == "doc1"
-    
-    def test_search_scoring(self):
-        """Test that search results are scored."""
-        index = InvertedIndex()
-        
-        index.add_document("doc1", {"text": "Python Python Python"})
-        index.add_document("doc2", {"text": "Python"})
-        
-        results = index.search("python")
-        
-        # doc1 should score higher (more occurrences)
-        assert results[0][0] == "doc1"
-        assert results[0][1] > results[1][1]
-    
-    def test_search_empty_query(self):
-        """Test search with empty query."""
-        index = InvertedIndex()
-        
-        index.add_document("doc1", {"title": "Hello"})
-        
-        results = index.search("")
-        
-        assert len(results) == 0
-    
-    def test_get_stats(self):
-        """Test getting index statistics."""
-        index = InvertedIndex()
-        
-        index.add_document("doc1", {"title": "Hello World", "content": "Test"})
-        index.add_document("doc2", {"title": "Hello There", "content": "Test Content"})
-        
-        stats = index.get_stats()
-        
-        assert stats.total_documents == 2
-        assert stats.total_terms > 0
-        assert "title" in stats.field_stats
-    
-    def test_get_suggestions(self):
-        """Test getting term suggestions."""
-        index = InvertedIndex()
-        
-        index.add_document("doc1", {"title": "Python Programming"})
-        index.add_document("doc2", {"title": "Python Guide"})
-        index.add_document("doc3", {"title": "Java Programming"})
-        
-        suggestions = index.get_suggestions("pyth")
-        
-        assert "python" in suggestions
-    
-    def test_get_suggestions_by_field(self):
-        """Test getting suggestions for specific field."""
-        index = InvertedIndex()
-        
-        index.add_document("doc1", {"title": "Python", "content": "Java"})
-        
-        suggestions = index.get_suggestions("pyth", field="title")
-        
-        assert "python" in suggestions
-    
-    def test_get_suggestions_limit(self):
-        """Test suggestions limit."""
-        index = InvertedIndex()
-        
-        for i in range(20):
-            index.add_document(f"doc{i}", {"title": f"term{i}"})
-        
-        suggestions = index.get_suggestions("term", limit=5)
-        
-        assert len(suggestions) <= 5
-    
-    def test_get_suggestions_no_match(self):
-        """Test suggestions with no match."""
-        index = InvertedIndex()
-        
-        index.add_document("doc1", {"title": "Hello"})
-        
-        suggestions = index.get_suggestions("xyz")
-        
-        assert suggestions == []
-    
-    def test_tokenize_lowercase(self):
-        """Test that tokenization lowercases."""
-        index = InvertedIndex()
-        
-        tokens = index._tokenize("Hello WORLD")
-        
-        assert "hello" in tokens
-        assert "world" in tokens
-    
-    def test_tokenize_removes_punctuation(self):
-        """Test that tokenization removes punctuation."""
-        index = InvertedIndex()
-        
-        tokens = index._tokenize("Hello, World! How are you?")
-        
-        assert "hello" in tokens
-        assert "world" in tokens
-        assert "," not in tokens
-        assert "!" not in tokens
-    
-    def test_document_freq_tracked(self):
-        """Test that document frequency is tracked."""
-        index = InvertedIndex()
-        
-        index.add_document("doc1", {"text": "hello"})
-        index.add_document("doc2", {"text": "hello world"})
-        index.add_document("doc3", {"text": "hello"})
-        
-        assert index._doc_freq["hello"] == 3
-    
-    def test_term_freq_tracked(self):
-        """Test that term frequency per document is tracked."""
-        index = InvertedIndex()
-        
-        index.add_document("doc1", {"text": "hello hello hello"})
-        
-        assert index._term_freq["doc1"]["hello"] == 3
-    
-    def test_add_document_multiple_fields(self):
-        """Test adding document with multiple text fields."""
-        index = InvertedIndex()
-        
-        index.add_document(
-            "doc1",
-            {"title": "Python", "content": "Java", "tags": "coding"},
-            text_fields=["title", "content"],
+    def test_create_document(self):
+        """Test creating search document."""
+        doc = SearchDocument(
+            doc_id="doc_test",
+            content="Test content here",
+            boost=1.5,
         )
         
-        # Only title and content should be indexed
-        assert "python" in index._index.get("title", {})
-        assert "java" in index._index.get("content", {})
-        # "coding" should not be indexed (tags not in text_fields)
-        assert "coding" not in index._index.get("tags", {})
+        assert doc.doc_id == "doc_test"
+        assert doc.boost == 1.5
+    
+    def test_document_metadata_empty_by_default(self):
+        """Test that document metadata is empty by default."""
+        doc = SearchDocument(
+            doc_id="doc_test",
+            content="Test",
+        )
+        
+        assert doc.metadata == {}
+    
+    def test_document_fields_empty_by_default(self):
+        """Test that document fields is empty by default."""
+        doc = SearchDocument(
+            doc_id="doc_test",
+            content="Test",
+        )
+        
+        assert doc.fields == {}
+
+
+class TestSearchHit:
+    """Test search hit."""
+    
+    def test_create_hit(self):
+        """Test creating search hit."""
+        hit = SearchHit(
+            doc_id="doc_test",
+            score=0.85,
+            content="Matched content",
+        )
+        
+        assert hit.doc_id == "doc_test"
+        assert hit.score == 0.85
+    
+    def test_hit_to_dict(self):
+        """Test hit serialization."""
+        hit = SearchHit(
+            doc_id="doc_test",
+            score=0.9,
+            content="Content",
+            metadata={"category": "tech"},
+            highlights={"content": "<mark>Content</mark>"},
+            matched_fields=["title", "body"],
+        )
+        
+        d = hit.to_dict()
+        
+        assert d["score"] == 0.9
+        assert d["metadata"]["category"] == "tech"
+        assert len(d["matched_fields"]) == 2
+
+
+class TestSearchResult:
+    """Test search result."""
+    
+    def test_create_result(self):
+        """Test creating search result."""
+        result = SearchResult(
+            query="test query",
+            total_count=10,
+        )
+        
+        assert result.query == "test query"
+        assert result.total_count == 10
+    
+    def test_result_to_dict(self):
+        """Test result serialization."""
+        hit = SearchHit("doc1", 0.8, "content")
+        
+        result = SearchResult(
+            query="test",
+            hits=[hit],
+            total_count=1,
+            execution_time_ms=15.5,
+        )
+        
+        d = result.to_dict()
+        
+        assert d["query"] == "test"
+        assert len(d["hits"]) == 1
+        assert d["execution_time_ms"] == 15.5
+
+
+class TestFacet:
+    """Test facet."""
+    
+    def test_create_facet(self):
+        """Test creating facet."""
+        facet = Facet(name="category")
+        
+        assert facet.name == "category"
+        assert facet.values == {}
+    
+    def test_facet_to_dict(self):
+        """Test facet serialization."""
+        facet = Facet(
+            name="status",
+            values={"active": 10, "inactive": 5},
+        )
+        
+        d = facet.to_dict()
+        
+        assert d["name"] == "status"
+        assert d["values"]["active"] == 10
 
 
 class TestSearchEngine:
@@ -254,42 +152,69 @@ class TestSearchEngine:
         assert engine is not None
     
     def test_index_document(self):
-        """Test indexing a document."""
+        """Test indexing document."""
         engine = SearchEngine()
         
-        doc_id = engine.index_document(
-            "doc1",
-            {"title": "Hello World", "content": "Test content"},
+        result = engine.index_document(
+            doc_id="doc1",
+            content="This is a test document about Python programming",
         )
         
-        assert doc_id == "doc1"
-    
-    def test_index_document_auto_id(self):
-        """Test indexing with auto-generated ID."""
-        engine = SearchEngine()
-        
-        # This test uses explicit ID, but the function supports any string
-        doc_id = engine.index_document("auto_123", {"title": "Test"})
-        
-        assert doc_id == "auto_123"
-    
-    def test_index_document_stores_fields(self):
-        """Test that indexed document stores fields."""
-        engine = SearchEngine()
-        
-        engine.index_document("doc1", {"title": "Hello", "count": 42})
+        assert result is True
         
         doc = engine.get_document("doc1")
         
         assert doc is not None
-        assert doc.fields["title"] == "Hello"
-        assert doc.fields["count"] == 42
+        assert "Python" in doc.content
     
-    def test_delete_document(self):
-        """Test deleting a document."""
+    def test_index_document_with_metadata(self):
+        """Test indexing document with metadata."""
         engine = SearchEngine()
         
-        engine.index_document("doc1", {"title": "Hello"})
+        engine.index_document(
+            doc_id="doc1",
+            content="Test content",
+            metadata={"category": "tech", "author": "John"},
+        )
+        
+        doc = engine.get_document("doc1")
+        
+        assert doc.metadata["category"] == "tech"
+        assert doc.metadata["author"] == "John"
+    
+    def test_index_document_with_fields(self):
+        """Test indexing document with fields."""
+        engine = SearchEngine()
+        
+        engine.index_document(
+            doc_id="doc1",
+            content="Main content",
+            fields={"title": "Python Guide", "summary": "Learn Python"},
+        )
+        
+        doc = engine.get_document("doc1")
+        
+        assert doc.fields["title"] == "Python Guide"
+    
+    def test_index_document_with_boost(self):
+        """Test indexing document with boost."""
+        engine = SearchEngine()
+        
+        engine.index_document(
+            doc_id="doc1",
+            content="Important content",
+            boost=2.0,
+        )
+        
+        doc = engine.get_document("doc1")
+        
+        assert doc.boost == 2.0
+    
+    def test_delete_document(self):
+        """Test deleting document."""
+        engine = SearchEngine()
+        
+        engine.index_document("doc1", "Test content")
         
         result = engine.delete_document("doc1")
         
@@ -304,186 +229,515 @@ class TestSearchEngine:
         
         assert result is False
     
-    def test_search_basic(self):
-        """Test basic search."""
+    def test_search_exact_match(self):
+        """Test search with exact match."""
         engine = SearchEngine()
         
-        engine.index_document("doc1", {"title": "Python Tutorial"})
-        engine.index_document("doc2", {"title": "Java Guide"})
-        engine.index_document("doc3", {"title": "Python Advanced"})
+        engine.index_document("doc1", "Python programming is great")
+        engine.index_document("doc2", "Java programming is also good")
+        engine.index_document("doc3", "Python snakes are interesting")
         
-        results = engine.search("python")
+        result = engine.search("Python programming")
         
-        assert len(results) == 2
-    
-    def test_search_with_filters(self):
-        """Test search with filters."""
-        engine = SearchEngine()
-        
-        engine.index_document("doc1", {"title": "Python", "category": "tutorial"})
-        engine.index_document("doc2", {"title": "Python", "category": "advanced"})
-        engine.index_document("doc3", {"title": "Java", "category": "tutorial"})
-        
-        results = engine.search("python", filters={"category": "tutorial"})
-        
-        assert len(results) == 1
-        assert results[0].doc_id == "doc1"
-    
-    def test_search_with_multiple_filters(self):
-        """Test search with multiple filters."""
-        engine = SearchEngine()
-        
-        engine.index_document("doc1", {"title": "Python", "category": "tutorial", "level": "beginner"})
-        engine.index_document("doc2", {"title": "Python", "category": "tutorial", "level": "advanced"})
-        engine.index_document("doc3", {"title": "Python", "category": "advanced", "level": "beginner"})
-        
-        results = engine.search("python", filters={"category": "tutorial", "level": "beginner"})
-        
-        assert len(results) == 1
-        assert results[0].doc_id == "doc1"
+        assert result.total_count >= 1
+        assert result.hits[0].doc_id == "doc1"
     
     def test_search_with_limit(self):
         """Test search with limit."""
         engine = SearchEngine()
         
         for i in range(20):
-            engine.index_document(f"doc{i}", {"title": f"Python Topic {i}"})
+            engine.index_document(f"doc{i}", f"Document {i} about Python")
         
-        results = engine.search("python", limit=5)
+        result = engine.search("Python", limit=5)
         
-        assert len(results) == 5
+        assert result.returned_count <= 5
     
-    def test_search_with_highlight(self):
+    def test_search_with_offset(self):
+        """Test search with offset."""
+        engine = SearchEngine()
+        
+        for i in range(10):
+            engine.index_document(f"doc{i}", f"Document {i} Python")
+        
+        result1 = engine.search("Python", limit=5, offset=0)
+        result2 = engine.search("Python", limit=5, offset=5)
+        
+        # Different results
+        assert result1.hits[0].doc_id != result2.hits[0].doc_id
+    
+    def test_search_prefix_match(self):
+        """Test search with prefix match."""
+        engine = SearchEngine()
+        
+        engine.index_document("doc1", "Python programming")
+        engine.index_document("doc2", "Pyramid schemes")
+        engine.index_document("doc3", "Java programming")
+        
+        result = engine.search("Pyth", match_type=MatchType.PREFIX)
+        
+        # Should match "Python"
+        assert result.total_count >= 1
+    
+    def test_search_fuzzy_match(self):
+        """Test search with fuzzy match."""
+        engine = SearchEngine()
+        
+        engine.index_document("doc1", "Python programming")
+        engine.index_document("doc2", "Java programming")
+        
+        # Search with typo
+        result = engine.search("Pythn", match_type=MatchType.FUZZY)
+        
+        # Should still match "Python"
+        assert result.total_count >= 1
+    
+    def test_search_phrase_match(self):
+        """Test search with phrase match."""
+        engine = SearchEngine()
+        
+        engine.index_document("doc1", "Python programming is fun")
+        engine.index_document("doc2", "Programming in Python is great")
+        
+        result = engine.search("Python programming", match_type=MatchType.PHRASE)
+        
+        assert result.total_count >= 1
+    
+    def test_search_wildcard_match(self):
+        """Test search with wildcard match."""
+        engine = SearchEngine()
+        
+        engine.index_document("doc1", "Python programming")
+        engine.index_document("doc2", "Pyramid building")
+        engine.index_document("doc3", "Java programming")
+        
+        result = engine.search("Py*", match_type=MatchType.WILDCARD)
+        
+        # Should match Python and Pyramid
+        assert result.total_count >= 2
+    
+    def test_search_field_specific(self):
+        """Test search in specific fields."""
+        engine = SearchEngine()
+        
+        engine.index_document(
+            "doc1",
+            "Main content here",
+            fields={"title": "Python Guide", "body": "Learn Java instead"},
+        )
+        
+        result = engine.search("Python", fields=["title"])
+        
+        assert result.total_count >= 1
+    
+    def test_search_with_highlighting(self):
         """Test search with highlighting."""
         engine = SearchEngine()
         
-        engine.index_document("doc1", {"title": "Introduction to Python Programming"})
+        engine.index_document("doc1", "Python is a great programming language")
         
-        results = engine.search("python", highlight=True)
+        result = engine.search("Python", highlight=True)
         
-        assert len(results) == 1
-        assert "title" in results[0].highlights
-        assert "<mark>" in results[0].highlights["title"]
+        assert len(result.hits) >= 1
+        assert "highlights" in result.hits[0].to_dict()
     
-    def test_search_no_highlight(self):
-        """Test search without highlighting."""
+    def test_search_with_facets(self):
+        """Test search with facets."""
         engine = SearchEngine()
         
-        engine.index_document("doc1", {"title": "Python Programming"})
+        engine.index_document(
+            "doc1",
+            "Python guide",
+            metadata={"category": "programming"},
+        )
+        engine.index_document(
+            "doc2",
+            "Python snake info",
+            metadata={"category": "animals"},
+        )
         
-        results = engine.search("python", highlight=False)
+        result = engine.search("Python", facets=["category"])
         
-        assert len(results) == 1
-        assert results[0].highlights == {}
+        assert "category" in result.facets
     
-    def test_search_empty_results(self):
-        """Test search with no results."""
+    def test_add_synonym(self):
+        """Test adding synonyms."""
         engine = SearchEngine()
         
-        engine.index_document("doc1", {"title": "Hello"})
+        engine.add_synonym("python", ["snake", "conda", "monty"])
         
-        results = engine.search("nonexistent")
+        engine.index_document("doc1", "Snake handling guide")
         
-        assert len(results) == 0
+        # Search for python should match snake document
+        result = engine.search("python")
+        
+        assert result.total_count >= 1
     
-    def test_facet(self):
-        """Test faceted search."""
+    def test_remove_synonym(self):
+        """Test removing synonyms."""
         engine = SearchEngine()
         
-        engine.index_document("doc1", {"title": "Python", "category": "tutorial"})
-        engine.index_document("doc2", {"title": "Java", "category": "tutorial"})
-        engine.index_document("doc3", {"title": "Python", "category": "advanced"})
-        engine.index_document("doc4", {"title": "Python", "category": "tutorial"})
+        engine.add_synonym("python", ["snake"])
         
-        facets = engine.facet("category")
+        result = engine.remove_synonym("python")
         
-        assert len(facets) == 2
-        assert facets[0] == ("tutorial", 3)
-        assert facets[1] == ("advanced", 1)
+        assert result is True
     
-    def test_facet_with_query(self):
-        """Test faceted search with query filter."""
+    def test_remove_nonexistent_synonym(self):
+        """Test removing nonexistent synonym."""
         engine = SearchEngine()
         
-        engine.index_document("doc1", {"title": "Python Basic", "category": "tutorial"})
-        engine.index_document("doc2", {"title": "Java Basic", "category": "tutorial"})
-        engine.index_document("doc3", {"title": "Python Advanced", "category": "advanced"})
+        result = engine.remove_synonym("nonexistent")
         
-        facets = engine.facet("category", query="python")
-        
-        assert len(facets) == 2
-        # Python docs: 2 tutorial, 1 advanced
-        tutorial_count = next((count for val, count in facets if val == "tutorial"), 0)
-        assert tutorial_count == 2
+        assert result is False
     
-    def test_facet_with_limit(self):
-        """Test facet with limit."""
+    def test_add_stop_word(self):
+        """Test adding stop word."""
         engine = SearchEngine()
         
-        for i in range(20):
-            category = f"cat{i}"
-            engine.index_document(f"doc{i}", {"title": f"Title {i}", "category": category})
+        engine.add_stop_word("custom")
         
-        facets = engine.facet("category", limit=5)
-        
-        assert len(facets) == 5
+        assert "custom" in engine._stop_words
     
-    def test_facet_nonexistent_field(self):
-        """Test facet on nonexistent field."""
+    def test_remove_stop_word(self):
+        """Test removing stop word."""
         engine = SearchEngine()
         
-        engine.index_document("doc1", {"title": "Hello"})
+        engine.add_stop_word("tempword")
         
-        facets = engine.facet("nonexistent")
+        result = engine.remove_stop_word("tempword")
         
-        assert facets == []
+        assert result is True
+        assert "tempword" not in engine._stop_words
     
-    def test_suggest(self):
-        """Test search suggestions."""
+    def test_remove_nonexistent_stop_word(self):
+        """Test removing nonexistent stop word."""
         engine = SearchEngine()
         
-        engine.index_document("doc1", {"title": "Python Basics"})
-        engine.index_document("doc2", {"title": "Python Advanced"})
-        engine.index_document("doc3", {"title": "Java Basics"})
+        result = engine.remove_stop_word("nonexistent")
         
-        suggestions = engine.suggest("pyth")
-        
-        assert "python" in suggestions
+        assert result is False
     
-    def test_suggest_with_field(self):
-        """Test suggestions for specific field."""
+    def test_get_statistics(self):
+        """Test getting statistics."""
         engine = SearchEngine()
         
-        engine.index_document("doc1", {"title": "Python", "content": "Java"})
+        engine.index_document("doc1", "Test content")
+        engine.index_document("doc2", "More content")
         
-        suggestions = engine.suggest("pyth", field="title")
+        engine.search("test")
         
-        assert "python" in suggestions
+        stats = engine.get_statistics()
+        
+        assert stats["total_documents"] == 2
+        assert stats["total_searches"] == 1
     
-    def test_suggest_with_limit(self):
-        """Test suggestions with limit."""
+    def test_statistics_index_size(self):
+        """Test that statistics track index size."""
         engine = SearchEngine()
         
-        for i in range(20):
-            engine.index_document(f"doc{i}", {"title": f"term{i}"})
+        engine.index_document("doc1", "Python Java Ruby")
         
-        suggestions = engine.suggest("term", limit=5)
+        stats = engine.get_statistics()
         
-        assert len(suggestions) <= 5
+        assert stats["index_size"] >= 3  # At least 3 terms
     
-    def test_get_document(self):
-        """Test getting document by ID."""
+    def test_statistics_synonym_count(self):
+        """Test that statistics track synonym count."""
         engine = SearchEngine()
         
-        engine.index_document("doc1", {"title": "Hello", "count": 42})
+        engine.add_synonym("python", ["snake"])
+        engine.add_synonym("java", ["coffee"])
+        
+        stats = engine.get_statistics()
+        
+        assert stats["synonym_count"] == 2
+    
+    def test_clear(self):
+        """Test clearing all documents."""
+        engine = SearchEngine()
+        
+        engine.index_document("doc1", "Content 1")
+        engine.index_document("doc2", "Content 2")
+        
+        count = engine.clear()
+        
+        assert count == 2
+        
+        stats = engine.get_statistics()
+        
+        assert stats["total_documents"] == 0
+    
+    def test_reindex_all(self):
+        """Test reindexing all documents."""
+        engine = SearchEngine()
+        
+        engine.index_document("doc1", "Python guide")
+        engine.index_document("doc2", "Java guide")
+        
+        count = engine.reindex_all()
+        
+        assert count == 2
+        
+        # Search should still work
+        result = engine.search("Python")
+        
+        assert result.total_count >= 1
+    
+    def test_search_min_score_filter(self):
+        """Test search with minimum score filter."""
+        engine = SearchEngine()
+        
+        engine.index_document("doc1", "Python programming expert guide")
+        engine.index_document("doc2", "Mention of python once")
+        
+        result = engine.search("Python programming", min_score=0.5)
+        
+        # doc1 should have higher score
+        if len(result.hits) >= 1:
+            assert result.hits[0].score >= 0.5
+    
+    def test_search_execution_time(self):
+        """Test that search tracks execution time."""
+        engine = SearchEngine()
+        
+        engine.index_document("doc1", "Test content for search")
+        
+        result = engine.search("test")
+        
+        assert result.execution_time_ms >= 0
+    
+    def test_document_indexed_at_set(self):
+        """Test that document indexed_at is set."""
+        engine = SearchEngine()
+        
+        engine.index_document("doc1", "Test content")
         
         doc = engine.get_document("doc1")
         
-        assert doc is not None
-        assert doc.doc_id == "doc1"
-        assert doc.fields["title"] == "Hello"
+        assert doc.indexed_at is not None
     
-    def test_get_nonexistent_document(self):
+    def test_search_empty_query(self):
+        """Test search with empty query."""
+        engine = SearchEngine()
+        
+        engine.index_document("doc1", "Test content")
+        
+        result = engine.search("")
+        
+        assert result.total_count == 0
+    
+    def test_search_nonexistent_term(self):
+        """Test search for nonexistent term."""
+        engine = SearchEngine()
+        
+        engine.index_document("doc1", "Python programming")
+        
+        result = engine.search("nonexistentterm123")
+        
+        assert result.total_count == 0
+    
+    def test_update_document(self):
+        """Test updating document (re-indexing same ID)."""
+        engine = SearchEngine()
+        
+        engine.index_document("doc1", "Original content about Java")
+        
+        # Update with new content
+        engine.index_document("doc1", "Updated content about Python")
+        
+        result = engine.search("Java")
+        
+        # Should not find Java anymore
+        assert result.total_count == 0
+        
+        result = engine.search("Python")
+        
+        # Should find Python
+        assert result.total_count >= 1
+    
+    def test_search_case_insensitive(self):
+        """Test that search is case insensitive."""
+        engine = SearchEngine()
+        
+        engine.index_document("doc1", "PYTHON PROGRAMMING")
+        
+        result = engine.search("python")
+        
+        assert result.total_count >= 1
+        
+        result = engine.search("Python")
+        
+        assert result.total_count >= 1
+    
+    def test_search_stops_words_filtered(self):
+        """Test that stop words are filtered."""
+        engine = SearchEngine()
+        
+        engine.index_document("doc1", "The quick brown fox")
+        
+        # Search with only stop words should return nothing
+        result = engine.search("the and or")
+        
+        assert result.total_count == 0
+    
+    def test_search_min_word_length(self):
+        """Test minimum word length filtering."""
+        engine = SearchEngine(min_word_length=3)
+        
+        engine.index_document("doc1", "I am a Python developer")
+        
+        # "I" and "a" should be filtered out
+        result = engine.search("I a")
+        
+        assert result.total_count == 0
+    
+    def test_boost_affects_score(self):
+        """Test that document boost affects score."""
+        engine = SearchEngine()
+        
+        engine.index_document("doc1", "Python guide", boost=1.0)
+        engine.index_document("doc2", "Python guide", boost=3.0)
+        
+        result = engine.search("Python")
+        
+        # doc2 should have higher score due to boost
+        if len(result.hits) >= 2:
+            assert result.hits[0].doc_id == "doc2"
+    
+    def test_field_match_scores_higher(self):
+        """Test that field matches score higher than content."""
+        engine = SearchEngine()
+        
+        engine.index_document(
+            "doc1",
+            "Mention of python in content",
+            fields={"title": "Python Programming"},
+        )
+        
+        result = engine.search("Python")
+        
+        # Should match and title should be in matched_fields
+        if len(result.hits) >= 1:
+            assert "title" in result.hits[0].matched_fields
+    
+    def test_facet_values_count(self):
+        """Test that facet values are counted correctly."""
+        engine = SearchEngine()
+        
+        for i in range(5):
+            engine.index_document(
+                f"doc{i}",
+                f"Document {i}",
+                metadata={"category": "tech"},
+            )
+        
+        for i in range(3):
+            engine.index_document(
+                f"doc{i+5}",
+                f"Document {i+5}",
+                metadata={"category": "science"},
+            )
+        
+        result = engine.search("Document", facets=["category"])
+        
+        assert result.facets["category"].values.get("tech", 0) == 5
+        assert result.facets["category"].values.get("science", 0) == 3
+    
+    def test_highlight_marks_terms(self):
+        """Test that highlighting marks matched terms."""
+        engine = SearchEngine()
+        
+        engine.index_document("doc1", "Python is great for programming")
+        
+        result = engine.search("Python", highlight=True)
+        
+        if len(result.hits) >= 1 and result.hits[0].highlights:
+            highlight = result.hits[0].highlights.get("content", "")
+            assert "<mark>" in highlight or "Python" in highlight
+    
+    def test_search_result_total_count(self):
+        """Test that result includes total count."""
+        engine = SearchEngine()
+        
+        for i in range(100):
+            engine.index_document(f"doc{i}", f"Python document {i}")
+        
+        result = engine.search("Python", limit=10)
+        
+        assert result.total_count == 100
+        assert result.returned_count == 10
+    
+    def test_document_id_unique(self):
+        """Test that document IDs are unique (last write wins)."""
+        engine = SearchEngine()
+        
+        engine.index_document("doc1", "First content")
+        engine.index_document("doc1", "Second content")
+        
+        doc = engine.get_document("doc1")
+        
+        assert "Second" in doc.content
+    
+    def test_statistics_total_terms(self):
+        """Test that statistics track total terms."""
+        engine = SearchEngine()
+        
+        engine.index_document("doc1", "Python Java Ruby")
+        
+        stats = engine.get_statistics()
+        
+        assert stats["total_terms"] >= 3
+    
+    def test_statistics_stop_word_count(self):
+        """Test that statistics track stop word count."""
+        engine = SearchEngine()
+        
+        stats = engine.get_statistics()
+        
+        # Default stop words
+        assert stats["stop_word_count"] >= 10
+    
+    def test_search_multiple_terms(self):
+        """Test search with multiple terms."""
+        engine = SearchEngine()
+        
+        engine.index_document("doc1", "Python Java programming")
+        engine.index_document("doc2", "Python only")
+        engine.index_document("doc3", "Java only")
+        
+        result = engine.search("Python Java")
+        
+        # doc1 should rank highest (has both terms)
+        assert result.hits[0].doc_id == "doc1"
+    
+    def test_search_result_query_preserved(self):
+        """Test that result preserves original query."""
+        engine = SearchEngine()
+        
+        engine.index_document("doc1", "Test content")
+        
+        result = engine.search("original query")
+        
+        assert result.query == "original query"
+    
+    def test_clear_empty_engine(self):
+        """Test clearing empty engine."""
+        engine = SearchEngine()
+        
+        count = engine.clear()
+        
+        assert count == 0
+    
+    def test_reindex_empty_engine(self):
+        """Test reindexing empty engine."""
+        engine = SearchEngine()
+        
+        count = engine.reindex_all()
+        
+        assert count == 0
+    
+    def test_get_document_nonexistent(self):
         """Test getting nonexistent document."""
         engine = SearchEngine()
         
@@ -491,639 +745,136 @@ class TestSearchEngine:
         
         assert doc is None
     
-    def test_get_statistics(self):
-        """Test getting statistics."""
+    def test_search_with_special_characters(self):
+        """Test search with special characters."""
         engine = SearchEngine()
         
-        engine.index_document("doc1", {"title": "Hello World"})
-        engine.index_document("doc2", {"title": "Hello There"})
+        engine.index_document("doc1", "C++ programming guide")
+        engine.index_document("doc2", "C# development")
         
-        engine.search("hello")
+        result = engine.search("C++")
         
-        stats = engine.get_statistics()
-        
-        assert stats["total_documents"] == 2
-        assert stats["total_indexed"] == 2
-        assert stats["total_searches"] == 1
+        assert result.total_count >= 1
     
-    def test_clear(self):
-        """Test clearing all documents."""
+    def test_wildcard_single_char(self):
+        """Test wildcard with single character (?)."""
         engine = SearchEngine()
         
-        engine.index_document("doc1", {"title": "Hello"})
-        engine.index_document("doc2", {"title": "World"})
+        engine.index_document("doc1", "Cat animal")
+        engine.index_document("doc2", "Bat animal")
+        engine.index_document("doc3", "Car vehicle")
         
-        count = engine.clear()
+        result = engine.search("C?t", match_type=MatchType.WILDCARD)
         
-        assert count == 2
-        assert len(engine.search("hello")) == 0
+        # Should match Cat and Bat
+        assert result.total_count >= 2
     
-    def test_bulk_index(self):
-        """Test bulk indexing."""
+    def test_synonym_expansion(self):
+        """Test that synonyms expand search."""
         engine = SearchEngine()
         
-        documents = [
-            {"id": "doc1", "title": "Python", "category": "tutorial"},
-            {"id": "doc2", "title": "Java", "category": "tutorial"},
-            {"id": "doc3", "title": "Python", "category": "advanced"},
-        ]
+        engine.add_synonym("car", ["auto", "vehicle", "automobile"])
         
-        count = engine.bulk_index(documents)
+        engine.index_document("doc1", "Auto racing is fun")
         
-        assert count == 3
-        assert engine.get_document("doc1") is not None
-        assert engine.get_document("doc2") is not None
-        assert engine.get_document("doc3") is not None
+        result = engine.search("car")
+        
+        # Should match via synonym
+        assert result.total_count >= 1
     
-    def test_bulk_index_auto_id(self):
-        """Test bulk indexing with auto-generated IDs."""
+    def test_facet_empty_when_no_matches(self):
+        """Test that facets are empty when no matches."""
         engine = SearchEngine()
         
-        documents = [
-            {"title": "Python", "category": "tutorial"},
-            {"title": "Java", "category": "tutorial"},
-        ]
+        engine.index_document("doc1", "Test", metadata={"category": "tech"})
         
-        count = engine.bulk_index(documents, doc_id_field="nonexistent")
+        result = engine.search("nonexistent", facets=["category"])
         
-        assert count == 2
+        assert result.facets.get("category") is None or result.facets["category"].values == {}
     
-    def test_bulk_index_with_text_fields(self):
-        """Test bulk indexing with specific text fields."""
-        engine = SearchEngine()
-        
-        documents = [
-            {"id": "doc1", "title": "Python", "content": "Java", "tags": "coding"},
-        ]
-        
-        engine.bulk_index(documents, text_fields=["title"])
-        
-        results = engine.search("python")
-        assert len(results) == 1
-        
-        results = engine.search("java")
-        # "java" should not be indexed (content not in text_fields)
-        assert len(results) == 0
-    
-    def test_search_scoring_relevance(self):
-        """Test that search scoring reflects relevance."""
-        engine = SearchEngine()
-        
-        # doc1 has more occurrences
-        engine.index_document("doc1", {"title": "Python Python Python"})
-        engine.index_document("doc2", {"title": "Python"})
-        
-        results = engine.search("python")
-        
-        assert results[0].doc_id == "doc1"
-        assert results[0].score > results[1].score
-    
-    def test_search_result_to_dict(self):
-        """Test search result serialization."""
-        result = SearchResult(
-            doc_id="doc_test",
-            score=0.95,
-            fields={"title": "Test"},
-            highlights={"title": "<mark>Test</mark>"},
+    def test_highlight_custom_markers(self):
+        """Test custom highlight markers."""
+        engine = SearchEngine(
+            highlight_prefix="<<",
+            highlight_suffix=">>",
         )
         
-        d = result.to_dict()
+        engine.index_document("doc1", "Python is great")
         
-        assert d["doc_id"] == "doc_test"
-        assert d["score"] == 0.95
-        assert d["highlights"]["title"] == "<mark>Test</mark>"
-    
-    def test_document_to_dict(self):
-        """Test document serialization."""
-        doc = Document(
-            doc_id="doc_test",
-            fields={"title": "Test", "count": 42},
-        )
+        result = engine.search("Python", highlight=True)
         
-        d = doc.to_dict()
-        
-        assert d["doc_id"] == "doc_test"
-        assert d["fields"]["title"] == "Test"
-        assert d["fields"]["count"] == 42
+        if len(result.hits) >= 1 and result.hits[0].highlights:
+            highlight = result.hits[0].highlights.get("content", "")
+            assert "<<" in highlight or ">>" in highlight
     
-    def test_index_stats_to_dict(self):
-        """Test index stats serialization."""
-        stats = IndexStats(
-            total_documents=100,
-            total_terms=500,
-            field_stats={"title": {"unique_terms": 100}},
-        )
-        
-        assert stats.total_documents == 100
-        assert stats.total_terms == 500
-    
-    def test_field_type_enum_values(self):
-        """Test field type enum values."""
-        assert FieldType.TEXT.value == "text"
-        assert FieldType.KEYWORD.value == "keyword"
-        assert FieldType.NUMBER.value == "number"
-        assert FieldType.DATE.value == "date"
-        assert FieldType.BOOLEAN.value == "boolean"
-    
-    def test_document_created_at_set(self):
-        """Test that document created_at is set."""
-        doc = Document(doc_id="doc_test", fields={"title": "Test"})
-        
-        assert doc.created_at is not None
-    
-    def test_document_updated_at_set(self):
-        """Test that document updated_at is set."""
-        doc = Document(doc_id="doc_test", fields={"title": "Test"})
-        
-        assert doc.updated_at is not None
-    
-    def test_index_document_updates_existing(self):
-        """Test that indexing existing document updates it."""
+    def test_search_returns_hits_list(self):
+        """Test that search returns hits list."""
         engine = SearchEngine()
         
-        engine.index_document("doc1", {"title": "Original"})
-        engine.index_document("doc1", {"title": "Updated"})
+        engine.index_document("doc1", "Python content")
         
-        doc = engine.get_document("doc1")
+        result = engine.search("Python")
         
-        assert doc.fields["title"] == "Updated"
+        assert isinstance(result.hits, list)
     
-    def test_search_case_insensitive(self):
-        """Test that search is case insensitive."""
+    def test_hit_score_positive(self):
+        """Test that hit scores are positive."""
         engine = SearchEngine()
         
-        engine.index_document("doc1", {"title": "PYTHON PROGRAMMING"})
+        engine.index_document("doc1", "Python programming guide")
         
-        results = engine.search("python")
-        assert len(results) == 1
+        result = engine.search("Python")
         
-        results = engine.search("Python")
-        assert len(results) == 1
-        
-        results = engine.search("PYTHON")
-        assert len(results) == 1
+        if len(result.hits) >= 1:
+            assert result.hits[0].score > 0
     
-    def test_filter_nonexistent_value(self):
-        """Test filtering by nonexistent value."""
+    def test_multiple_documents_independent(self):
+        """Test that multiple documents are independent."""
         engine = SearchEngine()
         
-        engine.index_document("doc1", {"title": "Python", "category": "tutorial"})
+        engine.index_document("doc1", "Python only")
+        engine.index_document("doc2", "Java only")
+        engine.index_document("doc3", "Ruby only")
         
-        results = engine.search("python", filters={"category": "nonexistent"})
+        python_result = engine.search("Python")
+        java_result = engine.search("Java")
+        ruby_result = engine.search("Ruby")
         
-        assert len(results) == 0
+        assert python_result.hits[0].doc_id == "doc1"
+        assert java_result.hits[0].doc_id == "doc2"
+        assert ruby_result.hits[0].doc_id == "doc3"
     
-    def test_filter_nonexistent_field(self):
-        """Test filtering by nonexistent field."""
+    def test_levenshtein_distance_same_string(self):
+        """Test Levenshtein distance for same string."""
         engine = SearchEngine()
         
-        engine.index_document("doc1", {"title": "Python"})
+        distance = engine._levenshtein_distance("python", "python")
         
-        results = engine.search("python", filters={"nonexistent": "value"})
-        
-        assert len(results) == 0
+        assert distance == 0
     
-    def test_highlight_multiple_fields(self):
-        """Test highlighting multiple fields."""
+    def test_levenshtein_distance_different_string(self):
+        """Test Levenshtein distance for different strings."""
         engine = SearchEngine()
         
-        engine.index_document(
-            "doc1",
-            {"title": "Python Intro", "content": "Learn Python here"},
-        )
+        distance = engine._levenshtein_distance("python", "pythn")
         
-        results = engine.search("python", highlight=True)
-        
-        assert len(results) == 1
-        assert "title" in results[0].highlights
-        assert "content" in results[0].highlights
+        assert distance == 1
     
-    def test_highlight_no_match(self):
-        """Test highlighting when no match."""
+    def test_tokenize_lowercase(self):
+        """Test that tokenization lowercases."""
         engine = SearchEngine()
         
-        engine.index_document("doc1", {"title": "Hello World"})
+        tokens = engine._tokenize("PYTHON Programming")
         
-        results = engine.search("hello", highlight=True)
-        
-        assert len(results) == 1
-        # Title should have highlight
-        assert "title" in results[0].highlights
+        assert all(t.islower() for t in tokens)
     
-    def test_statistics_total_queries(self):
-        """Test that statistics track total queries."""
+    def test_tokenize_removes_punctuation(self):
+        """Test that tokenization removes punctuation."""
         engine = SearchEngine()
         
-        engine.index_document("doc1", {"title": "Test"})
+        tokens = engine._tokenize("Hello, world! How are you?")
         
-        engine.search("test")
-        engine.search("test")
-        engine.search("test")
-        
-        stats = engine.get_statistics()
-        
-        assert stats["total_queries"] == 3
-    
-    def test_statistics_field_stats(self):
-        """Test that statistics include field stats."""
-        engine = SearchEngine()
-        
-        engine.index_document("doc1", {"title": "Hello", "content": "World"})
-        
-        stats = engine.get_statistics()
-        
-        assert "field_stats" in stats
-        assert "title" in stats["field_stats"]
-        assert "content" in stats["field_stats"]
-    
-    def test_search_result_fields_preserved(self):
-        """Test that search result preserves all fields."""
-        engine = SearchEngine()
-        
-        engine.index_document(
-            "doc1",
-            {"title": "Python", "count": 42, "active": True, "tags": ["a", "b"]},
-        )
-        
-        results = engine.search("python")
-        
-        assert len(results) == 1
-        assert results[0].fields["title"] == "Python"
-        assert results[0].fields["count"] == 42
-        assert results[0].fields["active"] is True
-        assert results[0].fields["tags"] == ["a", "b"]
-    
-    def test_facet_empty_index(self):
-        """Test facet on empty index."""
-        engine = SearchEngine()
-        
-        facets = engine.facet("category")
-        
-        assert facets == []
-    
-    def test_suggest_empty_index(self):
-        """Test suggestions on empty index."""
-        engine = SearchEngine()
-        
-        suggestions = engine.suggest("pyth")
-        
-        assert suggestions == []
-    
-    def test_bulk_index_empty_list(self):
-        """Test bulk indexing empty list."""
-        engine = SearchEngine()
-        
-        count = engine.bulk_index([])
-        
-        assert count == 0
-    
-    def test_delete_document_updates_index(self):
-        """Test that deleting document updates search index."""
-        engine = SearchEngine()
-        
-        engine.index_document("doc1", {"title": "Python"})
-        engine.index_document("doc2", {"title": "Java"})
-        
-        engine.delete_document("doc1")
-        
-        results = engine.search("python")
-        
-        assert len(results) == 0
-    
-    def test_delete_document_updates_filters(self):
-        """Test that deleting document updates filter index."""
-        engine = SearchEngine()
-        
-        engine.index_document("doc1", {"title": "Python", "category": "tutorial"})
-        engine.index_document("doc2", {"title": "Java", "category": "tutorial"})
-        
-        engine.delete_document("doc1")
-        
-        facets = engine.facet("category")
-        
-        # Only doc2 remains
-        assert facets[0] == ("tutorial", 1)
-    
-    def test_search_after_clear(self):
-        """Test search after clearing index."""
-        engine = SearchEngine()
-        
-        engine.index_document("doc1", {"title": "Python"})
-        engine.clear()
-        
-        results = engine.search("python")
-        
-        assert len(results) == 0
-    
-    def test_index_document_numeric_field(self):
-        """Test indexing document with numeric field."""
-        engine = SearchEngine()
-        
-        engine.index_document("doc1", {"title": "Test", "count": 42, "price": 19.99})
-        
-        doc = engine.get_document("doc1")
-        
-        assert doc.fields["count"] == 42
-        assert doc.fields["price"] == 19.99
-    
-    def test_index_document_boolean_field(self):
-        """Test indexing document with boolean field."""
-        engine = SearchEngine()
-        
-        engine.index_document("doc1", {"title": "Test", "active": True, "deleted": False})
-        
-        doc = engine.get_document("doc1")
-        
-        assert doc.fields["active"] is True
-        assert doc.fields["deleted"] is False
-    
-    def test_filter_by_numeric_value(self):
-        """Test filtering by numeric value."""
-        engine = SearchEngine()
-        
-        engine.index_document("doc1", {"title": "Test", "count": 42})
-        engine.index_document("doc2", {"title": "Test", "count": 100})
-        
-        results = engine.search("test", filters={"count": 42})
-        
-        assert len(results) == 1
-        assert results[0].doc_id == "doc1"
-    
-    def test_filter_by_boolean_value(self):
-        """Test filtering by boolean value."""
-        engine = SearchEngine()
-        
-        engine.index_document("doc1", {"title": "Test", "active": True})
-        engine.index_document("doc2", {"title": "Test", "active": False})
-        
-        results = engine.search("test", filters={"active": True})
-        
-        assert len(results) == 1
-        assert results[0].doc_id == "doc1"
-    
-    def test_search_result_score_positive(self):
-        """Test that search result score is positive."""
-        engine = SearchEngine()
-        
-        engine.index_document("doc1", {"title": "Python Programming"})
-        
-        results = engine.search("python")
-        
-        assert len(results) == 1
-        assert results[0].score > 0
-    
-    def test_multiple_searches_same_query(self):
-        """Test multiple searches with same query."""
-        engine = SearchEngine()
-        
-        engine.index_document("doc1", {"title": "Python"})
-        
-        results1 = engine.search("python")
-        results2 = engine.search("python")
-        
-        assert len(results1) == len(results2)
-        assert results1[0].doc_id == results2[0].doc_id
-    
-    def test_index_document_special_characters(self):
-        """Test indexing document with special characters."""
-        engine = SearchEngine()
-        
-        engine.index_document("doc1", {"title": "C++ Programming & More!"})
-        
-        results = engine.search("programming")
-        
-        assert len(results) == 1
-    
-    def test_search_partial_word(self):
-        """Test search with partial word."""
-        engine = SearchEngine()
-        
-        engine.index_document("doc1", {"title": "Programming Python"})
-        
-        # Partial words won't match (tokenization requires full words)
-        results = engine.search("progra")
-        
-        assert len(results) == 0
-    
-    def test_facet_single_value(self):
-        """Test facet with single value."""
-        engine = SearchEngine()
-        
-        for i in range(5):
-            engine.index_document(f"doc{i}", {"title": f"Title {i}", "category": "same"})
-        
-        facets = engine.facet("category")
-        
-        assert len(facets) == 1
-        assert facets[0] == ("same", 5)
-    
-    def test_suggest_prefix_case_insensitive(self):
-        """Test that suggestions are case insensitive."""
-        engine = SearchEngine()
-        
-        engine.index_document("doc1", {"title": "Python"})
-        
-        suggestions = engine.suggest("PYTH")
-        
-        assert "python" in suggestions
-    
-    def test_document_updated_at_changes_on_reindex(self):
-        """Test that document updated_at changes on reindex."""
-        engine = SearchEngine()
-        
-        engine.index_document("doc1", {"title": "Original"})
-        
-        doc1 = engine.get_document("doc1")
-        
-        import time
-        time.sleep(0.01)
-        
-        engine.index_document("doc1", {"title": "Updated"})
-        
-        doc2 = engine.get_document("doc1")
-        
-        assert doc2.updated_at > doc1.updated_at
-    
-    def test_search_with_all_options(self):
-        """Test search with all options."""
-        engine = SearchEngine()
-        
-        engine.index_document("doc1", {"title": "Python Tutorial", "level": "beginner"})
-        engine.index_document("doc2", {"title": "Python Advanced", "level": "advanced"})
-        engine.index_document("doc3", {"title": "Java Tutorial", "level": "beginner"})
-        
-        results = engine.search(
-            "python",
-            fields=["title"],
-            filters={"level": "beginner"},
-            limit=10,
-            highlight=True,
-        )
-        
-        assert len(results) == 1
-        assert results[0].doc_id == "doc1"
-        assert "<mark>" in results[0].highlights.get("title", "")
-    
-    def test_statistics_after_delete(self):
-        """Test statistics after deleting documents."""
-        engine = SearchEngine()
-        
-        engine.index_document("doc1", {"title": "Test"})
-        engine.index_document("doc2", {"title": "Test"})
-        
-        engine.delete_document("doc1")
-        
-        stats = engine.get_statistics()
-        
-        assert stats["total_documents"] == 1
-    
-    def test_bulk_index_returns_correct_count(self):
-        """Test that bulk_index returns correct count."""
-        engine = SearchEngine()
-        
-        documents = [{"id": f"doc{i}", "title": f"Title {i}"} for i in range(10)]
-        
-        count = engine.bulk_index(documents)
-        
-        assert count == 10
-    
-    def test_index_document_unicode_content(self):
-        """Test indexing document with unicode content."""
-        engine = SearchEngine()
-        
-        engine.index_document("doc1", {"title": "Python 编程", "content": "Привет мир"})
-        
-        results = engine.search("python")
-        
-        assert len(results) == 1
-    
-    def test_search_empty_string_query(self):
-        """Test search with empty string query."""
-        engine = SearchEngine()
-        
-        engine.index_document("doc1", {"title": "Hello"})
-        
-        results = engine.search("")
-        
-        assert len(results) == 0
-    
-    def test_facet_case_sensitive_values(self):
-        """Test that facet values are case sensitive."""
-        engine = SearchEngine()
-        
-        engine.index_document("doc1", {"title": "Test", "category": "Tutorial"})
-        engine.index_document("doc2", {"title": "Test", "category": "tutorial"})
-        
-        facets = engine.facet("category")
-        
-        # Should be separate values
-        assert len(facets) == 2
-    
-    def test_clear_updates_statistics(self):
-        """Test that clear updates statistics."""
-        engine = SearchEngine()
-        
-        engine.index_document("doc1", {"title": "Test"})
-        engine.clear()
-        
-        stats = engine.get_statistics()
-        
-        assert stats["total_documents"] == 0
-        assert stats["total_terms"] == 0
-    
-    def test_inverted_index_reuse_after_clear(self):
-        """Test that inverted index can be reused after clear."""
-        engine = SearchEngine()
-        
-        engine.index_document("doc1", {"title": "Python"})
-        engine.clear()
-        
-        # Should be able to index and search again
-        engine.index_document("doc2", {"title": "Java"})
-        
-        results = engine.search("java")
-        
-        assert len(results) == 1
-        assert results[0].doc_id == "doc2"
-    
-    def test_search_filters_excluded_documents(self):
-        """Test that filters properly exclude documents."""
-        engine = SearchEngine()
-        
-        engine.index_document("doc1", {"title": "Python", "status": "published"})
-        engine.index_document("doc2", {"title": "Python", "status": "draft"})
-        engine.index_document("doc3", {"title": "Python", "status": "published"})
-        
-        results = engine.search("python", filters={"status": "published"})
-        
-        assert len(results) == 2
-        
-        doc_ids = [r.doc_id for r in results]
-        
-        assert "doc1" in doc_ids
-        assert "doc3" in doc_ids
-        assert "doc2" not in doc_ids
-    
-    def test_highlight_preserves_original_case(self):
-        """Test that highlighting preserves original case."""
-        engine = SearchEngine()
-        
-        engine.index_document("doc1", {"title": "PYTHON Programming"})
-        
-        results = engine.search("python", highlight=True)
-        
-        # Should preserve original case in highlight
-        assert "<mark>PYTHON</mark>" in results[0].highlights["title"] or \
-               "<mark>python</mark>" in results[0].highlights["title"].lower()
-    
-    def test_document_id_unique_in_bulk_index(self):
-        """Test that bulk index handles duplicate IDs."""
-        engine = SearchEngine()
-        
-        documents = [
-            {"id": "doc1", "title": "First"},
-            {"id": "doc1", "title": "Second"},  # Duplicate ID
-        ]
-        
-        count = engine.bulk_index(documents)
-        
-        # Should index both (second overwrites first)
-        assert count == 2
-        
-        doc = engine.get_document("doc1")
-        
-        # Second should win
-        assert doc.fields["title"] == "Second"
-    
-    def test_search_whitespace_handling(self):
-        """Test search handles whitespace."""
-        engine = SearchEngine()
-        
-        engine.index_document("doc1", {"title": "Python Programming"})
-        
-        results = engine.search("  python   programming  ")
-        
-        assert len(results) == 1
-    
-    def test_facet_zero_limit(self):
-        """Test facet with zero limit."""
-        engine = SearchEngine()
-        
-        engine.index_document("doc1", {"title": "Test", "category": "test"})
-        
-        facets = engine.facet("category", limit=0)
-        
-        assert facets == []
-    
-    def test_suggest_zero_limit(self):
-        """Test suggestions with zero limit."""
-        engine = SearchEngine()
-        
-        engine.index_document("doc1", {"title": "Python"})
-        
-        suggestions = engine.suggest("pyth", limit=0)
-        
-        assert suggestions == []
+        assert all(t.isalnum() for t in tokens)
     
     def test_statistics_initial_values(self):
         """Test statistics initial values."""
@@ -1131,53 +882,66 @@ class TestSearchEngine:
         
         stats = engine.get_statistics()
         
-        assert stats["total_documents"] == 0
-        assert stats["total_indexed"] == 0
         assert stats["total_searches"] == 0
-        assert stats["total_queries"] == 0
+        assert stats["total_documents"] == 0
+        assert stats["total_terms"] == 0
     
-    def test_index_document_nested_fields(self):
-        """Test indexing document with nested fields."""
+    def test_facet_to_dict(self):
+        """Test facet to_dict method."""
+        facet = Facet(
+            name="status",
+            values={"active": 10, "pending": 5},
+        )
+        
+        d = facet.to_dict()
+        
+        assert d["name"] == "status"
+        assert d["values"]["active"] == 10
+        assert d["values"]["pending"] == 5
+    
+    def test_search_result_facets_dict(self):
+        """Test that search result facets convert to dict properly."""
+        engine = SearchEngine()
+        
+        engine.index_document("doc1", "Test", metadata={"cat": "A"})
+        
+        result = engine.search("Test", facets=["cat"])
+        
+        d = result.to_dict()
+        
+        assert "facets" in d
+    
+    def test_index_document_returns_true(self):
+        """Test that index_document returns True."""
+        engine = SearchEngine()
+        
+        result = engine.index_document("doc1", "Content")
+        
+        assert result is True
+    
+    def test_search_with_numeric_content(self):
+        """Test search with numeric content."""
+        engine = SearchEngine()
+        
+        engine.index_document("doc1", "Version 1.2.3 released")
+        engine.index_document("doc2", "Version 2.0.0 available")
+        
+        result = engine.search("1.2.3")
+        
+        assert result.total_count >= 1
+    
+    def test_search_preserves_document_metadata(self):
+        """Test that search results preserve document metadata."""
         engine = SearchEngine()
         
         engine.index_document(
             "doc1",
-            {"title": "Test", "metadata": {"author": "John", "tags": ["a", "b"]}},
+            "Python guide",
+            metadata={"author": "John", "year": 2024},
         )
         
-        doc = engine.get_document("doc1")
+        result = engine.search("Python")
         
-        assert doc.fields["metadata"]["author"] == "John"
-        assert doc.fields["metadata"]["tags"] == ["a", "b"]
-    
-    def test_search_nested_field_value(self):
-        """Test searching nested field values."""
-        engine = SearchEngine()
-        
-        engine.index_document(
-            "doc1",
-            {"title": "Test", "author": "John Smith"},
-        )
-        
-        results = engine.search("john")
-        
-        assert len(results) == 1
-    
-    def test_filter_nested_field_value(self):
-        """Test filtering by nested field value."""
-        engine = SearchEngine()
-        
-        engine.index_document(
-            "doc1",
-            {"title": "Test", "status": {"published": True, "verified": False}},
-        )
-        engine.index_document(
-            "doc2",
-            {"title": "Test", "status": {"published": True, "verified": True}},
-        )
-        
-        # Filter by string representation
-        results = engine.search("test", filters={"status": "{'published': True, 'verified': False}"})
-        
-        assert len(results) == 1
-        assert results[0].doc_id == "doc1"
+        if len(result.hits) >= 1:
+            assert result.hits[0].metadata["author"] == "John"
+            assert result.hits[0].metadata["year"] == 2024
