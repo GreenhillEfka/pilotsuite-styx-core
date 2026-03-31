@@ -1,7 +1,7 @@
 # PilotSuite Styx Core
 
 **Version:** 15.3.0  
-**Status:** ✅ Life-Long-Learning Dachsystem
+**Status:** ✅ Life-Long-Learning Dachsystem — End-to-End Verkabelt
 
 ---
 
@@ -12,9 +12,10 @@
 PilotSuite ist ein **Life-Long-Learning Dachsystem**, das:
 - **Modular** lernt (jede Komponente verbessert sich)
 - **Nutzer kennt** (über ALLE Schnittstellen hinweg)
-- **Habitus speichert** (gelernte Patterns zentral)
+- **Habitus speichert** (gelernte Patterns zentral — Unified Store)
 - **Proaktiv** handelt (kommt Nutzer zuvor)
 - **Zugänglich** ist (Chat/API für externe Dienste)
+- **End-to-End** verkabelt ist (maximale Synergien)
 
 📖 **Vollständige Vision:** [docs/VISION.md](docs/VISION.md)
 
@@ -22,18 +23,43 @@ PilotSuite ist ein **Life-Long-Learning Dachsystem**, das:
 
 ## 🚀 WHAT'S NEW IN v15.3.0
 
-### Life-Long-Learning System
+### Unified Habitus Store
 
-| Feature | API | Beschreibung |
-|---------|-----|--------------|
-| **Habitus Storage** | `/api/v1/habitus` | Zentrales Pattern-Lernen |
-| **Chat API** | `/api/v1/chat` | Externer Zugang (Telegram, WhatsApp, REST) |
-| **Learning Viz** | `/api/v1/learning` | Zeigt Nutzer was System lernt |
-| **Backend UI** | `/api/v1/backend` | 10-Tabs Dashboard |
-| **Neurons UI** | `/api/v1/neurons` | 3-Layer Visualisierung |
-| **RAG UI** | `/api/v1/rag` | Vector-Store + SearXNG + Voice |
-| **Media UI** | `/api/v1/media` | Sonos + Musikwolke |
-| **Zone Sync** | `/api/v1/hub/zones` | Core ↔ HA Sync |
+**Kombiniert RAG + Habitus + Anomaly in EINEM Store:**
+- Patterns (A→B Regeln)
+- Preferences (Nutzer-Vorlieben)
+- Routines (wiederkehrende Aktivitäten)
+- Events (HA state_changed)
+- RAG-Docs (Dokumente, Wissen)
+- AnomalyBaselines (Normalzustände)
+- ZoneConfigs (pro Zone)
+- ModuleDependencies (übergreifend)
+
+### End-to-End Wiring
+
+**Verkabelt ALLE Komponenten:**
+- AutoDiscovery → UnifiedHabitusStore
+- UnifiedHabitusStore → Neurons
+- Neurons → Anomaly Detection
+- Anomaly Detection → Chat API
+- Chat API → User Feedback
+- User Feedback → UnifiedHabitusStore
+- Module Dependencies → Cross-Module Effects
+
+### Zone-Scoped Data
+
+**Saubere Trennung + Queries:**
+- Alle Daten mit zone_id taggbar
+- Zone-spezifische Konfiguration
+- Zone-scoped Search
+- Cross-Zone Contamination verhindert
+
+### Module Dependencies
+
+**Übergreifende Abhängigkeiten:**
+- requires (Light benötigt Motion)
+- enhances (Music verbessert Climate)
+- conflicts (Camera konflikts mit Privacy)
 
 ---
 
@@ -64,11 +90,11 @@ searxng_url: http://localhost:8080  # Optional
 
 ## 🔗 API-ENDPOINTS
 
-### Life-Long-Learning
+### Life-Long-Learning (Unified Store)
 
 ```
 GET  /api/v1/habitus              — Overview + Stats
-GET  /api/v1/habitus/patterns     — Gelernte Patterns
+GET  /api/v1/habitus/patterns     — Patterns (filterbar)
 POST /api/v1/habitus/feedback     — Feedback geben
 GET  /api/v1/habitus/preferences  — Nutzer-Präferenzen
 GET  /api/v1/habitus/routines     — Nutzer-Routinen
@@ -86,7 +112,7 @@ POST /api/v1/chat/webhooks/rest            — REST Webhook
 ### Learning Visualization
 
 ```
-GET  /api/v1/learning/overview    — Lern-Übersicht
+GET  /api/v1/learning/overview    — Intelligence Score
 GET  /api/v1/learning/patterns    — Patterns (visualisiert)
 GET  /api/v1/learning/progress    — Fortschritt pro Zone/Modul
 POST /api/v1/learning/correct     — Manuelle Korrektur
@@ -102,6 +128,8 @@ GET  /api/v1/backend/mood          — Mood + Dimensions
 GET  /api/v1/backend/automation    — Vorschläge + Regeln
 GET  /api/v1/backend/rag           — Vector-Store + SearXNG
 GET  /api/v1/backend/media         — Sonos + Musikwolke
+GET  /api/v1/backend/hardware      — Zigbee/Z-Wave/UniFi
+GET  /api/v1/backend/system        — Health + Config + Models
 ```
 
 ---
@@ -113,18 +141,25 @@ GET  /api/v1/backend/media         — Sonos + Musikwolke
 │                    PILOTSUITE CORE                           │
 ├─────────────────────────────────────────────────────────────┤
 │                                                              │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │         UNIFIED HABITUS STORE                         │  │
+│  │  (Patterns + Preferences + RAG + Anomaly + Zones)    │  │
+│  └──────────────────────────────────────────────────────┘  │
+│         ↓                   ↓                   ↓           │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
 │  │   Habitus    │  │   Neurons    │  │    Chat      │      │
-│  │   Storage    │  │   Manager    │  │   Handler    │      │
+│  │   Service    │  │   Manager    │  │   Handler    │      │
 │  └──────────────┘  └──────────────┘  └──────────────┘      │
 │         ↓                   ↓                   ↓           │
 │  ┌────────────────────────────────────────────────────┐    │
-│  │              API Gateway (Flask)                    │    │
+│  │          END-TO-END WIRING                          │    │
+│  │  (AutoDiscovery → Store → Neurons → Anomaly →     │    │
+│  │   Chat → Feedback → Confidence → Dependencies)     │    │
 │  └────────────────────────────────────────────────────┘    │
 │         ↓                   ↓                   ↓           │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
-│  │   Zones      │  │   Modules    │  │     RAG      │      │
-│  │   Engine     │  │   Registry   │  │   + SearXNG  │      │
+│  │   Zones      │  │   Modules    │  │   Anomaly    │      │
+│  │   Engine     │  │   Registry   │  │   Detector   │      │
 │  └──────────────┘  └──────────────┘  └──────────────┘      │
 │                                                              │
 └─────────────────────────────────────────────────────────────┘
@@ -143,13 +178,34 @@ GET  /api/v1/backend/media         — Sonos + Musikwolke
 
 | Metric | Value |
 |--------|-------|
-| **Code Lines** | ~190.000 |
+| **Code Lines (neu)** | ~4.289 |
+| **Code Lines (bewahrt)** | ~190.000 |
 | **API Endpoints** | 50+ |
 | **Modules** | 25+ |
 | **Zone Types** | 10 |
 | **Neuron Layers** | 3 (CONTEXT, STATE, MOOD) |
 | **Mood Dimensions** | 5 |
-| **Patterns** | Unbegrenzt (SQLite) |
+| **Patterns** | Unbegrenzt (Unified Store) |
+| **Module Dependencies** | Unbegrenzt |
+
+---
+
+## 🎯 INTELLIGENCE SCORE
+
+```python
+score = pattern_score + active_score + acceptance_score
+
+pattern_score = min(total_patterns * 2, 40)     # Max 40
+active_score = min(active_patterns * 5, 30)     # Max 30
+acceptance_score = min(acceptance_rate * 30, 30) # Max 30
+
+Level:
+- 80-100: Expert
+- 60-79:  Advanced
+- 40-59:  Intermediate
+- 20-39:  Beginner
+- 0-19:   Novice
+```
 
 ---
 
@@ -162,6 +218,7 @@ GET  /api/v1/backend/media         — Sonos + Musikwolke
 | **HA Integration** | https://github.com/GreenhillEfka/pilotsuite-styx-ha |
 | **Vision** | [docs/VISION.md](docs/VISION.md) |
 | **Changelog** | [CHANGELOG.md](CHANGELOG.md) |
+| **Architektur** | [/config/clawd/ARCHITECTUR_REVISION.md](/config/clawd/ARCHITECTUR_REVISION.md) |
 
 ---
 
@@ -172,13 +229,16 @@ GET  /api/v1/backend/media         — Sonos + Musikwolke
 **Status:** ✅ READY FOR PRODUCTION
 
 **Key Features:**
-- ✅ Life-Long-Learning System (Habitus Storage)
+- ✅ UnifiedHabitusStore (RAG + Habitus + Anomaly)
+- ✅ EndToEndWiring (alle Komponenten verkabelt)
+- ✅ Zone-Scoped Data (saubere Trennung)
+- ✅ Module Dependencies (übergreifend)
+- ✅ Cross-Type Search (BM25 über ALLES)
+- ✅ HabitusService (High-Level API)
+- ✅ AutoDiscovery (automatische Pattern-Erkennung)
 - ✅ Chat API (Telegram, WhatsApp, REST)
-- ✅ Learning Visualization (für Nutzer-Vertrauen)
-- ✅ Zone Sync (Core ↔ HA)
-- ✅ Backend UI (10 Tabs)
-- ✅ ~190.000 Zeilen Code bewahrt
+- ✅ Learning Visualization (Intelligence Score)
 
 ---
 
-**🚀 PILOTSUITE — DAS DACHSYSTEM.**
+**🚀 PILOTSUITE — DAS LEBENDIGE, LERNENDE, VERKABELTE DACHSYSTEM.**
