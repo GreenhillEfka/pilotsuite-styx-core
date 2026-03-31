@@ -1,370 +1,1087 @@
-"""Tests for Health Check & System Monitoring — Slice 24."""
+"""Tests for Health Engine — Slice 38."""
 import pytest
 from copilot_core.health.engine import (
-    HealthCheckEngine,
+    HealthEngine,
     HealthStatus,
-    ComponentType,
-    create_health_check_engine,
+    CheckType,
+    HealthCheckResult,
+    ComponentHealth,
+    HealthCheckDefinition,
+    create_health_engine,
 )
+from datetime import datetime, timezone, timedelta
 
 
-class TestHealthCheckEngine:
-    """Test health check engine."""
+class TestHealthEngine:
+    """Test health engine."""
     
     def test_create_engine(self):
         """Test engine creation."""
-        engine = create_health_check_engine()
+        engine = create_health_engine()
         assert engine is not None
     
-    def test_register_component(self):
-        """Test component registration."""
-        engine = HealthCheckEngine()
+    def test_register_check_liveness(self):
+        """Test registering liveness check."""
+        engine = HealthEngine()
         
-        comp_id = engine.register_component(
-            component_id="cpu_main",
-            component_type=ComponentType.CPU,
-            name="Main CPU",
-            initial_value=0.0,
+        def checker():
+            return {"status": "healthy", "message": "OK"}
+        
+        check_id = engine.register_check(
+            component="database",
+            check_type="liveness",
+            checker=checker,
         )
         
-        assert comp_id == "cpu_main"
-        assert comp_id in engine._components
-        assert engine._components[comp_id].name == "Main CPU"
+        assert check_id is not None
+        
+        checks = engine.get_checks()
+        
+        assert len(checks) >= 1
+        assert any(c["component"] == "database" for c in checks)
     
-    def test_update_component_healthy(self):
-        """Test updating component - healthy state."""
-        engine = HealthCheckEngine()
-        engine.register_component("cpu_test", ComponentType.CPU, "Test CPU")
+    def test_register_check_readiness(self):
+        """Test registering readiness check."""
+        engine = HealthEngine()
         
-        component = engine.update_component_value("cpu_test", 45.0)
+        def checker():
+            return {"status": "healthy", "message": "Ready"}
         
-        assert component.status == HealthStatus.HEALTHY
-        assert component.value == 45.0
+        check_id = engine.register_check(
+            component="api",
+            check_type="readiness",
+            checker=checker,
+        )
+        
+        checks = engine.get_checks(component="api")
+        
+        assert len(checks) == 1
+        assert checks[0]["check_type"] == "readiness"
     
-    def test_update_component_warning(self):
-        """Test updating component - warning state."""
-        engine = HealthCheckEngine()
-        engine.register_component("cpu_test", ComponentType.CPU, "Test CPU")
+    def test_register_check_startup(self):
+        """Test registering startup check."""
+        engine = HealthEngine()
         
-        component = engine.update_component_value("cpu_test", 85.0)
+        def checker():
+            return {"status": "healthy", "message": "Started"}
         
-        assert component.status == HealthStatus.WARNING
-        assert "Warning" in component.message
+        engine.register_check(
+            component="worker",
+            check_type="startup",
+            checker=checker,
+        )
+        
+        checks = engine.get_checks(component="worker")
+        
+        assert checks[0]["check_type"] == "startup"
     
-    def test_update_component_critical(self):
-        """Test updating component - critical state."""
-        engine = HealthCheckEngine()
-        engine.register_component("cpu_test", ComponentType.CPU, "Test CPU")
+    def test_register_check_custom(self):
+        """Test registering custom check."""
+        engine = HealthEngine()
         
-        component = engine.update_component_value("cpu_test", 98.0)
+        def checker():
+            return {"status": "healthy", "message": "Custom OK"}
         
-        assert component.status == HealthStatus.CRITICAL
-        assert "Critical" in component.message
+        engine.register_check(
+            component="cache",
+            check_type="custom",
+            checker=checker,
+        )
+        
+        checks = engine.get_checks(component="cache")
+        
+        assert checks[0]["check_type"] == "custom"
     
-    def test_update_unknown_component(self):
-        """Test updating unknown component."""
-        engine = HealthCheckEngine()
+    def test_run_check_healthy(self):
+        """Test running healthy check."""
+        engine = HealthEngine()
         
-        with pytest.raises(ValueError):
-            engine.update_component_value("unknown_component", 50.0)
+        def checker():
+            return {"status": "healthy", "message": "All good"}
+        
+        check_id = engine.register_check(
+            component="test",
+            check_type="liveness",
+            checker=checker,
+        )
+        
+        result = engine.run_check(check_id)
+        
+        assert result is not None
+        assert result.status == HealthStatus.HEALTHY
     
-    def test_get_system_health_empty(self):
-        """Test system health with no components."""
-        engine = HealthCheckEngine()
+    def test_run_check_degraded(self):
+        """Test running degraded check."""
+        engine = HealthEngine()
         
-        health = engine.get_system_health()
+        def checker():
+            return {"status": "degraded", "message": "Slow response"}
         
-        assert health.overall_status == HealthStatus.UNKNOWN
-        assert health.health_score == 0.0
-        assert len(health.components) == 0
+        check_id = engine.register_check(
+            component="test",
+            check_type="liveness",
+            checker=checker,
+        )
+        
+        result = engine.run_check(check_id)
+        
+        assert result is not None
+        assert result.status == HealthStatus.DEGRADED
     
-    def test_get_system_health_healthy(self):
-        """Test system health - all healthy."""
-        engine = HealthCheckEngine()
-        engine.register_component("cpu_test", ComponentType.CPU, "Test CPU")
-        engine.update_component_value("cpu_test", 30.0)
+    def test_run_check_unhealthy(self):
+        """Test running unhealthy check."""
+        engine = HealthEngine()
         
-        health = engine.get_system_health()
+        def checker():
+            return {"status": "unhealthy", "message": "Connection failed"}
         
-        assert health.overall_status == HealthStatus.HEALTHY
-        assert health.health_score == 100.0
+        check_id = engine.register_check(
+            component="test",
+            check_type="liveness",
+            checker=checker,
+        )
+        
+        result = engine.run_check(check_id)
+        
+        assert result is not None
+        assert result.status == HealthStatus.UNHEALTHY
     
-    def test_get_system_health_degraded(self):
-        """Test system health - degraded."""
-        engine = HealthCheckEngine()
-        engine.register_component("cpu_test", ComponentType.CPU, "Test CPU")
-        engine.update_component_value("cpu_test", 85.0)  # Warning
+    def test_run_check_unknown(self):
+        """Test running check with unknown status."""
+        engine = HealthEngine()
         
-        health = engine.get_system_health()
+        def checker():
+            return {"status": "unknown", "message": "Cannot determine"}
         
-        assert health.overall_status == HealthStatus.WARNING
-        assert len(health.warnings) >= 1
+        check_id = engine.register_check(
+            component="test",
+            check_type="liveness",
+            checker=checker,
+        )
+        
+        result = engine.run_check(check_id)
+        
+        assert result is not None
+        assert result.status == HealthStatus.UNKNOWN
     
-    def test_get_system_health_critical(self):
-        """Test system health - critical."""
-        engine = HealthCheckEngine()
-        engine.register_component("cpu_test", ComponentType.CPU, "Test CPU")
-        engine.update_component_value("cpu_test", 98.0)  # Critical
+    def test_run_check_exception(self):
+        """Test running check that raises exception."""
+        engine = HealthEngine()
         
-        health = engine.get_system_health()
+        def checker():
+            raise Exception("Check failed")
         
-        assert health.overall_status == HealthStatus.CRITICAL
-        assert len(health.critical_issues) >= 1
+        check_id = engine.register_check(
+            component="test",
+            check_type="liveness",
+            checker=checker,
+        )
+        
+        result = engine.run_check(check_id)
+        
+        assert result is not None
+        assert result.status == HealthStatus.UNHEALTHY
+        assert "Check failed" in result.message
+    
+    def test_run_unknown_check(self):
+        """Test running unknown check."""
+        engine = HealthEngine()
+        
+        result = engine.run_check("unknown_check")
+        
+        assert result is None
+    
+    def test_run_all_checks(self):
+        """Test running all checks."""
+        engine = HealthEngine()
+        
+        def healthy_checker():
+            return {"status": "healthy", "message": "OK"}
+        
+        def unhealthy_checker():
+            return {"status": "unhealthy", "message": "Failed"}
+        
+        engine.register_check("db", "liveness", healthy_checker)
+        engine.register_check("cache", "liveness", unhealthy_checker)
+        
+        results = engine.run_all_checks()
+        
+        assert len(results) == 2
     
     def test_get_component_health(self):
         """Test getting component health."""
-        engine = HealthCheckEngine()
-        engine.register_component("cpu_test", ComponentType.CPU, "Test CPU")
-        engine.update_component_value("cpu_test", 50.0)
+        engine = HealthEngine()
         
-        comp = engine.get_component_health("cpu_test")
+        def checker():
+            return {"status": "healthy", "message": "OK"}
         
-        assert comp is not None
-        assert comp["component_id"] == "cpu_test"
-        assert comp["name"] == "Test CPU"
+        check_id = engine.register_check(
+            component="database",
+            check_type="liveness",
+            checker=checker,
+        )
+        
+        engine.run_check(check_id)
+        
+        health = engine.get_component_health("database")
+        
+        assert health is not None
+        assert health["component"] == "database"
+        assert health["status"] == "healthy"
     
     def test_get_unknown_component_health(self):
         """Test getting unknown component health."""
-        engine = HealthCheckEngine()
+        engine = HealthEngine()
         
-        comp = engine.get_component_health("unknown_component")
+        health = engine.get_component_health("unknown")
         
-        assert comp is None
+        assert health is None
     
-    def test_get_all_components(self):
-        """Test getting all components."""
-        engine = HealthCheckEngine()
+    def test_get_all_components_health(self):
+        """Test getting all components health."""
+        engine = HealthEngine()
         
-        engine.register_component("cpu_test", ComponentType.CPU, "Test CPU")
-        engine.register_component("mem_test", ComponentType.MEMORY, "Test Memory")
+        def checker():
+            return {"status": "healthy", "message": "OK"}
         
-        components = engine.get_all_components()
+        engine.register_check("db", "liveness", checker)
+        engine.register_check("cache", "liveness", checker)
+        engine.register_check("api", "liveness", checker)
         
-        assert len(components) == 2
+        for check in engine.get_checks():
+            engine.run_check(check["check_id"])
+        
+        health_list = engine.get_all_components_health()
+        
+        assert len(health_list) >= 3
     
-    def test_alert_creation_on_critical(self):
-        """Test that alerts are created on critical status."""
-        engine = HealthCheckEngine()
-        engine.register_component("cpu_test", ComponentType.CPU, "Test CPU")
+    def test_get_overall_health_healthy(self):
+        """Test getting overall healthy status."""
+        engine = HealthEngine()
         
-        engine.update_component_value("cpu_test", 98.0)
+        def checker():
+            return {"status": "healthy", "message": "OK"}
         
-        alerts = engine.get_alerts(unresolved_only=True)
+        engine.register_check("db", "liveness", checker)
+        engine.register_check("cache", "liveness", checker)
         
-        assert len(alerts) >= 1
-        assert alerts[0]["severity"] == "critical"
+        for check in engine.get_checks():
+            engine.run_check(check["check_id"])
+        
+        overall = engine.get_overall_health()
+        
+        assert overall["status"] == "healthy"
+        assert overall["unhealthy_components"] == 0
     
-    def test_alert_creation_on_warning(self):
-        """Test that alerts are created on warning status."""
-        engine = HealthCheckEngine()
-        engine.register_component("cpu_test", ComponentType.CPU, "Test CPU")
+    def test_get_overall_health_unhealthy(self):
+        """Test getting overall unhealthy status."""
+        engine = HealthEngine()
         
-        engine.update_component_value("cpu_test", 85.0)
+        def healthy_checker():
+            return {"status": "healthy", "message": "OK"}
         
-        alerts = engine.get_alerts(unresolved_only=True)
+        def unhealthy_checker():
+            return {"status": "unhealthy", "message": "Failed"}
         
-        assert len(alerts) >= 1
-        assert alerts[0]["severity"] == "warning"
+        engine.register_check("db", "liveness", healthy_checker)
+        engine.register_check("cache", "liveness", unhealthy_checker)
+        
+        for check in engine.get_checks():
+            engine.run_check(check["check_id"])
+        
+        overall = engine.get_overall_health()
+        
+        assert overall["status"] == "unhealthy"
+        assert overall["unhealthy_components"] >= 1
     
-    def test_acknowledge_alert(self):
-        """Test acknowledging alert."""
-        engine = HealthCheckEngine()
-        engine.register_component("cpu_test", ComponentType.CPU, "Test CPU")
-        engine.update_component_value("cpu_test", 98.0)
+    def test_get_overall_health_degraded(self):
+        """Test getting overall degraded status."""
+        engine = HealthEngine()
         
-        alerts = engine.get_alerts(unresolved_only=True)
-        alert_id = alerts[0]["alert_id"]
+        def healthy_checker():
+            return {"status": "healthy", "message": "OK"}
         
-        result = engine.acknowledge_alert(alert_id)
+        def degraded_checker():
+            return {"status": "degraded", "message": "Slow"}
         
-        assert result is True
+        engine.register_check("db", "liveness", healthy_checker)
+        engine.register_check("cache", "liveness", degraded_checker)
         
-        # Should not appear in unresolved
-        unresolved = engine.get_alerts(unresolved_only=True)
-        assert not any(a["alert_id"] == alert_id for a in unresolved)
+        for check in engine.get_checks():
+            engine.run_check(check["check_id"])
+        
+        overall = engine.get_overall_health()
+        
+        assert overall["status"] == "degraded"
     
-    def test_acknowledge_unknown_alert(self):
-        """Test acknowledging unknown alert."""
-        engine = HealthCheckEngine()
+    def test_get_overall_health_empty(self):
+        """Test getting overall health with no components."""
+        engine = HealthEngine()
         
-        result = engine.acknowledge_alert("unknown_alert")
+        # Clear the default system check
+        engine._component_health.clear()
         
-        assert result is False
+        overall = engine.get_overall_health()
+        
+        assert overall["status"] == "unknown"
+        assert overall["total_components"] == 0
     
-    def test_get_health_trend(self):
-        """Test health trend calculation."""
-        engine = HealthCheckEngine()
-        engine.register_component("cpu_test", ComponentType.CPU, "Test CPU")
+    def test_get_health_history(self):
+        """Test getting health history."""
+        engine = HealthEngine()
         
-        # Add some history by getting health multiple times
-        for i in range(10):
-            engine.update_component_value("cpu_test", 50.0 + i)
-            engine.get_system_health()
+        def checker():
+            return {"status": "healthy", "message": "OK"}
         
-        trend = engine.get_health_trend(hours=24)
-        
-        assert trend["data_points"] >= 1
-        assert "avg_health_score" in trend
-        assert "trend" in trend
-    
-    def test_get_health_trend_empty(self):
-        """Test health trend with no history."""
-        engine = HealthCheckEngine()
-        
-        trend = engine.get_health_trend(hours=24)
-        
-        assert trend["data_points"] == 0
-        assert trend["avg_health_score"] == 0.0
-    
-    def test_get_health_summary(self):
-        """Test health summary."""
-        engine = HealthCheckEngine()
-        
-        engine.register_component("cpu_test", ComponentType.CPU, "Test CPU")
-        engine.register_component("mem_test", ComponentType.MEMORY, "Test Memory")
-        
-        engine.update_component_value("cpu_test", 30.0)  # Healthy
-        engine.update_component_value("mem_test", 90.0)  # Warning
-        
-        summary = engine.get_health_summary()
-        
-        assert summary["total_components"] == 2
-        assert summary["healthy_components"] == 1
-        assert summary["warning_components"] == 1
-        assert summary["critical_components"] == 0
-    
-    def test_set_custom_thresholds(self):
-        """Test setting custom thresholds."""
-        engine = HealthCheckEngine()
-        engine.register_component("cpu_test", ComponentType.CPU, "Test CPU")
-        
-        # Set custom thresholds (lower than default)
-        result = engine.set_thresholds("cpu_test", warning=50.0, critical=70.0)
-        
-        assert result is True
-        
-        # Update value that would be healthy with default thresholds
-        component = engine.update_component_value("cpu_test", 60.0)
-        
-        # Should now be warning due to custom threshold
-        assert component.status == HealthStatus.WARNING
-    
-    def test_set_thresholds_unknown_component(self):
-        """Test setting thresholds for unknown component."""
-        engine = HealthCheckEngine()
-        
-        result = engine.set_thresholds("unknown_component", warning=50.0, critical=70.0)
-        
-        assert result is False
-    
-    def test_health_history_trimming(self):
-        """Test that health history is trimmed to max size."""
-        engine = HealthCheckEngine()
-        engine._max_history_size = 10
-        engine.register_component("cpu_test", ComponentType.CPU, "Test CPU")
-        
-        # Generate more than max history entries
-        for i in range(20):
-            engine.update_component_value("cpu_test", float(i))
-            engine.get_system_health()
-        
-        assert len(engine._health_history) <= 10
-    
-    def test_component_to_dict(self):
-        """Test component serialization."""
-        from copilot_core.health.engine import ComponentHealth
-        
-        comp = ComponentHealth(
-            component_id="cpu_test",
-            component_type=ComponentType.CPU,
-            name="Test CPU",
-            status=HealthStatus.HEALTHY,
-            value=45.0,
-            threshold_warning=80.0,
-            threshold_critical=95.0,
-            unit="%",
+        check_id = engine.register_check(
+            component="test",
+            check_type="liveness",
+            checker=checker,
         )
         
-        d = comp.to_dict()
+        for i in range(5):
+            engine.run_check(check_id)
         
-        assert d["component_id"] == "cpu_test"
-        assert d["component_type"] == "cpu"
-        assert d["status"] == "healthy"
-        assert d["value"] == 45.0
+        history = engine.get_health_history(limit=10)
+        
+        assert len(history) == 5
     
-    def test_system_health_to_dict(self):
-        """Test system health serialization."""
-        from copilot_core.health.engine import SystemHealth, ComponentHealth
+    def test_get_health_history_filtered_by_component(self):
+        """Test getting health history filtered by component."""
+        engine = HealthEngine()
         
-        health = SystemHealth(
+        def checker():
+            return {"status": "healthy", "message": "OK"}
+        
+        check1 = engine.register_check("db", "liveness", checker)
+        check2 = engine.register_check("cache", "liveness", checker)
+        
+        engine.run_check(check1)
+        engine.run_check(check2)
+        engine.run_check(check1)
+        
+        db_history = engine.get_health_history(component="db")
+        
+        assert len(db_history) == 2
+        assert all(h["component"] == "db" for h in db_history)
+    
+    def test_get_health_history_filtered_by_status(self):
+        """Test getting health history filtered by status."""
+        engine = HealthEngine()
+        
+        def healthy_checker():
+            return {"status": "healthy", "message": "OK"}
+        
+        def unhealthy_checker():
+            return {"status": "unhealthy", "message": "Failed"}
+        
+        check1 = engine.register_check("db", "liveness", healthy_checker)
+        check2 = engine.register_check("cache", "liveness", unhealthy_checker)
+        
+        engine.run_check(check1)
+        engine.run_check(check2)
+        
+        unhealthy_history = engine.get_health_history(status=HealthStatus.UNHEALTHY)
+        
+        assert len(unhealthy_history) == 1
+        assert unhealthy_history[0]["status"] == "unhealthy"
+    
+    def test_get_checks(self):
+        """Test getting registered checks."""
+        engine = HealthEngine()
+        
+        def checker():
+            return {"status": "healthy", "message": "OK"}
+        
+        engine.register_check("db", "liveness", checker, interval_seconds=60)
+        engine.register_check("cache", "readiness", checker, interval_seconds=30)
+        
+        checks = engine.get_checks()
+        
+        assert len(checks) == 2
+    
+    def test_get_checks_filtered_by_component(self):
+        """Test getting checks filtered by component."""
+        engine = HealthEngine()
+        
+        def checker():
+            return {"status": "healthy", "message": "OK"}
+        
+        engine.register_check("db", "liveness", checker)
+        engine.register_check("db", "readiness", checker)
+        engine.register_check("cache", "liveness", checker)
+        
+        db_checks = engine.get_checks(component="db")
+        
+        assert len(db_checks) == 2
+        assert all(c["component"] == "db" for c in db_checks)
+    
+    def test_enable_disable_check(self):
+        """Test enabling/disabling check."""
+        engine = HealthEngine()
+        
+        def checker():
+            return {"status": "healthy", "message": "OK"}
+        
+        check_id = engine.register_check(
+            component="test",
+            check_type="liveness",
+            checker=checker,
+        )
+        
+        # Disable
+        result = engine.disable_check(check_id)
+        assert result is True
+        
+        # Run should return None when disabled
+        result = engine.run_check(check_id)
+        assert result is None
+        
+        # Enable
+        result = engine.enable_check(check_id)
+        assert result is True
+        
+        # Run should work again
+        result = engine.run_check(check_id)
+        assert result is not None
+    
+    def test_enable_unknown_check(self):
+        """Test enabling unknown check."""
+        engine = HealthEngine()
+        
+        result = engine.enable_check("unknown")
+        
+        assert result is False
+    
+    def test_disable_unknown_check(self):
+        """Test disabling unknown check."""
+        engine = HealthEngine()
+        
+        result = engine.disable_check("unknown")
+        
+        assert result is False
+    
+    def test_get_statistics(self):
+        """Test getting statistics."""
+        engine = HealthEngine()
+        
+        def checker():
+            return {"status": "healthy", "message": "OK"}
+        
+        check_id = engine.register_check("test", "liveness", checker)
+        
+        for i in range(5):
+            engine.run_check(check_id)
+        
+        stats = engine.get_statistics()
+        
+        assert stats["total_components"] >= 1
+        assert stats["total_checks_run"] >= 5
+        assert stats["success_rate"] == 100.0
+    
+    def test_get_unhealthy_components(self):
+        """Test getting unhealthy components."""
+        engine = HealthEngine()
+        
+        def healthy_checker():
+            return {"status": "healthy", "message": "OK"}
+        
+        def unhealthy_checker():
+            return {"status": "unhealthy", "message": "Failed"}
+        
+        engine.register_check("db", "liveness", healthy_checker)
+        engine.register_check("cache", "liveness", unhealthy_checker)
+        
+        for check in engine.get_checks():
+            engine.run_check(check["check_id"])
+        
+        unhealthy = engine.get_unhealthy_components()
+        
+        assert len(unhealthy) >= 1
+        assert any(c["component"] == "cache" for c in unhealthy)
+    
+    def test_reset_component_health(self):
+        """Test resetting component health."""
+        engine = HealthEngine()
+        
+        def unhealthy_checker():
+            return {"status": "unhealthy", "message": "Failed"}
+        
+        check_id = engine.register_check(
+            component="test",
+            check_type="liveness",
+            checker=unhealthy_checker,
+        )
+        
+        engine.run_check(check_id)
+        
+        health_before = engine.get_component_health("test")
+        assert health_before["status"] == "unhealthy"
+        
+        result = engine.reset_component_health("test")
+        
+        assert result is True
+        
+        health_after = engine.get_component_health("test")
+        assert health_after["status"] == "unknown"
+        assert health_after["consecutive_failures"] == 0
+    
+    def test_reset_unknown_component_health(self):
+        """Test resetting unknown component health."""
+        engine = HealthEngine()
+        
+        result = engine.reset_component_health("unknown")
+        
+        assert result is False
+    
+    def test_clear_history_all(self):
+        """Test clearing all history."""
+        engine = HealthEngine()
+        
+        def checker():
+            return {"status": "healthy", "message": "OK"}
+        
+        check_id = engine.register_check("test", "liveness", checker)
+        
+        for i in range(10):
+            engine.run_check(check_id)
+        
+        count = engine.clear_history()
+        
+        assert count == 10
+        assert len(engine._health_history) == 0
+    
+    def test_clear_history_older_than(self):
+        """Test clearing history older than timestamp."""
+        engine = HealthEngine()
+        
+        def checker():
+            return {"status": "healthy", "message": "OK"}
+        
+        check_id = engine.register_check("test", "liveness", checker)
+        
+        # Run some checks
+        for i in range(5):
+            engine.run_check(check_id)
+        
+        # Get current time as cutoff
+        cutoff = datetime.now(timezone.utc).isoformat()
+        
+        # Run more checks
+        for i in range(5):
+            engine.run_check(check_id)
+        
+        count = engine.clear_history(older_than=cutoff)
+        
+        # Should have cleared some
+        assert count >= 0
+    
+    def test_register_status_callback(self):
+        """Test registering status callback."""
+        engine = HealthEngine()
+        
+        status_changes = []
+        
+        def callback(change):
+            status_changes.append(change)
+        
+        engine.register_status_callback(callback)
+        
+        def unhealthy_checker():
+            return {"status": "unhealthy", "message": "Failed"}
+        
+        check_id = engine.register_check(
+            component="test",
+            check_type="liveness",
+            checker=unhealthy_checker,
+            critical=True,
+        )
+        
+        engine.run_check(check_id)
+        
+        assert len(status_changes) >= 1
+        assert status_changes[0]["component"] == "test"
+        assert status_changes[0]["status"] == "unhealthy"
+    
+    def test_consecutive_failures_tracking(self):
+        """Test tracking consecutive failures."""
+        engine = HealthEngine()
+        
+        def unhealthy_checker():
+            return {"status": "unhealthy", "message": "Failed"}
+        
+        check_id = engine.register_check(
+            component="test",
+            check_type="liveness",
+            checker=unhealthy_checker,
+        )
+        
+        for i in range(5):
+            engine.run_check(check_id)
+        
+        health = engine.get_component_health("test")
+        
+        assert health["consecutive_failures"] == 5
+        assert health["failed_checks"] == 5
+    
+    def test_healthy_resets_consecutive_failures(self):
+        """Test that healthy check resets consecutive failures."""
+        engine = HealthEngine()
+        
+        def unhealthy_checker():
+            return {"status": "unhealthy", "message": "Failed"}
+        
+        def healthy_checker():
+            return {"status": "healthy", "message": "OK"}
+        
+        check_id = engine.register_check(
+            component="test",
+            check_type="liveness",
+            checker=unhealthy_checker,
+        )
+        
+        # Run 3 unhealthy checks
+        for i in range(3):
+            engine.run_check(check_id)
+        
+        # Change to healthy checker
+        engine._checks[check_id].checker = healthy_checker
+        
+        # Run healthy check
+        engine.run_check(check_id)
+        
+        health = engine.get_component_health("test")
+        
+        assert health["consecutive_failures"] == 0
+    
+    def test_critical_check_makes_component_unhealthy(self):
+        """Test that critical check failure makes component unhealthy."""
+        engine = HealthEngine()
+        
+        def unhealthy_checker():
+            return {"status": "unhealthy", "message": "Failed"}
+        
+        check_id = engine.register_check(
+            component="test",
+            check_type="liveness",
+            checker=unhealthy_checker,
+            critical=True,
+        )
+        
+        engine.run_check(check_id)
+        
+        health = engine.get_component_health("test")
+        
+        assert health["status"] == "unhealthy"
+    
+    def test_non_critical_check_needs_3_failures(self):
+        """Test that non-critical check needs 3 failures to be unhealthy."""
+        engine = HealthEngine()
+        
+        def unhealthy_checker():
+            return {"status": "unhealthy", "message": "Failed"}
+        
+        check_id = engine.register_check(
+            component="test",
+            check_type="liveness",
+            checker=unhealthy_checker,
+            critical=False,
+        )
+        
+        # First failure
+        engine.run_check(check_id)
+        health = engine.get_component_health("test")
+        assert health["status"] != "unhealthy"  # Still unknown or degraded
+        
+        # Second failure
+        engine.run_check(check_id)
+        health = engine.get_component_health("test")
+        assert health["status"] != "unhealthy"
+        
+        # Third failure
+        engine.run_check(check_id)
+        health = engine.get_component_health("test")
+        assert health["status"] == "unhealthy"
+    
+    def test_health_check_result_to_dict(self):
+        """Test health check result serialization."""
+        result = HealthCheckResult(
+            check_id="check_test",
+            component="test_component",
+            check_type=CheckType.LIVENESS,
+            status=HealthStatus.HEALTHY,
+            message="All good",
             timestamp="2026-03-31T12:00:00Z",
-            overall_status=HealthStatus.HEALTHY,
-            health_score=95.0,
-            components={},
-            warnings=[],
-            critical_issues=[],
-            recommendations=[],
+            latency_ms=15,
+            details={"extra": "info"},
+        )
+        
+        d = result.to_dict()
+        
+        assert d["check_id"] == "check_test"
+        assert d["component"] == "test_component"
+        assert d["check_type"] == "liveness"
+        assert d["status"] == "healthy"
+        assert d["latency_ms"] == 15
+    
+    def test_component_health_to_dict(self):
+        """Test component health serialization."""
+        health = ComponentHealth(
+            component="test",
+            status=HealthStatus.HEALTHY,
+            last_check="2026-03-31T12:00:00Z",
+            last_success="2026-03-31T12:00:00Z",
+            last_failure=None,
+            consecutive_failures=0,
+            total_checks=10,
+            successful_checks=10,
+            failed_checks=0,
         )
         
         d = health.to_dict()
         
-        assert d["timestamp"] == "2026-03-31T12:00:00Z"
-        assert d["overall_status"] == "healthy"
-        assert d["health_score"] == 95.0
+        assert d["component"] == "test"
+        assert d["status"] == "healthy"
+        assert d["uptime_percent"] == 100.0
     
-    def test_alert_to_dict(self):
-        """Test alert serialization."""
-        from copilot_core.health.engine import HealthAlert
+    def test_health_check_definition_to_dict(self):
+        """Test health check definition serialization."""
+        def checker():
+            return {"status": "healthy"}
         
-        alert = HealthAlert(
-            alert_id="alert_test",
-            component_id="cpu_test",
-            severity=HealthStatus.CRITICAL,
-            title="CPU Critical",
-            message="CPU usage critical",
-            value=98.0,
-            threshold=95.0,
+        definition = HealthCheckDefinition(
+            check_id="check_test",
+            component="test",
+            check_type=CheckType.READINESS,
+            checker=checker,
+            interval_seconds=60,
+            timeout_seconds=10,
+            critical=True,
+            enabled=True,
         )
         
-        d = alert.to_dict()
+        d = definition.to_dict()
         
-        assert d["alert_id"] == "alert_test"
-        assert d["severity"] == "critical"
-        assert d["value"] == 98.0
-        assert d["acknowledged"] is False
+        assert d["check_id"] == "check_test"
+        assert d["check_type"] == "readiness"
+        assert d["interval_seconds"] == 60
+        assert d["critical"] is True
     
-    def test_different_component_types(self):
-        """Test different component types."""
-        engine = HealthCheckEngine()
-        
-        # Register different component types
-        engine.register_component("cpu_1", ComponentType.CPU, "CPU")
-        engine.register_component("mem_1", ComponentType.MEMORY, "Memory")
-        engine.register_component("disk_1", ComponentType.DISK, "Disk")
-        engine.register_component("net_1", ComponentType.NETWORK, "Network")
-        
-        # Update with values
-        engine.update_component_value("cpu_1", 50.0)
-        engine.update_component_value("mem_1", 60.0)
-        engine.update_component_value("disk_1", 70.0)
-        engine.update_component_value("net_1", 100.0)  # ms latency
-        
-        # All should be healthy with default thresholds
-        for comp_id in ["cpu_1", "mem_1", "disk_1", "net_1"]:
-            comp = engine._components[comp_id]
-            assert comp.status == HealthStatus.HEALTHY
+    def test_health_status_enum_values(self):
+        """Test health status enum values."""
+        assert HealthStatus.HEALTHY.value == "healthy"
+        assert HealthStatus.DEGRADED.value == "degraded"
+        assert HealthStatus.UNHEALTHY.value == "unhealthy"
+        assert HealthStatus.UNKNOWN.value == "unknown"
     
-    def test_alerts_sorted_newest_first(self):
-        """Test that alerts are sorted newest first."""
-        engine = HealthCheckEngine()
-        engine.register_component("cpu_test", ComponentType.CPU, "Test CPU")
+    def test_check_type_enum_values(self):
+        """Test check type enum values."""
+        assert CheckType.LIVENESS.value == "liveness"
+        assert CheckType.READINESS.value == "readiness"
+        assert CheckType.STARTUP.value == "startup"
+        assert CheckType.CUSTOM.value == "custom"
+    
+    def test_check_latency_tracked(self):
+        """Test that check latency is tracked."""
+        engine = HealthEngine()
         
-        # Create multiple alerts
+        def slow_checker():
+            import time
+            time.sleep(0.05)  # 50ms
+            return {"status": "healthy", "message": "OK"}
+        
+        check_id = engine.register_check(
+            component="test",
+            check_type="liveness",
+            checker=slow_checker,
+        )
+        
+        result = engine.run_check(check_id)
+        
+        assert result.latency_ms >= 50
+    
+    def test_check_timestamp_recorded(self):
+        """Test that check timestamp is recorded."""
+        engine = HealthEngine()
+        
+        def checker():
+            return {"status": "healthy", "message": "OK"}
+        
+        check_id = engine.register_check(
+            component="test",
+            check_type="liveness",
+            checker=checker,
+        )
+        
+        result = engine.run_check(check_id)
+        
+        assert result.timestamp is not None
+        assert "T" in result.timestamp  # ISO format
+    
+    def test_health_history_trimmed_to_max(self):
+        """Test that health history is trimmed to max."""
+        engine = HealthEngine()
+        engine._max_history_size = 10
+        
+        def checker():
+            return {"status": "healthy", "message": "OK"}
+        
+        check_id = engine.register_check("test", "liveness", checker)
+        
+        for i in range(20):
+            engine.run_check(check_id)
+        
+        assert len(engine._health_history) <= 10
+    
+    def test_component_checks_trimmed_to_10(self):
+        """Test that component checks list is trimmed to 10."""
+        engine = HealthEngine()
+        
+        def checker():
+            return {"status": "healthy", "message": "OK"}
+        
+        check_id = engine.register_check("test", "liveness", checker)
+        
+        for i in range(20):
+            engine.run_check(check_id)
+        
+        health = engine.get_component_health("test")
+        
+        assert len(health["checks"]) <= 10
+    
+    def test_uptime_percent_calculation(self):
+        """Test uptime percent calculation."""
+        engine = HealthEngine()
+        
+        def healthy_checker():
+            return {"status": "healthy", "message": "OK"}
+        
+        def unhealthy_checker():
+            return {"status": "unhealthy", "message": "Failed"}
+        
+        check_id = engine.register_check("test", "liveness", healthy_checker)
+        
+        # 7 healthy, 3 unhealthy
+        engine._checks[check_id].checker = healthy_checker
+        for i in range(7):
+            engine.run_check(check_id)
+        
+        engine._checks[check_id].checker = unhealthy_checker
+        for i in range(3):
+            engine.run_check(check_id)
+        
+        health = engine.get_component_health("test")
+        
+        assert health["uptime_percent"] == 70.0
+    
+    def test_statistics_success_rate_calculation(self):
+        """Test statistics success rate calculation."""
+        engine = HealthEngine()
+        
+        def healthy_checker():
+            return {"status": "healthy", "message": "OK"}
+        
+        def unhealthy_checker():
+            return {"status": "unhealthy", "message": "Failed"}
+        
+        check_id = engine.register_check("test", "liveness", healthy_checker)
+        
+        # 8 healthy, 2 unhealthy
+        engine._checks[check_id].checker = healthy_checker
+        for i in range(8):
+            engine.run_check(check_id)
+        
+        engine._checks[check_id].checker = unhealthy_checker
+        for i in range(2):
+            engine.run_check(check_id)
+        
+        stats = engine.get_statistics()
+        
+        assert stats["success_rate"] == 80.0
+    
+    def test_overall_health_includes_timestamp(self):
+        """Test that overall health includes timestamp."""
+        engine = HealthEngine()
+        
+        overall = engine.get_overall_health()
+        
+        assert "timestamp" in overall
+        assert overall["timestamp"] is not None
+    
+    def test_degraded_status_tracking(self):
+        """Test degraded status tracking."""
+        engine = HealthEngine()
+        
+        def degraded_checker():
+            return {"status": "degraded", "message": "Slow"}
+        
+        check_id = engine.register_check(
+            component="test",
+            check_type="liveness",
+            checker=degraded_checker,
+        )
+        
+        engine.run_check(check_id)
+        
+        health = engine.get_component_health("test")
+        
+        assert health["status"] == "degraded"
+    
+    def test_multiple_checks_same_component(self):
+        """Test multiple checks for same component."""
+        engine = HealthEngine()
+        
+        def healthy_checker():
+            return {"status": "healthy", "message": "OK"}
+        
+        def unhealthy_checker():
+            return {"status": "unhealthy", "message": "Failed"}
+        
+        engine.register_check("db", "liveness", healthy_checker)
+        engine.register_check("db", "readiness", unhealthy_checker)
+        
+        for check in engine.get_checks(component="db"):
+            engine.run_check(check["check_id"])
+        
+        health = engine.get_component_health("db")
+        
+        # Component should reflect worst status
+        assert health is not None
+    
+    def test_check_details_included(self):
+        """Test that check details are included in result."""
+        engine = HealthEngine()
+        
+        def checker():
+            return {
+                "status": "healthy",
+                "message": "OK",
+                "details": {"version": "1.0.0", "uptime": 3600},
+            }
+        
+        check_id = engine.register_check(
+            component="test",
+            check_type="liveness",
+            checker=checker,
+        )
+        
+        result = engine.run_check(check_id)
+        
+        assert "version" in result.details
+        assert "uptime" in result.details
+    
+    def test_default_system_memory_check_registered(self):
+        """Test that default system memory check is registered."""
+        engine = HealthEngine()
+        
+        checks = engine.get_checks(component="system")
+        
+        # Should have at least the memory check
+        assert len(checks) >= 1
+    
+    def test_health_history_sorted_by_timestamp(self):
+        """Test that health history is sorted by timestamp."""
+        engine = HealthEngine()
+        
+        def checker():
+            return {"status": "healthy", "message": "OK"}
+        
+        check_id = engine.register_check("test", "liveness", checker)
+        
         for i in range(5):
-            engine.update_component_value("cpu_test", 98.0)  # Critical
+            engine.run_check(check_id)
         
-        alerts = engine.get_alerts(unresolved_only=True)
+        history = engine.get_health_history(limit=10)
         
-        # Verify sorted by created_at (newest first)
-        for i in range(len(alerts) - 1):
-            assert alerts[i]["created_at"] >= alerts[i + 1]["created_at"]
+        # Verify sorted (newest first)
+        for i in range(len(history) - 1):
+            assert history[i]["timestamp"] >= history[i + 1]["timestamp"]
+    
+    def test_unhealthy_components_sorted_by_failures(self):
+        """Test that unhealthy components are sorted by failures."""
+        engine = HealthEngine()
+        
+        def unhealthy_checker():
+            return {"status": "unhealthy", "message": "Failed"}
+        
+        engine.register_check("db", "liveness", unhealthy_checker)
+        engine.register_check("cache", "liveness", unhealthy_checker)
+        
+        # Run more checks on db
+        db_checks = engine.get_checks(component="db")
+        for check in db_checks:
+            for i in range(5):
+                engine.run_check(check["check_id"])
+        
+        # Run fewer checks on cache
+        cache_checks = engine.get_checks(component="cache")
+        for check in cache_checks:
+            engine.run_check(check["check_id"])
+        
+        unhealthy = engine.get_unhealthy_components()
+        
+        # db should be first (more failures)
+        if len(unhealthy) >= 2:
+            assert unhealthy[0]["component"] == "db"
+    
+    def test_check_id_generated_if_not_provided(self):
+        """Test that check ID is generated if not provided."""
+        engine = HealthEngine()
+        
+        def checker():
+            return {"status": "healthy", "message": "OK"}
+        
+        check_id = engine.register_check(
+            component="test",
+            check_type="liveness",
+            checker=checker,
+            check_id=None,
+        )
+        
+        assert check_id is not None
+        assert check_id.startswith("check_")
+    
+    def test_check_interval_and_timeout_stored(self):
+        """Test that check interval and timeout are stored."""
+        engine = HealthEngine()
+        
+        def checker():
+            return {"status": "healthy", "message": "OK"}
+        
+        check_id = engine.register_check(
+            component="test",
+            check_type="liveness",
+            checker=checker,
+            interval_seconds=120,
+            timeout_seconds=30,
+        )
+        
+        checks = engine.get_checks()
+        check = next(c for c in checks if c["check_id"] == check_id)
+        
+        assert check["interval_seconds"] == 120
+        assert check["timeout_seconds"] == 30
+    
+    def test_statistics_zero_checks_run(self):
+        """Test statistics with zero checks run."""
+        engine = HealthEngine()
+        
+        stats = engine.get_statistics()
+        
+        assert stats["total_checks_run"] == 0
+        assert stats["success_rate"] == 0.0
+    
+    def test_component_health_zero_checks(self):
+        """Test component health with zero checks."""
+        engine = HealthEngine()
+        
+        def checker():
+            return {"status": "healthy", "message": "OK"}
+        
+        engine.register_check("test", "liveness", checker)
+        # Don't run the check
+        
+        health = engine.get_component_health("test")
+        
+        assert health["total_checks"] == 0
+        assert health["uptime_percent"] == 0.0

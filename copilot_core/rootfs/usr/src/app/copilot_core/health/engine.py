@@ -1,22 +1,24 @@
-"""Health Check & System Monitoring — Slice 24.
+"""Health Engine — Slice 38.
 
 System health monitoring for PilotSuite Core.
 
 Features:
-- System resource monitoring (CPU, memory, disk)
-- Service health checks
+- Component health checks
 - Dependency monitoring
-- Alerting on threshold breaches
-- Health score calculation
-- Performance trending
+- Health status aggregation
+- Readiness/liveness probes
+- Health history tracking
+- Alerting on health degradation
 """
 from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Callable
 from enum import Enum
+import uuid
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -25,372 +27,495 @@ class HealthStatus(Enum):
     """Health status."""
     HEALTHY = "healthy"
     DEGRADED = "degraded"
-    WARNING = "warning"
-    CRITICAL = "critical"
+    UNHEALTHY = "unhealthy"
     UNKNOWN = "unknown"
 
 
-class ComponentType(Enum):
-    """System component type."""
-    CPU = "cpu"
-    MEMORY = "memory"
-    DISK = "disk"
-    NETWORK = "network"
-    SERVICE = "service"
-    DATABASE = "database"
-    EXTERNAL_API = "external_api"
+class CheckType(Enum):
+    """Health check type."""
+    LIVENESS = "liveness"  # Is the component running?
+    READINESS = "readiness"  # Is the component ready to serve?
+    STARTUP = "startup"  # Has the component started successfully?
+    CUSTOM = "custom"  # Custom health check
+
+
+@dataclass
+class HealthCheckResult:
+    """Result of a health check."""
+    check_id: str
+    component: str
+    check_type: CheckType
+    status: HealthStatus
+    message: str
+    timestamp: str
+    latency_ms: int
+    details: Dict[str, Any] = field(default_factory=dict)
+    
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "check_id": self.check_id,
+            "component": self.component,
+            "check_type": self.check_type.value,
+            "status": self.status.value,
+            "message": self.message,
+            "timestamp": self.timestamp,
+            "latency_ms": self.latency_ms,
+            "details": self.details,
+        }
 
 
 @dataclass
 class ComponentHealth:
-    """Health status of a single component."""
-    component_id: str
-    component_type: ComponentType
-    name: str
+    """Health status of a component."""
+    component: str
     status: HealthStatus
-    value: float  # Current value (percentage, latency, etc.)
-    threshold_warning: float
-    threshold_critical: float
-    unit: str = "%"
-    last_check: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
-    message: str = ""
+    last_check: str
+    last_success: Optional[str]
+    last_failure: Optional[str]
+    consecutive_failures: int
+    total_checks: int
+    successful_checks: int
+    failed_checks: int
+    checks: List[HealthCheckResult] = field(default_factory=list)
     
     def to_dict(self) -> Dict[str, Any]:
         return {
-            "component_id": self.component_id,
-            "component_type": self.component_type.value,
-            "name": self.name,
+            "component": self.component,
             "status": self.status.value,
-            "value": self.value,
-            "threshold_warning": self.threshold_warning,
-            "threshold_critical": self.threshold_critical,
-            "unit": self.unit,
             "last_check": self.last_check,
-            "message": self.message,
+            "last_success": self.last_success,
+            "last_failure": self.last_failure,
+            "consecutive_failures": self.consecutive_failures,
+            "total_checks": self.total_checks,
+            "successful_checks": self.successful_checks,
+            "failed_checks": self.failed_checks,
+            "uptime_percent": round((self.successful_checks / self.total_checks * 100), 2) if self.total_checks > 0 else 0.0,
         }
 
 
 @dataclass
-class SystemHealth:
-    """Overall system health."""
-    timestamp: str
-    overall_status: HealthStatus
-    health_score: float  # 0-100
-    components: Dict[str, ComponentHealth]
-    warnings: List[str]
-    critical_issues: List[str]
-    recommendations: List[str]
+class HealthCheckDefinition:
+    """Definition of a health check."""
+    check_id: str
+    component: str
+    check_type: CheckType
+    checker: Callable[[], Dict[str, Any]]
+    interval_seconds: int = 30
+    timeout_seconds: int = 10
+    critical: bool = False  # If critical, component is unhealthy when this fails
+    enabled: bool = True
     
     def to_dict(self) -> Dict[str, Any]:
         return {
-            "timestamp": self.timestamp,
-            "overall_status": self.overall_status.value,
-            "health_score": self.health_score,
-            "components": {k: v.to_dict() for k, v in self.components.items()},
-            "warnings": self.warnings,
-            "critical_issues": self.critical_issues,
-            "recommendations": self.recommendations,
+            "check_id": self.check_id,
+            "component": self.component,
+            "check_type": self.check_type.value,
+            "interval_seconds": self.interval_seconds,
+            "timeout_seconds": self.timeout_seconds,
+            "critical": self.critical,
+            "enabled": self.enabled,
         }
 
 
-@dataclass
-class HealthAlert:
-    """Health alert."""
-    alert_id: str
-    component_id: str
-    severity: HealthStatus
-    title: str
-    message: str
-    value: float
-    threshold: float
-    acknowledged: bool = False
-    created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
-    acknowledged_at: Optional[str] = None
-    
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "alert_id": self.alert_id,
-            "component_id": self.component_id,
-            "severity": self.severity.value,
-            "title": self.title,
-            "message": self.message,
-            "value": self.value,
-            "threshold": self.threshold,
-            "acknowledged": self.acknowledged,
-            "created_at": self.created_at,
-            "acknowledged_at": self.acknowledged_at,
-        }
-
-
-class HealthCheckEngine:
-    """Health check and monitoring engine."""
+class HealthEngine:
+    """System health monitoring engine."""
     
     def __init__(self):
-        self._components: Dict[str, ComponentHealth] = {}
-        self._alerts: Dict[str, HealthAlert] = {}
-        self._alert_counter = 0
-        self._health_history: List[SystemHealth] = []
+        self._checks: Dict[str, HealthCheckDefinition] = {}
+        self._component_health: Dict[str, ComponentHealth] = {}
+        self._health_history: List[HealthCheckResult] = []
         self._max_history_size = 1000
         
-        # Default thresholds
-        self._default_thresholds = {
-            ComponentType.CPU: {"warning": 80.0, "critical": 95.0},
-            ComponentType.MEMORY: {"warning": 80.0, "critical": 95.0},
-            ComponentType.DISK: {"warning": 85.0, "critical": 95.0},
-            ComponentType.NETWORK: {"warning": 500.0, "critical": 1000.0},  # ms latency
-            ComponentType.SERVICE: {"warning": 5000.0, "critical": 30000.0},  # ms response
-        }
-    
-    def register_component(self, component_id: str, component_type: ComponentType,
-                          name: str, initial_value: float = 0.0) -> str:
-        """Register a component for monitoring."""
-        thresholds = self._default_thresholds.get(component_type, {"warning": 80.0, "critical": 95.0})
+        # Callbacks for health status changes
+        self._status_callbacks: List[Callable] = []
         
-        component = ComponentHealth(
-            component_id=component_id,
-            component_type=component_type,
-            name=name,
-            status=HealthStatus.UNKNOWN,
-            value=initial_value,
-            threshold_warning=thresholds["warning"],
-            threshold_critical=thresholds["critical"],
+        # Register built-in checks
+        self._register_builtin_checks()
+    
+    def _register_builtin_checks(self) -> None:
+        """Register built-in health checks."""
+        # System memory check
+        self.register_check(
+            component="system",
+            check_type=CheckType.LIVENESS,
+            checker=self._check_system_memory,
+            interval_seconds=60,
+            check_id="system_memory",
+        )
+    
+    def _check_system_memory(self) -> Dict[str, Any]:
+        """Check system memory availability."""
+        try:
+            import psutil
+            mem = psutil.virtual_memory()
+            available_percent = mem.available / mem.total * 100
+            
+            if available_percent < 5:
+                return {
+                    "status": "unhealthy",
+                    "message": f"Critical: Only {available_percent:.1f}% memory available",
+                    "details": {"available_percent": available_percent},
+                }
+            elif available_percent < 15:
+                return {
+                    "status": "degraded",
+                    "message": f"Warning: Only {available_percent:.1f}% memory available",
+                    "details": {"available_percent": available_percent},
+                }
+            else:
+                return {
+                    "status": "healthy",
+                    "message": f"Memory OK: {available_percent:.1f}% available",
+                    "details": {"available_percent": available_percent},
+                }
+        except ImportError:
+            return {
+                "status": "unknown",
+                "message": "psutil not available",
+                "details": {},
+            }
+        except Exception as exc:
+            return {
+                "status": "unhealthy",
+                "message": str(exc),
+                "details": {"error": str(exc)},
+            }
+    
+    def register_check(self, component: str, check_type: str,
+                      checker: Callable[[], Dict[str, Any]],
+                      interval_seconds: int = 30,
+                      timeout_seconds: int = 10,
+                      critical: bool = False,
+                      check_id: Optional[str] = None) -> str:
+        """Register a health check."""
+        if check_id is None:
+            check_id = f"check_{uuid.uuid4().hex[:8]}"
+        
+        definition = HealthCheckDefinition(
+            check_id=check_id,
+            component=component,
+            check_type=CheckType(check_type),
+            checker=checker,
+            interval_seconds=interval_seconds,
+            timeout_seconds=timeout_seconds,
+            critical=critical,
         )
         
-        self._components[component_id] = component
-        return component_id
-    
-    def update_component_value(self, component_id: str, value: float) -> ComponentHealth:
-        """Update component value and check health."""
-        if component_id not in self._components:
-            raise ValueError(f"Unknown component: {component_id}")
+        self._checks[check_id] = definition
         
-        component = self._components[component_id]
-        component.value = value
-        component.last_check = datetime.now(timezone.utc).isoformat()
-        
-        # Determine status
-        if value >= component.threshold_critical:
-            component.status = HealthStatus.CRITICAL
-            component.message = f"Critical: {value}{component.unit} >= {component.threshold_critical}{component.unit}"
-            self._create_alert(component, HealthStatus.CRITICAL)
-        elif value >= component.threshold_warning:
-            component.status = HealthStatus.WARNING
-            component.message = f"Warning: {value}{component.unit} >= {component.threshold_warning}{component.unit}"
-            self._create_alert(component, HealthStatus.WARNING)
-        else:
-            component.status = HealthStatus.HEALTHY
-            component.message = ""
-        
-        return component
-    
-    def check_service_health(self, component_id: str, endpoint: str,
-                            timeout_ms: int = 5000) -> ComponentHealth:
-        """Check service health via endpoint."""
-        # Simulated health check
-        # In production, this would make HTTP request
-        
-        import random
-        response_time = random.randint(50, 200)  # Simulated response time
-        
-        return self.update_component_value(component_id, float(response_time))
-    
-    def get_system_health(self) -> SystemHealth:
-        """Get overall system health."""
-        now = datetime.now(timezone.utc)
-        
-        if not self._components:
-            return SystemHealth(
-                timestamp=now.isoformat(),
-                overall_status=HealthStatus.UNKNOWN,
-                health_score=0.0,
-                components={},
-                warnings=[],
-                critical_issues=[],
-                recommendations=[],
+        # Initialize component health if needed
+        if component not in self._component_health:
+            self._component_health[component] = ComponentHealth(
+                component=component,
+                status=HealthStatus.UNKNOWN,
+                last_check="",
+                last_success=None,
+                last_failure=None,
+                consecutive_failures=0,
+                total_checks=0,
+                successful_checks=0,
+                failed_checks=0,
             )
         
-        # Calculate health score
-        scores = []
-        warnings = []
-        critical_issues = []
-        recommendations = []
+        logger.info("Health check registered: %s for %s", check_id, component)
         
-        for component in self._components.values():
-            if component.status == HealthStatus.CRITICAL:
-                scores.append(0.0)
-                critical_issues.append(f"{component.name}: {component.message}")
-                recommendations.append(f"Investigate {component.name} immediately")
-            elif component.status == HealthStatus.WARNING:
-                scores.append(50.0)
-                warnings.append(f"{component.name}: {component.message}")
-                recommendations.append(f"Monitor {component.name} closely")
-            elif component.status == HealthStatus.HEALTHY:
-                scores.append(100.0)
-            else:
-                scores.append(0.0)
-        
-        health_score = sum(scores) / len(scores) if scores else 0.0
-        
-        # Determine overall status
-        if critical_issues:
-            overall_status = HealthStatus.CRITICAL
-        elif warnings:
-            overall_status = HealthStatus.WARNING
-        elif health_score >= 80:
-            overall_status = HealthStatus.HEALTHY
-        elif health_score >= 50:
-            overall_status = HealthStatus.DEGRADED
-        else:
-            overall_status = HealthStatus.CRITICAL
-        
-        health = SystemHealth(
-            timestamp=now.isoformat(),
-            overall_status=overall_status,
-            health_score=health_score,
-            components=dict(self._components),
-            warnings=warnings,
-            critical_issues=critical_issues,
-            recommendations=recommendations,
-        )
-        
-        # Store in history
-        self._health_history.append(health)
-        if len(self._health_history) > self._max_history_size:
-            self._health_history = self._health_history[-self._max_history_size:]
-        
-        return health
+        return check_id
     
-    def get_component_health(self, component_id: str) -> Optional[Dict[str, Any]]:
-        """Get health of specific component."""
-        if component_id not in self._components:
+    def run_check(self, check_id: str) -> Optional[HealthCheckResult]:
+        """Run a specific health check."""
+        if check_id not in self._checks:
+            logger.warning("Unknown health check: %s", check_id)
             return None
         
-        return self._components[component_id].to_dict()
+        definition = self._checks[check_id]
+        
+        if not definition.enabled:
+            logger.debug("Health check disabled: %s", check_id)
+            return None
+        
+        start_time = time.time()
+        timestamp = datetime.now(timezone.utc).isoformat()
+        
+        try:
+            # Run checker with timeout
+            result_data = definition.checker()
+            
+            latency_ms = int((time.time() - start_time) * 1000)
+            
+            status = HealthStatus(result_data.get("status", "unknown"))
+            message = result_data.get("message", "")
+            details = result_data.get("details", {})
+            
+            result = HealthCheckResult(
+                check_id=check_id,
+                component=definition.component,
+                check_type=definition.check_type,
+                status=status,
+                message=message,
+                timestamp=timestamp,
+                latency_ms=latency_ms,
+                details=details,
+            )
+            
+            # Update component health
+            self._update_component_health(definition.component, result, definition.critical)
+            
+            # Store in history
+            self._health_history.append(result)
+            if len(self._health_history) > self._max_history_size:
+                self._health_history = self._health_history[-self._max_history_size:]
+            
+            logger.debug("Health check %s: %s", check_id, status.value)
+            
+            return result
+            
+        except Exception as exc:
+            logger.exception("Health check %s failed: %s", check_id, exc)
+            
+            latency_ms = int((time.time() - start_time) * 1000)
+            
+            result = HealthCheckResult(
+                check_id=check_id,
+                component=definition.component,
+                check_type=definition.check_type,
+                status=HealthStatus.UNHEALTHY,
+                message=f"Check failed: {exc}",
+                timestamp=timestamp,
+                latency_ms=latency_ms,
+                details={"error": str(exc)},
+            )
+            
+            self._update_component_health(definition.component, result, definition.critical)
+            self._health_history.append(result)
+            
+            return result
     
-    def get_all_components(self) -> List[Dict[str, Any]]:
-        """Get all registered components."""
-        return [c.to_dict() for c in self._components.values()]
+    def _update_component_health(self, component: str,
+                                result: HealthCheckResult,
+                                is_critical: bool) -> None:
+        """Update component health status."""
+        if component not in self._component_health:
+            self._component_health[component] = ComponentHealth(
+                component=component,
+                status=HealthStatus.UNKNOWN,
+                last_check="",
+                last_success=None,
+                last_failure=None,
+                consecutive_failures=0,
+                total_checks=0,
+                successful_checks=0,
+                failed_checks=0,
+            )
+        
+        health = self._component_health[component]
+        
+        health.last_check = result.timestamp
+        health.total_checks += 1
+        
+        if result.status == HealthStatus.HEALTHY:
+            health.successful_checks += 1
+            health.consecutive_failures = 0
+            health.last_success = result.timestamp
+            health.status = HealthStatus.HEALTHY
+        elif result.status == HealthStatus.DEGRADED:
+            health.successful_checks += 1
+            health.consecutive_failures = 0
+            health.last_success = result.timestamp
+            if health.status != HealthStatus.UNHEALTHY:
+                health.status = HealthStatus.DEGRADED
+        else:  # UNHEALTHY or UNKNOWN
+            health.failed_checks += 1
+            health.consecutive_failures += 1
+            health.last_failure = result.timestamp
+            
+            if is_critical or health.consecutive_failures >= 3:
+                health.status = HealthStatus.UNHEALTHY
+        
+        # Store recent checks
+        health.checks.append(result)
+        if len(health.checks) > 10:
+            health.checks = health.checks[-10:]
+        
+        # Notify callbacks on status change
+        self._notify_status_change(component, health.status, result)
     
-    def get_alerts(self, unresolved_only: bool = True) -> List[Dict[str, Any]]:
-        """Get health alerts."""
-        alerts = list(self._alerts.values())
-        
-        if unresolved_only:
-            alerts = [a for a in alerts if not a.acknowledged]
-        
-        # Sort by created_at (newest first)
-        alerts.sort(key=lambda a: a.created_at, reverse=True)
-        
-        return [a.to_dict() for a in alerts]
+    def _notify_status_change(self, component: str,
+                             new_status: HealthStatus,
+                             result: HealthCheckResult) -> None:
+        """Notify callbacks of status change."""
+        for callback in self._status_callbacks:
+            try:
+                callback({
+                    "component": component,
+                    "status": new_status.value,
+                    "check_result": result.to_dict(),
+                })
+            except Exception as exc:
+                logger.exception("Status callback failed: %s", exc)
     
-    def acknowledge_alert(self, alert_id: str) -> bool:
-        """Acknowledge an alert."""
-        if alert_id not in self._alerts:
-            return False
-        
-        self._alerts[alert_id].acknowledged = True
-        self._alerts[alert_id].acknowledged_at = datetime.now(timezone.utc).isoformat()
-        return True
+    def register_status_callback(self, callback: Callable) -> None:
+        """Register callback for health status changes."""
+        self._status_callbacks.append(callback)
     
-    def get_health_trend(self, hours: int = 24) -> Dict[str, Any]:
-        """Get health trend over time."""
-        now = datetime.now(timezone.utc)
-        cutoff = now - timedelta(hours=hours)
+    def run_all_checks(self) -> Dict[str, HealthCheckResult]:
+        """Run all registered health checks."""
+        results = {}
         
-        history = [
-            h for h in self._health_history
-            if datetime.fromisoformat(h.timestamp) >= cutoff
-        ]
+        for check_id in self._checks:
+            result = self.run_check(check_id)
+            if result:
+                results[check_id] = result
         
-        if not history:
+        return results
+    
+    def get_component_health(self, component: str) -> Optional[Dict[str, Any]]:
+        """Get health status of a component."""
+        if component not in self._component_health:
+            return None
+        
+        return self._component_health[component].to_dict()
+    
+    def get_all_components_health(self) -> List[Dict[str, Any]]:
+        """Get health status of all components."""
+        return [h.to_dict() for h in self._component_health.values()]
+    
+    def get_overall_health(self) -> Dict[str, Any]:
+        """Get overall system health."""
+        if not self._component_health:
             return {
-                "period_hours": hours,
-                "data_points": 0,
-                "avg_health_score": 0.0,
-                "min_health_score": 0.0,
-                "max_health_score": 0.0,
-                "trend": "unknown",
+                "status": HealthStatus.UNKNOWN.value,
+                "healthy_components": 0,
+                "degraded_components": 0,
+                "unhealthy_components": 0,
+                "total_components": 0,
             }
         
-        scores = [h.health_score for h in history]
+        healthy = sum(1 for h in self._component_health.values() if h.status == HealthStatus.HEALTHY)
+        degraded = sum(1 for h in self._component_health.values() if h.status == HealthStatus.DEGRADED)
+        unhealthy = sum(1 for h in self._component_health.values() if h.status == HealthStatus.UNHEALTHY)
+        unknown = sum(1 for h in self._component_health.values() if h.status == HealthStatus.UNKNOWN)
         
-        # Calculate trend (simple linear regression)
-        if len(scores) >= 2:
-            first_half_avg = sum(scores[:len(scores)//2]) / (len(scores)//2)
-            second_half_avg = sum(scores[len(scores)//2:]) / (len(scores) - len(scores)//2)
-            
-            if second_half_avg > first_half_avg + 5:
-                trend = "improving"
-            elif second_half_avg < first_half_avg - 5:
-                trend = "degrading"
-            else:
-                trend = "stable"
+        # Determine overall status
+        if unhealthy > 0:
+            overall = HealthStatus.UNHEALTHY
+        elif degraded > 0:
+            overall = HealthStatus.DEGRADED
+        elif unknown > 0:
+            overall = HealthStatus.UNKNOWN
         else:
-            trend = "stable"
+            overall = HealthStatus.HEALTHY
         
         return {
-            "period_hours": hours,
-            "data_points": len(history),
-            "avg_health_score": sum(scores) / len(scores),
-            "min_health_score": min(scores),
-            "max_health_score": max(scores),
-            "trend": trend,
+            "status": overall.value,
+            "healthy_components": healthy,
+            "degraded_components": degraded,
+            "unhealthy_components": unhealthy,
+            "unknown_components": unknown,
+            "total_components": len(self._component_health),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
     
-    def _create_alert(self, component: ComponentHealth, severity: HealthStatus) -> None:
-        """Create health alert."""
-        self._alert_counter += 1
+    def get_health_history(self, component: Optional[str] = None,
+                          status: Optional[HealthStatus] = None,
+                          limit: int = 100) -> List[Dict[str, Any]]:
+        """Get health check history."""
+        results = self._health_history
         
-        alert = HealthAlert(
-            alert_id=f"alert_{self._alert_counter}",
-            component_id=component.component_id,
-            severity=severity,
-            title=f"{component.name} {severity.value}",
-            message=component.message,
-            value=component.value,
-            threshold=component.threshold_critical if severity == HealthStatus.CRITICAL else component.threshold_warning,
-        )
+        if component:
+            results = [r for r in results if r.component == component]
         
-        self._alerts[alert.alert_id] = alert
+        if status:
+            results = [r for r in results if r.status == status]
+        
+        # Sort by timestamp (newest first)
+        results.sort(key=lambda r: r.timestamp, reverse=True)
+        
+        return [r.to_dict() for r in results[:limit]]
     
-    def get_health_summary(self) -> Dict[str, Any]:
-        """Get health monitoring summary."""
-        total_components = len(self._components)
-        healthy_components = len([c for c in self._components.values() if c.status == HealthStatus.HEALTHY])
-        warning_components = len([c for c in self._components.values() if c.status == HealthStatus.WARNING])
-        critical_components = len([c for c in self._components.values() if c.status == HealthStatus.CRITICAL])
+    def get_checks(self, component: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Get registered health checks."""
+        checks = list(self._checks.values())
         
-        total_alerts = len(self._alerts)
-        unresolved_alerts = len([a for a in self._alerts.values() if not a.acknowledged])
+        if component:
+            checks = [c for c in checks if c.component == component]
         
-        current_health = self.get_system_health()
-        
-        return {
-            "total_components": total_components,
-            "healthy_components": healthy_components,
-            "warning_components": warning_components,
-            "critical_components": critical_components,
-            "total_alerts": total_alerts,
-            "unresolved_alerts": unresolved_alerts,
-            "current_health_score": current_health.health_score,
-            "current_status": current_health.overall_status.value,
-        }
+        return [c.to_dict() for c in checks]
     
-    def set_thresholds(self, component_id: str, warning: float, critical: float) -> bool:
-        """Set custom thresholds for a component."""
-        if component_id not in self._components:
+    def enable_check(self, check_id: str) -> bool:
+        """Enable a health check."""
+        if check_id not in self._checks:
             return False
         
-        component = self._components[component_id]
-        component.threshold_warning = warning
-        component.threshold_critical = critical
+        self._checks[check_id].enabled = True
+        return True
+    
+    def disable_check(self, check_id: str) -> bool:
+        """Disable a health check."""
+        if check_id not in self._checks:
+            return False
         
-        # Re-evaluate status with new thresholds
-        self.update_component_value(component_id, component.value)
+        self._checks[check_id].enabled = False
+        return True
+    
+    def get_statistics(self) -> Dict[str, Any]:
+        """Get health monitoring statistics."""
+        total_checks = sum(h.total_checks for h in self._component_health.values())
+        successful_checks = sum(h.successful_checks for h in self._component_health.values())
+        failed_checks = sum(h.failed_checks for h in self._component_health.values())
+        
+        return {
+            "total_components": len(self._component_health),
+            "total_checks_registered": len(self._checks),
+            "total_checks_run": total_checks,
+            "successful_checks": successful_checks,
+            "failed_checks": failed_checks,
+            "success_rate": round(successful_checks / total_checks * 100, 2) if total_checks > 0 else 0.0,
+            "history_size": len(self._health_history),
+        }
+    
+    def get_unhealthy_components(self) -> List[Dict[str, Any]]:
+        """Get list of unhealthy components."""
+        unhealthy = [
+            h.to_dict() for h in self._component_health.values()
+            if h.status in (HealthStatus.UNHEALTHY, HealthStatus.DEGRADED)
+        ]
+        
+        # Sort by consecutive failures (most failures first)
+        unhealthy.sort(key=lambda h: h["consecutive_failures"], reverse=True)
+        
+        return unhealthy
+    
+    def reset_component_health(self, component: str) -> bool:
+        """Reset health status for a component."""
+        if component not in self._component_health:
+            return False
+        
+        health = self._component_health[component]
+        health.status = HealthStatus.UNKNOWN
+        health.consecutive_failures = 0
+        health.checks.clear()
         
         return True
+    
+    def clear_history(self, older_than: Optional[str] = None) -> int:
+        """Clear health check history."""
+        if older_than is None:
+            count = len(self._health_history)
+            self._health_history.clear()
+            return count
+        
+        # Clear history older than timestamp
+        cutoff = datetime.fromisoformat(older_than)
+        
+        initial_count = len(self._health_history)
+        self._health_history = [
+            r for r in self._health_history
+            if datetime.fromisoformat(r.timestamp) >= cutoff
+        ]
+        
+        return initial_count - len(self._health_history)
 
 
-def create_health_check_engine() -> HealthCheckEngine:
-    """Factory function to create health check engine."""
-    return HealthCheckEngine()
+def create_health_engine() -> HealthEngine:
+    """Factory function to create health engine."""
+    return HealthEngine()
