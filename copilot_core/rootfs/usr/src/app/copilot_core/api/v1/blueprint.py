@@ -83,6 +83,12 @@ api_v1.register_blueprint(ha_discovery_bp)
 # Register Metrics API (Flask)
 api_v1.register_blueprint(metrics_bp)
 
+# Module APIs (Slices 67-82)
+from copilot_core.api.v1.modules import modules_bp
+
+# Register Module APIs
+api_v1.register_blueprint(modules_bp)
+
 # Note: Additional standalone blueprints (habitus_zones, mcp, rag, styx_chat,
 # sonos, zone_automation, etc.) are registered directly on the Flask app via
 # core_setup.register_blueprints(). They must NOT be nested here to avoid

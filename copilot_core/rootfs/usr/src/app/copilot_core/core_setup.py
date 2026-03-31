@@ -250,6 +250,142 @@ def _wire_bus_events(services: dict) -> None:
         except Exception:
             _LOGGER.exception("Failed to wire anomaly → proactive engine")
 
+    # ── Slices 67-82: Module Event Wiring ─────────────────────────────
+    
+    # 7) Presence Intelligence ← state.changed (motion, person, device_tracker)
+    presence = services.get("presence_engine")
+    if presence and hasattr(presence, "on_state_changed"):
+        try:
+            def _presence_from_event(event, _svc=presence):
+                data = event.data if hasattr(event, "data") else {}
+                entity_id = data.get("entity_id", "")
+                new_state = data.get("new_state", "")
+                old_state = data.get("old_state", "")
+                if entity_id and (new_state != old_state):
+                    try:
+                        _svc.on_state_changed(entity_id, new_state, old_state)
+                    except Exception:
+                        _LOGGER.debug("Presence on_state_changed failed", exc_info=True)
+
+            bus.subscribe("state.changed", _presence_from_event)
+            _LOGGER.info("Presence Intelligence wired to state.changed events")
+        except Exception:
+            _LOGGER.exception("Failed to wire Presence Intelligence")
+    
+    # 8) Presence → Light Intelligence (presence.triggered)
+    light = services.get("light_engine")
+    if light and hasattr(light, "on_presence_triggered"):
+        try:
+            def _light_from_presence(event, _svc=light):
+                data = event.data if hasattr(event, "data") else {}
+                zone_id = data.get("zone_id", "")
+                state = data.get("state", "")
+                if zone_id:
+                    try:
+                        if state == "present":
+                            _svc.on_presence_triggered(zone_id)
+                        elif state == "absent":
+                            _svc.on_absence_triggered(zone_id)
+                    except Exception:
+                        _LOGGER.debug("Light on_presence/absence_triggered failed", exc_info=True)
+
+            bus.subscribe("presence.changed", _light_from_presence)
+            _LOGGER.info("Light Intelligence wired to presence.changed events")
+        except Exception:
+            _LOGGER.exception("Failed to wire Light Intelligence")
+    
+    # 9) TimeOfDay → All Modules (time.changed)
+    timeofday = services.get("timeofday_engine")
+    if timeofday and hasattr(timeofday, "on_time_changed"):
+        try:
+            def _time_changed(event, _svc=timeofday):
+                data = event.data if hasattr(event, "data") else {}
+                time_of_day = data.get("time_of_day", "")
+                if time_of_day:
+                    try:
+                        _svc.on_time_changed(time_of_day)
+                    except Exception:
+                        _LOGGER.debug("TimeOfDay on_time_changed failed", exc_info=True)
+
+            bus.subscribe("time.changed", _time_changed)
+            _LOGGER.info("TimeOfDay Intelligence wired to time.changed events")
+        except Exception:
+            _LOGGER.exception("Failed to wire TimeOfDay Intelligence")
+    
+    # 10) Climate ← temperature, hvac_mode changes
+    climate = services.get("climate_engine")
+    if climate and hasattr(climate, "on_state_changed"):
+        try:
+            def _climate_from_event(event, _svc=climate):
+                data = event.data if hasattr(event, "data") else {}
+                entity_id = data.get("entity_id", "")
+                if entity_id and entity_id.startswith("climate."):
+                    try:
+                        _svc.on_state_changed(entity_id, data)
+                    except Exception:
+                        _LOGGER.debug("Climate on_state_changed failed", exc_info=True)
+
+            bus.subscribe("state.changed", _climate_from_event)
+            _LOGGER.info("Climate Module wired to state.changed events (climate.*)")
+        except Exception:
+            _LOGGER.exception("Failed to wire Climate Module")
+    
+    # 11) Humidity ← humidity sensor changes
+    humidity = services.get("humidity_engine")
+    if humidity and hasattr(humidity, "on_humidity_changed"):
+        try:
+            def _humidity_from_event(event, _svc=humidity):
+                data = event.data if hasattr(event, "data") else {}
+                entity_id = data.get("entity_id", "")
+                value = data.get("value")
+                if entity_id and entity_id.startswith("sensor.") and "humidity" in entity_id and value is not None:
+                    try:
+                        _svc.on_humidity_changed(entity_id, float(value))
+                    except (ValueError, TypeError):
+                        pass
+
+            bus.subscribe("state.changed", _humidity_from_event)
+            _LOGGER.info("Humidity Module wired to state.changed events (humidity sensors)")
+        except Exception:
+            _LOGGER.exception("Failed to wire Humidity Module")
+    
+    # 12) Energy ← power/energy sensor changes
+    energy = services.get("energy_engine")
+    if energy and hasattr(energy, "on_energy_changed"):
+        try:
+            def _energy_from_event(event, _svc=energy):
+                data = event.data if hasattr(event, "data") else {}
+                entity_id = data.get("entity_id", "")
+                value = data.get("value")
+                if entity_id and (entity_id.startswith("sensor.power") or entity_id.startswith("sensor.energy")) and value is not None:
+                    try:
+                        _svc.on_energy_changed(entity_id, float(value))
+                    except (ValueError, TypeError):
+                        pass
+
+            bus.subscribe("state.changed", _energy_from_event)
+            _LOGGER.info("Energy Module wired to state.changed events (power/energy sensors)")
+        except Exception:
+            _LOGGER.exception("Failed to wire Energy Module")
+    
+    # 13) Rules Engine ← rule.triggered (from other modules)
+    rules = services.get("rules_engine")
+    if rules and hasattr(rules, "on_rule_triggered"):
+        try:
+            def _rule_triggered(event, _svc=rules):
+                data = event.data if hasattr(event, "data") else {}
+                rule_id = data.get("rule_id", "")
+                if rule_id:
+                    try:
+                        _svc.on_rule_triggered(rule_id, data)
+                    except Exception:
+                        _LOGGER.debug("Rules on_rule_triggered failed", exc_info=True)
+
+            bus.subscribe("rule.triggered", _rule_triggered)
+            _LOGGER.info("Rules Engine wired to rule.triggered events")
+        except Exception:
+            _LOGGER.exception("Failed to wire Rules Engine")
+
     # 7) Pattern Discovery → RAG Embedding
     # NOTE: Removed bus-based embedding here to avoid double-embedding.
     # HabitusMinerService._embed_rules_in_rag() handles embedding directly
@@ -843,6 +979,86 @@ async def init_services(hass=None, config: dict = None):
         services["module_registry"] = ModuleRegistry()
     except Exception:
         _LOGGER.exception("Failed to init ModuleRegistry")
+
+    # ── Slices 67-82: Intelligence Modules ─────────────────────────────
+    # Initialize new module suite (Slices 67-82)
+    
+    # Slice 70/75: Presence Intelligence
+    try:
+        from copilot_core.presence.zone_presence import ZonePresenceEngine
+        services["presence_engine"] = ZonePresenceEngine()
+        _LOGGER.info("Presence Intelligence initialized (Slice 70/75)")
+    except Exception:
+        _LOGGER.exception("Failed to init Presence Intelligence")
+    
+    # Slice 71/76: Light Intelligence
+    try:
+        from copilot_core.light.zone_light import ZoneLightEngine
+        services["light_engine"] = ZoneLightEngine()
+        _LOGGER.info("Light Intelligence initialized (Slice 71/76)")
+    except Exception:
+        _LOGGER.exception("Failed to init Light Intelligence")
+    
+    # Slice 72/77: TimeOfDay Intelligence
+    try:
+        from copilot_core.timeofday.zone_time import TimeOfDayEngine
+        services["timeofday_engine"] = TimeOfDayEngine()
+        _LOGGER.info("TimeOfDay Intelligence initialized (Slice 72/77)")
+    except Exception:
+        _LOGGER.exception("Failed to init TimeOfDay Intelligence")
+    
+    # Slice 73/78: Rules Engine
+    try:
+        from copilot_core.rules.engine import RulesEngine
+        services["rules_engine"] = RulesEngine()
+        _LOGGER.info("Rules Engine initialized (Slice 73/78)")
+    except Exception:
+        _LOGGER.exception("Failed to init Rules Engine")
+    
+    # Slice 80: Climate/HVAC Module
+    try:
+        from copilot_core.climate.climate import ClimateEngine
+        services["climate_engine"] = ClimateEngine()
+        _LOGGER.info("Climate/HVAC Module initialized (Slice 80)")
+    except Exception:
+        _LOGGER.exception("Failed to init Climate/HVAC Module")
+    
+    # Slice 81: Humidity Module
+    try:
+        from copilot_core.humidity.humidity import HumidityEngine
+        services["humidity_engine"] = HumidityEngine()
+        _LOGGER.info("Humidity Module initialized (Slice 81)")
+    except Exception:
+        _LOGGER.exception("Failed to init Humidity Module")
+    
+    # Slice 82: Energy Module
+    try:
+        from copilot_core.energy.energy import EnergyEngine
+        services["energy_engine"] = EnergyEngine()
+        _LOGGER.info("Energy Module initialized (Slice 82)")
+    except Exception:
+        _LOGGER.exception("Failed to init Energy Module")
+    
+    # Register modules in API for /api/v1/modules/* endpoints
+    try:
+        from copilot_core.api.v1.modules import register_module
+        if "presence_engine" in services:
+            register_module("presence", services["presence_engine"])
+        if "light_engine" in services:
+            register_module("light", services["light_engine"])
+        if "timeofday_engine" in services:
+            register_module("timeofday", services["timeofday_engine"])
+        if "rules_engine" in services:
+            register_module("rules", services["rules_engine"])
+        if "climate_engine" in services:
+            register_module("climate", services["climate_engine"])
+        if "humidity_engine" in services:
+            register_module("humidity", services["humidity_engine"])
+        if "energy_engine" in services:
+            register_module("energy", services["energy_engine"])
+        _LOGGER.info("All modules registered in API")
+    except Exception:
+        _LOGGER.exception("Failed to register modules in API")
 
     # Initialize Integration Bus and wire to existing services
     try:
