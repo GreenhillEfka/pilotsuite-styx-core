@@ -1,5 +1,16 @@
 # Changelog
 
+## [v15.3.36] - 2026-04-02
+
+### 🧩 Slice 25 — Closure Follow-Up Dispatch Worker
+
+- `copilot_core.api.v1.notifications` exponiert jetzt eine deduplizierte Worker-Surface unter `GET /notifications/action-closures/dispatch`, die dieselbe kanonische `ActionClosureNotificationDigestV1`-Wahrheit fuer `notification_job` und `reminder_queue` in delivery-faehige Dispatch-Kandidaten uebersetzt.
+- Neue `ActionClosureFollowUpDispatchV1`- und `ActionClosureFollowUpDispatchCandidateV1`-Payloads liefern `delivery_mode`, `cursor`, `counts`, `dedupe_key`, `closure_revision` und queue-spezifische Delivery-Metadaten, ohne eine zweite Closure-Aggregationslogik aufzubauen.
+- `POST /notifications/action-closures/dispatch/ack` bestaetigt versendete Kandidaten jetzt revisionsscharf; bestaetigte Follow-ups bleiben fuer denselben Closure-Stand unterdrueckt und tauchen erst nach einer echten Closure-Aenderung wieder auf.
+- `copilot_core.core.action_closure_read_model` fuehrt die Closure-Revision jetzt bis in kompakte Recent-Closure-Eintraege durch, damit Notification-/Worker-Surfaces denselben monotonen Cursor fuer Dedup/Ack nutzen koennen.
+- Versionsartefakte (`VERSION`, `copilot_core/VERSION`, Runtime-VERSION, `copilot_core/config.yaml`, `copilot_core/manifest.json`) auf `15.3.36` harmonisiert.
+- Validiert mit: `pytest -q tests/test_notification_action_closure_dispatch_contract.py tests/test_notification_action_closure_digest_contract.py tests/test_action_closure_contract.py tests/test_action_closure_summary_contract.py tests/test_zone_dashboard_contract.py tests/test_voice_action_closure_hints_contract.py` → `27 passed`.
+
 ## [v15.3.35] - 2026-04-01
 
 ### 🧩 Slice 24 — Closure-Aware Notification Digest

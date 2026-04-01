@@ -61,6 +61,7 @@ def _compact_recent_closure(closure: Mapping[str, Any]) -> dict[str, Any]:
     execution = closure.get("execution") or {}
     return {
         "closure_id": closure.get("closure_id"),
+        "revision": closure.get("revision", 0),
         "source": closure.get("source"),
         "state": closure.get("state"),
         "proposal_id": closure.get("proposal_id"),

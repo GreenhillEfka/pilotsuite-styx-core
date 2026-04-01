@@ -891,3 +891,27 @@ Notification- und Digest-Worker sollen offene bzw. problematische `ActionClosure
 **Tests:** `pytest -q tests/test_notification_action_closure_digest_contract.py tests/test_action_closure_contract.py tests/test_action_closure_summary_contract.py tests/test_zone_dashboard_contract.py tests/test_voice_action_closure_hints_contract.py` → `24 passed`
 
 **Next Exact Task:** Slice 25 als delivery-faehigen Closure-Follow-up-Worker ableiten: aus `ActionClosureNotificationDigestV1` deduplizierte Dispatch-Kandidaten plus Cursor-/Ack-Mechanik fuer echte Notification-Jobs und Reminder-Queues materialisieren.
+
+### ✅ Slice 25 — Closure Follow-Up Dispatch Worker
+**Status:** ✅ DONE (v15.3.36)
+
+**Goal**
+Notification-Jobs und Reminder-Queues sollen aus derselben kanonischen `ActionClosureNotificationDigestV1`-Wahrheit worker-faehige Dispatch-Kandidaten ziehen koennen — inklusive Delta-Cursor, Delivery-Modus und Ack-Mechanik, damit offene/problematische Closures nicht doppelt versendet werden und erst nach einer echten Closure-Aenderung erneut auftauchen.
+
+### Deliverables
+- [x] deduplizierte `ActionClosureFollowUpDispatchCandidateV1`-Kandidaten aus derselben kanonischen Closure-Digest-Surface materialisiert
+- [x] worker-faehige `ActionClosureFollowUpDispatchV1`-Bundle-/Cursor-Surface fuer `notification_job` und `reminder_queue` geliefert
+- [x] Ack-Mechanik unter `/notifications/action-closures/dispatch/ack` suppressiert bestaetigte Kandidaten bis zur naechsten Closure-Revision
+- [x] Closure-Recent-Items tragen jetzt ihre Revision bis in die Notification-/Worker-Surface durch
+- [x] Contract-Tests decken Initial-Materialisierung, Ack-Suppression, Cursor-Verhalten und beide Delivery-Modi ab
+
+### Acceptance criteria
+- Notification-Worker und Reminder-Queues lesen dieselben offenen/problematischen Closures aus derselben kanonischen Notification-Digest-Wahrheit.
+- Ein bestaetigter Dispatch-Kandidat verschwindet fuer denselben Closure-Stand, taucht aber bei einer echten Closure-Revision wieder auf.
+- `since_revision` liefert Delta-/Cursor-Infos fuer Worker-Poller, ohne unbestaetigte Follow-ups unsichtbar zu machen.
+
+**Commit:** `feat(core): deliver slice 25 closure follow-up dispatch worker`
+**Tag:** v15.3.36
+**Tests:** `pytest -q tests/test_notification_action_closure_dispatch_contract.py tests/test_notification_action_closure_digest_contract.py tests/test_action_closure_contract.py tests/test_action_closure_summary_contract.py tests/test_zone_dashboard_contract.py tests/test_voice_action_closure_hints_contract.py` → `27 passed`
+
+**Next Exact Task:** Slice 26 als delivery-result-aware Closure-Follow-up-Receipt-Surface ableiten: Dispatch-Acks, Queue-/Reminder-Receipts und Retry-/Escalation-State aus derselben kanonischen Worker-/Closure-Wahrheit in Notification-/Dashboard-/Chat-Kontexte zurueckfuehren.

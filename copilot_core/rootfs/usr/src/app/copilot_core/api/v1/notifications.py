@@ -19,6 +19,7 @@ Endpoints:
 """
 from __future__ import annotations
 
+import hashlib
 import logging
 import uuid
 from dataclasses import dataclass, field
@@ -585,8 +586,165 @@ class NotificationManager:
         return notification
 
 
-# Singleton instance
+@dataclass
+class ActionClosureDispatchCandidate:
+    """Worker-facing dispatch candidate for closure follow-ups."""
+
+    dispatch_id: str
+    dedupe_key: str
+    delivery_mode: str
+    closure_id: str
+    closure_revision: int
+    zone_id: str | None = None
+    module_id: str | None = None
+    action_id: str | None = None
+    state: str | None = None
+    kind: str = "open"
+    priority: str = "normal"
+    title: str = ""
+    message: str = ""
+    updated_at: str | None = None
+    acknowledged: bool = False
+    acknowledged_at: str | None = None
+    acknowledged_by: str | None = None
+    ack_note: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "contract": "ActionClosureFollowUpDispatchCandidateV1",
+            "dispatch_id": self.dispatch_id,
+            "dedupe_key": self.dedupe_key,
+            "delivery_mode": self.delivery_mode,
+            "closure_id": self.closure_id,
+            "closure_revision": self.closure_revision,
+            "zone_id": self.zone_id,
+            "module_id": self.module_id,
+            "action_id": self.action_id,
+            "state": self.state,
+            "kind": self.kind,
+            "priority": self.priority,
+            "title": self.title,
+            "message": self.message,
+            "updated_at": self.updated_at,
+            "acknowledged": self.acknowledged,
+            "acknowledged_at": self.acknowledged_at,
+            "acknowledged_by": self.acknowledged_by,
+            "ack_note": self.ack_note,
+            "delivery": {
+                "mode": self.delivery_mode,
+                "queue": "notifications" if self.delivery_mode == "notification_job" else "reminders",
+                "topic": "action_closure_follow_up" if self.delivery_mode == "notification_job" else "action_closure_reminder",
+            },
+        }
+
+
+def _utcnow_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _dispatch_id(entry: dict[str, Any], delivery_mode: str) -> str:
+    revision = int(entry.get("revision") or 0)
+    seed = "|".join(
+        [
+            delivery_mode,
+            str(entry.get("closure_id") or "unknown"),
+            str(entry.get("kind") or "unknown"),
+            str(revision),
+        ]
+    )
+    digest = hashlib.sha1(seed.encode("utf-8")).hexdigest()[:16]
+    return f"dispatch:{delivery_mode}:{digest}"
+
+
+def _dispatch_dedupe_key(entry: dict[str, Any], delivery_mode: str) -> str:
+    revision = int(entry.get("revision") or 0)
+    return "|".join(
+        [
+            delivery_mode,
+            str(entry.get("closure_id") or "unknown"),
+            str(entry.get("kind") or "unknown"),
+            str(revision),
+        ]
+    )
+
+
+class ActionClosureFollowUpDispatchStore:
+    """Tracks worker-facing dispatch candidates and acknowledgement state."""
+
+    def __init__(self) -> None:
+        self._candidate_index: dict[str, ActionClosureDispatchCandidate] = {}
+        self._acknowledged: dict[str, dict[str, Any]] = {}
+
+    def clear(self) -> None:
+        self._candidate_index.clear()
+        self._acknowledged.clear()
+
+    def candidate_from_follow_up(
+        self,
+        follow_up: dict[str, Any],
+        *,
+        delivery_mode: str,
+    ) -> ActionClosureDispatchCandidate:
+        dispatch_id = _dispatch_id(follow_up, delivery_mode)
+        dedupe_key = _dispatch_dedupe_key(follow_up, delivery_mode)
+        ack = self._acknowledged.get(dedupe_key) or {}
+        candidate = ActionClosureDispatchCandidate(
+            dispatch_id=dispatch_id,
+            dedupe_key=dedupe_key,
+            delivery_mode=delivery_mode,
+            closure_id=str(follow_up.get("closure_id") or "unknown"),
+            closure_revision=int(follow_up.get("revision") or 0),
+            zone_id=follow_up.get("zone_id"),
+            module_id=follow_up.get("module_id"),
+            action_id=follow_up.get("action_id"),
+            state=follow_up.get("state"),
+            kind=str(follow_up.get("kind") or "open"),
+            priority=str(follow_up.get("priority") or "normal"),
+            title=str(follow_up.get("title") or ""),
+            message=str(follow_up.get("message") or ""),
+            updated_at=follow_up.get("updated_at"),
+            acknowledged=bool(ack),
+            acknowledged_at=ack.get("acknowledged_at"),
+            acknowledged_by=ack.get("acknowledged_by"),
+            ack_note=ack.get("ack_note"),
+        )
+        self._candidate_index[dispatch_id] = candidate
+        return candidate
+
+    def acknowledge(
+        self,
+        dispatch_ids: list[str],
+        *,
+        acknowledged_by: str | None = None,
+        note: str | None = None,
+    ) -> list[dict[str, Any]]:
+        results: list[dict[str, Any]] = []
+        for dispatch_id in dispatch_ids:
+            candidate = self._candidate_index.get(str(dispatch_id or "").strip())
+            if candidate is None:
+                continue
+            timestamp = _utcnow_iso()
+            ack = {
+                "dispatch_id": candidate.dispatch_id,
+                "closure_id": candidate.closure_id,
+                "closure_revision": candidate.closure_revision,
+                "delivery_mode": candidate.delivery_mode,
+                "acknowledged_at": timestamp,
+                "acknowledged_by": str(acknowledged_by or "worker").strip() or "worker",
+                "ack_note": str(note or "").strip() or None,
+            }
+            self._acknowledged[candidate.dedupe_key] = ack
+            candidate.acknowledged = True
+            candidate.acknowledged_at = timestamp
+            candidate.acknowledged_by = ack["acknowledged_by"]
+            candidate.ack_note = ack["ack_note"]
+            results.append({"contract": "ActionClosureFollowUpDispatchAckV1", **candidate.to_dict()})
+        return results
+
+
+# Singleton instances
 _notification_manager: Optional[NotificationManager] = None
+_action_closure_follow_up_dispatch_store: Optional[ActionClosureFollowUpDispatchStore] = None
 
 
 def get_notification_manager() -> NotificationManager:
@@ -599,6 +757,13 @@ def get_notification_manager() -> NotificationManager:
     if _notification_manager is None:
         _notification_manager = NotificationManager()
     return _notification_manager
+
+
+def get_action_closure_follow_up_dispatch_store() -> ActionClosureFollowUpDispatchStore:
+    global _action_closure_follow_up_dispatch_store
+    if _action_closure_follow_up_dispatch_store is None:
+        _action_closure_follow_up_dispatch_store = ActionClosureFollowUpDispatchStore()
+    return _action_closure_follow_up_dispatch_store
 
 
 # =============================================================================
@@ -1054,6 +1219,50 @@ def get_notification_digest() -> tuple[dict[str, Any], int]:
     return jsonify(response)
 
 
+@bp.route("/action-closures/dispatch", methods=["GET"])
+def get_action_closure_follow_up_dispatch() -> tuple[dict[str, Any], int]:
+    """Get delivery-ready follow-up dispatch candidates for workers."""
+    try:
+        since_revision = _parse_optional_int_arg("action_closure_since")
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+
+    delivery_mode = (request.args.get("delivery_mode") or "notification_job").strip() or "notification_job"
+    if delivery_mode not in {"notification_job", "reminder_queue"}:
+        return jsonify({"ok": False, "error": f"Unsupported delivery_mode: {delivery_mode}"}), 400
+
+    bundle = _build_action_closure_follow_up_dispatch_bundle(
+        zone_id=(request.args.get("zone_id") or "").strip() or None,
+        since_revision=since_revision,
+        recent_limit=max(1, min(10, int(request.args.get("recent_limit", "5")))),
+        delivery_mode=delivery_mode,
+        include_acknowledged=_parse_bool_arg("include_acknowledged"),
+    )
+    return jsonify({"ok": True, "dispatch": bundle})
+
+
+@bp.route("/action-closures/dispatch/ack", methods=["POST"])
+def acknowledge_action_closure_follow_up_dispatch() -> tuple[dict[str, Any], int]:
+    """Acknowledge worker dispatch candidates so they stay suppressed until closure change."""
+    body = request.get_json(silent=True) or {}
+    dispatch_ids = body.get("dispatch_ids") or []
+    if not dispatch_ids and body.get("dispatch_id"):
+        dispatch_ids = [body["dispatch_id"]]
+    dispatch_ids = [str(item).strip() for item in dispatch_ids if str(item).strip()]
+    if not dispatch_ids:
+        return jsonify({"ok": False, "error": "dispatch_id or dispatch_ids required"}), 400
+
+    acknowledgements = get_action_closure_follow_up_dispatch_store().acknowledge(
+        dispatch_ids,
+        acknowledged_by=body.get("acknowledged_by"),
+        note=body.get("note"),
+    )
+    if not acknowledgements:
+        return jsonify({"ok": False, "error": "No matching dispatch candidates found"}), 404
+
+    return jsonify({"ok": True, "acknowledged": acknowledgements, "count": len(acknowledgements)})
+
+
 # Helper methods for NotificationManager
 def _get_stats(self) -> dict[str, Any]:
     """Get notification statistics.
@@ -1153,6 +1362,7 @@ def _build_action_closure_follow_up(entry: dict[str, Any]) -> dict[str, Any] | N
 
     return {
         "closure_id": entry.get("closure_id"),
+        "revision": int(entry.get("revision") or 0),
         "zone_id": entry.get("zone_id"),
         "module_id": entry.get("module_id"),
         "action_id": entry.get("action_id"),
@@ -1195,6 +1405,56 @@ def _build_action_closure_notification_digest(
         "total_closures": summary.get("total_closures", 0),
         "delta": summary.get("delta", {}),
         "follow_ups": follow_ups,
+    }
+
+
+def _build_action_closure_follow_up_dispatch_bundle(
+    *,
+    zone_id: str | None = None,
+    since_revision: int | None = None,
+    recent_limit: int = 5,
+    delivery_mode: str = "notification_job",
+    include_acknowledged: bool = False,
+) -> dict[str, Any]:
+    digest = _build_action_closure_notification_digest(
+        zone_id=zone_id,
+        since_revision=since_revision,
+        recent_limit=recent_limit,
+    )
+    store = get_action_closure_follow_up_dispatch_store()
+    candidates: list[dict[str, Any]] = []
+    acknowledged_count = 0
+    for follow_up in digest.get("follow_ups", []):
+        candidate = store.candidate_from_follow_up(follow_up, delivery_mode=delivery_mode)
+        if candidate.acknowledged:
+            acknowledged_count += 1
+            if not include_acknowledged:
+                continue
+        candidates.append(candidate.to_dict())
+
+    return {
+        "contract": "ActionClosureFollowUpDispatchV1",
+        "delivery_mode": delivery_mode,
+        "zone_id": zone_id,
+        "revision": digest.get("revision", 0),
+        "latest_change_at": digest.get("latest_change_at"),
+        "cursor": {
+            "contract": "ActionClosureFollowUpDispatchCursorV1",
+            "since_revision": since_revision,
+            "current_revision": digest.get("revision", 0),
+            "changed": bool((digest.get("delta") or {}).get("changed")),
+            "changed_count": int((digest.get("delta") or {}).get("changed_count") or 0),
+            "latest_change_at": (digest.get("delta") or {}).get("latest_change_at") or digest.get("latest_change_at"),
+        },
+        "counts": {
+            "total_follow_ups": len(digest.get("follow_ups", [])),
+            "dispatchable": len(candidates),
+            "acknowledged": acknowledged_count,
+            "open": digest.get("open_count", 0),
+            "problematic": digest.get("failure_count", 0),
+        },
+        "digest": digest,
+        "candidates": candidates,
     }
 
 
@@ -1541,8 +1801,12 @@ def get_ha_notify_services() -> tuple[dict[str, Any], int]:
 __all__ = [
     "bp",
     "get_notification_manager",
+    "get_action_closure_follow_up_dispatch_store",
     "NotificationManager",
+    "ActionClosureFollowUpDispatchStore",
     "register_ha_device",
+    "get_action_closure_follow_up_dispatch",
+    "acknowledge_action_closure_follow_up_dispatch",
     "get_ha_devices",
     "send_ha_notification",
     "test_ha_connection",
