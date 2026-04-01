@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import logging
 import time
+import copy
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Set
@@ -184,8 +185,14 @@ def build_module_read_model(
     This function can be called directly from api/v1/ endpoints.
     """
     now_str = _now_iso()
-    modules: Dict[str, ModuleSnapshotV1] = {}
-    zone_module_map: Dict[str, List[str]] = {}
+    modules: Dict[str, ModuleSnapshotV1] = {
+        module_id: copy.deepcopy(snapshot)
+        for module_id, snapshot in _module_state.get("modules", {}).items()
+    }
+    zone_module_map: Dict[str, List[str]] = {
+        zone_id: list(module_ids)
+        for zone_id, module_ids in _module_state.get("zone_module_map", {}).items()
+    }
 
     # ── Load module schemas from registry ─────────────────────────────────
     if module_registry is not None:

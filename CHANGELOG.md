@@ -1,5 +1,14 @@
 # Changelog
 
+## [v15.3.3] - 2026-04-01
+
+### 🧠 Slice 86 — Module Read-Model Runtime State Merge
+
+- `core/module_read_model.py`: `build_module_read_model()` merge-t jetzt den bereits gehaltenen Runtime-Zustand aus `_module_state`, statt bei Aufrufen ohne Registry leer zu bleiben.
+- Bestehende Snapshots werden per Deep-Copy übernommen, damit Builder-Aufrufe den In-Memory-Zustand nicht aliasen oder mutieren.
+- Versionsartefakte (`VERSION`, `copilot_core/VERSION`, `config.yaml`, `manifest.json`, Add-on-Config, Runtime-VERSION) auf `15.3.3` harmonisiert.
+- Validiert mit: `PYTHONPATH=copilot_core/rootfs/usr/src/app /home/linuxbrew/.linuxbrew/bin/pytest tests/test_module_read_model.py tests/test_dashboard_read_models_contract.py tests/test_zone_dashboard_contract.py -q` → `28 passed`.
+
 ## [v15.3.2] - 2026-04-01
 
 ### 🧩 Slice 85 — Contract Compatibility Hardening
