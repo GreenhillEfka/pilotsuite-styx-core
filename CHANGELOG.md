@@ -1,5 +1,15 @@
 # Changelog
 
+## [v15.3.35] - 2026-04-01
+
+### 🧩 Slice 24 — Closure-Aware Notification Digest
+
+- `copilot_core.api.v1.notifications` kann Digest- und Pending-Surfaces jetzt optional mit kanonischen `ActionClosure`-Follow-ups anreichern (`include_action_closures=true`), inklusive `zone_id`-Scope, `action_closure_since`-Cursor und denselben Delta-Informationen aus der Closure-Truth.
+- Neue `ActionClosureNotificationDigestV1`-Payloads exponieren `revision`, `latest_change_at`, Outcome-Counts und konkrete Follow-up-Eintraege fuer offene bzw. problematische Closures, damit Notification-/Digest-Worker keine eigene Closure-Aggregation mehr bauen muessen.
+- `copilot_core.api.security.get_auth_token()` priorisiert jetzt den aktuellen `COPILOT_AUTH_TOKEN` strikt vor dem 60s-Cache, damit Test- und Worker-Kontexte mit frischen Env-Tokens nicht gegen stale Cache-Werte laufen.
+- Versionsartefakte (`VERSION`, `copilot_core/VERSION`, Runtime-VERSION, `copilot_core/config.yaml`, `copilot_core/manifest.json`) auf `15.3.35` harmonisiert.
+- Validiert mit: `pytest -q tests/test_notification_action_closure_digest_contract.py tests/test_action_closure_contract.py tests/test_action_closure_summary_contract.py tests/test_zone_dashboard_contract.py tests/test_voice_action_closure_hints_contract.py` → `24 passed`.
+
 ## [v15.3.34] - 2026-04-01
 
 ### 🧩 Slice 23 — Action Closure Delta Surface

@@ -866,3 +866,28 @@ Die kanonische `ActionClosure`-Wahrheit fuer inkrementelle Poller revisionsfaehi
 **Tests:** `pytest -q tests/test_action_closure_contract.py tests/test_action_closure_summary_contract.py tests/test_zone_dashboard_contract.py tests/test_voice_action_closure_hints_contract.py` → `22 passed`
 
 **Next Exact Task:** Slice 24 als closure-aware Notifications-/Digest-Surface definieren: offene/problematische Closures aus derselben kanonischen Read-Model-Schicht in benachrichtigbare Follow-up-/Digest-Payloads ueberfuehren, inklusive deduplizierter Delta-Cursor fuer Notification-Worker.
+
+### ✅ Slice 24 — Closure-Aware Notification Digest
+**Status:** ✅ DONE (v15.3.35)
+
+**Goal**
+Notification- und Digest-Worker sollen offene bzw. problematische `ActionClosure`-Folgen direkt aus derselben kanonischen Closure-Wahrheit beziehen koennen — ohne zweite Aggregationslogik, aber mit demselben Revisionscursor wie Dashboard- und Context-Poller.
+
+### Deliverables
+- [x] `notifications`-Digest- und Pending-Surfaces akzeptieren `include_action_closures=true`
+- [x] `ActionClosureNotificationDigestV1` exponiert `revision`, `latest_change_at`, Outcome-Counts, Delta-Info und konkrete Follow-up-Eintraege
+- [x] `zone_id`-Scope und `action_closure_since`-Cursor werden in Notifications/Digests direkt auf die kanonische Closure-Read-Model-Schicht durchgereicht
+- [x] offene/problematische Closures werden als benachrichtigbare `follow_ups` mit Prioritaet/Kategorie materialisiert
+- [x] Auth-Token-Env-Prioritaet vor dem Cache korrigiert, damit test- und workergebundene Tokenwechsel deterministisch bleiben
+- [x] Contract-Tests decken Digest-/Pending-Action-Closure-Surface ab
+
+### Acceptance criteria
+- Notification-/Digest-Worker muessen keine eigene Closure-Zusammenfassung mehr pflegen, sondern koennen denselben Delta-Cursor wie andere Closure-Consumer verwenden.
+- Offene/problematische Closures sind in Digest/Pending strukturiert sichtbar und lassen sich ohne weitere Join-Logik priorisieren.
+- Temporäre Env-Token-Umschaltungen werden nicht mehr vom Security-Cache ueberfahren.
+
+**Commit:** `feat(core): deliver slice 24 closure aware notification digest`
+**Tag:** v15.3.35
+**Tests:** `pytest -q tests/test_notification_action_closure_digest_contract.py tests/test_action_closure_contract.py tests/test_action_closure_summary_contract.py tests/test_zone_dashboard_contract.py tests/test_voice_action_closure_hints_contract.py` → `24 passed`
+
+**Next Exact Task:** Slice 25 als delivery-faehigen Closure-Follow-up-Worker ableiten: aus `ActionClosureNotificationDigestV1` deduplizierte Dispatch-Kandidaten plus Cursor-/Ack-Mechanik fuer echte Notification-Jobs und Reminder-Queues materialisieren.

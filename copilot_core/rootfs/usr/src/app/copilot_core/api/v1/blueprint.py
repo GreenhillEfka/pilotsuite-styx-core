@@ -93,3 +93,31 @@ api_v1.register_blueprint(modules_bp)
 # sonos, zone_automation, etc.) are registered directly on the Flask app via
 # core_setup.register_blueprints(). They must NOT be nested here to avoid
 # double /api/v1/api/v1/ prefixes.
+
+# Additional blueprints with /api/v1 prefix (added 2026-04-02)
+from copilot_core.api.v1.ml_forecast import ml_forecast_bp
+from copilot_core.api.v1.cache_control import cache_control_bp
+from copilot_core.api.v1.ha_events import ha_events_bp
+from copilot_core.api.v1.learning_viz import learning_viz_bp
+from copilot_core.api.v1.media_ui import media_ui_bp
+from copilot_core.api.v1.neurons_ui import neurons_ui_bp
+from copilot_core.api.v1.rag_ui import rag_ui_bp
+from copilot_core.api.v1.zone_automation_api import zone_automation_api_bp
+from copilot_core.api.v1.backend_ui import backend_ui_bp
+from copilot_core.api.v1.chat import chat_bp
+from copilot_core.api.v1.energy_forecast import energy_forecast_bp
+from copilot_core.api.v1.predictive import predictive_bp
+
+# Register additional blueprints
+api_v1.register_blueprint(ml_forecast_bp)
+api_v1.register_blueprint(cache_control_bp)
+api_v1.register_blueprint(ha_events_bp)
+api_v1.register_blueprint(learning_viz_bp)
+api_v1.register_blueprint(media_ui_bp)
+api_v1.register_blueprint(neurons_ui_bp)
+api_v1.register_blueprint(rag_ui_bp)
+api_v1.register_blueprint(zone_automation_api_bp)
+api_v1.register_blueprint(backend_ui_bp)
+api_v1.register_blueprint(chat_bp)
+api_v1.register_blueprint(energy_forecast_bp)
+api_v1.register_blueprint(predictive_bp)
