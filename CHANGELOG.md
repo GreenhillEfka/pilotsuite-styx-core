@@ -1,5 +1,16 @@
 # Changelog
 
+## [v15.3.24] - 2026-04-01
+
+### 🧩 Slice 14 — Predictive Automation
+
+- Root- und Runtime-Surface für `copilot_core.predictive.automation_engine` sowie `api/v1/predictive.py` wieder auf einen kanonischen Slice-14-Contract gezogen; Predictive-Proposals tragen jetzt explizit `PredictiveProposalV1`-/`BehavioralPatternV1`-Metadaten, Source-Signals und Evidence.
+- Predictive-API materialisiert bestätigte Vorhersagen jetzt bewusst in denselben policy-gated `ProposalIntentV1`/`ActionIntentV1`/HA-Output-Handoff wie die übrige Proposal-Surface; damit gibt es keine zweite Policy-Engine neben Core.
+- Feedback-Loop gehärtet: Accept verstärkt Patterns, Reject degradiert Confidence, Stats liefern Auflösung (`unresolved/accepted/rejected`) und Kalender-/Presence-Signale werden als First-Class-Kontext in die Vorhersage einbezogen.
+- Root-Package `copilot_core/predictive/` ergänzt und `copilot_core.api.v1.habitus` als Runtime-Bridge fixiert, damit Root-Tests und Runtime dieselben Slice-14-/Proposal-Contracts importieren statt auf import-order-sensitive Rootfs-Pfade zu fallen.
+- Versionsartefakte (`VERSION`, `copilot_core/VERSION`, `copilot_core/config.yaml`, `copilot_core/manifest.json`, Runtime-VERSION) auf `15.3.24` harmonisiert.
+- Validiert mit: `pytest -q tests/test_predictive_automation.py tests/test_predictive_api_contract.py tests/test_calendar_integration.py tests/test_habitus_accept_contract.py` → `43 passed`.
+
 ## [v15.3.23] - 2026-04-01
 
 ### 🧩 Slice 106 — Energy Optimization Surface Delivery

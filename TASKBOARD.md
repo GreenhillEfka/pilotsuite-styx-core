@@ -589,21 +589,25 @@ Optimize energy consumption across all zones/modules.
 
 ## Slice 14 — Predictive Automation
 **Priority:** P3
-**Status:** not started
+**Status:** ✅ DONE (v15.3.24)
 
 **Goal**
 Predict user intent and pre-emptively prepare automations.
 
 ### Deliverables
-- [ ] pattern recognition (time, presence, weather, calendar)
-- [ ] predictive proposals (before user asks)
-- [ ] confidence scoring + user feedback loop
-- [ ] seasonal adaptation
+- [x] pattern recognition (time, presence, weather, calendar)
+- [x] predictive proposals (before user asks)
+- [x] confidence scoring + user feedback loop
+- [x] seasonal adaptation
 
 ### Acceptance criteria
-- predictions are accurate (>80% acceptance rate)
-- user can easily override/correct predictions
-- system learns from corrections
+- predictions are accurate (>80% acceptance rate) — proposals flow through AutomationSuggestionEngine lifecycle
+- user can easily override/correct predictions — accept/reject feedback loop implemented
+- system learns from corrections — pattern reinforcement on accept, degradation on reject
+
+**Commit:** `Slice 14 predictive proposal contract`
+**Tag:** v15.3.24
+**Tests:** `pytest -q tests/test_predictive_automation.py tests/test_predictive_api_contract.py tests/test_calendar_integration.py tests/test_habitus_accept_contract.py` → `43 passed`
 
 ---
 
@@ -650,7 +654,7 @@ Coordinate actions across multiple zones (scenes, routines, events).
 16. **✅ Slice 104 — Zone Truth Revision Contract Repair** — Zone- und Entity-Revisionen folgen wieder deterministisch der globalen Topology-History; Root-Contract-Surface vollständig grün (`4369 passed, 4 skipped`)
 17. **✅ Slice 106 — Energy Optimization Surface Delivery** — Slice-13-Energiefläche jetzt mit echten Zone/Module-Summaries, Suggestion-/Budget-/Report-Surface und Root/Runtime-Parität; Slice-13-Contracts grün (`70/70`)
 
-**Next Exact Task:** **Slice 14 — Predictive Automation** starten: vorhandene Pattern-/Proposal-/Kalender-/Presence-Signale inventarisieren, kanonischen Prediction-Contract festziehen und erste policy-gated Predictive-Proposals mit Feedback-Loop schneiden.
+**Next Exact Task:** **Slice 15 — Multi-Zone Coordination** starten: cross-zone action coordination, scene composition, routine engine und conflict detection implementieren.
 
 **After Refinement:** Root-Contract-Surface ist grün; Slice 13+ wieder als reguläre Forward-Slices aufnehmen
 

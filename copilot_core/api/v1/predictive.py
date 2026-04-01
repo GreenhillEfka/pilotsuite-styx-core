@@ -1,395 +1,383 @@
-"""Predictive Automation API Endpoints — v1.0.0.
+"""Predictive Automation API endpoints — v15.3.24.
 
-REST API für prädiktive Automation:
-- GET /api/v1/predictive/patterns — Gelernte Muster
-- GET /api/v1/predictive/next — Nächste vorhergesagte Aktion
-- POST /api/v1/predictive/confirm — Vorhersage bestätigen
-- POST /api/v1/predictive/reject — Vorhersage ablehnen
+Contract:
+- patterns are learned from observed actions plus live context signals,
+- predictive proposals stay read-only until confirmation,
+- confirmation materializes the existing policy-gated ActionIntentV1/HA handoff.
 """
 
 from __future__ import annotations
 
+import hashlib
 import logging
-from datetime import datetime
-from typing import Optional
+from datetime import datetime, timezone
+from typing import Any
 
-from flask import Blueprint, jsonify, request, current_app
+from flask import Blueprint, current_app, jsonify, request
 
 from copilot_core.api.security import require_token
-from copilot_core.automation.pattern_learner import PatternLearner
-from copilot_core.automation.predictor import (
+from copilot_core.homeassistant.habitat_adapter import wrap_accepted_proposal_action
+from copilot_core.homeassistant.habitus_zones import (
+    ZoneType,
+    evaluate_action_policy,
+    infer_module_id_for_action,
+    resolve_module_override_for_action,
+)
+from copilot_core.predictive.automation_engine import (
     PredictiveAutomationEngine,
-    PredictionRequest
+    create_predictive_automation_engine,
 )
 
 _LOGGER = logging.getLogger(__name__)
 
 predictive_bp = Blueprint("predictive", __name__, url_prefix="/api/v1/predictive")
 
+_CONFIDENCE_SCORES = {
+    "very_low": 0.1,
+    "low": 0.3,
+    "medium": 0.5,
+    "high": 0.7,
+    "very_high": 0.9,
+}
 
-def _get_pattern_learner() -> PatternLearner:
-    """Hole PatternLearner aus App Config oder erstelle neue Instanz."""
+
+def _utcnow() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _parse_bool(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return False
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _normalize_zone_type(value: Any) -> ZoneType | None:
+    if value in (None, ""):
+        return None
     try:
-        services = current_app.config.get("COPILOT_SERVICES", {})
-        pattern_learner = services.get("pattern_learner")
-        
-        if pattern_learner:
-            return pattern_learner
-        
-        # Fallback: Neue Instanz erstellen
-        data_dir = current_app.config.get("COPILOT_CFG").data_dir
-        return PatternLearner(data_dir=data_dir)
-    except Exception as e:
-        _LOGGER.warning(f"Error getting pattern learner: {e}")
-        # Default fallback
-        return PatternLearner()
+        return ZoneType(str(value))
+    except ValueError as exc:  # pragma: no cover - exercised via API contract tests
+        raise ValueError(f"Invalid zone_type: {value}") from exc
 
 
-def _get_predictor() -> PredictiveAutomationEngine:
-    """Hole PredictiveEngine aus App Config oder erstelle neue Instanz."""
-    try:
-        services = current_app.config.get("COPILOT_SERVICES", {})
-        predictor = services.get("predictive_engine")
-        
-        if predictor:
-            return predictor
-        
-        # Fallback: Neue Instanz erstellen
-        pattern_learner = _get_pattern_learner()
-        return PredictiveAutomationEngine(pattern_learner)
-    except Exception as e:
-        _LOGGER.warning(f"Error getting predictor: {e}")
-        # Default fallback
-        pattern_learner = PatternLearner()
-        return PredictiveAutomationEngine(pattern_learner)
+def _build_service_call_preview(action: dict[str, Any]) -> dict[str, Any]:
+    target = action.get("target") if isinstance(action.get("target"), dict) else {}
+    entity_id = str(action.get("entity_id") or target.get("entity_id") or "").strip()
+    if entity_id and "entity_id" not in target:
+        target = {**target, "entity_id": entity_id}
+
+    return {
+        "domain": str(action.get("domain") or "").strip().lower(),
+        "service": str(action.get("suggested_service") or action.get("service") or "").strip().lower(),
+        "target": target,
+        "expected_state": action.get("state"),
+    }
+
+
+def _confidence_score(value: Any) -> float:
+    if isinstance(value, (int, float)):
+        return float(value)
+    return _CONFIDENCE_SCORES.get(str(value or "").strip().lower(), 0.0)
+
+
+def _get_predictive_engine() -> PredictiveAutomationEngine:
+    services = current_app.config.get("COPILOT_SERVICES", {})
+    if isinstance(services, dict):
+        for key in ("predictive_engine", "predictive_automation_engine"):
+            engine = services.get(key)
+            if isinstance(engine, PredictiveAutomationEngine):
+                return engine
+
+    engine = getattr(current_app, "_predictive_engine", None)
+    if isinstance(engine, PredictiveAutomationEngine):
+        return engine
+
+    engine = create_predictive_automation_engine()
+    current_app._predictive_engine = engine
+    return engine
+
+
+def _collect_context(payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    payload = payload or {}
+    args = request.args
+    away_events = payload.get("away_events")
+    if not isinstance(away_events, list):
+        away_events = []
+        if _parse_bool(payload.get("away_event") or args.get("away_event")):
+            away_events = [payload.get("calendar_summary") or args.get("calendar_summary") or "away_event"]
+
+    context = {
+        "presence_detected": _parse_bool(payload.get("presence_detected") or args.get("presence_detected")),
+        "calendar_summary": payload.get("calendar_summary") or payload.get("calendar_event") or args.get("calendar_summary"),
+        "calendar_event": payload.get("calendar_event") or args.get("calendar_event"),
+        "away_events": away_events,
+        "weather_condition": payload.get("weather_condition") or args.get("weather"),
+        "current_temperature": payload.get("current_temperature") or args.get("temperature", type=float),
+    }
+    return {key: value for key, value in context.items() if value not in (None, "", [])}
+
+
+def _normalize_action_payload(entity_id: str, action: Any) -> dict[str, Any]:
+    if isinstance(action, dict):
+        return dict(action)
+
+    service = str(action or "").strip().lower()
+    domain = entity_id.split(".", 1)[0] if "." in entity_id else ""
+    return {
+        "domain": domain,
+        "service": service,
+        "entity_id": entity_id,
+    }
+
+
+def _materialize_confirmation_response(proposal: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
+    proposal_id = str(proposal.get("proposal_id") or "").strip()
+    zone_id = str(payload.get("zone_id") or proposal.get("zone_id") or "").strip()
+    action = proposal.get("predicted_action") if isinstance(proposal.get("predicted_action"), dict) else {}
+    if not proposal_id or not zone_id or not action:
+        raise ValueError("proposal_id, zone_id, and predicted_action are required")
+
+    zone_type = _normalize_zone_type(payload.get("zone_type") or proposal.get("zone_type"))
+    module_id = str(
+        payload.get("module_id")
+        or proposal.get("module_id")
+        or infer_module_id_for_action(action)
+        or ""
+    ).strip() or None
+
+    module_overrides = payload.get("module_overrides") if isinstance(payload.get("module_overrides"), dict) else proposal.get("module_overrides")
+    module_override = (
+        payload.get("module_override")
+        if isinstance(payload.get("module_override"), dict)
+        else resolve_module_override_for_action(zone_type, module_id, module_overrides)
+    )
+    explicit_styx_instruction = bool(payload.get("styx_instruction") or payload.get("execute_now"))
+    policy_gate = evaluate_action_policy(
+        module_id,
+        module_override,
+        explicit_styx_instruction=explicit_styx_instruction,
+    )
+
+    accepted_at = _utcnow()
+    action_preview = _build_service_call_preview(action)
+    action_seed = f"{proposal_id}|{zone_id}|{module_id or 'unknown'}|predictive"
+    action_intent_id = f"action:{hashlib.sha1(action_seed.encode('utf-8')).hexdigest()[:12]}"
+
+    proposal_intent = {
+        "contract": "ProposalIntentV1",
+        "proposal_id": proposal_id,
+        "zone_id": zone_id,
+        "module_id": module_id,
+        "state": "accepted",
+        "accepted_at": accepted_at,
+        "title": proposal.get("description"),
+        "summary": proposal.get("reasoning"),
+        "confidence": proposal.get("confidence_score"),
+        "source": "predictive.accepted",
+    }
+    action_intent = {
+        "contract": "ActionIntentV1",
+        "action_intent_id": action_intent_id,
+        "proposal_id": proposal_id,
+        "zone_id": zone_id,
+        "module_id": module_id,
+        "source": "predictive.accepted",
+        "execution_state": policy_gate["execution_state"],
+        "eligible_for_execution": policy_gate["eligible_for_execution"],
+        "needs_explicit_styx_instruction": policy_gate["needs_explicit_styx_instruction"],
+        "blocked_reasons": policy_gate["blocked_reasons"],
+        "accepted_at": accepted_at,
+        "action": action_preview,
+        "policy": policy_gate,
+    }
+    habitat_module_command = {
+        "contract": "HabitatModuleCommandV1",
+        "module_id": module_id,
+        "output_adapter": str(module_override.get("output_adapter") or "homeassistant") if isinstance(module_override, dict) else "homeassistant",
+        "command_mode": "service_call_ready" if policy_gate["eligible_for_execution"] else "preview_only",
+        "service_call": action_preview,
+        "blocked_reasons": policy_gate["blocked_reasons"],
+    }
+    ha_output = wrap_accepted_proposal_action(
+        action_id=action_intent_id,
+        proposal_id=proposal_id,
+        module_id=module_id or "unknown",
+        zone_id=zone_id,
+        service_call=action_preview,
+        confidence=float(proposal.get("confidence_score") or 0.0),
+        explanation=str(proposal.get("reasoning") or proposal.get("description") or ""),
+        accepted_at=accepted_at,
+        source="predictive.accepted",
+        policy_gate=policy_gate,
+    )
+
+    return {
+        "status": "ok",
+        "proposal": proposal,
+        "proposal_intent": proposal_intent,
+        "action_intent": action_intent,
+        "habitat_module_command": habitat_module_command,
+        "ha_output": ha_output,
+        "policy_gate": policy_gate,
+    }
 
 
 @predictive_bp.route("/patterns", methods=["GET"])
 @require_token
 def get_patterns():
-    """Hole gelernte Muster.
-    
-    Query Params:
-    - type: Filter nach Pattern-Typ ("time_based", "weather_based", etc.)
-    - entity_id: Filter nach Entity ID
-    - min_confidence: Minimale Confidence (default: 0.0)
-    - limit: Maximale Anzahl zurückgegebener Muster (default: 50)
-    
-    Returns:
-    {
-        "ok": true,
-        "patterns": [...],
-        "stats": {...},
-        "count": 10
-    }
-    """
+    """Return learned predictive patterns from the canonical engine."""
     try:
-        pattern_learner = _get_pattern_learner()
-        
-        # Parse Query Params
+        engine = _get_predictive_engine()
         pattern_type = request.args.get("type")
         entity_id = request.args.get("entity_id")
-        min_confidence = float(request.args.get("min_confidence", 0.0))
-        limit = int(request.args.get("limit", 50))
-        
-        # Hole Patterns
-        patterns = pattern_learner.get_patterns(
-            pattern_type=pattern_type,
-            entity_id=entity_id,
-            min_confidence=min_confidence
-        )
-        
-        # Begrenze Anzahl
-        patterns = patterns[:limit]
-        
-        # Hole Stats
-        stats = pattern_learner.get_pattern_stats()
-        
+        min_confidence = request.args.get("min_confidence", type=float)
+
+        patterns = engine.get_patterns()
+        if pattern_type:
+            patterns = [pattern for pattern in patterns if pattern.get("pattern_type") == pattern_type]
+        if entity_id:
+            patterns = [pattern for pattern in patterns if pattern.get("entity_id") == entity_id]
+        if min_confidence is not None:
+            patterns = [
+                pattern for pattern in patterns
+                if _confidence_score(pattern.get("confidence")) >= float(min_confidence)
+            ]
+
         return jsonify({
             "ok": True,
-            "patterns": [p.to_dict() for p in patterns],
-            "stats": {
-                "total_patterns": stats.total_patterns,
-                "time_based_patterns": stats.time_based_patterns,
-                "weather_based_patterns": stats.weather_based_patterns,
-                "sequence_patterns": stats.sequence_patterns,
-                "device_patterns": stats.device_patterns,
-                "avg_confidence": stats.avg_confidence,
-                "total_observations": stats.total_observations,
-            },
+            "patterns": patterns,
             "count": len(patterns),
-            "generated_at": datetime.now().isoformat()
+            "generated_at": _utcnow(),
         })
-    
-    except Exception as e:
-        _LOGGER.error(f"Error getting patterns: {e}")
-        return jsonify({
-            "ok": False,
-            "error": str(e)
-        }), 500
+    except Exception as exc:  # pragma: no cover - defensive
+        _LOGGER.error("Error getting predictive patterns: %s", exc)
+        return jsonify({"ok": False, "error": str(exc)}), 500
 
 
 @predictive_bp.route("/next", methods=["GET"])
 @require_token
 def get_next_prediction():
-    """Hole nächste vorhergesagte Aktion.
-    
-    Query Params:
-    - weather: Aktuelle Wetterbedingung ("sunny", "cloudy", "rainy")
-    - temperature: Aktuelle Temperatur (°C)
-    - include_low_confidence: Auch niedrige Confidence einschließen (default: false)
-    - max_predictions: Maximale Anzahl Vorhersagen (default: 1)
-    
-    Returns:
-    {
-        "ok": true,
-        "prediction": {...},
-        "all_predictions": [...],
-        "generated_at": "..."
-    }
-    """
+    """Return the next predictive proposal(s) for the current live context."""
     try:
-        predictor = _get_predictor()
-        
-        # Parse Query Params
-        weather = request.args.get("weather")
-        temperature = request.args.get("temperature", type=float)
-        include_low = request.args.get("include_low_confidence", "false").lower() == "true"
-        max_predictions = int(request.args.get("max_predictions", 1))
-        
-        # Erstelle Request
-        prediction_request = PredictionRequest(
-            current_time=datetime.now(),
-            weather_condition=weather,
-            current_temperature=temperature,
-            include_low_confidence=include_low,
-            max_predictions=max_predictions
-        )
-        
-        # Hole Vorhersage(n)
-        if max_predictions == 1:
-            prediction = predictor.predict_next(prediction_request)
-            all_predictions = [prediction] if prediction else []
-        else:
-            all_predictions = predictor.predict_all(prediction_request)
-            prediction = all_predictions[0] if all_predictions else None
-        
+        engine = _get_predictive_engine()
+        max_predictions = max(int(request.args.get("max_predictions", 1)), 1)
+        predictions = engine.generate_predictions(context=_collect_context())[:max_predictions]
+        payloads = [prediction.to_dict() for prediction in predictions]
+
         return jsonify({
             "ok": True,
-            "prediction": prediction.to_dict() if prediction else None,
-            "all_predictions": [p.to_dict() for p in all_predictions],
-            "count": len(all_predictions),
-            "generated_at": datetime.now().isoformat()
+            "prediction": payloads[0] if payloads else None,
+            "all_predictions": payloads,
+            "count": len(payloads),
+            "generated_at": _utcnow(),
         })
-    
-    except Exception as e:
-        _LOGGER.error(f"Error getting next prediction: {e}")
-        return jsonify({
-            "ok": False,
-            "error": str(e)
-        }), 500
+    except Exception as exc:  # pragma: no cover - defensive
+        _LOGGER.error("Error getting next predictive proposal: %s", exc)
+        return jsonify({"ok": False, "error": str(exc)}), 500
 
 
 @predictive_bp.route("/confirm", methods=["POST"])
 @require_token
 def confirm_prediction():
-    """Bestätige eine Vorhersage.
-    
-    Request Body:
-    {
-        "prediction_id": "pred_000001",
-        "action_performed": true  // Optional: wurde Aktion ausgeführt?
-    }
-    
-    Returns:
-    {
-        "ok": true,
-        "prediction_id": "pred_000001",
-        "confirmed": true,
-        "message": "..."
-    }
-    """
+    """Accept a predictive proposal and materialize a policy-gated action intent."""
     try:
-        predictor = _get_predictor()
-        
-        # Parse Request Body
-        data = request.get_json() or {}
-        prediction_id = data.get("prediction_id")
-        action_performed = data.get("action_performed", True)
-        
-        if not prediction_id:
-            return jsonify({
-                "ok": False,
-                "error": "prediction_id required"
-            }), 400
-        
-        # Bestätige Vorhersage
-        result = predictor.confirm_prediction(
-            prediction_id=prediction_id,
-            actual_action_performed=action_performed
-        )
-        
-        return jsonify(result)
-    
-    except Exception as e:
-        _LOGGER.error(f"Error confirming prediction: {e}")
-        return jsonify({
-            "ok": False,
-            "error": str(e)
-        }), 500
+        engine = _get_predictive_engine()
+        payload = request.get_json(silent=True) or {}
+        proposal_id = str(payload.get("proposal_id") or "").strip()
+        if not proposal_id:
+            return jsonify({"ok": False, "error": "proposal_id required"}), 400
+
+        if not engine.accept_prediction(proposal_id):
+            return jsonify({"ok": False, "error": "Prediction not found"}), 404
+
+        proposal = engine.get_proposal(proposal_id)
+        if proposal is None:
+            return jsonify({"ok": False, "error": "Prediction not found"}), 404
+
+        return jsonify(_materialize_confirmation_response(proposal.to_dict(), payload))
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    except Exception as exc:  # pragma: no cover - defensive
+        _LOGGER.error("Error confirming prediction: %s", exc)
+        return jsonify({"ok": False, "error": str(exc)}), 500
 
 
 @predictive_bp.route("/reject", methods=["POST"])
 @require_token
 def reject_prediction():
-    """Lehne eine Vorhersage ab.
-    
-    Request Body:
-    {
-        "prediction_id": "pred_000001",
-        "reason": "Falsche Vorhersage"  // Optional
-    }
-    
-    Returns:
-    {
-        "ok": true,
-        "prediction_id": "pred_000001",
-        "rejected": true,
-        "reason": "...",
-        "message": "..."
-    }
-    """
+    """Reject a predictive proposal and persist optional feedback."""
     try:
-        predictor = _get_predictor()
-        
-        # Parse Request Body
-        data = request.get_json() or {}
-        prediction_id = data.get("prediction_id")
-        reason = data.get("reason")
-        
-        if not prediction_id:
-            return jsonify({
-                "ok": False,
-                "error": "prediction_id required"
-            }), 400
-        
-        # Lehne Vorhersage ab
-        result = predictor.reject_prediction(
-            prediction_id=prediction_id,
-            reason=reason
-        )
-        
-        return jsonify(result)
-    
-    except Exception as e:
-        _LOGGER.error(f"Error rejecting prediction: {e}")
+        engine = _get_predictive_engine()
+        payload = request.get_json(silent=True) or {}
+        proposal_id = str(payload.get("proposal_id") or "").strip()
+        feedback = payload.get("feedback") or payload.get("reason")
+        if not proposal_id:
+            return jsonify({"ok": False, "error": "proposal_id required"}), 400
+
+        if not engine.reject_prediction(proposal_id, feedback=feedback):
+            return jsonify({"ok": False, "error": "Prediction not found"}), 404
+
+        proposal = engine.get_proposal(proposal_id)
         return jsonify({
-            "ok": False,
-            "error": str(e)
-        }), 500
+            "ok": True,
+            "proposal_id": proposal_id,
+            "feedback": feedback,
+            "proposal": proposal.to_dict() if proposal else None,
+            "generated_at": _utcnow(),
+        })
+    except Exception as exc:  # pragma: no cover - defensive
+        _LOGGER.error("Error rejecting prediction: %s", exc)
+        return jsonify({"ok": False, "error": str(exc)}), 500
 
 
 @predictive_bp.route("/stats", methods=["GET"])
 @require_token
 def get_predictive_stats():
-    """Hole Statistik über prädiktive Automation.
-    
-    Returns:
-    {
-        "ok": true,
-        "stats": {...},
-        "generated_at": "..."
-    }
-    """
+    """Return aggregate predictive-engine statistics."""
     try:
-        predictor = _get_predictor()
-        stats = predictor.get_prediction_stats()
-        
+        engine = _get_predictive_engine()
         return jsonify({
             "ok": True,
-            "stats": stats,
-            "generated_at": datetime.now().isoformat()
+            "stats": engine.get_stats(),
+            "generated_at": _utcnow(),
         })
-    
-    except Exception as e:
-        _LOGGER.error(f"Error getting predictive stats: {e}")
-        return jsonify({
-            "ok": False,
-            "error": str(e)
-        }), 500
+    except Exception as exc:  # pragma: no cover - defensive
+        _LOGGER.error("Error getting predictive stats: %s", exc)
+        return jsonify({"ok": False, "error": str(exc)}), 500
 
 
 @predictive_bp.route("/observe", methods=["POST"])
 @require_token
 def observe_action():
-    """Registriere Beobachtung für Pattern-Learning.
-    
-    Request Body:
-    {
-        "entity_id": "light.wohnzimmer",
-        "action": "turn_on",
-        "timestamp": "2026-03-02T08:00:00",  // Optional, default: now
-        "context": {  // Optional
-            "weather_condition": "sunny",
-            "temperature": 22.5,
-            "related_entities": ["switch.tv"]
-        }
-    }
-    
-    Returns:
-    {
-        "ok": true,
-        "message": "Beobachtung registriert",
-        "patterns_updated": 2
-    }
-    """
+    """Observe a user action so the predictive engine can learn new patterns."""
     try:
-        pattern_learner = _get_pattern_learner()
-        
-        # Parse Request Body
-        data = request.get_json() or {}
-        entity_id = data.get("entity_id")
-        action = data.get("action")
-        timestamp_str = data.get("timestamp")
-        context = data.get("context", {})
-        
-        if not entity_id or not action:
-            return jsonify({
-                "ok": False,
-                "error": "entity_id and action required"
-            }), 400
-        
-        # Parse Timestamp
-        timestamp = None
-        if timestamp_str:
-            try:
-                timestamp = datetime.fromisoformat(timestamp_str)
-            except ValueError:
-                return jsonify({
-                    "ok": False,
-                    "error": "Invalid timestamp format"
-                }), 400
-        
-        # Registriere Beobachtung
-        pattern_count_before = len(pattern_learner.patterns)
-        pattern_learner.observe(
-            entity_id=entity_id,
-            action=action,
-            timestamp=timestamp,
-            context=context
-        )
-        pattern_count_after = len(pattern_learner.patterns)
-        
+        engine = _get_predictive_engine()
+        payload = request.get_json(silent=True) or {}
+        entity_id = str(payload.get("entity_id") or "").strip()
+        action = payload.get("action")
+        if not entity_id or action in (None, ""):
+            return jsonify({"ok": False, "error": "entity_id and action required"}), 400
+
+        action_payload = _normalize_action_payload(entity_id, action)
+        patterns_before = len(engine.get_patterns())
+        engine.record_action({
+            "entity_id": entity_id,
+            "zone_id": payload.get("zone_id"),
+            "module_id": payload.get("module_id"),
+            "timestamp": payload.get("timestamp"),
+            "action": action_payload,
+            "context": payload.get("context") if isinstance(payload.get("context"), dict) else {},
+        })
+        stats = engine.get_stats()
+
         return jsonify({
             "ok": True,
             "message": "Beobachtung registriert",
-            "patterns_updated": pattern_count_after - pattern_count_before,
-            "total_patterns": pattern_count_after
+            "patterns_updated": stats["patterns_total"] - patterns_before,
+            "stats": stats,
         })
-    
-    except Exception as e:
-        _LOGGER.error(f"Error observing action: {e}")
-        return jsonify({
-            "ok": False,
-            "error": str(e)
-        }), 500
+    except Exception as exc:  # pragma: no cover - defensive
+        _LOGGER.error("Error observing predictive action: %s", exc)
+        return jsonify({"ok": False, "error": str(exc)}), 500

@@ -5,6 +5,7 @@ from copilot_core.predictive.automation_engine import (
     BehavioralPattern,
     PatternType,
     PredictionConfidence,
+    PredictiveProposal,
     create_predictive_automation_engine,
 )
 
@@ -365,3 +366,73 @@ class TestConfidenceDowngrade:
         engine = PredictiveAutomationEngine()
         result = engine._downgrade_confidence(PredictionConfidence.VERY_LOW)
         assert result == PredictionConfidence.VERY_LOW
+
+
+class TestSlice14Contracts:
+    """Additional Slice-14 contract coverage."""
+
+    def test_detect_calendar_pattern(self):
+        """Calendar-correlated actions should become first-class patterns."""
+        engine = PredictiveAutomationEngine()
+
+        for _ in range(3):
+            engine.record_action(
+                {
+                    "entity_id": "light.kitchen",
+                    "zone_id": "zone_kitchen",
+                    "module_id": "licht_kitchen",
+                    "action": {"domain": "light", "service": "turn_on"},
+                    "context": {"calendar_summary": "Office commute"},
+                }
+            )
+
+        patterns = engine.get_patterns()
+        calendar_patterns = [p for p in patterns if p["pattern_type"] == "calendar_based"]
+        assert len(calendar_patterns) >= 1
+        assert calendar_patterns[0]["contract"] == "BehavioralPatternV1"
+
+    def test_prediction_to_dict_exposes_canonical_contract(self):
+        """Predictions should expose source signals and policy-gate requirement."""
+        engine = PredictiveAutomationEngine()
+        pattern = BehavioralPattern(
+            pattern_id="pattern_slice14",
+            pattern_type=PatternType.CALENDAR_BASED,
+            zone_id="zone_test",
+            module_id="licht_test",
+            entity_id="light.test",
+            trigger_conditions={"calendar_summary": "Office commute"},
+            typical_action={"domain": "light", "service": "turn_on", "entity_id": "light.test"},
+            occurrence_count=6,
+            confidence=PredictionConfidence.HIGH,
+        )
+        engine._patterns[pattern.pattern_id] = pattern
+
+        predictions = engine.generate_predictions({"calendar_summary": "Office commute"})
+        assert predictions
+        payload = predictions[0].to_dict()
+        assert payload["contract"] == "PredictiveProposalV1"
+        assert payload["policy_gate_required"] is True
+        assert "calendar" in payload["source_signals"]
+
+    def test_get_stats_counts_resolution_state(self):
+        """Aggregate stats should expose proposal resolution state."""
+        engine = PredictiveAutomationEngine()
+        proposal = PredictiveProposal(
+            proposal_id="pred_stats",
+            pattern_id="pattern_stats",
+            zone_id="zone_test",
+            module_id="licht_test",
+            description="Stats proposal",
+            predicted_action={"domain": "light", "service": "turn_on"},
+            confidence=PredictionConfidence.MEDIUM,
+            confidence_score=0.6,
+            reasoning="Stats reasoning",
+            expires_at="2026-04-01T00:00:00Z",
+        )
+        engine._proposals[proposal.proposal_id] = proposal
+        engine.reject_prediction("pred_stats", feedback="not_now")
+
+        stats = engine.get_stats()
+        assert stats["proposals_total"] == 1
+        assert stats["proposals_rejected"] == 1
+        assert stats["proposals_unresolved"] == 0
