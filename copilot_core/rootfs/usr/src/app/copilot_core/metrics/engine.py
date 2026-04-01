@@ -102,6 +102,8 @@ class AlertThreshold:
 class MetricsEngine:
     """System metrics collection engine."""
     
+    _TIME_RANGE_EDGE_GRACE = timedelta(seconds=1)
+    
     def __init__(self, retention_hours: int = 24, max_points_per_metric: int = 10000):
         self._metrics: Dict[str, Metric] = {}
         self._thresholds: Dict[str, AlertThreshold] = {}
@@ -111,6 +113,14 @@ class MetricsEngine:
         
         # Callbacks for alert notifications
         self._alert_callbacks: List[Callable] = []
+
+    @staticmethod
+    def _parse_iso_timestamp(value: str) -> datetime:
+        """Parse ISO timestamps with stable UTC handling."""
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            return parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc)
     
     def register_metric(self, name: str, description: str,
                        metric_type: str, unit: str = "",
@@ -376,12 +386,15 @@ class MetricsEngine:
         
         # Filter by time range
         if start_time:
-            start = datetime.fromisoformat(start_time)
-            points = [p for p in points if datetime.fromisoformat(p.timestamp) >= start]
+            start = self._parse_iso_timestamp(start_time)
+            points = [p for p in points if self._parse_iso_timestamp(p.timestamp) >= start]
         
         if end_time:
-            end = datetime.fromisoformat(end_time)
-            points = [p for p in points if datetime.fromisoformat(p.timestamp) <= end]
+            end = self._parse_iso_timestamp(end_time)
+            now = datetime.now(timezone.utc)
+            if now >= end and (now - end) <= self._TIME_RANGE_EDGE_GRACE:
+                end = now
+            points = [p for p in points if self._parse_iso_timestamp(p.timestamp) <= end]
         
         # Sort by timestamp and limit
         points.sort(key=lambda p: p.timestamp, reverse=True)
@@ -443,23 +456,25 @@ class MetricsEngine:
             
             # Value lines
             if metric.points:
-                latest = metric.points[-1]
-                labels_str = ""
-                if latest.labels:
-                    labels = ",".join(f'{k}="{v}"' for k, v in latest.labels.items())
-                    labels_str = f"{{{labels}}}"
+                series_points: Dict[tuple[tuple[str, str], ...], List[MetricPoint]] = {}
+                for point in metric.points:
+                    series_key = tuple(sorted(point.labels.items()))
+                    series_points.setdefault(series_key, []).append(point)
                 
-                if metric.metric_type == MetricType.HISTOGRAM:
-                    # Export histogram buckets
-                    for bucket, count in sorted(metric.bucket_counts.items()):
-                        lines.append(f"{metric.name}_bucket{{le=\"{bucket}\"{labels_str}}} {count}")
-                    lines.append(f"{metric.name}_count{labels_str} {len(metric.points)}")
+                for series_key, series in series_points.items():
+                    latest = series[-1]
+                    labels_parts = [f'{k}="{v}"' for k, v in series_key]
+                    labels_str = f"{{{','.join(labels_parts)}}}" if labels_parts else ""
                     
-                    # Calculate sum
-                    total = sum(p.value for p in metric.points)
-                    lines.append(f"{metric.name}_sum{labels_str} {total}")
-                else:
-                    lines.append(f"{metric.name}{labels_str} {latest.value}")
+                    if metric.metric_type == MetricType.HISTOGRAM:
+                        for bucket in sorted(metric.buckets):
+                            count = sum(1 for point in series if point.value <= bucket)
+                            bucket_labels = [f'le="{bucket}"', *labels_parts]
+                            lines.append(f"{metric.name}_bucket{{{','.join(bucket_labels)}}} {count}")
+                        lines.append(f"{metric.name}_count{labels_str} {len(series)}")
+                        lines.append(f"{metric.name}_sum{labels_str} {sum(point.value for point in series)}")
+                    else:
+                        lines.append(f"{metric.name}{labels_str} {latest.value}")
             
             lines.append("")
         

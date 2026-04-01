@@ -1,5 +1,14 @@
 # Changelog
 
+## [v15.3.14] - 2026-04-01
+
+### 🧩 Slice 97 — Metrics History Edge Repair
+
+- `metrics.engine.get_metric_history()` parst ISO-/`Z`-Zeitstempel jetzt robust in UTC und toleriert am oberen Zeitrand einen kleinen Fresh-Write-Skew, damit unmittelbar vor dem Query gesetzte Punkte nicht leer herausfallen.
+- `metrics.engine.export_prometheus()` exportiert Non-Histogram-Series jetzt pro Label-Set statt nur den global letzten Punkt; Histogramm-Serien werden labelbezogen aus den Serienpunkten materialisiert.
+- Versionsartefakte (`VERSION`, `copilot_core/VERSION`, `config.yaml`, `manifest.json`, Add-on-Config, Runtime-VERSION) auf `15.3.14` harmonisiert.
+- Validiert mit: `pytest -q tests/test_metrics_engine.py` → `67 passed`.
+
 ## [v15.3.13] - 2026-04-01
 
 ### 🧩 Slice 96 — Circadian, Logging, and Metrics Contract Repair
