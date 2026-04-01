@@ -647,9 +647,10 @@ Coordinate actions across multiple zones (scenes, routines, events).
 13. **✅ Slice 101 — Energy Reserve Recovery Contract Repair** — Batterie-Reserveboden ist wieder echt geschützt; Low-Battery-Zonen laden auch während Peak-Hours deterministisch nach und dokumentieren den Schutzpfad mit `reserve_recovery`
 14. **✅ Slice 102 — Zone Comfort Scoring Contract Repair** — Zone-Comfort-Scores, Bedroom-Profil und Trend-Baseline wieder contract-konform; gesamtes Komfortmodul (`98/98`) grün
 15. **✅ Slice 103 — Zone Truth API Store Contract Repair** — Zone-Truth-API, Delta-Responses und Sync-Flows nutzen wieder dieselbe kanonische Store-Instanz; Contract-Surface (`74/74`) grün
+16. **✅ Slice 104 — Zone Truth Revision Contract Repair** — Zone- und Entity-Revisionen folgen wieder deterministisch der globalen Topology-History; Root-Contract-Surface vollständig grün (`4369 passed, 4 skipped`)
 
-**Next Exact Refinement Task:** `tests/test_zone_truth_store.py::TestZoneTruthStore::test_create_zone` isoliert schließen; `ZoneTruthStore.create_zone()` setzt aktuell `zone.revision=0`, der Contract erwartet nach der ersten Revision `1`
+**Next Exact Task:** Refinement ist sauber abgeschlossen; Forward-Entwicklung kann wieder mit **Slice 12 — Anomaly Detection + Alerting** starten
 
-**After Refinement:** Slice 12+ nur entlang der dann verbleibenden ersten echten Root-Restfehler weiterziehen; keine neuen Feature-Slices vor sauberem Restfehler-Abtrag
+**After Refinement:** Root-Contract-Surface ist grün; Slice 12+ wieder als reguläre Forward-Slices aufnehmen
 
 **Core is now stable enough for HA/HACS lane reactivation.**

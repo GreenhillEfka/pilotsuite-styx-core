@@ -413,16 +413,16 @@ class ZoneTruthStore:
             source=source,
             ha_area_id=ha_area_id,
         )
-        zone.touch(self._revision_counter)
-        
+
         self._zones[zone_id] = zone
-        self._record_revision(
+        revision = self._record_revision(
             zone_id=zone_id,
             change_type="created",
             change_summary=f"Created zone '{name}' ({zone_type})",
             source=source,
             metadata={"name": name, "zone_type": zone_type},
         )
+        zone.touch(revision.revision)
         self._save()
         return zone
 
@@ -474,20 +474,19 @@ class ZoneTruthStore:
         
         if source != zone.source:
             zone.source = source
-        
-        zone.touch(self._revision_counter)
-        
+
         if ha_context:
             zone.ha_context = ha_context
             zone.synced_at = _now_iso()
-        
-        self._record_revision(
+
+        revision = self._record_revision(
             zone_id=zone_id,
             change_type="updated",
             change_summary=f"Updated zone '{zone.name}'",
             source=source,
             metadata={"changes": changes},
         )
+        zone.touch(revision.revision)
         self._save()
         return zone
 
@@ -521,7 +520,6 @@ class ZoneTruthStore:
         if zone is None:
             raise ValueError(f"Zone '{zone_id}' not found")
         
-        self._revision_counter += 1
         assignment = zone.add_entity(
             entity_id=entity_id,
             role=role,
@@ -529,15 +527,15 @@ class ZoneTruthStore:
             display_name=display_name,
             source=source,
         )
-        zone.touch(self._revision_counter)
-        
-        self._record_revision(
+
+        revision = self._record_revision(
             zone_id=zone_id,
             change_type="entity_added",
             change_summary=f"Added entity '{entity_id}' to zone '{zone.name}'",
             source=source,
             metadata={"entity_id": entity_id, "role": role},
         )
+        zone.touch(revision.revision)
         self._save()
         return assignment
 
@@ -549,13 +547,14 @@ class ZoneTruthStore:
         
         removed = zone.remove_entity(entity_id)
         if removed:
-            self._record_revision(
+            revision = self._record_revision(
                 zone_id=zone_id,
                 change_type="entity_removed",
                 change_summary=f"Removed entity '{entity_id}' from zone '{zone.name}'",
                 source=source,
                 metadata={"entity_id": entity_id},
             )
+            zone.touch(revision.revision)
             self._save()
         return removed
 

@@ -1,5 +1,15 @@
 # Changelog
 
+## [v15.3.21] - 2026-04-01
+
+### 🧩 Slice 104 — Zone Truth Revision Contract Repair
+
+- `ZoneTruthStore` koppelt Zonen- und Entity-Revisionen jetzt an die tatsächlich aufgezeichnete globale Topology-Revision, statt vor dem History-Record alte Zählerstände in die Zone zu schreiben.
+- `create_zone()`, `update_zone()`, `add_entity()` und `remove_entity()` liefern damit wieder contract-konforme Revisionsnummern; der lokale Zone-State und die globale Revision-History bleiben synchron.
+- Ergebnis: Der verbleibende Root-Restfehler in `tests/test_zone_truth_store.py::TestZoneTruthStore::test_create_zone` ist geschlossen, und der komplette Root-Sweep ist wieder grün.
+- Versionsartefakte (`VERSION`, `copilot_core/VERSION`, `config.yaml`, `manifest.json`, Add-on-Config, Runtime-VERSION) auf `15.3.21` harmonisiert.
+- Validiert mit: `pytest -q tests/test_zone_truth_store.py tests/test_zone_truth_api_contract.py` → `35 passed`; `pytest -x -q` → `4369 passed, 4 skipped`.
+
 ## [v15.3.20] - 2026-04-01
 
 ### 🧩 Slice 103 — Zone Truth API Store Contract Repair
