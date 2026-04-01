@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional, Set, Tuple, Callable
 from enum import Enum
+import threading
 import uuid
 import statistics
 
@@ -67,6 +68,7 @@ class AdvancedSensorConfig:
     weight: float = 1.0  # Fusion weight
     min_trigger_time_seconds: int = 0  # Debounce
     min_clear_time_seconds: int = 0  # Debounce off
+    pet_friendly: bool = False
     ignore_motion_below: Optional[float] = None  # For pet filtering
     max_confidence_decay: float = 0.1  # Per minute when inactive
     battery_monitored: bool = False
@@ -86,6 +88,7 @@ class AdvancedSensorConfig:
             "weight": self.weight,
             "min_trigger_time_seconds": self.min_trigger_time_seconds,
             "min_clear_time_seconds": self.min_clear_time_seconds,
+            "pet_friendly": self.pet_friendly,
             "ignore_motion_below": self.ignore_motion_below,
             "max_confidence_decay": self.max_confidence_decay,
             "battery_monitored": self.battery_monitored,
@@ -218,6 +221,7 @@ class PresenceModuleExtended:
     """
     
     def __init__(self):
+        self._thread_lock = threading.RLock()
         self._sensors: Dict[str, AdvancedSensorConfig] = {}
         self._zone_sensors: Dict[str, List[str]] = {}
         self._profiles: Dict[str, PresenceProfile] = {}
@@ -567,7 +571,17 @@ class PresenceModuleExtended:
         # Anomaly detection
         if profile and current_hour in profile.typical_absence_hours and occupancy_rate > 0.7:
             return PresencePattern.ANOMALY
-        
+
+        # High sustained occupancy should still resolve to a useful pattern even
+        # without an explicit profile or on weekdays, so trend consumers don't
+        # receive a surprising `None` for obviously occupied zones.
+        if occupancy_rate > 0.8:
+            if current_hour < 12:
+                return PresencePattern.TYPICAL_MORNING
+            if current_hour < 17:
+                return PresencePattern.TYPICAL_DAY
+            return PresencePattern.TYPICAL_EVENING
+
         return None
     
     def get_multi_person_state(self, zone_id: str) -> Optional[MultiPersonState]:
@@ -621,8 +635,7 @@ class PresenceModuleExtended:
     
     def _lock(self):
         """Simple context manager for thread safety."""
-        import threading
-        return threading.Lock()
+        return self._thread_lock
 
 
 def create_presence_module_extended() -> PresenceModuleExtended:

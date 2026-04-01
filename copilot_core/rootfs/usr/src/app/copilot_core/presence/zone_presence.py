@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional, Set, Tuple
 from enum import Enum
+import threading
 import uuid
 
 logger = logging.getLogger(__name__)
@@ -175,6 +176,7 @@ class PresenceModule:
     """
     
     def __init__(self):
+        self._thread_lock = threading.RLock()
         self._sensors: Dict[str, PresenceSensor] = {}
         self._zone_sensors: Dict[str, List[str]] = {}  # zone_id -> sensor_ids
         self._zone_configs: Dict[str, PresenceConfig] = {}
@@ -328,7 +330,13 @@ class PresenceModule:
         zone_state = self._zone_states.get(zone_id)
         
         if not zone_state:
-            zone_state = ZonePresenceState(zone_id=zone_id, state=new_state, confidence=confidence)
+            zone_state = ZonePresenceState(
+                zone_id=zone_id,
+                state=new_state,
+                confidence=confidence,
+                active_sensors=[],
+                inactive_sensors=[],
+            )
             self._zone_states[zone_id] = zone_state
         
         zone_state.state = new_state
@@ -344,6 +352,8 @@ class PresenceModule:
             zone_state.absent_since = None
         elif new_state in (PresenceState.ABSENT, PresenceState.EXTENDED_ABSENT):
             if previous_state not in (PresenceState.ABSENT, PresenceState.EXTENDED_ABSENT):
+                zone_state.absent_since = now.isoformat()
+            elif not zone_state.absent_since:
                 zone_state.absent_since = now.isoformat()
             zone_state.present_since = None
         
@@ -370,15 +380,6 @@ class PresenceModule:
             if absent_duration >= config.extended_absence_threshold_seconds:
                 return PresenceState.EXTENDED_ABSENT
         
-        # Check require_multiple_sensors
-        if config.require_multiple_sensors:
-            if len(active_sensors) < 2:
-                return PresenceState.ABSENT
-        
-        # Check confidence threshold
-        if confidence < config.min_confidence_threshold:
-            return PresenceState.ABSENT
-        
         # Check on-delay
         if active_sensors and config.on_delay_seconds > 0:
             # Check if any sensor has been active for on_delay
@@ -403,6 +404,17 @@ class PresenceModule:
             
             if not all_inactive_long_enough:
                 return PresenceState.UNCERTAIN
+
+        # Check require_multiple_sensors only when presence is otherwise active.
+        if active_sensors and config.require_multiple_sensors and len(active_sensors) < 2:
+            return PresenceState.ABSENT
+
+        # Confidence threshold only applies to active detections. When a zone
+        # has no active sensors, off-delay / extended-absence semantics must be
+        # able to yield UNCERTAIN or EXTENDED_ABSENT instead of short-circuiting
+        # to ABSENT due to 0.0 confidence.
+        if active_sensors and confidence < config.min_confidence_threshold:
+            return PresenceState.ABSENT
         
         # Normal presence detection
         if active_sensors:
@@ -638,8 +650,7 @@ class PresenceModule:
     
     def _lock(self):
         """Simple context manager for thread safety."""
-        import threading
-        return threading.Lock()
+        return self._thread_lock
 
 
 def create_presence_module() -> PresenceModule:

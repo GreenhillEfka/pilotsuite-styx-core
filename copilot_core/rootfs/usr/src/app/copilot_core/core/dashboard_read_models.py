@@ -59,11 +59,24 @@ class ReadModelMeta:
         }
 
 
+class _ReadModelCompatMixin:
+    """Small dict-like compatibility layer for read models."""
+
+    def get(self, key: str, default: Any = None) -> Any:
+        return self.to_dict().get(key, default)
+
+    def copy(self) -> Dict[str, Any]:
+        return self.to_dict().copy()
+
+    def __getitem__(self, key: str) -> Any:
+        return self.to_dict()[key]
+
+
 # ── ZoneSummaryReadModel ─────────────────────────────────────────────────────
 
 
 @dataclass
-class ZoneSummaryReadModel:
+class ZoneSummaryReadModel(_ReadModelCompatMixin):
     """
     Leichtgewichtige Zone-Übersicht für das Dashboard.
 
@@ -102,7 +115,8 @@ class ZoneSummaryReadModel:
         if engine is not None:
             try:
                 overview = engine.get_overview()
-                for z in overview.zones:
+                overview_zones = overview.zones
+                for z in overview_zones:
                     zone_type = z.get("zone_type", "unknown")
                     zones.append({
                         "zone_id": z.get("zone_id", ""),
@@ -122,6 +136,31 @@ class ZoneSummaryReadModel:
                 total_zones = overview.total_zones
             except Exception as e:
                 _LOGGER.warning("HabitusZoneEngine.get_overview failed: %s", e)
+                overview_zones = []
+                if hasattr(engine, "get_all_zones"):
+                    try:
+                        overview_zones = list(engine.get_all_zones() or [])
+                    except Exception as inner_exc:
+                        _LOGGER.warning("HabitusZoneEngine.get_all_zones failed: %s", inner_exc)
+
+                for z in overview_zones:
+                    zone_type = z.get("zone_type", "unknown")
+                    entity_ids = z.get("entities", []) or z.get("entity_ids", []) or []
+                    entity_count = z.get("entity_count", len(entity_ids))
+                    zones.append({
+                        "zone_id": z.get("zone_id", ""),
+                        "name": z.get("name", ""),
+                        "zone_type": zone_type,
+                        "icon": z.get("icon", ""),
+                        "mode": z.get("mode", "idle"),
+                        "enabled": z.get("enabled", True),
+                        "room_count": z.get("room_count", 0),
+                        "entity_count": entity_count,
+                        "priority": z.get("priority", 0),
+                        "entity_ids": entity_ids,
+                    })
+                    zone_types[zone_type] = zone_types.get(zone_type, 0) + 1
+
                 total_zones = len(zones)
                 active_zones = sum(1 for z in zones if z.get("enabled", True))
                 total_entities = sum(z.get("entity_count", 0) for z in zones)
@@ -166,7 +205,7 @@ class ZoneSummaryReadModel:
 
 
 @dataclass
-class ZoneDetailReadModel:
+class ZoneDetailReadModel(_ReadModelCompatMixin):
     """
     Detaillierte Zone-Daten.
 
@@ -191,6 +230,18 @@ class ZoneDetailReadModel:
     state: Dict[str, Any] = field(default_factory=dict)   # ZoneState aus Engine
     mood: Dict[str, Any] = field(default_factory=dict)     # Mood-Daten
     modules: Dict[str, Any] = field(default_factory=dict)  # Modul-Daten
+
+    @property
+    def zone_name(self) -> str:
+        return self.name
+
+    @property
+    def module_states(self) -> Dict[str, Any]:
+        return self.modules
+
+    @property
+    def freshness(self) -> str:
+        return self.meta.freshness
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -320,7 +371,7 @@ class ZoneDetailReadModel:
 
 
 @dataclass
-class ModuleReadModel:
+class ModuleReadModel(_ReadModelCompatMixin):
     """
     Modul-Zustände aus ModuleRegistry.
 
@@ -351,6 +402,18 @@ class ModuleReadModel:
         "cover": {"name_de": "Rollläden", "icon": "mdi:window-shutter", "category": "habitat"},
         "sicherheit": {"name_de": "Sicherheit", "icon": "mdi:shield", "category": "habitat"},
     })
+
+    @property
+    def module_count(self) -> int:
+        return len(self.modules)
+
+    @property
+    def modules_by_type(self) -> Dict[str, int]:
+        counts: Dict[str, int] = {}
+        for module_id in self.modules:
+            module_type = str(module_id).split(".", 1)[0].split("_", 1)[0]
+            counts[module_type] = counts.get(module_type, 0) + 1
+        return counts
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -414,7 +477,7 @@ class ModuleReadModel:
 
 
 @dataclass
-class SystemOverviewReadModel:
+class SystemOverviewReadModel(_ReadModelCompatMixin):
     """
     Globale System-Übersicht.
 
@@ -433,6 +496,22 @@ class SystemOverviewReadModel:
     persons_home: int = 0
     sun_phase: str = ""
     uptime_seconds: float = 0.0
+
+    @property
+    def total_zones(self) -> int:
+        return self.zones.total_zones
+
+    @property
+    def total_modules(self) -> int:
+        return self.modules.module_count
+
+    @property
+    def system_health(self) -> str:
+        return "ok"
+
+    @property
+    def last_updated(self) -> str:
+        return self.meta.generated_at
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -550,12 +629,11 @@ def build_zone_summary_read_model(
     zone_engine: Any,
     *,
     example_data: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
+) -> ZoneSummaryReadModel:
     """API-freundlicher Wrapper für ZoneSummaryReadModel."""
-    model = ZoneSummaryReadModel.from_habitus_zones(
+    return ZoneSummaryReadModel.from_habitus_zones(
         zone_engine, example_data=example_data
     )
-    return model.to_dict()
 
 
 def build_zone_detail_read_model(
@@ -564,7 +642,7 @@ def build_zone_detail_read_model(
     *,
     zone_automation: Any = None,
     example_data: Optional[Dict[str, Any]] = None,
-) -> Optional[Dict[str, Any]]:
+) -> Optional[ZoneDetailReadModel]:
     """API-freundlicher Wrapper für ZoneDetailReadModel."""
     # Versuche zone_id aus example_data zu finden
     example_zone = None
@@ -594,19 +672,18 @@ def build_zone_detail_read_model(
         example_data=example_data,
         example_zone=example_zone,
     )
-    return model.to_dict() if model else None
+    return model
 
 
 def build_module_read_model(
     module_registry: Any,
     *,
     all_zone_states: Optional[Dict[str, Dict[str, str]]] = None,
-) -> Dict[str, Any]:
+) -> ModuleReadModel:
     """API-freundlicher Wrapper für ModuleReadModel."""
-    model = ModuleReadModel.from_module_registry(
+    return ModuleReadModel.from_module_registry(
         module_registry, all_zone_states=all_zone_states
     )
-    return model.to_dict()
 
 
 def build_system_overview_read_model(
@@ -620,9 +697,9 @@ def build_system_overview_read_model(
     persons_home: int = 0,
     sun_phase: str = "",
     example_data: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
+) -> SystemOverviewReadModel:
     """API-freundlicher Wrapper für SystemOverviewReadModel."""
-    model = SystemOverviewReadModel.build(
+    return SystemOverviewReadModel.build(
         zone_engine=zone_engine,
         module_registry=module_registry,
         zone_automation=zone_automation,
@@ -633,7 +710,6 @@ def build_system_overview_read_model(
         sun_phase=sun_phase,
         example_data=example_data,
     )
-    return model.to_dict()
 
 
 __all__ = [

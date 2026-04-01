@@ -1,5 +1,17 @@
 # Changelog
 
+## [v15.3.2] - 2026-04-01
+
+### 🧩 Slice 85 — Contract Compatibility Hardening
+
+- `presence/zone_presence.py`: Off-Delay und `extended_absent` wieder korrekt an Timer-/Abwesenheitssemantik gekoppelt; dazu Thread-Lock auf persistente Instanz gehärtet.
+- `presence/presence_extended.py`: `AdvancedSensorConfig.pet_friendly` ergänzt und Trend-Erkennung für stark belegte Zonen mit stabilem Fallback versehen.
+- `automations/suggestion_engine.py`: `SuggestionActionIntent` wieder Slice-7-kompatibel gemacht (`suggestion_id`, `action_type`, `domain`, `service`, `entity_ids`, `evidence`, `explanation`, `policy_decision`) ohne die neuere Proposal-/Intent-Wiring zu brechen.
+- `core/dashboard_read_models.py`: Read-Models wieder objekt-kompatibel für Contract-Tests und API-Aufrufer (`get()`/`copy()`), inklusive Alias-Felder und `get_all_zones()`-Fallback für truth-backed Dashboard-Building.
+- Neuer Import-Kompatibilitätspfad `copilot_core.modules.module_registry` für Slice-3-Contracts ergänzt.
+- Versionsartefakte (`VERSION`, `copilot_core/VERSION`, `config.yaml`, `manifest.json`, Add-on-Config, Runtime-VERSION) auf `15.3.2` harmonisiert.
+- Validiert mit: `PYTHONPATH=copilot_core/rootfs/usr/src/app /home/linuxbrew/.linuxbrew/bin/pytest tests/test_zone_presence.py tests/test_presence_extended.py tests/test_edge_cases_refinement.py tests/test_core_contract_slice11.py -q` → `192 passed`.
+
 ## [v15.3.1] - 2026-04-01
 
 ### 🛠 Runtime Wiring Repair

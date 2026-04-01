@@ -60,16 +60,50 @@ class SuggestionProposal:
 
 @dataclass
 class SuggestionActionIntent:
-    """Action intent representing the executable form of a proposal."""
+    """Action intent representing the executable form of a proposal.
+
+    This model intentionally carries both the original Slice-7 contract fields
+    (`suggestion_id`, `action_type`, `domain`, `service`, `entity_ids`,
+    `evidence`, `explanation`, `policy_decision`) and the later internal
+    proposal/intents representation (`proposal_id`, `action`, `params`). That
+    keeps older contract tests and newer engine code compatible.
+    """
 
     intent_id: str
-    proposal_id: str
-    action: str
+    suggestion_id: str = ""
+    action_type: str = ""
+    domain: str = ""
+    service: str = ""
+    entity_ids: list[str] = field(default_factory=list)
+    evidence: list[str] = field(default_factory=list)
+    explanation: str = ""
+    policy_decision: str = ""
+    proposal_id: str = ""
+    action: str = ""
     params: dict[str, Any] = field(default_factory=dict)
     status: str = "pending"  # pending / ready / executed / failed
     created_at: str = field(default_factory=_now_iso)
     executed_at: str | None = None
     result: dict[str, Any] | None = None
+
+    def __post_init__(self) -> None:
+        if not self.action and self.action_type:
+            self.action = self.action_type
+        if not self.action_type and self.action:
+            self.action_type = self.action
+
+        action_config = self.params.get("action_config") if isinstance(self.params, dict) else None
+        if isinstance(action_config, dict):
+            self.domain = self.domain or str(action_config.get("domain", ""))
+            self.service = self.service or str(action_config.get("service", ""))
+            if not self.entity_ids:
+                entity_ids = action_config.get("entity_ids") or action_config.get("entity_id") or []
+                if isinstance(entity_ids, str):
+                    entity_ids = [entity_ids]
+                self.entity_ids = list(entity_ids)
+
+        if not self.explanation and isinstance(self.params, dict):
+            self.explanation = str(self.params.get("explanation", "") or "")
 
 
 class AutomationSuggestionEngine:
@@ -527,6 +561,9 @@ class AutomationSuggestionEngine:
         }
         intent = SuggestionActionIntent(
             intent_id=intent_id,
+            suggestion_id=proposal.suggestion_id,
+            action_type=proposal.action_type,
+            explanation=proposal.explanation,
             proposal_id=proposal_id,
             action="create_automation",
             params=params,
@@ -618,6 +655,14 @@ class AutomationSuggestionEngine:
     def _intent_to_dict(i: SuggestionActionIntent) -> dict[str, Any]:
         return {
             "intent_id": i.intent_id,
+            "suggestion_id": i.suggestion_id,
+            "action_type": i.action_type,
+            "domain": i.domain,
+            "service": i.service,
+            "entity_ids": list(i.entity_ids),
+            "evidence": list(i.evidence),
+            "explanation": i.explanation,
+            "policy_decision": i.policy_decision,
             "proposal_id": i.proposal_id,
             "action": i.action,
             "params": dict(i.params),
