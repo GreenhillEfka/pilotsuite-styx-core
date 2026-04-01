@@ -673,7 +673,29 @@ Handoffs, Scheduler-Runtime und echte Zone-/Module-Targets auf der Multi-Zone-Su
 **Tag:** v15.3.26
 **Tests:** `pytest -q tests/test_multizone_coordination.py tests/test_multizone_blueprint_contract.py tests/test_multizone_runtime_contract.py` → `22 passed`
 
-**Next Exact Task:** **Slice 16 Candidate**: Voice-Control-/Policy-Gate-Surface als nächste reguläre Forward-Slice definieren und gegen denselben Proposal→Action→Runtime-Vertrag ziehen.
+### ✅ Slice 16 — Voice Control / Policy Gate Surface
+**Status:** ✅ DONE (v15.3.27)
+
+**Goal**
+Voice-Control auf denselben Proposal→Action→Runtime-Vertrag wie Predictive, Habitus und Multi-Zone ziehen.
+
+### Deliverables
+- [x] neue `/api/v1/voice/control/parse`-Surface für `VoiceControlProposalV1`
+- [x] neue `/api/v1/voice/control/confirm`-Surface für `ProposalIntentV1`/`ActionIntentV1`/HA-Handoff
+- [x] Policy-Preview + Modul-/Zone-Auflösung für Voice-Control-Kommandos
+- [x] Payload-Preserve bis in den HA-Adapter für Climate-/Brightness-Kommandos
+- [x] Contract-Tests für Parse/Confirm/`execute_now`
+
+### Acceptance criteria
+- Voice-Control erzeugt keine zweite Entscheidungs- oder Policy-Fläche neben Core.
+- bestätigte Voice-Kommandos laufen durch denselben Policy-Gate-/HA-Adapter-Vertrag wie andere akzeptierte Vorschläge.
+- Runtime-Payloads bleiben für echte Voice-Ausführung erhalten.
+
+**Commit:** `feat(voice): deliver slice 16 policy gate surface`
+**Tag:** v15.3.27
+**Tests:** `pytest -q tests/test_voice_control.py tests/test_voice_policy_contract.py tests/test_habitus_accept_contract.py tests/test_predictive_api_contract.py` → `37 passed`
+
+**Next Exact Task:** **Slice 17 Candidate**: Proposal→Action→Runtime um eine kanonische User-Feedback-/Execution-Closure-Surface ergänzen, damit Voice/Predictive/Multi-Zone nach Ausführung dieselbe Rückmelde- und Lernspur teilen.
 
 **After Refinement:** Root-Contract-Surface ist grün; Slice 13+ wieder als reguläre Forward-Slices aufnehmen
 

@@ -726,11 +726,9 @@ def wrap_accepted_proposal_action(
     service = str(preview.get("service") or "").strip().lower()
     action_type = ".".join(part for part in [domain, service] if part) or "unknown"
     target = dict(preview.get("target") or {})
-    payload = (
-        {"expected_state": preview.get("expected_state")}
-        if preview.get("expected_state") is not None
-        else {}
-    )
+    payload = dict(preview.get("payload") or {})
+    if preview.get("expected_state") is not None and "expected_state" not in payload:
+        payload["expected_state"] = preview.get("expected_state")
 
     approved = _coerce_bool(extra.pop("approved", policy.get("eligible_for_execution")), False)
     needs_explicit = _coerce_bool(

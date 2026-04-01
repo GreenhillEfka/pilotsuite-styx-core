@@ -1,5 +1,16 @@
 # Changelog
 
+## [v15.3.27] - 2026-04-01
+
+### 🧩 Slice 16 — Voice Control / Policy Gate Surface
+
+- `copilot_core.api.v1.voice` materialisiert Voice-Control jetzt in dieselbe kanonische Proposal→Action→HA-Handoff-Surface wie Predictive/Habitus: neue Routen `/api/v1/voice/control/parse` und `/api/v1/voice/control/confirm` liefern `VoiceControlProposalV1`, `ProposalIntentV1`, `ActionIntentV1` und den policy-gated HA-Output aus einer Hand.
+- `copilot_core.voice.control_engine` wird damit nicht mehr nur als isolierter Parser verwendet; erkannte Licht-/Climate-Kommandos werden in belastbare Service-Previews, Modul-Zuordnung, Erklärungen und Policy-Preview überführt.
+- `copilot_core.homeassistant.habitat_adapter.wrap_accepted_proposal_action()` erhält Payload-Preserve-Logik, damit Voice-/Climate-/Brightness-Kommandos ihre echten Runtime-Payloads (`temperature`, `brightness_pct` etc.) bis in den HA-Adapter behalten statt auf reines `expected_state` zu kollabieren.
+- Neue Contract-Tests decken Voice-Parse, Voice-Confirm und `execute_now`-/Payload-Erhalt für Climate-Kommandos ab; damit ist die Voice-Surface jetzt am selben Policy-Gate wie die übrigen Core-Entscheidungsflächen aufgehängt.
+- Versionsartefakte (`VERSION`, `copilot_core/VERSION`, `copilot_core/config.yaml`, `copilot_core/manifest.json`, Runtime-VERSION) auf `15.3.27` harmonisiert.
+- Validiert mit: `pytest -q tests/test_voice_control.py tests/test_voice_policy_contract.py tests/test_habitus_accept_contract.py tests/test_predictive_api_contract.py` → `37 passed`.
+
 ## [v15.3.26] - 2026-04-01
 
 ### 🧩 Slice 15 Follow-up Hardening — Multi-Zone Runtime Handoffs
