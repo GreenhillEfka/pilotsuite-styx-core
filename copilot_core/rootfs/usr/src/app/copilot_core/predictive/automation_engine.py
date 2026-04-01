@@ -17,6 +17,8 @@ from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 from enum import Enum
 
+from copilot_core.action_closure import get_action_closure_store
+
 logger = logging.getLogger(__name__)
 
 
@@ -318,16 +320,26 @@ class PredictiveAutomationEngine:
         """Generate predictive proposals based on patterns and current context."""
         predictions = []
         now = datetime.now(timezone.utc)
-        current_hour = now.hour
-        current_day = now.strftime("%a").lower()
-        
+
         for pattern in self._patterns.values():
             # Check if pattern matches current context
             match_score = self._evaluate_pattern_match(pattern, context)
-            
+            learning_signals = self._closure_learning_summary(pattern)
+            match_score = max(
+                0.0,
+                min(1.0, match_score + float(learning_signals.get("score") or 0.0) * 0.15),
+            )
+
             if match_score >= self._min_confidence_for_proposal:
                 self._proposal_counter += 1
-                
+                source_signals = self._derive_source_signals(pattern, context)
+                if learning_signals["accepted"]:
+                    source_signals.append("closure_history")
+                if learning_signals["executed"]:
+                    source_signals.append("execution_outcomes")
+                if learning_signals["feedback_positive"] or learning_signals["feedback_negative"]:
+                    source_signals.append("feedback_loop")
+
                 # Create predictive proposal
                 proposal = PredictiveProposal(
                     proposal_id=f"pred_{self._proposal_counter}",
@@ -338,10 +350,10 @@ class PredictiveAutomationEngine:
                     predicted_action=pattern.typical_action,
                     confidence=pattern.confidence,
                     confidence_score=match_score,
-                    reasoning=self._generate_reasoning(pattern, context),
+                    reasoning=self._generate_reasoning(pattern, context, learning_signals),
                     expires_at=(now + timedelta(hours=1)).isoformat(),
-                    source_signals=self._derive_source_signals(pattern, context),
-                    evidence=self._build_evidence(pattern, context),
+                    source_signals=source_signals,
+                    evidence=self._build_evidence(pattern, context, learning_signals),
                 )
                 
                 predictions.append(proposal)
@@ -417,7 +429,20 @@ class PredictiveAutomationEngine:
         else:
             return "Based on your behavior patterns, this action is likely needed"
     
-    def _generate_reasoning(self, pattern: BehavioralPattern, context: Optional[Dict[str, Any]]) -> str:
+    def _closure_learning_summary(self, pattern: BehavioralPattern) -> Dict[str, Any]:
+        return get_action_closure_store().get_learning_summary(
+            source="predictive.accepted",
+            zone_id=pattern.zone_id,
+            module_id=pattern.module_id,
+            metadata={"pattern_id": pattern.pattern_id},
+        )
+
+    def _generate_reasoning(
+        self,
+        pattern: BehavioralPattern,
+        context: Optional[Dict[str, Any]],
+        learning_signals: Optional[Dict[str, Any]] = None,
+    ) -> str:
         """Generate reasoning for prediction."""
         reasons = []
         
@@ -437,6 +462,14 @@ class PredictiveAutomationEngine:
         if context and (context.get("calendar_summary") or context.get("calendar_event") or context.get("away_events")):
             reasons.append("Calendar context currently active")
 
+        learning_signals = learning_signals or {}
+        if learning_signals.get("executed"):
+            reasons.append("Past accepted actions executed successfully")
+        if learning_signals.get("feedback_positive"):
+            reasons.append("Positive user feedback reinforced this pattern")
+        if learning_signals.get("problematic") or learning_signals.get("feedback_negative"):
+            reasons.append("Past closure outcomes dampen confidence")
+
         return ". ".join(reasons) if reasons else "Pattern match"
 
     def _derive_source_signals(self, pattern: BehavioralPattern, context: Optional[Dict[str, Any]]) -> List[str]:
@@ -450,7 +483,12 @@ class PredictiveAutomationEngine:
             signals.append("calendar")
         return signals
 
-    def _build_evidence(self, pattern: BehavioralPattern, context: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    def _build_evidence(
+        self,
+        pattern: BehavioralPattern,
+        context: Optional[Dict[str, Any]],
+        learning_signals: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
         """Build lightweight evidence payload for proposals."""
         context = context or {}
         return {
@@ -461,6 +499,7 @@ class PredictiveAutomationEngine:
                 for key in ("presence_detected", "calendar_summary", "calendar_event", "away_events")
                 if key in context and context[key] not in (None, "", [])
             },
+            "learning_signals": dict(learning_signals or {}),
         }
     
     def get_predictions(self, unresolved_only: bool = True) -> List[Dict[str, Any]]:

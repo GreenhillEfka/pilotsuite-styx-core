@@ -74,3 +74,5 @@ def test_accept_zone_proposal_returns_normalized_ha_output(monkeypatch) -> None:
     assert body["ha_output"]["module_command"]["payload"]["expected_state"] == "on"
     assert body["ha_output"]["module_command"]["command_mode"] == "suggest"
     assert body["ha_output"]["module_command"]["metadata"]["decision_source"] == body["policy_gate"]["decision_source"]
+    assert body["action_closure"]["metadata"]["rule_a"] == "light.wohnzimmer:on"
+    assert body["action_closure"]["metadata"]["rule_b"] == "light.wohnzimmer:on"

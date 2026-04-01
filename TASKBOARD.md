@@ -742,7 +742,29 @@ Closure-/Outcome-Summaries als kanonische Read-Model-/Chat-/Dashboard-Surface au
 **Tag:** v15.3.29
 **Tests:** `pytest -q tests/test_action_closure_contract.py tests/test_action_closure_summary_contract.py tests/test_voice_policy_contract.py tests/test_predictive_api_contract.py tests/test_multizone_runtime_contract.py tests/test_habitus_accept_contract.py` → `17 passed`
 
-**Next Exact Task:** **Slice 19 Candidate**: Closure-Signale in Predictive-/Habitus-/Multi-Zone-Lern- und Priorisierungslogik rueckkoppeln, damit accept/reject/execution-outcomes nicht nur erklaert, sondern fuer kuenftige Vorschlagsqualitaet systematisch verwertet werden.
+### ✅ Slice 19 — Closure-Driven Learning Feedback Loop
+**Status:** ✅ DONE (v15.3.30)
+
+**Goal**
+Closure-Signale in Predictive-/Habitus-/Multi-Zone-Lern- und Priorisierungslogik rueckkoppeln, damit accept/reject/execution-outcomes nicht nur erklaert, sondern fuer kuenftige Vorschlagsqualitaet systematisch verwertet werden.
+
+### Deliverables
+- [x] kanonische `ActionClosure`-Lernzusammenfassung mit Feedback-/Execution-Signalwertung und `priority_bias`
+- [x] Predictive-Proposals koppeln Closure-Historie in Confidence, Reasoning, Source-Signals und Evidence zurueck
+- [x] Habitus-Proposals verknuepfen Regelmetadaten (`rule_a`/`rule_b`) mit Closure-Historie fuer Re-Ranking
+- [x] Multi-Zone-Pending-Actions exponieren `learning_signals`, `priority_bias` und `effective_priority`
+- [x] Contract-Tests fuer closure-getriebene Repriorisierung ueber Predictive, Habitus und Multi-Zone
+
+### Acceptance criteria
+- Closure-Historie beeinflusst kuenftige Vorschlagsreihenfolge und nicht nur Reporting.
+- Predictive, Habitus und Multi-Zone lesen dieselbe kanonische Lernspur statt feature-spezifischer Sonderlogik.
+- Konfliktaufloesung und Proposal-Ranking bleiben source-grounded und testbar.
+
+**Commit:** `feat(core): deliver slice 19 closure learning feedback loop`
+**Tag:** v15.3.30
+**Tests:** `pytest -q tests/test_action_closure_contract.py tests/test_action_closure_summary_contract.py tests/test_action_closure_learning_contract.py tests/test_predictive_automation.py tests/test_predictive_api_contract.py tests/test_multizone_coordination.py tests/test_multizone_blueprint_contract.py tests/test_multizone_runtime_contract.py tests/test_habitus_accept_contract.py` → `58 passed`
+
+**Next Exact Task:** Kein weiterer expliziter Forward-Slice ist im Taskboard definiert; naechster Schritt ist die Definition des naechsten Core-Slices aus Roadmap/Vision ohne neue Annahmen.
 
 **After Refinement:** Root-Contract-Surface ist grün; Slice 13+ wieder als reguläre Forward-Slices aufnehmen
 

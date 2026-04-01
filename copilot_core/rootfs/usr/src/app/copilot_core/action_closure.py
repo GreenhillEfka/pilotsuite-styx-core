@@ -24,6 +24,77 @@ def _copy_list(value: list[Any] | tuple[Any, ...] | None = None) -> list[Any]:
     return list(value or [])
 
 
+def _subset_match(actual: Mapping[str, Any] | None, expected: Mapping[str, Any] | None) -> bool:
+    if not expected:
+        return True
+    actual = actual or {}
+    for key, value in expected.items():
+        current = actual.get(key)
+        if isinstance(value, Mapping):
+            if not isinstance(current, Mapping) or not _subset_match(current, value):
+                return False
+            continue
+        if current != value:
+            return False
+    return True
+
+
+def _feedback_signal(value: Any) -> float:
+    text = str(value or "").strip().lower()
+    if not text:
+        return 0.0
+    positive = {
+        "accepted",
+        "confirmed",
+        "good",
+        "great",
+        "helpful",
+        "success",
+        "thumbs_up",
+        "useful",
+        "worked",
+        "worked_well",
+    }
+    negative = {
+        "bad",
+        "cancelled",
+        "failed",
+        "incorrect",
+        "not_now",
+        "problem",
+        "rejected",
+        "snoozed",
+        "thumbs_down",
+        "wrong",
+    }
+    if text in positive:
+        return 1.0
+    if text in negative:
+        return -1.0
+    if any(token in text for token in ("worked", "good", "helpful", "success")):
+        return 1.0
+    if any(token in text for token in ("fail", "wrong", "reject", "not_now", "cancel")):
+        return -1.0
+    return 0.0
+
+
+def _execution_signal(value: Any) -> float:
+    text = str(value or "").strip().lower()
+    if not text:
+        return 0.0
+    positive = {"applied", "completed", "executed", "success", "succeeded"}
+    negative = {"blocked", "cancelled", "error", "failed", "problematic", "timed_out"}
+    if text in positive:
+        return 1.5
+    if text in negative:
+        return -1.5
+    if any(token in text for token in ("execut", "success", "complete", "appl")):
+        return 1.5
+    if any(token in text for token in ("fail", "block", "error", "cancel", "timeout", "problem")):
+        return -1.5
+    return 0.0
+
+
 def _action_ref(action_intent: Mapping[str, Any] | None = None, action_id: str | None = None) -> str | None:
     if action_id:
         return str(action_id).strip() or None
@@ -202,6 +273,82 @@ class ActionClosureStore:
             items = [record for record in items if record.proposal_id == proposal_id]
         items.sort(key=lambda record: (record.accepted_at or "", record.closure_id), reverse=True)
         return [record.to_dict() for record in items]
+
+    def get_learning_summary(
+        self,
+        *,
+        source: str | None = None,
+        zone_id: str | None = None,
+        module_id: str | None = None,
+        state: str | None = None,
+        action_id: str | None = None,
+        proposal_id: str | None = None,
+        subject_type: str | None = None,
+        subject_id: str | None = None,
+        metadata: Mapping[str, Any] | None = None,
+        service_call: Mapping[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        items = [record for record in self._records.values()]
+        if source:
+            items = [record for record in items if record.source == source]
+        if zone_id:
+            items = [record for record in items if record.zone_id == zone_id]
+        if module_id:
+            items = [record for record in items if record.module_id == module_id]
+        if state:
+            items = [record for record in items if record.state == state]
+        if action_id:
+            items = [record for record in items if record.action_id == action_id]
+        if proposal_id:
+            items = [record for record in items if record.proposal_id == proposal_id]
+        if subject_type:
+            items = [record for record in items if record.subject_type == subject_type]
+        if subject_id:
+            items = [record for record in items if record.subject_id == subject_id]
+        if metadata:
+            items = [record for record in items if _subset_match(record.metadata, metadata)]
+        if service_call:
+            items = [record for record in items if _subset_match(record.service_call, service_call)]
+
+        accepted = len(items)
+        feedback_positive = 0
+        feedback_negative = 0
+        executed = 0
+        problematic = 0
+        signal_total = 0.0
+
+        for record in items:
+            signal_total += 0.15
+            for feedback in record.feedback_history:
+                score = _feedback_signal(feedback.get("feedback"))
+                if score > 0:
+                    feedback_positive += 1
+                elif score < 0:
+                    feedback_negative += 1
+                signal_total += score
+
+            if record.execution:
+                score = _execution_signal(record.execution.get("outcome"))
+                if score > 0:
+                    executed += 1
+                elif score < 0:
+                    problematic += 1
+                signal_total += score
+
+        normalized = 0.0
+        if items:
+            normalized = max(-1.0, min(1.0, signal_total / max(len(items), 1)))
+
+        priority_bias = max(-3.0, min(3.0, round(normalized * 3.0, 3)))
+        return {
+            "accepted": accepted,
+            "feedback_positive": feedback_positive,
+            "feedback_negative": feedback_negative,
+            "executed": executed,
+            "problematic": problematic,
+            "score": round(normalized, 3),
+            "priority_bias": priority_bias,
+        }
 
     def record_feedback(
         self,

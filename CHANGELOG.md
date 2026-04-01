@@ -1,5 +1,17 @@
 # Changelog
 
+## [v15.3.30] - 2026-04-01
+
+### 🧩 Slice 19 — Closure-Driven Learning Feedback Loop
+
+- `copilot_core.action_closure` liefert jetzt eine filterbare Lernzusammenfassung (`accepted`, positive/negative Feedback-Signale, Execution-Outcomes, normalisierter `score`, `priority_bias`) aus derselben kanonischen Closure-Historie statt separater Feature-Heuristiken.
+- `copilot_core.predictive.automation_engine` koppelt Closure-Signale in Confidence, Reasoning, Source-Signals und Evidence zurück: erfolgreiche Closures verstärken Pattern-Matches, problematische Outcomes dämpfen sie nachvollziehbar.
+- `copilot_core.habitus_miner.zone_mining` verknüpft Proposal-Regeln mit Closure-Metadaten (`rule_a`, `rule_b`) und priorisiert Regelvorschläge dadurch nach realen Accept/Execution-Ergebnissen statt nur nach Confidence/Score.
+- `copilot_core.multizone.coordination_engine` berechnet für Pending-Actions jetzt `learning_signals`, `priority_bias` und `effective_priority`, sodass Konfliktauflösung dieselbe Closure-Lernspur nutzt wie Predictive und Habitus.
+- `copilot_core.api.v1.habitus` persistiert beim Accept die kanonischen Regel-Keys jetzt belastbar auch ohne separaten Trigger-Fallback; damit bleibt Closure-basiertes Re-Ranking für Habit-Policies konsistent.
+- Versionsartefakte (`VERSION`, `copilot_core/VERSION`, Runtime-VERSION, `copilot_core/config.yaml`, `copilot_core/manifest.json`) auf `15.3.30` harmonisiert.
+- Validiert mit: `pytest -q tests/test_action_closure_contract.py tests/test_action_closure_summary_contract.py tests/test_action_closure_learning_contract.py tests/test_predictive_automation.py tests/test_predictive_api_contract.py tests/test_multizone_coordination.py tests/test_multizone_blueprint_contract.py tests/test_multizone_runtime_contract.py tests/test_habitus_accept_contract.py` → `58 passed`.
+
 ## [v15.3.29] - 2026-04-01
 
 ### 🧩 Slice 18 — Action Closure Summary / Context Surface

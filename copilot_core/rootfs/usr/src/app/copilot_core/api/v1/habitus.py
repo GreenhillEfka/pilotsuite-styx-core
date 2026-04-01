@@ -371,6 +371,18 @@ def accept_zone_proposal():
 
         accepted_at = datetime.now(timezone.utc).isoformat()
         action_preview = _build_service_call_preview(action)
+        trigger = proposal.get("trigger") if isinstance(proposal.get("trigger"), dict) else {}
+        rule_a = str(
+            proposal.get("rule_a")
+            or (trigger.get("entity_id") and f"{trigger.get('entity_id')}:{trigger.get('state')}")
+            or (action.get("entity_id") and f"{action.get('entity_id')}:{action.get('state')}")
+            or ""
+        ).strip() or None
+        rule_b = str(
+            proposal.get("rule_b")
+            or (action.get("entity_id") and f"{action.get('entity_id')}:{action.get('state')}")
+            or ""
+        ).strip() or None
         action_seed = f"{proposal_id}|{zone_id}|{module_id or 'unknown'}"
         action_intent_id = f"action:{hashlib.sha1(action_seed.encode('utf-8')).hexdigest()[:12]}"
 
@@ -431,7 +443,12 @@ def accept_zone_proposal():
             service_call=action_preview,
             policy_gate=policy_gate,
             accepted_at=accepted_at,
-            metadata={"surface": "habitus"},
+            metadata={
+                "surface": "habitus",
+                "rule_a": rule_a,
+                "rule_b": rule_b,
+                "rule_key": f"{rule_a}->{rule_b}" if rule_a and rule_b else None,
+            },
         )
 
         return jsonify({

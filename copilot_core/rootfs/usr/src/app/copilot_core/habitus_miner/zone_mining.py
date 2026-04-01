@@ -20,6 +20,7 @@ from typing import Any, Optional
 
 from .model import NormEvent, Rule, MiningConfig, EventStreamType
 from .mining import mine_ab_rules
+from copilot_core.action_closure import get_action_closure_store
 from copilot_core.homeassistant.habitus_zones import infer_module_id_for_action
 
 _LOGGER = logging.getLogger(__name__)
@@ -511,6 +512,14 @@ class ZoneBasedMiner:
             antecedent = candidate["antecedent"]
             consequent = candidate["consequent"]
             typical_delay_s = self._typical_delay(rule)
+            rule_a = f"{antecedent['entity_id']}:{antecedent['state']}"
+            rule_b = f"{consequent['entity_id']}:{consequent['state']}"
+            learning_signals = get_action_closure_store().get_learning_summary(
+                source="proposal.accepted",
+                zone_id=candidate["zone_id"],
+                metadata={"rule_a": rule_a, "rule_b": rule_b},
+            )
+            priority_bias = round(float(learning_signals.get("score") or 0.0) * 0.1, 3)
 
             action_payload = {
                 **consequent,
@@ -528,6 +537,8 @@ class ZoneBasedMiner:
                 "confidence": candidate["confidence"],
                 "confidence_label": self._confidence_label(candidate["confidence"]),
                 "score": round(rule.score(), 3),
+                "priority_bias": priority_bias,
+                "learning_signals": learning_signals,
                 "requires_confirmation": candidate["requires_confirmation"],
                 "trigger": {
                     **antecedent,
@@ -566,7 +577,13 @@ class ZoneBasedMiner:
             proposal["explanation"] = self.explain_proposal(proposal)
             proposals.append(proposal)
 
-        proposals.sort(key=lambda item: (item["confidence"], item["score"]), reverse=True)
+        proposals.sort(
+            key=lambda item: (
+                item["confidence"] + item.get("priority_bias", 0.0),
+                item["score"] + item.get("priority_bias", 0.0),
+            ),
+            reverse=True,
+        )
         return proposals[:limit]
 
     def explain_suggestion(self, suggestion: dict[str, Any]) -> str:

@@ -114,6 +114,9 @@ class ZoneAction:
     scheduled_job_id: Optional[str] = None
     action_closure_id: Optional[str] = None
     action_closure: Optional[Dict[str, Any]] = None
+    learning_signals: Optional[Dict[str, Any]] = None
+    priority_bias: float = 0.0
+    effective_priority: Optional[float] = None
 
     def normalized_target(self) -> Dict[str, Any]:
         target = dict(self.target)
@@ -179,6 +182,9 @@ class ZoneAction:
             "scheduled_job_id": self.scheduled_job_id,
             "action_closure_id": self.action_closure_id,
             "action_closure": _copy_optional_mapping(self.action_closure),
+            "learning_signals": _copy_optional_mapping(self.learning_signals),
+            "priority_bias": self.priority_bias,
+            "effective_priority": self.effective_priority if self.effective_priority is not None else self.priority,
         }
 
 
@@ -544,12 +550,27 @@ class MultiZoneCoordinationEngine:
         return sorted(
             actions,
             key=lambda action: (
-                action.priority,
+                action.effective_priority if action.effective_priority is not None else action.priority,
                 action.scheduled_at or "",
                 action.action_id,
             ),
             reverse=True,
         )
+
+    def _apply_learning_priority(self, action: ZoneAction) -> None:
+        learning_signals = get_action_closure_store().get_learning_summary(
+            zone_id=action.zone_id,
+            module_id=action.module_id,
+            subject_type=action.subject_type,
+            service_call={
+                "domain": action.domain,
+                "service": action.service,
+                "target": action.normalized_target(),
+            },
+        )
+        action.learning_signals = learning_signals
+        action.priority_bias = float(learning_signals.get("priority_bias") or 0.0)
+        action.effective_priority = round(action.priority + action.priority_bias, 3)
 
     def create_scene(
         self,
@@ -698,7 +719,8 @@ class MultiZoneCoordinationEngine:
             for loser in ranked[1:]:
                 pool.pop(loser.action_id, None)
             conflict.resolved = True
-            conflict.resolution = f"Priority-based: {winner.action_id} (priority {winner.priority}) wins"
+            winner_priority = winner.effective_priority if winner.effective_priority is not None else winner.priority
+            conflict.resolution = f"Priority-based: {winner.action_id} (priority {winner_priority}) wins"
             conflict.resolved_at = _utcnow()
             return True
 
@@ -754,6 +776,7 @@ class MultiZoneCoordinationEngine:
                 action.routine_id = subject_id
             if scheduled_job_id:
                 action.scheduled_job_id = scheduled_job_id
+            self._apply_learning_priority(action)
             action.action_closure = store.upsert(
                 source=action.source or runtime_source,
                 proposal_id=str((action.proposal_intent or {}).get("proposal_id") or "").strip() or None,
