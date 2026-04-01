@@ -637,8 +637,9 @@ Coordinate actions across multiple zones (scenes, routines, events).
 3. **Policy Gate Coverage** — 100% of action intents through policy
 4. **Documentation** — API docs, architecture diagrams, runbooks
 5. **✅ Slice 90 — Runtime/Test Surface Repair** — Package-Bridge, Cache/Queue/SDK/Config-Baseline für Root-Pytest stabilisiert
+6. **✅ Slice 91 — Plugin Engine Contract Recovery** — Legacy-/Current-Plugin-Engine-Verträge, Hooks, Discovery und Dependency-/Version-Checks wieder vereinheitlicht
 
-**Next Exact Refinement Task:** Plugin Engine Contract Recovery
+**Next Exact Refinement Task:** Full Contract Bundle Rerun + Residual Triage
 
 **After Refinement:** Start Slice 12+ (Anomaly, Energy, Predictive, Multi-Zone)
 

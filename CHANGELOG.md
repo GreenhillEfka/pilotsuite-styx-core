@@ -1,5 +1,15 @@
 # Changelog
 
+## [v15.3.8] - 2026-04-01
+
+### 🧩 Slice 91 — Plugin Engine Contract Recovery
+
+- `copilot_core.plugins.engine` auf Legacy-/Current-Contract-Parität gehärtet: `plugins_dir` und `plugin_dirs`, `manifest.json` und `plugin.json`, `core_version`-Factory-Override sowie int-kompatibles Discovery-Result werden jetzt parallel unterstützt.
+- Plugin-Lifecycle wieder slice-übergreifend konsistent: Versionskompatibilität, Dependency-Checks, Hook-Registrierung/-Unregistrierung, Config-Updates und Summary-/Statistics-APIs decken jetzt beide historischen Testflächen ab.
+- Legacy-Status/Hooks (`ACTIVE`, `ON_EVENT_RECEIVED`, `ON_ZONE_CREATED`, `ON_HEALTH_CHECK`) bleiben intern kompatibel, während die neuere API-Fläche weiter normalisiert `enabled`/Hook-Listen ausliefert.
+- Versionsartefakte (`VERSION`, `copilot_core/VERSION`, `config.yaml`, `manifest.json`, Add-on-Config, Runtime-VERSION) auf `15.3.8` harmonisiert.
+- Validiert mit: `pytest -q tests/test_plugin_engine.py tests/test_plugins_engine.py` → `84 passed`.
+
 ## [v15.3.7] - 2026-04-01
 
 ### 🧩 Slice 90 — Runtime Surface Repair
