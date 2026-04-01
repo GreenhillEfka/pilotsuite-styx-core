@@ -1,5 +1,13 @@
 # Changelog
 
+## [v15.3.1] - 2026-04-01
+
+### 🛠 Runtime Wiring Repair
+
+- `copilot_core/rootfs/usr/src/app/copilot_core/core_setup.py` repariert: optionale UI-Blueprints werden jetzt sauber und fehlertolerant geladen statt den Startup durch einen Syntax-/Import-Fehler zu brechen.
+- Neue Contract-Absicherung für fehlende optionale UI-Module: Core-Startup bleibt stabil, auch wenn Backend-/Viz-Blueprints in einem Runtime-Paket nicht vorhanden sind.
+- Versionsartefakte (`VERSION`, `copilot_core/VERSION`, `config.yaml`, `manifest.json`, Add-on-Config, Runtime-VERSION) auf `15.3.1` harmonisiert.
+
 ## [v15.3.0] - 2026-04-01
 
 ### 🎯 Life-Long-Learning System

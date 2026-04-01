@@ -2034,22 +2034,33 @@ def register_blueprints(app: Flask, services: dict) -> None:
     try:
         from copilot_core.mcp_server import mcp_bp
         app.register_blueprint(mcp_bp)
-from copilot_core.api.v1.backend_ui import backend_ui_bp
-from copilot_core.api.v1.neurons_ui import neurons_ui_bp
-from copilot_core.api.v1.rag_ui import rag_ui_bp
-from copilot_core.api.v1.habitus import habitus_bp
-from copilot_core.api.v1.chat import chat_bp
-from copilot_core.api.v1.learning_viz import learning_viz_bp
-from copilot_core.api.v1.media_ui import media_ui_bp
-app.register_blueprint(backend_ui_bp)  # 10-tab Backend UI
-app.register_blueprint(neurons_ui_bp)  # Neuron Visualisierung
-app.register_blueprint(rag_ui_bp)  # RAG Visualisierung
-app.register_blueprint(habitus_bp)  # Habitus Life-Long-Learning
-app.register_blueprint(chat_bp)  # Chat API (externer Zugang)
-app.register_blueprint(learning_viz_bp)  # Learning Visualization
-app.register_blueprint(media_ui_bp)  # Media UI (Sonos, Musikwolke, Cameras)
     except Exception:
         _LOGGER.exception("Failed to register mcp_bp")
+
+    # Additional UI/API surfaces that may not be packaged in every runtime.
+    # These must never break startup when absent or when an optional dependency
+    # is unavailable.
+    _OPTIONAL_UI_BLUEPRINTS = [
+        ("copilot_core.api.v1.backend_ui", "backend_ui_bp"),
+        ("copilot_core.api.v1.neurons_ui", "neurons_ui_bp"),
+        ("copilot_core.api.v1.rag_ui", "rag_ui_bp"),
+        ("copilot_core.api.v1.habitus", "habitus_bp"),
+        ("copilot_core.api.v1.chat", "chat_bp"),
+        ("copilot_core.api.v1.learning_viz", "learning_viz_bp"),
+        ("copilot_core.api.v1.media_ui", "media_ui_bp"),
+    ]
+
+    for module_path, bp_attr in _OPTIONAL_UI_BLUEPRINTS:
+        try:
+            mod = importlib.import_module(module_path)
+            bp = getattr(mod, bp_attr)
+            app.register_blueprint(bp)
+        except Exception:
+            _LOGGER.exception(
+                "Optional UI blueprint unavailable: %s.%s",
+                module_path,
+                bp_attr,
+            )
 
     _LOGGER.info("All API blueprints registered")
 
