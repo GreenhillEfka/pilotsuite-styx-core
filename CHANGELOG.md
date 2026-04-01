@@ -1,5 +1,14 @@
 # Changelog
 
+## [v15.3.6] - 2026-04-01
+
+### 🧪 Slice 89 — Pytest Root Bootstrap
+
+- `tests/conftest.py` ergänzt jetzt einen deterministischen Repo-Root-Bootstrap in `sys.path`, damit Top-Level-Testläufe die Bridge aus `copilot_core/__init__.py` ohne manuelles `PYTHONPATH=.` sehen.
+- Bestehende Canvas-Fixtures bleiben unverändert nutzbar; der Bootstrap wirkt nur auf die Test-Importauflösung.
+- Versionsartefakte (`VERSION`, `copilot_core/VERSION`, `config.yaml`, `manifest.json`, Add-on-Config, Runtime-VERSION) auf `15.3.6` harmonisiert.
+- Validiert mit: `/home/linuxbrew/.linuxbrew/bin/pytest tests/test_predictive_automation.py tests/test_energy_optimization.py tests/test_anomaly_blueprint_contract.py -q` → `34 passed`.
+
 ## [v15.3.5] - 2026-04-01
 
 ### 🧩 Slice 88 — Runtime Package Bridge
