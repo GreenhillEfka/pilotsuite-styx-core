@@ -427,16 +427,20 @@ class EnergyModule:
     def _evaluate_battery(self, zone_id: str, config: EnergyConfig,
                          state: ZoneEnergyState) -> Optional[EnergyAction]:
         """Evaluate battery charge/discharge."""
-        # Charge during off-peak or excess solar
-        if not state.is_peak_hour and state.battery_charge_percent < config.battery_min_charge_percent:
+        # Recover the reserve threshold immediately, regardless of tariff window.
+        # `battery_min_charge_percent` is the minimum desired floor, not merely an
+        # off-peak target. This keeps evaluation deterministic across clock time and
+        # prevents peak-hour discharge logic from blocking a necessary recharge.
+        if state.battery_charge_percent < config.battery_min_charge_percent:
+            reason = "off_peak_charge" if not state.is_peak_hour else "reserve_recovery"
             return EnergyAction(
                 action_id=f"ea_{uuid.uuid4().hex[:16]}",
                 zone_id=zone_id,
                 action_type="charge_battery",
-                reason="off_peak_charge",
+                reason=reason,
             )
         
-        # Discharge during peak hours
+        # Discharge during peak hours only once the minimum reserve is protected.
         if state.is_peak_hour and state.battery_charge_percent > config.battery_min_charge_percent:
             return EnergyAction(
                 action_id=f"ea_{uuid.uuid4().hex[:16]}",

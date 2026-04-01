@@ -327,6 +327,28 @@ class TestEnergyModule:
         # Should discharge battery
         discharge_actions = [a for a in actions if a.action_type == "discharge_battery"]
         assert len(discharge_actions) >= 1
+
+    def test_evaluate_zone_battery_charge_below_reserve_even_during_peak(self):
+        module = EnergyModule()
+
+        config = EnergyConfig(
+            zone_id="zone_living",
+            battery_management_enabled=True,
+            battery_min_charge_percent=20.0,
+            peak_hours=[17, 18, 19],
+        )
+        module.set_zone_config(config)
+
+        module.update_power_data("zone_living", power_kw=2.0, battery_percent=15.0)
+
+        state = module.get_state("zone_living")
+        state.is_peak_hour = True
+
+        actions = module.evaluate_zone("zone_living")
+
+        charge_actions = [a for a in actions if a.action_type == "charge_battery"]
+        assert len(charge_actions) >= 1
+        assert charge_actions[0].reason == "reserve_recovery"
     
     def test_evaluate_zone_cost_optimization(self):
         module = EnergyModule()

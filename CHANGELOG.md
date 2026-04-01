@@ -1,5 +1,15 @@
 # Changelog
 
+## [v15.3.18] - 2026-04-01
+
+### 🧩 Slice 101 — Energy Reserve Recovery Contract Repair
+
+- `energy/energy.py` lädt Batterien unterhalb von `battery_min_charge_percent` jetzt immer nach, auch während Peak-Hours; die Mindestreserve ist damit wieder ein echter Sicherheitsboden statt nur ein Off-Peak-Ziel.
+- Peak-Discharge greift erst wieder oberhalb der geschützten Reserve; der neue Reason `reserve_recovery` macht den Schutzpfad explizit nachvollziehbar.
+- Regressionstest ergänzt: niedriger Batteriestand lädt auch dann, wenn `is_peak_hour=True` gesetzt ist.
+- Versionsartefakte (`VERSION`, `copilot_core/VERSION`, `config.yaml`, `manifest.json`, Add-on-Config, Runtime-VERSION) auf `15.3.18` harmonisiert.
+- Validiert mit: `pytest -q tests/test_energy.py::TestEnergyModule::test_evaluate_zone_battery_charge tests/test_energy.py::TestEnergyModule::test_evaluate_zone_battery_charge_below_reserve_even_during_peak tests/test_energy.py::TestEnergyModule::test_evaluate_zone_battery_discharge` → `3 passed`; `pytest -x -q` → erster echter Restfehler weiter bei `tests/test_zone_comfort.py::TestZoneComfortEngine::test_calculate_comfort_too_hot`.
+
 ## [v15.3.17] - 2026-04-01
 
 ### 🧩 Slice 100 — Zone Automation Boolean Contract Repair
