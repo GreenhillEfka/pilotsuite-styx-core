@@ -52,10 +52,18 @@ _zone_engine: Optional[Any] = None
 TRUE_VALUES = {"1", "true", "yes", "on"}
 FALSE_VALUES = {"0", "false", "no", "off"}
 
-def _parse_bool_query_param(value: str | None, *, param_name: str) -> bool:
-    """Parse HTTP boolean query parameters with strict token validation."""
+def _invalid_param_response(*, error: str, message: str):
+    """Return a stable parameter-validation error payload."""
+    return jsonify({"ok": False, "error": error, "message": message}), 400
+
+
+def _parse_bool_param(value: Any, *, param_name: str, default: bool = False) -> bool:
+    """Parse boolean-like query/body parameters with strict token validation."""
     if value is None:
-        return False
+        return default
+
+    if isinstance(value, bool):
+        return value
 
     normalized = str(value).strip().lower()
     if normalized in TRUE_VALUES:
@@ -63,7 +71,12 @@ def _parse_bool_query_param(value: str | None, *, param_name: str) -> bool:
     if normalized in FALSE_VALUES:
         return False
 
-    raise ValueError(f"Invalid boolean value for '{param_name}': {value!r}")
+    raise ValueError(f"Invalid value for '{param_name}': {value!r}")
+
+
+def _parse_bool_query_param(value: str | None, *, param_name: str) -> bool:
+    """Parse HTTP boolean query parameters with strict token validation."""
+    return _parse_bool_param(value, param_name=param_name, default=False)
 
 
 
@@ -357,10 +370,17 @@ def toggle_override(zone_id: str):
 
     data = request.get_json(silent=True) or {}
     updates = {}
-    if "light_enabled" in data:
-        updates["light"] = {"enabled": bool(data["light_enabled"])}
-    if "music_enabled" in data:
-        updates["music"] = {"enabled": bool(data["music_enabled"])}
+    try:
+        if "light_enabled" in data:
+            updates["light"] = {
+                "enabled": _parse_bool_param(data["light_enabled"], param_name="light_enabled")
+            }
+        if "music_enabled" in data:
+            updates["music"] = {
+                "enabled": _parse_bool_param(data["music_enabled"], param_name="music_enabled")
+            }
+    except ValueError as exc:
+        return _invalid_param_response(error="invalid_body_param", message=str(exc))
 
     config = _controller.set_zone_config(zone_id, updates)
     return jsonify({"ok": True, "config": config.to_dict()})
@@ -412,7 +432,10 @@ def report_presence(zone_id: str):
         return jsonify({"ok": False, "error": "Controller not initialized"}), 503
 
     data = request.get_json(silent=True) or {}
-    detected = data.get("detected", True)
+    try:
+        detected = _parse_bool_param(data.get("detected"), param_name="detected", default=True)
+    except ValueError as exc:
+        return _invalid_param_response(error="invalid_body_param", message=str(exc))
 
     if detected:
         actions = _controller.on_presence_detected(zone_id)
@@ -493,7 +516,7 @@ def list_zone_entities(zone_id: str):
             request.args.get("by_role"), param_name="by_role"
         )
     except ValueError as exc:
-        return jsonify({"ok": False, "error": str(exc)}), 400
+        return _invalid_param_response(error="invalid_query_param", message=str(exc))
 
     if by_role:
         return jsonify({"ok": True, "zone_id": zone_id,
@@ -518,7 +541,7 @@ def get_zone_entities_read_model(zone_id: str):
             request.args.get("compact"), param_name="compact"
         )
     except ValueError as exc:
-        return jsonify({"ok": False, "error": str(exc)}), 400
+        return _invalid_param_response(error="invalid_query_param", message=str(exc))
 
     model = _controller.get_zone_entities_read_model(zone_id, compact=want_compact)
     current_revision = model["revision"]
@@ -696,14 +719,14 @@ def get_entities_read_model():
             request.args.get("deltas"), param_name="deltas"
         )
     except ValueError as exc:
-        return jsonify({"ok": False, "error": str(exc)}), 400
+        return _invalid_param_response(error="invalid_query_param", message=str(exc))
 
     try:
         want_compact = _parse_bool_query_param(
             request.args.get("compact"), param_name="compact"
         )
     except ValueError as exc:
-        return jsonify({"ok": False, "error": str(exc)}), 400
+        return _invalid_param_response(error="invalid_query_param", message=str(exc))
 
     if want_deltas and raw_since is None:
         return jsonify({"ok": False, "error": "deltas=true requires since parameter"}), 400
@@ -824,7 +847,10 @@ def ensure_zones():
     if not isinstance(zone_ids, list):
         return jsonify({"ok": False, "error": "'zone_ids' must be a list"}), 400
 
-    habitus_sync = bool(data.get("habitus_sync", False))
+    try:
+        habitus_sync = _parse_bool_param(data.get("habitus_sync"), param_name="habitus_sync", default=False)
+    except ValueError as exc:
+        return _invalid_param_response(error="invalid_body_param", message=str(exc))
     created = []
     for zid in zone_ids:
         zid = str(zid).strip()
@@ -898,7 +924,10 @@ def sync_habitus_zones():
 
     data = request.get_json(silent=True) or {}
     zones = data.get("zones", [])
-    clear_missing = bool(data.get("clear_missing", False))
+    try:
+        clear_missing = _parse_bool_param(data.get("clear_missing"), param_name="clear_missing", default=False)
+    except ValueError as exc:
+        return _invalid_param_response(error="invalid_body_param", message=str(exc))
 
     if not isinstance(zones, list):
         return jsonify({"ok": False, "error": "'zones' must be a list"}), 400
@@ -1235,14 +1264,14 @@ def get_zone_truth_zones():
             request.args.get("deltas"), param_name="deltas"
         )
     except ValueError as exc:
-        return jsonify({"ok": False, "error": str(exc)}), 400
+        return _invalid_param_response(error="invalid_query_param", message=str(exc))
 
     try:
         want_compact = _parse_bool_query_param(
             request.args.get("compact"), param_name="compact"
         )
     except ValueError as exc:
-        return jsonify({"ok": False, "error": str(exc)}), 400
+        return _invalid_param_response(error="invalid_query_param", message=str(exc))
 
     since_revision = None
     if raw_since is not None:

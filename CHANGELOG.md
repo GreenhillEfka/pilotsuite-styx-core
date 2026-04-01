@@ -1,5 +1,14 @@
 # Changelog
 
+## [v15.3.17] - 2026-04-01
+
+### 🧩 Slice 100 — Zone Automation Boolean Contract Repair
+
+- `api/v1/zone_automation.py` nutzt für Query- und Body-Boolean-Parameter jetzt strikte Token-Validierung statt Python-`bool(...)`-Truthiness, damit `1/0`, `true/false`, `on/off`, `yes/no` stabil unterstützt werden.
+- Ungültige Werte liefern jetzt konsistente Contract-Payloads mit `error=invalid_query_param` bzw. `error=invalid_body_param` plus verständlicher `message`, statt freier Error-Strings oder versehentlich akzeptierter Truthy-Werte.
+- Versionsartefakte (`VERSION`, `copilot_core/VERSION`, `config.yaml`, `manifest.json`, Add-on-Config, Runtime-VERSION) auf `15.3.17` harmonisiert.
+- Validiert mit: `pytest -q tests/test_zone_automation_blueprint_contract.py` → `12 passed`; `pytest -q copilot_core/rootfs/usr/src/app/tests/test_zone_automation.py::TestZoneAutomationAPI::test_list_entities_by_role_query_bool copilot_core/rootfs/usr/src/app/tests/test_zone_automation.py::TestZoneAutomationAPI::test_zone_entities_read_model` → `2 passed`; `pytest -x -q` → erster echter Restfehler jetzt bei `tests/test_zone_comfort.py::TestZoneComfortEngine::test_calculate_comfort_too_hot`.
+
 ## [v15.3.16] - 2026-04-01
 
 ### 🧩 Slice 99 — Scheduler Naive Datetime Repair
