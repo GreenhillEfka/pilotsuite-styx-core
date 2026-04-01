@@ -1,5 +1,17 @@
 # Changelog
 
+## [v15.3.26] - 2026-04-01
+
+### 🧩 Slice 15 Follow-up Hardening — Multi-Zone Runtime Handoffs
+
+- `copilot_core.multizone.coordination_engine` bindet Multi-Zone-Scenes und -Routines jetzt an echte `ProposalIntentV1`-/`ActionIntentV1`-Handoffs an; Runtime-Pending-Actions behalten Proposal-/Action-Metadaten sowie Source-/Queue-Kontext bis in die Ausführungssurface.
+- Scheduler-Anbindung ergänzt: time-basierte Routines materialisieren jetzt echte Scheduler-Jobs (`multizone.trigger_routine`), und Scenes können optional ebenfalls scheduler-gebunden aktiviert werden (`multizone.activate_scene`).
+- ZoneAction-Read-Models exponieren jetzt reale `target`-/`targets`-Contracts für Zone-, Module- und Service-Targets statt nur flacher Entity-Felder; damit bleiben Zone-/Module-Targets für Runtime, API und Downstream-Ausführung konsistent.
+- `/api/v1/multizone/*` übernimmt jetzt Scheduler-Injektion, Runtime-Source-Kontext, optionale Scene-Schedules sowie zielgenaue Pending-Action-Filter (`zone_id`, `module_id`, `entity_id`).
+- Neue Hardening-Tests decken Scheduler-Ausführung, handoff-preserving Scene-Aktivierung und echte Target-Contracts ab.
+- Versionsartefakte (`VERSION`, `copilot_core/VERSION`, `copilot_core/config.yaml`, `copilot_core/manifest.json`, Runtime-VERSION) auf `15.3.26` harmonisiert.
+- Validiert mit: `pytest -q tests/test_multizone_coordination.py tests/test_multizone_blueprint_contract.py tests/test_multizone_runtime_contract.py` → `22 passed`.
+
 ## [v15.3.25] - 2026-04-01
 
 ### 🧩 Slice 15 — Multi-Zone Coordination Surface Delivery

@@ -658,7 +658,22 @@ Coordinate actions across multiple zones (scenes, routines, events).
 16. **✅ Slice 104 — Zone Truth Revision Contract Repair** — Zone- und Entity-Revisionen folgen wieder deterministisch der globalen Topology-History; Root-Contract-Surface vollständig grün (`4369 passed, 4 skipped`)
 17. **✅ Slice 106 — Energy Optimization Surface Delivery** — Slice-13-Energiefläche jetzt mit echten Zone/Module-Summaries, Suggestion-/Budget-/Report-Surface und Root/Runtime-Parität; Slice-13-Contracts grün (`70/70`)
 
-**Next Exact Task:** **Slice 15 Follow-up Hardening**: Multi-Zone-Scenes/Routines an truth-backed Proposal-/Action-Handoffs und scheduler-getriebene Runtime-Ausführung anbinden; zusätzlich API-/Execution-Contracts für echte Zone-/Module-Targets ergänzen.
+### ✅ Refinement — Slice 15 Follow-up Hardening
+**Status:** ✅ DONE (v15.3.26)
+
+**Goal**
+Handoffs, Scheduler-Runtime und echte Zone-/Module-Targets auf der Multi-Zone-Surface kontraktsicher machen.
+
+### Deliverables
+- [x] Proposal-/Action-Handoffs an Scene-/Routine-Runtime gebunden
+- [x] Scheduler-getriebene Routine-Ausführung und optionale Scene-Schedules angebunden
+- [x] echte Zone-/Module-/Service-Target-Contracts in Pending-Actions/API ergänzt
+
+**Commit:** `feat(multizone): harden runtime handoffs and scheduler bindings`
+**Tag:** v15.3.26
+**Tests:** `pytest -q tests/test_multizone_coordination.py tests/test_multizone_blueprint_contract.py tests/test_multizone_runtime_contract.py` → `22 passed`
+
+**Next Exact Task:** **Slice 16 Candidate**: Voice-Control-/Policy-Gate-Surface als nächste reguläre Forward-Slice definieren und gegen denselben Proposal→Action→Runtime-Vertrag ziehen.
 
 **After Refinement:** Root-Contract-Surface ist grün; Slice 13+ wieder als reguläre Forward-Slices aufnehmen
 
