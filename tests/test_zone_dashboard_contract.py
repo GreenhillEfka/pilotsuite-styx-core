@@ -143,6 +143,49 @@ def test_zone_dashboard_surfaces_zone_scoped_action_closure_context() -> None:
     assert detail_body["zone"]["action_closures"]["zone_name"] == "Wohnbereich"
 
 
+def test_zone_dashboard_action_closure_since_param_surfaces_delta_state() -> None:
+    _init_services()
+    store = get_action_closure_store()
+    base_revision = store.get_current_revision()
+    closure = store.upsert(
+        source="voice.accepted",
+        proposal_id="proposal:wohnbereich:delta",
+        action_id="action:wohnbereich:delta",
+        zone_id="wohnbereich",
+        module_id="light",
+        accepted_at="2026-04-01T21:02:00+00:00",
+    )
+
+    app = Flask(__name__)
+    app.config["TESTING"] = True
+    app.register_blueprint(zone_dashboard_bp)
+
+    with app.test_request_context(
+        f"/api/v1/zone/dashboard/wohnbereich?action_closure_since={base_revision}",
+        method="GET",
+    ):
+        detail_response = get_zone_detail.__wrapped__("wohnbereich")
+
+    detail_body = detail_response.get_json()
+    delta = detail_body["zone"]["action_closures"]["context"]["delta"]
+    assert delta["since_revision"] == base_revision
+    assert delta["changed"] is True
+    assert delta["changed_count"] == 1
+    assert delta["recent_closures"][0]["closure_id"] == closure["closure_id"]
+
+    current_revision = store.get_current_revision()
+    with app.test_request_context(
+        f"/api/v1/zone/dashboard/wohnbereich?action_closure_since={current_revision}",
+        method="GET",
+    ):
+        unchanged_response = get_zone_detail.__wrapped__("wohnbereich")
+
+    unchanged_body = unchanged_response.get_json()
+    unchanged_delta = unchanged_body["zone"]["action_closures"]["context"]["delta"]
+    assert unchanged_delta["changed"] is False
+    assert unchanged_delta["changed_count"] == 0
+
+
 def test_zone_dashboard_mood_list_prefers_truth_engine_zones() -> None:
     _init_services()
     app = Flask(__name__)

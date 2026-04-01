@@ -841,3 +841,28 @@ Die kanonische `ActionClosure`-Wahrheit wird jetzt nicht nur global fuer Dashboa
 **Tests:** `pytest -q tests/test_action_closure_summary_contract.py tests/test_zone_dashboard_contract.py` → gruen
 
 **Next Exact Task:** Slice 23 als kanonische `ActionClosure`-Delta-Surface ableiten: revision-/freshness-faehige Summary/Context-Read-Models plus `since`-/zone-scoped-Filter fuer inkrementelle Dashboard-Poller auf derselben Closure-Truth evaluieren und kontraktfest machen.
+
+### ✅ Slice 23 — Action Closure Delta Surface
+**Status:** ✅ DONE (v15.3.34)
+
+**Goal**
+Die kanonische `ActionClosure`-Wahrheit fuer inkrementelle Poller revisionsfaehig machen: Summary-, Context-, API- und Dashboard-Surfaces sollen mit demselben monotonen Cursor erkennen koennen, ob seit einer bekannten Revision echte Closure-Aenderungen passiert sind.
+
+### Deliverables
+- [x] `ActionClosureStore` zaehlt monotone Revisionen fuer Accept-/Feedback-/Execution-Aenderungen und exponiert sie auf `ActionClosureV1`
+- [x] `ActionClosureSummaryV1` und `ActionClosureContextBlockV1` tragen jetzt `revision`, `latest_change_at` und einen eingebetteten `ActionClosureDeltaV1`-Block
+- [x] `/api/v1/action-closures`, `/summary` und `/context` akzeptieren `?since=<revision>` fuer deltafaehige Closure-Abfragen
+- [x] `zone_dashboard` und Zone-Detail akzeptieren `?action_closure_since=<revision>` und leiten den Delta-Zustand zonenspezifisch durch
+- [x] globale `zone_contexts` werden bei Delta-Abfragen auf wirklich geaenderte Closure-Zonen reduziert
+- [x] Contract-Tests decken Delta-Read-Model, API und Dashboard-Since-Surface ab
+
+### Acceptance criteria
+- Dashboard-/UI-Poller koennen gegen eine einzige kanonische Closure-Revision inkrementell abfragen statt komplette Closure-Kontexte neu zu laden.
+- Globale und zonenspezifische Closure-Surfaces bleiben dieselbe Wahrheit; Delta-Abfragen erzeugen keine zweite Aggregationslogik.
+- Keine neue Closure-Aenderung bleibt fuer Summary-, Context- oder Dashboard-Consumer unsichtbar, solange der letzte bekannte Revisionscursor uebergeben wird.
+
+**Commit:** `feat(core): deliver slice 23 action closure delta surface`
+**Tag:** v15.3.34
+**Tests:** `pytest -q tests/test_action_closure_contract.py tests/test_action_closure_summary_contract.py tests/test_zone_dashboard_contract.py tests/test_voice_action_closure_hints_contract.py` → `22 passed`
+
+**Next Exact Task:** Slice 24 als closure-aware Notifications-/Digest-Surface definieren: offene/problematische Closures aus derselben kanonischen Read-Model-Schicht in benachrichtigbare Follow-up-/Digest-Payloads ueberfuehren, inklusive deduplizierter Delta-Cursor fuer Notification-Worker.

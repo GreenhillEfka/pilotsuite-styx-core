@@ -93,6 +93,8 @@ def test_action_closure_summary_read_model_aggregates_outcomes() -> None:
     summary = build_action_closure_summary_read_model(get_action_closure_store()).to_dict()
 
     assert summary["contract"] == "ActionClosureSummaryV1"
+    assert summary["revision"] >= 1
+    assert summary["latest_change_at"]
     assert summary["total_closures"] == 3
     assert summary["open_count"] == 1
     assert summary["terminal_count"] == 2
@@ -108,6 +110,9 @@ def test_action_closure_summary_read_model_aggregates_outcomes() -> None:
     assert summary["modules"]["scene"] == 1
     assert summary["recent_closures"][0]["closure_id"]
     assert summary["highlights"]
+    assert summary["delta"]["contract"] == "ActionClosureDeltaV1"
+    assert summary["delta"]["current_revision"] == summary["revision"]
+    assert summary["delta"]["changed_count"] == 3
 
 
 def test_action_closure_context_block_is_chat_ready() -> None:
@@ -120,10 +125,58 @@ def test_action_closure_context_block_is_chat_ready() -> None:
     ).to_dict()
 
     assert context["contract"] == "ActionClosureContextBlockV1"
+    assert context["revision"] >= 1
     assert context["summary"]["total_closures"] == 2
     assert context["summary"]["success_count"] == 1
     assert context["recent_closures"][0]["zone_id"] == "zone:living"
     assert any("Aktionsabschluesse" in line for line in context["context_lines"])
+
+
+def test_action_closure_summary_delta_surface_tracks_changes_since_revision() -> None:
+    _seed_closures()
+    store = get_action_closure_store()
+    base_revision = store.get_current_revision()
+
+    delta_closure = store.upsert(
+        source="voice.accepted",
+        proposal_id="proposal:delta",
+        action_id="action:delta",
+        zone_id="zone:living",
+        module_id="light",
+        accepted_at="2026-04-01T20:25:00+00:00",
+    )
+
+    summary = build_action_closure_summary_read_model(
+        store,
+        zone_id="zone:living",
+        since_revision=base_revision,
+        recent_limit=2,
+    ).to_dict()
+
+    assert summary["total_closures"] == 3
+    assert summary["delta"]["since_revision"] == base_revision
+    assert summary["delta"]["current_revision"] == store.get_current_revision()
+    assert summary["delta"]["changed"] is True
+    assert summary["delta"]["changed_count"] == 1
+    assert summary["delta"]["recent_closures"][0]["closure_id"] == delta_closure["closure_id"]
+
+
+def test_action_closure_context_block_reports_no_delta_when_revision_is_current() -> None:
+    _seed_closures()
+    store = get_action_closure_store()
+    current_revision = store.get_current_revision()
+
+    context = build_action_closure_context_block(
+        store,
+        zone_id="zone:living",
+        zone_name="Wohnzimmer",
+        since_revision=current_revision,
+    ).to_dict()
+
+    assert context["delta"]["since_revision"] == current_revision
+    assert context["delta"]["changed"] is False
+    assert context["delta"]["changed_count"] == 0
+    assert any("Keine Closure-Aenderungen seit Revision" in line for line in context["context_lines"])
 
 
 def test_action_closure_summary_and_context_api_surface() -> None:
@@ -132,21 +185,33 @@ def test_action_closure_summary_and_context_api_surface() -> None:
     client = app.test_client()
     headers = {"Authorization": "Bearer test-token", "X-Ingress-Path": "/api"}
 
+    base_revision = get_action_closure_store().get_current_revision()
+    get_action_closure_store().upsert(
+        source="predictive.accepted",
+        proposal_id="proposal:api-delta",
+        action_id="action:api-delta",
+        zone_id="zone:living",
+        module_id="climate",
+        accepted_at="2026-04-01T20:30:00+00:00",
+    )
+
     summary_response = client.get("/api/v1/action-closures/summary", headers=headers)
     assert summary_response.status_code == 200
     summary_body = summary_response.get_json()
     assert summary_body["summary"]["contract"] == "ActionClosureSummaryV1"
-    assert summary_body["summary"]["total_closures"] == 3
+    assert summary_body["summary"]["total_closures"] == 4
 
     context_response = client.get(
-        "/api/v1/action-closures/context?zone_id=zone:living&recent_limit=2",
+        f"/api/v1/action-closures/context?zone_id=zone:living&recent_limit=2&since={base_revision}",
         headers=headers,
     )
     assert context_response.status_code == 200
     context_body = context_response.get_json()
     assert context_body["context"]["contract"] == "ActionClosureContextBlockV1"
-    assert context_body["context"]["summary"]["total_closures"] == 2
+    assert context_body["context"]["summary"]["total_closures"] == 3
     assert len(context_body["context"]["recent_closures"]) == 2
+    assert context_body["context"]["delta"]["changed"] is True
+    assert context_body["context"]["delta"]["changed_count"] == 1
 
 
 def test_zone_dashboard_global_context_exposes_action_closure_summary() -> None:
@@ -154,6 +219,8 @@ def test_zone_dashboard_global_context_exposes_action_closure_summary() -> None:
 
     ctx = _build_global_context()
 
+    assert ctx["action_closures"]["revision"] >= 1
+    assert ctx["action_closures"]["freshness"]
     assert ctx["action_closures"]["total"] == 3
     assert ctx["action_closures"]["open"] == 1
     assert ctx["action_closures"]["successful"] == 1
@@ -169,6 +236,31 @@ def test_zone_dashboard_global_context_exposes_action_closure_summary() -> None:
         "Wohnzimmer" in line or "Wohnbereich" in line
         for line in living["context"]["context_lines"]
     )
+
+
+def test_zone_dashboard_global_context_delta_filters_unchanged_zone_contexts() -> None:
+    _seed_closures()
+    store = get_action_closure_store()
+    base_revision = store.get_current_revision()
+
+    ctx = _build_global_context(since_revision=base_revision)
+    assert ctx["action_closures"]["delta"]["changed"] is False
+    assert ctx["action_closures"]["zone_contexts"] == []
+
+    store.upsert(
+        source="predictive.accepted",
+        proposal_id="proposal:delta-dashboard",
+        action_id="action:delta-dashboard",
+        zone_id="zone:sleep",
+        module_id="climate",
+        accepted_at="2026-04-01T20:40:00+00:00",
+    )
+
+    changed_ctx = _build_global_context(since_revision=base_revision)
+    assert changed_ctx["action_closures"]["delta"]["changed"] is True
+    assert changed_ctx["action_closures"]["delta"]["changed_count"] == 1
+    assert len(changed_ctx["action_closures"]["zone_contexts"]) == 1
+    assert changed_ctx["action_closures"]["zone_contexts"][0]["zone_id"] == "zone:sleep"
 
 
 def test_chat_handler_home_context_mentions_action_closure_summary() -> None:

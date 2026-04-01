@@ -28,6 +28,34 @@ def _sort_counter(counter: Counter[str]) -> dict[str, int]:
     return dict(sorted(counter.items(), key=lambda item: (-item[1], item[0])))
 
 
+def _latest_change_at(closures: Sequence[Mapping[str, Any]]) -> str | None:
+    for closure in closures:
+        updated_at = _as_text(closure.get("updated_at"))
+        if updated_at:
+            return updated_at
+    return None
+
+
+def _build_delta_payload(
+    delta_closures: Sequence[Mapping[str, Any]],
+    *,
+    since_revision: int | None,
+    current_revision: int,
+    recent_limit: int,
+) -> dict[str, Any]:
+    return {
+        "contract": "ActionClosureDeltaV1",
+        "since_revision": since_revision,
+        "current_revision": current_revision,
+        "changed": bool(delta_closures),
+        "changed_count": len(delta_closures),
+        "latest_change_at": _latest_change_at(delta_closures),
+        "recent_closures": [
+            _compact_recent_closure(item) for item in list(delta_closures)[: max(1, recent_limit)]
+        ],
+    }
+
+
 def _compact_recent_closure(closure: Mapping[str, Any]) -> dict[str, Any]:
     latest_feedback = closure.get("latest_feedback") or {}
     execution = closure.get("execution") or {}
@@ -72,6 +100,8 @@ def _describe_recent_closure(closure: Mapping[str, Any]) -> str | None:
 @dataclass
 class ActionClosureSummaryReadModel:
     meta: ReadModelMeta
+    revision: int = 0
+    latest_change_at: str | None = None
     total_closures: int = 0
     open_count: int = 0
     terminal_count: int = 0
@@ -87,11 +117,14 @@ class ActionClosureSummaryReadModel:
     modules: dict[str, int] = field(default_factory=dict)
     recent_closures: list[dict[str, Any]] = field(default_factory=list)
     highlights: list[str] = field(default_factory=list)
+    delta: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "contract": "ActionClosureSummaryV1",
             **self.meta.to_dict(),
+            "revision": self.revision,
+            "latest_change_at": self.latest_change_at,
             "total_closures": self.total_closures,
             "open_count": self.open_count,
             "terminal_count": self.terminal_count,
@@ -107,6 +140,7 @@ class ActionClosureSummaryReadModel:
             "modules": dict(self.modules),
             "recent_closures": [dict(item) for item in self.recent_closures],
             "highlights": list(self.highlights),
+            "delta": dict(self.delta),
         }
 
     @classmethod
@@ -122,6 +156,7 @@ class ActionClosureSummaryReadModel:
         action_id: str | None = None,
         proposal_id: str | None = None,
         recent_limit: int = 5,
+        since_revision: int | None = None,
     ) -> "ActionClosureSummaryReadModel":
         store = store or get_action_closure_store()
         if closures is None:
@@ -135,7 +170,18 @@ class ActionClosureSummaryReadModel:
             )
 
         closures = list(closures)
-        meta = ReadModelMeta(source="action_closure")
+        latest_change_at = _latest_change_at(closures)
+        meta = ReadModelMeta(source="action_closure", freshness=latest_change_at or ReadModelMeta().freshness)
+        current_revision = store.get_current_revision() if hasattr(store, "get_current_revision") else 0
+        delta_closures = store.list(
+            source=source,
+            zone_id=zone_id,
+            module_id=module_id,
+            state=state,
+            action_id=action_id,
+            proposal_id=proposal_id,
+            since_revision=since_revision,
+        )
         state_counter: Counter[str] = Counter()
         outcome_counter: Counter[str] = Counter()
         feedback_counter: Counter[str] = Counter()
@@ -210,6 +256,8 @@ class ActionClosureSummaryReadModel:
 
         return cls(
             meta=meta,
+            revision=current_revision,
+            latest_change_at=latest_change_at,
             total_closures=len(closures),
             open_count=open_count,
             terminal_count=terminal_count,
@@ -225,23 +273,35 @@ class ActionClosureSummaryReadModel:
             modules=_sort_counter(module_counter),
             recent_closures=recent,
             highlights=highlights,
+            delta=_build_delta_payload(
+                delta_closures,
+                since_revision=since_revision,
+                current_revision=current_revision,
+                recent_limit=recent_limit,
+            ),
         )
 
 
 @dataclass
 class ActionClosureContextBlock:
     meta: ReadModelMeta
+    revision: int = 0
+    latest_change_at: str | None = None
     summary: dict[str, Any] = field(default_factory=dict)
     recent_closures: list[dict[str, Any]] = field(default_factory=list)
     context_lines: list[str] = field(default_factory=list)
+    delta: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "contract": "ActionClosureContextBlockV1",
             **self.meta.to_dict(),
+            "revision": self.revision,
+            "latest_change_at": self.latest_change_at,
             "summary": dict(self.summary),
             "recent_closures": [dict(item) for item in self.recent_closures],
             "context_lines": list(self.context_lines),
+            "delta": dict(self.delta),
         }
 
 
@@ -255,6 +315,7 @@ def build_action_closure_summary_read_model(
     action_id: str | None = None,
     proposal_id: str | None = None,
     recent_limit: int = 5,
+    since_revision: int | None = None,
 ) -> ActionClosureSummaryReadModel:
     return ActionClosureSummaryReadModel.build(
         store,
@@ -265,6 +326,7 @@ def build_action_closure_summary_read_model(
         action_id=action_id,
         proposal_id=proposal_id,
         recent_limit=recent_limit,
+        since_revision=since_revision,
     )
 
 
@@ -317,6 +379,7 @@ def build_action_closure_context_block(
     proposal_id: str | None = None,
     recent_limit: int = 3,
     zone_name: str | None = None,
+    since_revision: int | None = None,
 ) -> ActionClosureContextBlock:
     summary = build_action_closure_summary_read_model(
         store,
@@ -327,6 +390,7 @@ def build_action_closure_context_block(
         action_id=action_id,
         proposal_id=proposal_id,
         recent_limit=recent_limit,
+        since_revision=since_revision,
     )
     payload = summary.to_dict()
 
@@ -348,9 +412,25 @@ def build_action_closure_context_block(
         recent_line = _describe_recent_closure(summary.recent_closures[0]) if summary.recent_closures else None
         if recent_line:
             context_lines.append(recent_line)
+    elif since_revision is not None and resolved_zone_name:
+        context_lines.append(f"Zone: {resolved_zone_name}")
+
+    delta_payload = payload.get("delta", {})
+    if since_revision is not None:
+        if delta_payload.get("changed"):
+            context_lines.append(
+                f"Closure-Deltas seit Revision {since_revision}: {delta_payload.get('changed_count', 0)}"
+            )
+        else:
+            context_lines.append(f"Keine Closure-Aenderungen seit Revision {since_revision}")
 
     return ActionClosureContextBlock(
-        meta=ReadModelMeta(source="action_closure.context"),
+        meta=ReadModelMeta(
+            source="action_closure.context",
+            freshness=payload.get("latest_change_at") or payload.get("freshness") or ReadModelMeta().freshness,
+        ),
+        revision=payload.get("revision", 0),
+        latest_change_at=payload.get("latest_change_at"),
         summary={
             "total_closures": payload.get("total_closures", 0),
             "open_count": payload.get("open_count", 0),
@@ -365,6 +445,7 @@ def build_action_closure_context_block(
         },
         recent_closures=payload.get("recent_closures", []),
         context_lines=context_lines,
+        delta=delta_payload,
     )
 
 

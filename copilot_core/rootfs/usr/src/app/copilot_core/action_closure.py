@@ -121,6 +121,7 @@ def _closure_id(source: str, proposal_id: str | None, action_ref: str | None, zo
 class ActionClosureRecord:
     closure_id: str
     source: str
+    revision: int = 0
     proposal_id: str | None = None
     action_id: str | None = None
     zone_id: str | None = None
@@ -145,6 +146,7 @@ class ActionClosureRecord:
             "contract": "ActionClosureV1",
             "closure_id": self.closure_id,
             "source": self.source,
+            "revision": self.revision,
             "proposal_id": self.proposal_id,
             "action_id": self.action_id,
             "zone_id": self.zone_id,
@@ -169,9 +171,24 @@ class ActionClosureRecord:
 class ActionClosureStore:
     def __init__(self) -> None:
         self._records: dict[str, ActionClosureRecord] = {}
+        self._revision_counter: int = 0
 
     def clear(self) -> None:
         self._records.clear()
+        self._revision_counter = 0
+
+    def get_current_revision(self) -> int:
+        return self._revision_counter
+
+    def _next_revision(self) -> int:
+        self._revision_counter += 1
+        return self._revision_counter
+
+    def _touch_record(self, record: ActionClosureRecord, timestamp: str | None = None) -> int:
+        revision = self._next_revision()
+        record.revision = revision
+        record.updated_at = timestamp or _utcnow()
+        return revision
 
     def upsert(
         self,
@@ -194,14 +211,16 @@ class ActionClosureStore:
         closure_id = _closure_id(source, proposal_id, action_ref, zone_id, module_id)
         record = self._records.get(closure_id)
         if record is None:
+            accepted_timestamp = accepted_at or _utcnow()
             record = ActionClosureRecord(
                 closure_id=closure_id,
                 source=str(source or "unknown"),
+                revision=0,
                 proposal_id=proposal_id,
                 action_id=action_ref,
                 zone_id=zone_id,
                 module_id=module_id,
-                accepted_at=accepted_at,
+                accepted_at=accepted_timestamp,
                 service_call=_copy_mapping(service_call),
                 policy_gate=_copy_mapping(policy_gate),
                 proposal_intent=_copy_mapping(proposal_intent),
@@ -210,38 +229,73 @@ class ActionClosureStore:
                 subject_id=subject_id,
                 metadata=_copy_mapping(metadata),
             )
+            revision = self._touch_record(record, accepted_timestamp)
             record.event_history.append({
                 "event_type": "accepted",
-                "timestamp": accepted_at or _utcnow(),
+                "timestamp": accepted_timestamp,
+                "revision": revision,
                 "source": record.source,
             })
             self._records[closure_id] = record
         else:
+            changed = False
             if proposal_id and not record.proposal_id:
                 record.proposal_id = proposal_id
+                changed = True
             if action_ref and not record.action_id:
                 record.action_id = action_ref
+                changed = True
             if zone_id and not record.zone_id:
                 record.zone_id = zone_id
+                changed = True
             if module_id and not record.module_id:
                 record.module_id = module_id
+                changed = True
             if accepted_at and not record.accepted_at:
                 record.accepted_at = accepted_at
+                changed = True
             if service_call:
-                record.service_call = _copy_mapping(service_call)
+                new_service_call = _copy_mapping(service_call)
+                if record.service_call != new_service_call:
+                    record.service_call = new_service_call
+                    changed = True
             if policy_gate:
-                record.policy_gate = _copy_mapping(policy_gate)
+                new_policy_gate = _copy_mapping(policy_gate)
+                if record.policy_gate != new_policy_gate:
+                    record.policy_gate = new_policy_gate
+                    changed = True
             if proposal_intent:
-                record.proposal_intent = _copy_mapping(proposal_intent)
+                new_proposal_intent = _copy_mapping(proposal_intent)
+                if record.proposal_intent != new_proposal_intent:
+                    record.proposal_intent = new_proposal_intent
+                    changed = True
             if action_intent:
-                record.action_intent = _copy_mapping(action_intent)
+                new_action_intent = _copy_mapping(action_intent)
+                if record.action_intent != new_action_intent:
+                    record.action_intent = new_action_intent
+                    changed = True
             if subject_type:
-                record.subject_type = subject_type
+                if record.subject_type != subject_type:
+                    record.subject_type = subject_type
+                    changed = True
             if subject_id:
-                record.subject_id = subject_id
+                if record.subject_id != subject_id:
+                    record.subject_id = subject_id
+                    changed = True
             if metadata:
-                record.metadata.update(_copy_mapping(metadata))
-        record.updated_at = _utcnow()
+                merged_metadata = dict(record.metadata)
+                merged_metadata.update(_copy_mapping(metadata))
+                if merged_metadata != record.metadata:
+                    record.metadata = merged_metadata
+                    changed = True
+            if changed:
+                revision = self._touch_record(record)
+                record.event_history.append({
+                    "event_type": "updated",
+                    "timestamp": record.updated_at,
+                    "revision": revision,
+                    "source": record.source,
+                })
         return record.to_dict()
 
     def get(self, closure_id: str) -> dict[str, Any] | None:
@@ -257,6 +311,7 @@ class ActionClosureStore:
         state: str | None = None,
         action_id: str | None = None,
         proposal_id: str | None = None,
+        since_revision: int | None = None,
     ) -> list[dict[str, Any]]:
         items = [record for record in self._records.values()]
         if source:
@@ -271,7 +326,9 @@ class ActionClosureStore:
             items = [record for record in items if record.action_id == action_id]
         if proposal_id:
             items = [record for record in items if record.proposal_id == proposal_id]
-        items.sort(key=lambda record: (record.accepted_at or "", record.closure_id), reverse=True)
+        if since_revision is not None:
+            items = [record for record in items if record.revision > since_revision]
+        items.sort(key=lambda record: (record.revision, record.updated_at, record.closure_id), reverse=True)
         return [record.to_dict() for record in items]
 
     def get_learning_summary(
@@ -368,11 +425,11 @@ class ActionClosureStore:
             "actor": str(actor or "user").strip() or "user",
             "metadata": _copy_mapping(metadata),
         }
+        event["revision"] = self._touch_record(record, event["timestamp"])
         record.latest_feedback = dict(event)
         record.feedback_history.append(dict(event))
         record.event_history.append(dict(event))
         record.state = "feedback_received"
-        record.updated_at = event["timestamp"]
         return record.to_dict()
 
     def record_execution(
@@ -396,10 +453,10 @@ class ActionClosureStore:
             "executed_at": timestamp,
             "metadata": _copy_mapping(metadata),
         }
+        execution["revision"] = self._touch_record(record, timestamp)
         record.execution = execution
         record.event_history.append({"event_type": "execution", **execution})
         record.state = execution["outcome"]
-        record.updated_at = timestamp
         return record.to_dict()
 
 

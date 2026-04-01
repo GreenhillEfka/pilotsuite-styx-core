@@ -44,12 +44,30 @@ def _recent_limit(default: int = 5) -> int:
         return default
 
 
+def _since_revision() -> int | None:
+    raw = _as_text(request.args.get("since"))
+    if raw is None:
+        return None
+    try:
+        value = int(raw)
+    except Exception:
+        return None
+    return max(0, value)
+
+
 @action_closure_bp.route("", methods=["GET"])
 @require_token
 def list_action_closures():
     store = get_action_closure_store()
-    closures = store.list(**_filters())
-    return jsonify({"ok": True, "closures": closures, "count": len(closures)})
+    closures = store.list(**_filters(), since_revision=_since_revision())
+    return jsonify(
+        {
+            "ok": True,
+            "closures": closures,
+            "count": len(closures),
+            "revision": store.get_current_revision(),
+        }
+    )
 
 
 @action_closure_bp.route("/summary", methods=["GET"])
@@ -58,6 +76,7 @@ def get_action_closure_summary():
     summary = build_action_closure_summary_read_model(
         get_action_closure_store(),
         recent_limit=_recent_limit(),
+        since_revision=_since_revision(),
         **_filters(),
     )
     return jsonify({"ok": True, "summary": summary.to_dict()})
@@ -69,6 +88,7 @@ def get_action_closure_context():
     context_block = build_action_closure_context_block(
         get_action_closure_store(),
         recent_limit=_recent_limit(default=3),
+        since_revision=_since_revision(),
         **_filters(),
     )
     return jsonify({"ok": True, "context": context_block.to_dict()})

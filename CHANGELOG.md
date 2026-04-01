@@ -1,5 +1,16 @@
 # Changelog
 
+## [v15.3.34] - 2026-04-01
+
+### 🧩 Slice 23 — Action Closure Delta Surface
+
+- `copilot_core.action_closure` fuehrt jetzt eine monotone Closure-Revision pro Accept-/Feedback-/Execution-Aenderung, sodass Summary-, Context- und Listen-Surfaces inkrementell gegen denselben kanonischen Cursor pollen koennen.
+- `copilot_core.core.action_closure_read_model` erweitert `ActionClosureSummaryV1` und `ActionClosureContextBlockV1` um `revision`, `latest_change_at` und einen eingebetteten `ActionClosureDeltaV1`-Block mit `since_revision`, `changed`, `changed_count` und delta-spezifischen Recent-Closures.
+- `/api/v1/action-closures`, `/summary` und `/context` akzeptieren jetzt `?since=<revision>`; Dashboard-/Zone-Detail-Surfaces akzeptieren `?action_closure_since=<revision>` und leiten zonenspezifische Delta-Zustaende fuer inkrementelle Poller durch.
+- Die globale Dashboard-Action-Closure-Surface exponiert jetzt `revision`, `freshness` und `delta`; systemweite `zone_contexts` werden bei Delta-Abfragen auf wirklich geaenderte Closure-Zonen reduziert statt alle Zonen erneut auszuleiten.
+- Versionsartefakte (`VERSION`, `copilot_core/VERSION`, Runtime-VERSION, `copilot_core/config.yaml`, `copilot_core/manifest.json`) auf `15.3.34` harmonisiert.
+- Validiert mit: `pytest -q tests/test_action_closure_contract.py tests/test_action_closure_summary_contract.py tests/test_zone_dashboard_contract.py tests/test_voice_action_closure_hints_contract.py` → `22 passed`.
+
 ## [v15.3.33] - 2026-04-01
 
 ### 🧩 Slice 22 — Zone-Scoped Closure Feed for Dashboard/System Context

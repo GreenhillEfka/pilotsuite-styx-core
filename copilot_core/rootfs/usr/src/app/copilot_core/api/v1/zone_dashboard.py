@@ -789,6 +789,7 @@ def _build_zone_action_closure_context(
     *,
     zone_name: str | None = None,
     recent_limit: int = 3,
+    since_revision: int | None = None,
 ) -> Dict[str, Any]:
     """Expose canonical action-closure context for one zone."""
     resolved_zone_name = zone_name or resolve_zone_name(zone_id) or zone_id
@@ -797,6 +798,7 @@ def _build_zone_action_closure_context(
         zone_id=zone_id,
         zone_name=resolved_zone_name,
         recent_limit=recent_limit,
+        since_revision=since_revision,
     )
     return {
         "zone_id": zone_id,
@@ -805,7 +807,11 @@ def _build_zone_action_closure_context(
     }
 
 
-def _build_zone_action_closure_contexts(zone_name_lookup: Dict[str, str] | None = None) -> List[Dict[str, Any]]:
+def _build_zone_action_closure_contexts(
+    zone_name_lookup: Dict[str, str] | None = None,
+    *,
+    since_revision: int | None = None,
+) -> List[Dict[str, Any]]:
     """Expose zone-scoped closure contexts for system-wide dashboard consumers."""
     zone_name_lookup = zone_name_lookup or {}
     summary = build_action_closure_summary_read_model(get_action_closure_store())
@@ -817,8 +823,11 @@ def _build_zone_action_closure_contexts(zone_name_lookup: Dict[str, str] | None 
             zone_id,
             zone_name=zone_name_lookup.get(zone_id),
             recent_limit=2,
+            since_revision=since_revision,
         )
         if context["context"].get("summary", {}).get("total_closures", 0):
+            if since_revision is not None and not context["context"].get("delta", {}).get("changed"):
+                continue
             contexts.append(context)
 
     contexts.sort(
@@ -829,12 +838,15 @@ def _build_zone_action_closure_contexts(zone_name_lookup: Dict[str, str] | None 
     )
     return contexts
 
-def _build_global_context() -> Dict[str, Any]:
+def _build_global_context(*, since_revision: int | None = None) -> Dict[str, Any]:
     """Build global dashboard context from available engines + example data."""
     ctx: Dict[str, Any] = {}
 
     try:
-        closure_summary = build_action_closure_summary_read_model(get_action_closure_store())
+        closure_summary = build_action_closure_summary_read_model(
+            get_action_closure_store(),
+            since_revision=since_revision,
+        )
         if closure_summary.total_closures:
             payload = closure_summary.to_dict()
             zone_name_lookup: Dict[str, str] = {}
@@ -852,8 +864,13 @@ def _build_global_context() -> Dict[str, Any]:
                 if not zid.startswith("zone:"):
                     zone_name_lookup[f"zone:{zid}"] = zone_name
 
-            zone_contexts = _build_zone_action_closure_contexts(zone_name_lookup)
+            zone_contexts = _build_zone_action_closure_contexts(
+                zone_name_lookup,
+                since_revision=since_revision,
+            )
             ctx["action_closures"] = {
+                "revision": payload.get("revision", 0),
+                "freshness": payload.get("latest_change_at") or payload.get("freshness"),
                 "total": payload.get("total_closures", 0),
                 "open": payload.get("open_count", 0),
                 "successful": payload.get("success_count", 0),
@@ -862,6 +879,7 @@ def _build_global_context() -> Dict[str, Any]:
                 "states": payload.get("states", {}),
                 "highlights": payload.get("highlights", []),
                 "recent": payload.get("recent_closures", [])[:3],
+                "delta": payload.get("delta", {}),
                 "zones_with_closures": len(zone_contexts),
                 "zone_contexts": zone_contexts,
             }
@@ -998,6 +1016,19 @@ def _parse_bool_param(name: str, default: bool = True) -> bool:
     return request.args.get(name, str(default)).lower() == "true"
 
 
+def _parse_optional_int_param(name: str) -> int | None:
+    raw = (request.args.get(name) or "").strip()
+    if not raw:
+        return None
+    try:
+        value = int(raw)
+    except ValueError:
+        raise ValueError(f"Invalid integer for {name}: {raw}")
+    if value < 0:
+        raise ValueError(f"Invalid integer for {name}: {raw}")
+    return value
+
+
 def _resolve_zone_id(zone_id: str) -> str:
     """Resolve incoming zone ids against the actual truth lane identifiers."""
     candidate = str(zone_id or "").strip()
@@ -1043,6 +1074,10 @@ def get_dashboard():
     requested_zone_type = (request.args.get("zone_type") or "").strip().lower()
     if requested_zone_type and not _is_valid_zone_type(requested_zone_type):
         return jsonify({"ok": False, "error": f"Invalid zone_type: {requested_zone_type}"}), 400
+    try:
+        action_closure_since = _parse_optional_int_param("action_closure_since")
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
 
     # Slice 6: ZoneSummaryReadModel as truth base for zone list
     zone_engine = _svc.get("habitus_zones")
@@ -1077,6 +1112,7 @@ def get_dashboard():
             zid,
             zone_name=_get_zone_display_name(zone),
             recent_limit=2,
+            since_revision=action_closure_since,
         )
         if include_modules:
             zone_data["modules"] = _get_zone_module_data(zid)
@@ -1095,7 +1131,7 @@ def get_dashboard():
         "count": len(dashboard_zones),
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }
-    global_ctx = _build_global_context()
+    global_ctx = _build_global_context(since_revision=action_closure_since)
     if global_ctx:
         response["global"] = global_ctx
 
@@ -1249,6 +1285,10 @@ def execute_quick_action():
 def get_zone_detail(zone_id: str):
     """Detailansicht einer einzelnen Zone mit allen Moduldaten."""
     zone_id = _resolve_zone_id(zone_id)
+    try:
+        action_closure_since = _parse_optional_int_param("action_closure_since")
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
 
     # Slice 6: Use ZoneDetailReadModel for truth-backed zone data
     zone_engine = _svc.get("habitus_zones")
@@ -1274,6 +1314,7 @@ def get_zone_detail(zone_id: str):
         zone_id,
         zone_name=_get_zone_display_name(zone_data),
         recent_limit=3,
+        since_revision=action_closure_since,
     )
 
     return jsonify({"ok": True, "zone": zone_data})
