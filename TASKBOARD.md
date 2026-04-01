@@ -645,7 +645,7 @@ Coordinate actions across multiple zones (scenes, routines, events).
 11. **✅ Slice 95 — Health Engine Surface Recovery** — Deadlock im Advanced-Health-Dependency-Pfad beseitigt, Built-in-Systemchecks von der user-facing Root-Contract-Surface getrennt, Default-Kritikalität/Overall-Health der klassischen Health-Engine wieder contract-konform gemacht und Component-Checks im Read-Model vollständig serialisiert
 12. **✅ Slice 96 — Circadian, Logging, and Metrics Contract Repair** — Night-Circadian-State liefert nachts wieder `sleep_mode_brightness`; Logging-Pattern-Filter arbeiten case-insensitive und der Default-Buffer ist wieder `100`; Counter-History wird nicht mehr in-place mutiert und `aggregation="sum"` summiert Serienstände statt aufgeblähter History-Referenzen
 
-**Next Exact Refinement Task:** `tests/test_metrics_engine.py::TestMetricsEngine::test_get_metric_history_time_range` isoliert schließen; Time-Range-Queries müssen frisch geschriebene Metric-Points am oberen Zeitrand contract-konform liefern statt leer zurückzufallen
+**Next Exact Refinement Task:** `tests/test_zone_automation_blueprint_contract.py::test_list_zone_entities_invalid_bool_query_rejected` contract-konform schließen; invalides `by_role` muss als `{"ok": false, "error": "invalid_query_param", "message": "Invalid value for 'by_role': ..."}` statt als freier Error-String zurückkommen
 
 **After Refinement:** Slice 12+ nur entlang der dann verbleibenden ersten echten Root-Restfehler weiterziehen; keine neuen Feature-Slices vor sauberem Restfehler-Abtrag
 

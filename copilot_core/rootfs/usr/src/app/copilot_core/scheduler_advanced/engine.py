@@ -24,6 +24,17 @@ import uuid
 logger = logging.getLogger(__name__)
 
 
+def _normalize_datetime_to_utc(value: datetime) -> datetime:
+    """Normalize datetimes to timezone-aware UTC.
+
+    Timezone-naive inputs are interpreted as local wall-clock times so callers
+    can pass ``datetime.now()`` style values without scheduling jobs hours late.
+    """
+    if value.tzinfo is None:
+        value = value.astimezone()
+    return value.astimezone(timezone.utc)
+
+
 class ScheduleType(Enum):
     """Schedule types."""
     CRON = "cron"
@@ -290,9 +301,8 @@ class SchedulerEngine:
                      metadata: Optional[Dict[str, Any]] = None) -> str:
         """Schedule a one-time job."""
         job_id = f"job_{uuid.uuid4().hex[:16]}"
-        
-        if run_at.tzinfo is None:
-            run_at = run_at.replace(tzinfo=timezone.utc)
+
+        run_at = _normalize_datetime_to_utc(run_at)
         
         job = ScheduledJob(
             job_id=job_id,

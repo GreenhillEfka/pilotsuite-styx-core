@@ -1,5 +1,14 @@
 # Changelog
 
+## [v15.3.16] - 2026-04-01
+
+### 🧩 Slice 99 — Scheduler Naive Datetime Repair
+
+- `scheduler_advanced.engine.schedule_once()` normalisiert timezone-naive Datetimes jetzt als lokale Wall-Clock-Zeit nach UTC, statt sie fälschlich direkt als UTC zu interpretieren.
+- One-shot-Jobs mit `datetime.now() + delta` laufen dadurch contract-konform zum erwarteten Zeitpunkt, auch wenn der Host nicht in UTC läuft.
+- Versionsartefakte (`VERSION`, `copilot_core/VERSION`, `config.yaml`, `manifest.json`, Add-on-Config, Runtime-VERSION) auf `15.3.16` harmonisiert.
+- Validiert mit: `pytest -q tests/test_scheduler_advanced_engine.py::TestSchedulerEngine::test_scheduler_with_timezone_naive_datetime` → `1 passed`; `pytest -q tests/test_scheduler_advanced_engine.py` → `78 passed`; `pytest -x -q` → erster echter Restfehler jetzt bei `tests/test_zone_automation_blueprint_contract.py::test_list_zone_entities_invalid_bool_query_rejected`.
+
 ## [v15.3.15] - 2026-04-01
 
 ### 🧩 Slice 98 — Scheduler Failure Cadence Repair
