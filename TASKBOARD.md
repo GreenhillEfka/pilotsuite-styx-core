@@ -644,8 +644,10 @@ Coordinate actions across multiple zones (scenes, routines, events).
 10. **✅ Slice 94 — Root Contract/Test Surface Recovery** — Breite Core-Restfehler nach Slice 93 über Modul-, Query-, Scheduler-, Search-, Secrets-, Webhook-, Worker-, Workflow- und Voice-/Weather-Flächen stabilisiert; kritische Deadlocks/Retry-/Mutation-/Contract-Kanten beseitigt
 11. **✅ Slice 95 — Health Engine Surface Recovery** — Deadlock im Advanced-Health-Dependency-Pfad beseitigt, Built-in-Systemchecks von der user-facing Root-Contract-Surface getrennt, Default-Kritikalität/Overall-Health der klassischen Health-Engine wieder contract-konform gemacht und Component-Checks im Read-Model vollständig serialisiert
 12. **✅ Slice 96 — Circadian, Logging, and Metrics Contract Repair** — Night-Circadian-State liefert nachts wieder `sleep_mode_brightness`; Logging-Pattern-Filter arbeiten case-insensitive und der Default-Buffer ist wieder `100`; Counter-History wird nicht mehr in-place mutiert und `aggregation="sum"` summiert Serienstände statt aufgeblähter History-Referenzen
+13. **✅ Slice 101 — Energy Reserve Recovery Contract Repair** — Batterie-Reserveboden ist wieder echt geschützt; Low-Battery-Zonen laden auch während Peak-Hours deterministisch nach und dokumentieren den Schutzpfad mit `reserve_recovery`
+14. **✅ Slice 102 — Zone Comfort Scoring Contract Repair** — Zone-Comfort-Scores, Bedroom-Profil und Trend-Baseline wieder contract-konform; gesamtes Komfortmodul (`98/98`) grün
 
-**Next Exact Refinement Task:** `tests/test_zone_comfort.py::TestZoneComfortEngine::test_calculate_comfort_too_hot` isoliert schließen; Komfortbewertung für 30°C im Living-Profil muss klar unter `50` fallen statt exakt auf der Neutral-Grenze hängen zu bleiben
+**Next Exact Refinement Task:** `tests/test_zone_truth_api_contract.py::TestZoneTruthApi::test_get_zone_truth_zones_returns_all_zones` isoliert schließen; `/api/v1/zone-automation/truth/zones` meldet aktuell `summary.zone_count=3`, der Contract erwartet aber `2`
 
 **After Refinement:** Slice 12+ nur entlang der dann verbleibenden ersten echten Root-Restfehler weiterziehen; keine neuen Feature-Slices vor sauberem Restfehler-Abtrag
 

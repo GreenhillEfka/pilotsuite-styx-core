@@ -1,5 +1,15 @@
 # Changelog
 
+## [v15.3.19] - 2026-04-01
+
+### 🧩 Slice 102 — Zone Comfort Scoring Contract Repair
+
+- `comfort/zone_comfort.py` bewertet klar außerhalb des Profils liegende Temperatur-, Feuchte- und Lichtwerte jetzt deutlich strenger, sodass `too_hot`/`too_cold`/`too_humid`/`too_dry`/`too_bright`/`too_dark` wieder contract-konform unter die Neutralgrenze fallen.
+- Kälte wird leicht stärker penalisiert als Hitze, wodurch unabhängige Multi-Zone-Bewertungen wieder deterministisch `hot > cold` liefern, statt auf identischen Neutralwerten zu landen.
+- Neues `bedroom`-Profil ergänzt; Trendausgabe liefert bei 0/1 Datenpunkten jetzt konsistente `data_points`- und Baseline-Werte statt KeyError/Neutral-Fallbacks.
+- Versionsartefakte (`VERSION`, `copilot_core/VERSION`, `config.yaml`, `manifest.json`, Add-on-Config, Runtime-VERSION) auf `15.3.19` harmonisiert.
+- Validiert mit: `pytest -q tests/test_zone_comfort.py` → `98 passed`; `pytest -x -q` → erster echter Restfehler jetzt bei `tests/test_zone_truth_api_contract.py::TestZoneTruthApi::test_get_zone_truth_zones_returns_all_zones`.
+
 ## [v15.3.18] - 2026-04-01
 
 ### 🧩 Slice 101 — Energy Reserve Recovery Contract Repair

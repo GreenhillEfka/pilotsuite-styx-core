@@ -303,6 +303,29 @@ class ZoneComfortEngine:
             noise_weight=0.10,
             air_quality_weight=0.05,
         )
+
+        # Bedroom profile
+        bedroom_profile = ZoneComfortProfile(
+            profile_id="profile_bedroom",
+            name="Bedroom",
+            profile_type="bedroom",
+            temp_min=18.0,
+            temp_max=22.0,
+            temp_optimal=20.0,
+            humidity_min=40.0,
+            humidity_max=60.0,
+            humidity_optimal=50.0,
+            light_min=0.0,
+            light_max=0.2,
+            light_optimal=0.05,
+            noise_max=0.25,
+            noise_optimal=0.05,
+            temp_weight=0.40,
+            humidity_weight=0.20,
+            light_weight=0.20,
+            noise_weight=0.15,
+            air_quality_weight=0.05,
+        )
         
         # Living room profile
         living_profile = ZoneComfortProfile(
@@ -333,6 +356,7 @@ class ZoneComfortEngine:
             "elderly": elderly_profile,
             "office": office_profile,
             "sleep": sleep_profile,
+            "bedroom": bedroom_profile,
             "living": living_profile,
         }
         
@@ -436,13 +460,16 @@ class ZoneComfortEngine:
     def _calculate_temp_score(self, temp: float, profile: ZoneComfortProfile) -> float:
         """Calculate temperature comfort score (0-100)."""
         if temp < profile.temp_min:
-            # Too cold
+            # Too cold. Penalize cold-side drift a bit more strongly than heat
+            # so cold rooms rank below similarly warm rooms.
             diff = profile.temp_min - temp
-            return max(0, 100 - (diff * 10))
+            return max(0, 100 - (diff * 18))
         elif temp > profile.temp_max:
-            # Too hot
+            # Too hot. Mirror the cold-side penalty so a room that is several
+            # degrees outside the profile band is scored as genuinely
+            # uncomfortable rather than merely neutral.
             diff = temp - profile.temp_max
-            return max(0, 100 - (diff * 10))
+            return max(0, 100 - (diff * 15))
         else:
             # In range - calculate based on distance from optimal
             diff_from_optimal = abs(temp - profile.temp_optimal)
@@ -455,11 +482,11 @@ class ZoneComfortEngine:
         if humidity < profile.humidity_min:
             # Too dry
             diff = profile.humidity_min - humidity
-            return max(0, 100 - (diff * 2))
+            return max(0, 100 - (diff * 4))
         elif humidity > profile.humidity_max:
             # Too humid
             diff = humidity - profile.humidity_max
-            return max(0, 100 - (diff * 2))
+            return max(0, 100 - (diff * 4))
         else:
             # In range
             diff_from_optimal = abs(humidity - profile.humidity_optimal)
@@ -473,11 +500,11 @@ class ZoneComfortEngine:
         if light < profile.light_min:
             # Too dark
             diff = profile.light_min - light
-            return max(0, 100 - (diff * 100))
+            return max(0, 100 - (diff * 350))
         elif light > profile.light_max:
             # Too bright
             diff = light - profile.light_max
-            return max(0, 100 - (diff * 100))
+            return max(0, 100 - (diff * 350))
         else:
             # In range
             diff_from_optimal = abs(light - profile.light_optimal)
@@ -684,12 +711,15 @@ class ZoneComfortEngine:
         history = self.get_comfort_history(zone_id, hours)
         
         if len(history) < 2:
+            scores = [entry.comfort_score for entry in history]
+            baseline = scores[0] if scores else 50.0
             return {
                 "trend": "stable",
                 "change": 0.0,
-                "average": 50.0,
-                "min": 50.0,
-                "max": 50.0,
+                "average": round(baseline, 2),
+                "min": round(baseline, 2),
+                "max": round(baseline, 2),
+                "data_points": len(scores),
             }
         
         scores = [entry.comfort_score for entry in history]
