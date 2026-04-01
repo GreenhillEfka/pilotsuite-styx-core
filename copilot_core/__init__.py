@@ -21,3 +21,21 @@ _runtime_pkg_path = str(_runtime_pkg_dir)
 
 if _runtime_pkg_dir.is_dir() and _runtime_pkg_path not in __path__:
     __path__.append(_runtime_pkg_path)
+
+try:
+    from .versioning import get_runtime_version
+except Exception:  # pragma: no cover - bridge fallback only
+    def get_runtime_version(default: str = "0.0.0") -> str:
+        version_file = _pkg_dir / "VERSION"
+        try:
+            value = version_file.read_text(encoding="utf-8").strip()
+            if value:
+                return value
+        except Exception:
+            pass
+        return default
+
+
+__version__ = get_runtime_version()
+
+__all__ = ["__version__", "get_runtime_version"]

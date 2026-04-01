@@ -124,6 +124,7 @@ class ConfigurationEngine:
         self._schemas: Dict[str, ConfigSchema] = {}
         self._change_log: List[ConfigChange] = []
         self._max_log_size = 1000
+        self._validation_errors: Dict[str, str] = {}
         
         # Callbacks for config changes
         self._change_callbacks: Dict[str, List[Callable]] = {}
@@ -181,8 +182,10 @@ class ConfigurationEngine:
         # Validate against schema
         if key in self._schemas:
             if not self._validate_value(key, value):
+                self._validation_errors[key] = f"Config validation failed: {key}"
                 logger.error("Config validation failed for %s", key)
                 return False
+            self._validation_errors.pop(key, None)
         
         # Determine config type
         config_type = self._infer_type(value)
@@ -354,6 +357,7 @@ class ConfigurationEngine:
         self._log_change(key, old_value, None, deleted_by, "Config deleted", ConfigSource.OVERRIDE)
         
         del self._configs[key]
+        self._validation_errors.pop(key, None)
         self._stats["total_configs"] = len(self._configs)
         
         logger.info("Config deleted: %s", key)
@@ -497,7 +501,7 @@ class ConfigurationEngine:
     
     def validate_all(self) -> Dict[str, Any]:
         """Validate all configuration values."""
-        errors = []
+        errors = list(self._validation_errors.values())
         warnings = []
         
         # Check required schemas
@@ -534,7 +538,9 @@ class ConfigurationEngine:
         for key in list(self._configs.keys()):
             self._log_change(key, self._configs[key].value, None, cleared_by, "Config cleared", ConfigSource.OVERRIDE)
             del self._configs[key]
-        
+
+        self._validation_errors.clear()
+
         self._stats["total_configs"] = 0
         
         logger.info("Cleared %d config values", count)

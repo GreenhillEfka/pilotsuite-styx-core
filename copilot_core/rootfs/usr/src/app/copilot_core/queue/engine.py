@@ -46,8 +46,8 @@ class Message:
     message_id: str
     queue_name: str
     body: Any
-    priority: int = 0
     created_at: str
+    priority: int = 0
     delay_until: Optional[str] = None
     visible_at: Optional[str] = None
     expires_at: Optional[str] = None
@@ -134,7 +134,7 @@ class QueueEngine:
         self._queues: Dict[str, Queue] = {}
         self._messages: Dict[str, Dict[str, Message]] = {}  # queue_name -> {message_id -> Message}
         self._priority_queues: Dict[str, List[tuple]] = {}  # queue_name -> [(priority, timestamp, message_id)]
-        self._subscribers: Dict[str, List[Callable[[Message], None]]] = {}
+        self._subscribers: Dict[str, List[tuple[str, Callable[[Message], None]]]] = {}
         self._processing: Dict[str, Message] = {}  # message_id -> Message
         self._lock = threading.Lock()
         
@@ -200,7 +200,7 @@ class QueueEngine:
     
     def enqueue(self, queue_name: str, body: Any,
                priority: int = 0,
-               delay_seconds: int = 0,
+               delay_seconds: Optional[int] = None,
                ttl_seconds: Optional[int] = None,
                metadata: Optional[Dict[str, Any]] = None) -> str:
         """Enqueue a message."""
@@ -219,13 +219,13 @@ class QueueEngine:
         message_id = f"msg_{uuid.uuid4().hex[:16]}"
         
         delay_until = None
-        if delay_seconds > 0 or queue.default_delay_seconds > 0:
-            delay_secs = delay_seconds or queue.default_delay_seconds
+        delay_secs = queue.default_delay_seconds if delay_seconds is None else delay_seconds
+        if delay_secs > 0:
             delay_until = (now + timedelta(seconds=delay_secs)).isoformat()
-        
+
         expires_at = None
-        if ttl_seconds or queue.default_ttl_seconds:
-            ttl = ttl_seconds or queue.default_ttl_seconds
+        ttl = queue.default_ttl_seconds if ttl_seconds is None else ttl_seconds
+        if ttl > 0:
             expires_at = (now + timedelta(seconds=ttl)).isoformat()
         
         message = Message(
@@ -301,7 +301,7 @@ class QueueEngine:
                     break
             else:
                 # FIFO - get oldest visible message
-                for message_id, msg in messages.items():
+                for message_id, msg in list(messages.items()):
                     if msg.status != MessageStatus.PENDING:
                         continue
                     
@@ -375,10 +375,19 @@ class QueueEngine:
             if requeue and message.attempts < message.max_attempts:
                 # Requeue for retry
                 message.status = MessageStatus.PENDING
-                message.visible_at = (datetime.now(timezone.utc) + timedelta(seconds=10 * message.attempts)).isoformat()  # Exponential backoff
-                
+                backoff_seconds = 0.05 * (2 ** max(message.attempts - 1, 0))
+                message.visible_at = (
+                    datetime.now(timezone.utc) + timedelta(seconds=backoff_seconds)
+                ).isoformat()
+
                 if queue_name in self._messages:
                     self._messages[queue_name][message_id] = message
+
+                if self._queues[queue_name].queue_type == QueueType.PRIORITY:
+                    heapq.heappush(
+                        self._priority_queues[queue_name],
+                        (-message.priority, datetime.now(timezone.utc).timestamp(), message_id),
+                    )
                 
                 logger.debug("Message requeued: %s (attempt %d)", message_id, message.attempts)
             else:
@@ -436,14 +445,15 @@ class QueueEngine:
         """Unsubscribe from queue."""
         if queue_name not in self._subscribers:
             return False
-        
+
         with self._lock:
+            original_len = len(self._subscribers[queue_name])
             self._subscribers[queue_name] = [
                 (sid, cb) for sid, cb in self._subscribers[queue_name]
                 if sid != subscriber_id
             ]
-        
-        return True
+
+        return len(self._subscribers[queue_name]) != original_len
     
     def get_queue_size(self, queue_name: str) -> int:
         """Get queue size (pending messages only)."""

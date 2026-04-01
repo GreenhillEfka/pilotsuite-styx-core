@@ -18,8 +18,16 @@ try:
 except ImportError:
     from ..api.security import require_token
 
-from .websocket_client import HomeAssistantWebSocketClient, WebSocketConfig, ConnectionState
-from .event_handler import EventHandler, HAEvent, create_standard_subscriptions
+from copilot_core.homeassistant.websocket_client import (
+    HomeAssistantWebSocketClient,
+    WebSocketConfig,
+    ConnectionState,
+)
+from copilot_core.homeassistant.event_handler import (
+    EventHandler,
+    HAEvent,
+    create_standard_subscriptions,
+)
 
 logger = logging.getLogger(__name__)
 

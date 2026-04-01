@@ -83,6 +83,10 @@ class CommandOutput:
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert to JSON-serializable dict."""
+        completed_at = self.completed_at
+        if completed_at is None and self.status != CommandStatus.PENDING:
+            completed_at = self.created_at
+
         return {
             "command_id": self.command_id,
             "command_type": self.command_type.value,
@@ -97,7 +101,7 @@ class CommandOutput:
             "policy_decision": self.policy_decision,
             "audit_trail": self.audit_trail,
             "created_at": self.created_at,
-            "completed_at": self.completed_at,
+            "completed_at": completed_at,
         }
 
 

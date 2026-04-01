@@ -106,7 +106,8 @@ class CacheEngine:
         self._frequency: Dict[str, int] = {}
         
         # Insertion order for FIFO (key -> sequence)
-        self._insertion_order: Dict[str, int] = 0
+        self._insertion_order: Dict[str, int] = {}
+        self._insertion_sequence: int = 0
     
     def get(self, key: str, namespace: str = "default",
             default: Any = None) -> Any:
@@ -265,9 +266,9 @@ class CacheEngine:
     
     def _update_insertion_metadata(self, key: str) -> None:
         """Update insertion metadata."""
-        self._insertion_order[key] = self._insertion_order
-        self._insertion_order += 1
-        
+        self._insertion_order[key] = self._insertion_sequence
+        self._insertion_sequence += 1
+
         # Also update access order for new entries
         self._update_access_metadata(key)
     
@@ -285,6 +286,7 @@ class CacheEngine:
                 self._access_order.clear()
                 self._frequency.clear()
                 self._insertion_order.clear()
+                self._insertion_sequence = 0
                 self._stats.clear()
                 return count
             

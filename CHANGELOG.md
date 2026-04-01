@@ -1,5 +1,16 @@
 # Changelog
 
+## [v15.3.7] - 2026-04-01
+
+### 🧩 Slice 90 — Runtime Surface Repair
+
+- Root-Pytest-Importfläche gehärtet: neue Bridge-Pakete für `copilot_core.api`, `copilot_core.api.v1`, `copilot_core.config`, `core` und `copilot_sdk`; `copilot_core.homeassistant` und `copilot_core.cache` erweitern jetzt deterministisch den Runtime-Pfad.
+- `copilot_core/__init__.py` exportiert wieder eine belastbare `__version__`; HA-Event-Imports zeigen jetzt auf die reale Home-Assistant-Implementierung, und `plugins/__init__.py` degradiert sauber ohne `bs4`, damit Engine-Tests nicht schon beim Package-Import kippen.
+- Cache-/Queue-/Config-/SDK-Baseline repariert: FIFO-Insertion-Tracking im Cache, Queue-Requeue/Delay/Expiry-Handling, Konfigurations-Validierungsfehler-Tracking sowie ein testbarer Top-Level-SDK-Client sind jetzt wieder konsistent.
+- `ha_adapter_executor.CommandOutput.to_dict()` liefert für terminale Zustände wieder ein belastbares `completed_at`.
+- Versionsartefakte (`VERSION`, `copilot_core/VERSION`, `config.yaml`, `manifest.json`, Add-on-Config, Runtime-VERSION) auf `15.3.7` harmonisiert.
+- Validiert mit: `/home/linuxbrew/.linuxbrew/bin/pytest -q tests/test_cache_engine.py tests/test_config_engine.py sdk/python/tests/test_client.py tests/test_queue_engine.py tests/test_ha_adapter_executor.py` → `236 passed`.
+
 ## [v15.3.6] - 2026-04-01
 
 ### 🧪 Slice 89 — Pytest Root Bootstrap
