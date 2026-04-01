@@ -769,3 +769,27 @@ Closure-Signale in Predictive-/Habitus-/Multi-Zone-Lern- und Priorisierungslogik
 **After Refinement:** Root-Contract-Surface ist grün; Slice 13+ wieder als reguläre Forward-Slices aufnehmen
 
 **Core is now stable enough for HA/HACS lane reactivation.**
+
+### ✅ Slice 20 — Closure-Aware Voice Follow-Up Hints
+**Status:** ✅ DONE (v15.3.31)
+
+**Goal**
+Den Roadmap-Block **Voice Integration** an die kanonische Closure-Wahrheit anbinden, damit proaktive Sprachhinweise offene/problematische Aktionen aus derselben Proposal→Action→Runtime-Spur ableiten statt nur generische Zeit-/Mood-Hinweise zu sprechen.
+
+### Deliverables
+- [x] neuer Voice-Hint-Typ `action_follow_up` in der proaktiven Hint-Pipeline
+- [x] Proactive Voice liest `ActionClosureContextBlockV1` direkt aus der kanonischen Closure-Surface
+- [x] problematische Closures erzeugen High-Priority-Nachfass-Hinweise; offene Closures erzeugen Medium-Priority-Statushinweise
+- [x] `/api/v1/voice/hints` exponiert denselben Closure-Summary-/Recent-Closure-Kontext stabil im Hint-Payload
+- [x] Contract-Tests für direkte Hint-Generierung und API-Surface gegen dieselbe Closure-Wahrheit
+
+### Acceptance criteria
+- Voice-Hinweise sprechen bei realen offenen/problematischen Aktionen dieselbe Closure-Wahrheit wie Dashboard, Chat, Predictive und Multi-Zone.
+- Follow-up-Hinweise bleiben source-grounded: Status, Summary und letzte Closure sind im Hint-Kontext transparent enthalten.
+- Die Voice-Surface erfindet keine separaten Outcome-Heuristiken neben dem bestehenden Closure-Contract.
+
+**Commit:** `feat(core): deliver slice 20 closure-aware voice follow-up hints`
+**Tag:** v15.3.31
+**Tests:** `pytest -q tests/test_action_closure_contract.py tests/test_action_closure_summary_contract.py tests/test_voice_action_closure_hints_contract.py tests/test_voice_policy_contract.py` → `13 passed`
+
+**Next Exact Task:** Nächster Forward-Slice wieder aus Roadmap/Vision ableiten; naheliegender Kandidat ist die zonenspezifische Ausleitung derselben Closure-Wahrheit für Voice/Chat-Kontext statt globalem Follow-up.

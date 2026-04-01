@@ -5,11 +5,13 @@ Provides proactive voice hints based on:
 - Pattern recognition (Habitus)
 - Time-based routines
 - Important events
+- Action-closure follow-ups
 - Environmental changes
 
 Features:
 - Proaktive Hinweise bei wichtigen Erkenntnissen
 - Integration mit Mood Engine und Habitus
+- Outcome-aware Follow-ups aus der kanonischen Action-Closure-Surface
 - Kontextbewusste Vorschläge
 - DE/EN Sprachunterstützung
 """
@@ -57,6 +59,7 @@ class HintType(str, Enum):
     # Event-based hints
     IMPORTANT_EVENT = "important_event"
     REMINDER = "reminder"
+    ACTION_FOLLOW_UP = "action_follow_up"
     
     # Environment-based hints
     WEATHER_ALERT = "weather_alert"
@@ -360,6 +363,7 @@ class ProactiveVoiceHints:
         hints.extend(self._check_mood_changes(context))
         hints.extend(self._check_time_routines(context))
         hints.extend(self._check_habitus_patterns(context))
+        hints.extend(self._check_action_followups(context))
         hints.extend(self._check_environment_hints(context))
         
         # Filter by priority and cooldown
@@ -576,7 +580,129 @@ class ProactiveVoiceHints:
             _LOGGER.debug("Failed to check habitus patterns: %s", e)
         
         return hints
-    
+
+    def _check_action_followups(self, context: VoiceContext) -> List[ProactiveHint]:
+        """Check shared action-closure truth and suggest follow-ups for open/problematic actions."""
+        try:
+            from copilot_core.action_closure import get_action_closure_store
+            from copilot_core.core.action_closure_read_model import build_action_closure_context_block
+
+            closure_context = build_action_closure_context_block(
+                get_action_closure_store(),
+                recent_limit=3,
+            )
+        except Exception as exc:
+            _LOGGER.debug("Failed to build action-closure follow-up hint: %s", exc)
+            return []
+
+        summary = dict(closure_context.summary)
+        if int(summary.get("total_closures") or 0) <= 0:
+            return []
+
+        recent_closures = [dict(item) for item in closure_context.recent_closures]
+        problematic = next(
+            (
+                item
+                for item in recent_closures
+                if str(item.get("state") or "").strip().lower() in {"failed", "error", "blocked", "denied", "rejected", "cancelled"}
+                or str(item.get("execution_outcome") or "").strip().lower() in {"failed", "error", "blocked", "denied", "rejected", "cancelled"}
+            ),
+            None,
+        )
+        open_item = next(
+            (
+                item
+                for item in recent_closures
+                if str(item.get("state") or "").strip().lower() in {"accepted", "feedback_received", "queued", "pending", "scheduled", "awaiting_execution"}
+            ),
+            None,
+        )
+
+        base_context = {
+            "contract": "ActionClosureVoiceHintV1",
+            "summary": summary,
+            "voice_zone": context.zone_name,
+        }
+
+        if problematic:
+            target = self._describe_closure_target(problematic)
+            return [
+                ProactiveHint(
+                    hint_type=HintType.ACTION_FOLLOW_UP,
+                    priority=HintPriority.HIGH,
+                    title_de="Aktion braucht Nachfassen",
+                    title_en="Action Needs Follow-Up",
+                    message_de=(
+                        f"Die letzte Aktion bei {target} war problematisch. "
+                        "Soll ich den Status pruefen oder einen neuen Versuch vorbereiten?"
+                    ),
+                    message_en=(
+                        f"The latest action for {target} was problematic. "
+                        "Should I check the status or prepare a retry?"
+                    ),
+                    suggested_action={
+                        "kind": "action_closure_review",
+                        "closure_id": problematic.get("closure_id"),
+                        "state": problematic.get("state"),
+                    },
+                    context={
+                        **base_context,
+                        "recent_closure": problematic,
+                    },
+                )
+            ]
+
+        open_count = int(summary.get("open_count") or 0)
+        if open_item or open_count:
+            target = self._describe_closure_target(open_item) if open_item else f"{open_count} offenen Aktionen"
+            return [
+                ProactiveHint(
+                    hint_type=HintType.ACTION_FOLLOW_UP,
+                    priority=HintPriority.MEDIUM,
+                    title_de="Offene Aktion im Blick behalten",
+                    title_en="Keep an Eye on Open Action",
+                    message_de=(
+                        f"Es gibt noch offene Aktionen rund um {target}. "
+                        "Soll ich den aktuellen Status zusammenfassen?"
+                    ),
+                    message_en=(
+                        f"There are still open actions around {target}. "
+                        "Should I summarize the current status?"
+                    ),
+                    suggested_action={
+                        "kind": "action_closure_summary",
+                        "open_count": open_count,
+                        "closure_id": (open_item or {}).get("closure_id"),
+                    },
+                    context={
+                        **base_context,
+                        "recent_closure": dict(open_item) if open_item else None,
+                    },
+                )
+            ]
+
+        return []
+
+    @staticmethod
+    def _describe_closure_target(closure: Optional[Dict[str, Any]]) -> str:
+        """Build a short human-readable target label for a closure hint."""
+        if not closure:
+            return "dem letzten Vorgang"
+
+        zone_id = str(closure.get("zone_id") or "").strip()
+        module_id = str(closure.get("module_id") or "").strip()
+        action_id = str(closure.get("action_id") or "").strip()
+
+        if zone_id and module_id:
+            return f"{zone_id}/{module_id}"
+        if zone_id:
+            return zone_id
+        if module_id:
+            return module_id
+        if action_id:
+            return action_id
+        return "dem letzten Vorgang"
+
     def _check_environment_hints(self, context: VoiceContext) -> List[ProactiveHint]:
         """Check for environment-based hints (weather, energy, comfort)."""
         hints = []

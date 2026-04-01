@@ -1,5 +1,16 @@
 # Changelog
 
+## [v15.3.31] - 2026-04-01
+
+### 🧩 Slice 20 — Closure-Aware Voice Follow-Up Hints
+
+- `copilot_core.voice.proactive` liest fuer proaktive Voice-Hinweise jetzt direkt die kanonische `ActionClosureContextBlockV1`-Surface und erzeugt daraus outcome-aware Follow-up-Hints statt separater Sonderlogik.
+- Neuer Hint-Typ `action_follow_up` hebt problematische Closures mit hoher Prioritaet hervor und meldet offene Closures als proaktive Status-Nachfrage mit derselben Closure-/Summary-Wahrheit.
+- `GET /api/v1/voice/hints` exponiert den Closure-Summary- und Recent-Closure-Kontext jetzt stabil im Hint-Payload, damit Voice-Consumer den Follow-up-Grund nachvollziehen koennen.
+- Contract-Coverage sichert sowohl die direkte Hint-Generierung als auch die Voice-API-Surface gegen dieselbe Closure-Historie ab.
+- Versionsartefakte (`VERSION`, `copilot_core/VERSION`, Runtime-VERSION, `copilot_core/config.yaml`, `copilot_core/manifest.json`) auf `15.3.31` harmonisiert.
+- Validiert mit: `pytest -q tests/test_action_closure_contract.py tests/test_action_closure_summary_contract.py tests/test_voice_action_closure_hints_contract.py tests/test_voice_policy_contract.py` → `13 passed`.
+
 ## [v15.3.30] - 2026-04-01
 
 ### 🧩 Slice 19 — Closure-Driven Learning Feedback Loop
