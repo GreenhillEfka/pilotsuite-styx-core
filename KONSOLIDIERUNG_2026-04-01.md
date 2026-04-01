@@ -329,3 +329,93 @@ Dokumentations-Kategorien:
 *Erstellt: 2026-04-01*  
 *Ort: /config/clawd/team/worktrees/pilotsuite-styx-core-current/*  
 *Status: Konsolidierung abgeschlossen — bereit für systematische Prüfung*
+
+---
+
+## 🎯 BLUEPRINT SYSTEM — EINHEITLICH (2026-04-02)
+
+### Vorher vs. Nachher
+
+| Aspekt | Vorher | Nachher |
+|--------|--------|---------|
+| **Config-Ort** | 10+ Dateien | 1 Datei |
+| **Blueprints** | Verstreut | Zentralisiert |
+| **Prefixes** | Inconsistent | `/api/v1/*` |
+| **Wartung** | Schwer | Einfach |
+| **Validierung** | Keine | Automatisch |
+
+### Neue Datei: `copilot_core/blueprints_config.py`
+
+```python
+CORE_API_BLUEPRINTS: List[Tuple[str, str, Optional[str]]] = [
+    # 80+ Blueprints alle unter /api/v1
+    ("copilot_core.api.v1.health", "health_bp", None),
+    ("copilot_core.api.v1.metrics", "metrics_bp", None),
+    ("copilot_core.api.v1.zones", "zones_bp", None),
+    # ... 80+ mehr
+]
+
+EXTERNAL_BLUEPRINTS: List[Tuple[str, str, str]] = [
+    # Externe APIs
+    ("copilot_core.api.v1.openai_compat", "openai_compat_bp", "/v1"),
+    ("copilot_core.homeassistant.api", "ha_discovery_bp", "/ha"),
+]
+```
+
+### Vorteile
+
+✅ **Single Source of Truth** — Eine Datei für alle Blueprints  
+✅ **Konsistente Prefixes** — Alle unter `/api/v1/*`  
+✅ **Einfache Wartung** — Änderungen an einer Stelle  
+✅ **Automatische Validierung** — `validate_blueprint_config()`  
+✅ **Weniger Code** — DRY-Prinzip angewendet  
+
+---
+
+## 📊 FIXES — BLUEPRINT PREFIXES
+
+| Blueprint | Alter Prefix | Neuer Prefix |
+|-----------|-------------|--------------|
+| ml_forecast | (none) | `/api/v1/ml` |
+| cache_control | (none) | `/api/v1/cache` |
+| metrics | (none) | `/api/v1/metrics` |
+| ha_events | (none) | `/api/v1/ha-events` |
+| anomaly | (none) | `/api/v1/anomaly` |
+| dev | (none) | `/api/v1/dev` |
+| events_ingest | (none) | `/api/v1/events-ingest` |
+| proposals | (none) | `/api/v1/proposals` |
+| rate_limit | (none) | `/api/v1/rate-limit` |
+| entity_adoption | `/adoption` | `/api/v1/entity-adoption` |
+| candidates | `/candidates` | `/api/v1/candidates` |
+| dashboard | `/dashboard` | `/api/v1/dashboard` |
+| graph | `/graph` | `/api/v1/graph` |
+| conversation | `/chat` | `/api/v1/conversation` |
+
+### Zusätzliche Blueprints registriert (12)
+
+```
+✅ ml_forecast_bp → /api/v1/ml
+✅ cache_control_bp → /api/v1/cache
+✅ ha_events_bp → /api/v1/ha-events
+✅ learning_viz_bp → /api/v1/learning
+✅ media_ui_bp → /api/v1/media
+✅ neurons_ui_bp → /api/v1/neurons
+✅ rag_ui_bp → /api/v1/rag
+✅ zone_automation_api_bp → /api/v1/zone-automation
+✅ backend_ui_bp → /api/v1/backend
+✅ chat_bp → /api/v1/chat
+✅ energy_forecast_bp → /api/v1/energy
+✅ predictive_bp → /api/v1/predictive
+```
+
+### Erwartete Verbesserung
+
+**Vorher:**
+- 460 Endpoints getestet
+- 277 reachable (60.2%)
+- 183× 404 (39.8%)
+
+**Nachher (erwartet):**
+- 460 Endpoints getestet
+- ~400+ reachable (>87%)
+- ~60× 404 (<13%)
