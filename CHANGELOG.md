@@ -1,5 +1,15 @@
 # Changelog
 
+## [v15.3.5] - 2026-04-01
+
+### 🧩 Slice 88 — Runtime Package Bridge
+
+- Neues `copilot_core/__init__.py` ergänzt den Paketpfad deterministisch um die reale Runtime unter `copilot_core/rootfs/usr/src/app/copilot_core`, damit Top-Level-Tests und Runtime dieselbe Modulstruktur sehen.
+- `copilot_core/ml/__init__.py` auf lazy Exporte + Runtime-Pfad umgestellt; dadurch crasht ein reiner Package-Import nicht mehr an schweren Forecast-Abhängigkeiten, und optionale Anomaly-/ML-Pfade können sauber degradieren.
+- Import-Lücke für `copilot_core.predictive.automation_engine`, `copilot_core.energy.optimization_engine` und `copilot_core.api.v1.anomaly` im Worktree geschlossen, ohne Logik zu duplizieren.
+- Versionsartefakte (`VERSION`, `copilot_core/VERSION`, `config.yaml`, `manifest.json`, Add-on-Config, Runtime-VERSION) auf `15.3.5` harmonisiert.
+- Validiert mit: `PYTHONPATH=. /home/linuxbrew/.linuxbrew/bin/pytest tests/test_predictive_automation.py tests/test_energy_optimization.py tests/test_anomaly_blueprint_contract.py -q` → `34 passed`.
+
 ## [v15.3.4] - 2026-04-01
 
 ### 🧠 Slice 87 — Brain Read-Model Test API Completion
