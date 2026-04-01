@@ -1,5 +1,15 @@
 # Changelog
 
+## [v15.3.9] - 2026-04-01
+
+### 🧩 Slice 92 — Workspace Contract Bundle Recovery
+
+- `tests/integration/test_workspace_ha_core_contract.py` ist jetzt worktree-aware und sucht den HA-Repo-Pfad zuerst in `pilotsuite-styx-ha-current`, mit Legacy-Fallback auf `pilotsuite-styx-ha`.
+- `api/v1/zone_automation.py` normalisiert HA-Sync-Entities wieder contract-kompatibel: Listen aus Strings, Listen aus `{entity_id, role}`-Objekten und rollenbasierte Dict-Payloads werden stabil abgebildet; `cfg.ha_entities`/`cfg._ha_entities` bleiben legacy-kompatibel, reichere Sync-Metadaten wandern separat nach `_ha_entity_sync`.
+- Der Core-Contract-Bundle-Lauf ist wieder grün.
+- Versionsartefakte (`VERSION`, `copilot_core/VERSION`, `config.yaml`, `manifest.json`, Add-on-Config, Runtime-VERSION) auf `15.3.9` harmonisiert.
+- Validiert mit: `PYTHONPATH=copilot_core/rootfs/usr/src/app pytest -q tests/integration/test_workspace_ha_core_contract.py tests/test_zone_truth_sync_contract.py` → `11 passed`; `./scripts/run_core_contract_bundle.sh` → `65 passed`.
+
 ## [v15.3.8] - 2026-04-01
 
 ### 🧩 Slice 91 — Plugin Engine Contract Recovery

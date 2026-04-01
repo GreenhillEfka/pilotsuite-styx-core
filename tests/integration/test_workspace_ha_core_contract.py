@@ -21,8 +21,12 @@ from flask import Flask
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CORE_APP_ROOT = REPO_ROOT / "copilot_core" / "rootfs" / "usr" / "src" / "app"
-HA_REPO_ROOT = REPO_ROOT.parent / "pilotsuite-styx-ha"
+HA_REPO_CANDIDATES = (
+    REPO_ROOT.parent / "pilotsuite-styx-ha-current",
+    REPO_ROOT.parent / "pilotsuite-styx-ha",
+)
 SANDBOX_ROOT = REPO_ROOT.parent.parent / "workspaces" / "pilotsuite-stxy-sandbox"
+HA_REPO_ROOT = next((path for path in HA_REPO_CANDIDATES if path.exists()), HA_REPO_CANDIDATES[0])
 HABITAT_ADAPTER_PATH = HA_REPO_ROOT / "custom_components" / "copilot_ha" / "habitat_adapter.py"
 
 path_str = str(CORE_APP_ROOT)

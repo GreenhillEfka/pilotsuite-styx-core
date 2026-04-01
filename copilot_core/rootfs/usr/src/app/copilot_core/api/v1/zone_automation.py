@@ -956,25 +956,44 @@ def _normalize_string_list(value: Any) -> list[str]:
 
 
 
-def _normalize_zone_entities(zone: dict[str, Any]) -> tuple[list[str], dict[str, str]]:
+def _normalize_zone_entities(zone: dict[str, Any]) -> tuple[list[str], dict[str, str], list[Any]]:
     """Flatten HA zone payloads into entity_ids plus optional role hints.
 
     Accepts both:
     - entities: ["light.kitchen"]
+    - entities: [{"entity_id": "light.kitchen", "role": "lights"}]
     - entities: {"lights": ["light.kitchen"], "motion": ["binary_sensor.kitchen_motion"]}
     - entity_ids: ["light.kitchen", ...]
     """
     entity_ids: list[str] = []
     role_by_entity: dict[str, str] = {}
+    normalized_entities: list[Any] = []
     seen: set[str] = set()
 
+    def _remember_entity(entity_id: str, *, role: str | None = None, rich: Any = None) -> None:
+        if entity_id not in seen:
+            seen.add(entity_id)
+            entity_ids.append(entity_id)
+            normalized_entities.append(rich if rich is not None else entity_id)
+        if role and entity_id not in role_by_entity:
+            role_by_entity[entity_id] = role
+
     def _add_entities(values: Any, *, role: str | None = None) -> None:
+        if isinstance(values, list) and values and all(isinstance(item, dict) for item in values):
+            for item in values:
+                entity_id = str(item.get("entity_id", "")).strip()
+                if not entity_id:
+                    continue
+                item_role = str(item.get("role", role or "")).strip() or None
+                rich_item = {"entity_id": entity_id}
+                if item_role:
+                    rich_item["role"] = item_role
+                _remember_entity(entity_id, role=item_role, rich=rich_item)
+            return
+
         for entity_id in _normalize_string_list(values):
-            if entity_id not in seen:
-                seen.add(entity_id)
-                entity_ids.append(entity_id)
-            if role and entity_id not in role_by_entity:
-                role_by_entity[entity_id] = role
+            rich_item = {"entity_id": entity_id, "role": role} if role else None
+            _remember_entity(entity_id, role=role, rich=rich_item)
 
     entities_payload = zone.get("entities")
     if isinstance(entities_payload, dict):
@@ -985,7 +1004,7 @@ def _normalize_zone_entities(zone: dict[str, Any]) -> tuple[list[str], dict[str,
         _add_entities(entities_payload)
 
     _add_entities(zone.get("entity_ids"))
-    return entity_ids, role_by_entity
+    return entity_ids, role_by_entity, normalized_entities
 
 
 @zone_automation_bp.route("/sync-definitions", methods=["POST"])
@@ -1027,7 +1046,7 @@ def sync_zone_definitions():
         cfg = _controller._configs.get(zone_id)
         if cfg:
             zone_name = _normalize_sync_zone_name(zone, zone_id)
-            entity_ids, role_by_entity = _normalize_zone_entities(zone)
+            entity_ids, role_by_entity, normalized_entities = _normalize_zone_entities(zone)
             ha_sync_source = source if source.endswith("_sync") else f"{source}_sync"
 
             # Store HA entity definitions + zone metadata on the config
@@ -1042,8 +1061,11 @@ def sync_zone_definitions():
                     if str(mid).strip()
                 }
 
-            cfg.ha_entities = list(entity_ids)
-            cfg._ha_entities = {
+            cfg.ha_entities = list(normalized_entities)
+            # Keep the legacy mirror as a plain list for older callers/tests.
+            cfg._ha_entities = list(cfg.ha_entities)
+            # Preserve richer sync metadata separately for newer/internal callers.
+            cfg._ha_entity_sync = {
                 "entity_ids": entity_ids,
                 "entities": zone.get("entities", {}),
                 "role_by_entity": role_by_entity,
