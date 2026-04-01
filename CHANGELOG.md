@@ -1,5 +1,16 @@
 # Changelog
 
+## [v15.3.15] - 2026-04-01
+
+### 🧩 Slice 98 — Scheduler Failure Cadence Repair
+
+- `scheduler_advanced.engine` zählt fehlgeschlagene Interval-Runs jetzt als echte Ausführungen (`runs_completed`), damit `max_runs` auch im Fehlerpfad contract-konform greift.
+- Der nächste Intervalltermin wird jetzt vom zuletzt geplanten Takt statt vom Abschlusszeitpunkt abgeleitet; dadurch driftet der 1s-Scheduler in den Tests nicht mehr auf 2 Läufe weg.
+- Cron-Weekdays werden jetzt mit echter Cron-Semantik gematcht (`Sunday=0`, `Monday=1`), statt Python-`datetime.weekday()` direkt falsch zu übernehmen.
+- Jobs, die nach einem Fehlrun ihr `max_runs` erreichen, bleiben terminal auf `FAILED` statt fälschlich nach `COMPLETED` umzukippen; Group-Stats zählen diese Fehljobs dadurch korrekt.
+- Versionsartefakte (`VERSION`, `copilot_core/VERSION`, `config.yaml`, `manifest.json`, Add-on-Config, Runtime-VERSION) auf `15.3.15` harmonisiert.
+- Validiert mit: `pytest -q tests/test_scheduler_advanced_engine.py::TestSchedulerEngine::test_scheduler_handles_job_failure tests/test_scheduler_advanced_engine.py::TestSchedulerEngine::test_statistics_failed_runs tests/test_scheduler_advanced_engine.py::TestSchedulerEngine::test_scheduler_respects_max_runs tests/test_scheduler_advanced_engine.py::TestSchedulerEngine::test_job_runs_completed_tracked tests/test_scheduler_advanced_engine.py::TestSchedulerEngine::test_cron_expression_complex tests/test_scheduler_advanced_engine.py::TestSchedulerEngine::test_group_stats_failed_count tests/test_scheduler_advanced_engine.py::TestSchedulerEngine::test_statistics_completed_jobs` → `7 passed`.
+
 ## [v15.3.14] - 2026-04-01
 
 ### 🧩 Slice 97 — Metrics History Edge Repair

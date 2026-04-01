@@ -48,7 +48,7 @@ class CronExpression:
     hour: Set[int]  # 0-23
     day: Set[int]  # 1-31
     month: Set[int]  # 1-12
-    weekday: Set[int]  # 0-6 (Monday=0)
+    weekday: Set[int]  # 0-6 (Cron style: Sunday=0, Monday=1)
     
     @classmethod
     def parse(cls, expr: str) -> "CronExpression":
@@ -101,7 +101,8 @@ class CronExpression:
         hour_match = dt.hour in self.hour
         month_match = dt.month in self.month
         day_match = dt.day in self.day
-        weekday_match = dt.weekday() in self.weekday
+        cron_weekday = (dt.weekday() + 1) % 7
+        weekday_match = cron_weekday in self.weekday
 
         full_day = set(range(1, 32))
         full_weekday = set(range(0, 7))
@@ -502,6 +503,7 @@ class SchedulerEngine:
             
         except Exception as e:
             job.status = JobStatus.FAILED
+            job.runs_completed += 1
             
             self._stats["failed_runs"] += 1
             self._stats["total_runs"] += 1
@@ -528,7 +530,8 @@ class SchedulerEngine:
         """Update job's next run time."""
         # Check max runs
         if job.max_runs and job.runs_completed >= job.max_runs:
-            job.status = JobStatus.COMPLETED
+            if job.status not in {JobStatus.FAILED, JobStatus.CANCELLED, JobStatus.SKIPPED}:
+                job.status = JobStatus.COMPLETED
             job.next_run_at = None
             return
         
@@ -537,7 +540,16 @@ class SchedulerEngine:
             job.next_run_at = cron.next_run(now).isoformat()
         
         elif job.schedule_type == ScheduleType.INTERVAL:
-            next_run = now + timedelta(seconds=job.interval_seconds)
+            anchor = now
+            if job.next_run_at:
+                anchor = datetime.fromisoformat(job.next_run_at.replace('Z', '+00:00'))
+            elif job.last_run_at:
+                anchor = datetime.fromisoformat(job.last_run_at.replace('Z', '+00:00'))
+            
+            next_run = anchor + timedelta(seconds=job.interval_seconds)
+            while next_run <= now:
+                next_run += timedelta(seconds=job.interval_seconds)
+            
             job.next_run_at = next_run.isoformat()
         
         elif job.schedule_type == ScheduleType.ONCE:
