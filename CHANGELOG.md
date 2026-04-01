@@ -1,5 +1,16 @@
 # Changelog
 
+## [v15.3.22] - 2026-04-01
+
+### 🧩 Slice 105 — Anomaly Alerting Surface Delivery
+
+- `copilot_core.anomaly.detection_engine` routet Anomalien jetzt severity-aware über registrierte Alert-Routen, inklusive Throttling, Dispatch-History und NotificationEngine-kompatibler Zustellung für Telegram/HA/E-Mail-artige Kanäle.
+- Threshold-Regeln verstehen jetzt auch `critical`; statistische Spike/Drop-Erkennung leitet die Schwere aus Abweichung bzw. Relativänderung ab, sodass Dashboards und Alerts konsistente Prioritäten bekommen.
+- Neues `get_anomaly_summary()` liefert eine kompakte Read-Model-Sicht für Dashboard/Reporting mit Severity-/Type-Buckets, `false_positive_rate`, Alert-Zählung und Hotspot-Entities.
+- Root-Contract für Slice 12 erweitert: `tests/test_anomaly_detection.py` deckt Routing, Throttling und Summary-Metriken jetzt mit ab.
+- Versionsartefakte (`VERSION`, `copilot_core/VERSION`, `config.yaml`, `manifest.json`, Add-on-Config, Runtime-VERSION) auf `15.3.22` harmonisiert.
+- Validiert mit: `PYTHONPATH=. /home/linuxbrew/.linuxbrew/bin/pytest -q tests/test_anomaly_detection.py` → `20 passed`.
+
 ## [v15.3.21] - 2026-04-01
 
 ### 🧩 Slice 104 — Zone Truth Revision Contract Repair

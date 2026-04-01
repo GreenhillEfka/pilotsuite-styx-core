@@ -311,3 +311,113 @@ class TestAnomalyHistory:
         # Should contain last 1000 values (500-1499)
         assert history.values[0] == 500.0
         assert history.values[-1] == 1499.0
+
+
+class TestAnomalyAlertRouting:
+    """Test alert routing and summary contracts."""
+
+    def test_custom_alert_handler_dispatch(self):
+        """High-severity anomalies should dispatch through registered handlers."""
+        engine = AnomalyDetectionEngine()
+        deliveries = []
+
+        def handler(anomaly, route):
+            deliveries.append({
+                "anomaly_id": anomaly.anomaly_id,
+                "route_id": route.route_id,
+                "channel": route.channel,
+                "recipient": route.recipient,
+            })
+            return {"delivered": True}
+
+        engine.register_alert_handler("telegram", handler)
+        engine.register_alert_route(
+            "telegram",
+            "ops-room",
+            min_severity="high",
+            throttle_seconds=0,
+        )
+        engine.add_rule({
+            "type": "threshold",
+            "entity_id": "sensor.temperature",
+            "threshold": 30.0,
+            "operator": ">",
+            "severity": "high",
+        })
+
+        anomalies = engine.detect_anomalies("sensor.temperature", 35.0, {"zone_id": "zone.office"})
+
+        assert len(anomalies) == 1
+        assert deliveries == [{
+            "anomaly_id": anomalies[0].anomaly_id,
+            "route_id": "route_1",
+            "channel": "telegram",
+            "recipient": "ops-room",
+        }]
+
+        alert_history = engine.get_alert_history()
+        assert len(alert_history) == 1
+        assert alert_history[0]["status"] == "sent"
+        assert alert_history[0]["channel"] == "telegram"
+
+    def test_route_throttle_suppresses_duplicate_dispatch(self):
+        """Repeated anomalies inside the throttle window should only alert once."""
+        engine = AnomalyDetectionEngine()
+        deliveries = []
+
+        def handler(anomaly, route):
+            deliveries.append(anomaly.anomaly_id)
+            return {"delivered": True}
+
+        engine.register_alert_handler("telegram", handler)
+        engine.register_alert_route("telegram", "ops-room", min_severity="high", throttle_seconds=3600)
+        engine.add_rule({
+            "type": "threshold",
+            "entity_id": "sensor.temperature",
+            "threshold": 30.0,
+            "operator": ">",
+            "severity": "high",
+        })
+
+        engine.detect_anomalies("sensor.temperature", 35.0)
+        engine.detect_anomalies("sensor.temperature", 36.0)
+
+        assert deliveries == ["anomaly_1"]
+        assert len(engine.get_alert_history()) == 1
+
+    def test_summary_includes_false_positive_rate_and_alert_count(self):
+        """Summary should expose dashboard-ready counts and ratios."""
+        engine = AnomalyDetectionEngine()
+        deliveries = []
+
+        def handler(anomaly, route):
+            deliveries.append(anomaly.anomaly_id)
+            return {"delivered": True}
+
+        engine.register_alert_handler("telegram", handler)
+        engine.register_alert_route("telegram", "ops-room", min_severity="medium", throttle_seconds=0)
+        engine.add_rule({
+            "type": "threshold",
+            "entity_pattern": "*",
+            "threshold": 30.0,
+            "operator": ">",
+            "severity": "critical",
+        })
+
+        first = engine.detect_anomalies("sensor.temperature", 35.0)[0]
+        second = engine.detect_anomalies("sensor.humidity", 40.0)[0]
+
+        engine.acknowledge_anomaly(first.anomaly_id)
+        engine.add_feedback(first.anomaly_id, "false_positive")
+        engine.resolve_anomaly(second.anomaly_id)
+
+        summary = engine.get_anomaly_summary(since_hours=1)
+
+        assert summary["total"] == 2
+        assert summary["acknowledged"] == 1
+        assert summary["resolved"] == 1
+        assert summary["false_positive_count"] == 1
+        assert summary["false_positive_rate"] == pytest.approx(0.5)
+        assert summary["alerts_sent"] == 2
+        assert summary["by_severity"]["critical"] == 2
+        assert summary["hottest_entities"][0]["count"] >= 1

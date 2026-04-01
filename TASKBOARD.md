@@ -549,16 +549,16 @@ These are **P2/P3** — only start after refinement is complete:
 
 ## Slice 12 — Anomaly Detection + Alerting
 **Priority:** P2
-**Status:** not started
+**Status:** done (`v15.3.22`)
 
 **Goal**
 Detect anomalous zone/module behavior and alert user.
 
 ### Deliverables
-- [ ] anomaly detection engine (statistical + rule-based)
-- [ ] alert routing (Telegram, HA notification, email)
-- [ ] anomaly history + trend analysis
-- [ ] false-positive suppression (learning)
+- [x] anomaly detection engine (statistical + rule-based)
+- [x] alert routing (Telegram, HA notification, email)
+- [x] anomaly history + trend analysis
+- [x] false-positive suppression (learning)
 
 ### Acceptance criteria
 - anomalies are detected before user notices
@@ -649,8 +649,8 @@ Coordinate actions across multiple zones (scenes, routines, events).
 15. **✅ Slice 103 — Zone Truth API Store Contract Repair** — Zone-Truth-API, Delta-Responses und Sync-Flows nutzen wieder dieselbe kanonische Store-Instanz; Contract-Surface (`74/74`) grün
 16. **✅ Slice 104 — Zone Truth Revision Contract Repair** — Zone- und Entity-Revisionen folgen wieder deterministisch der globalen Topology-History; Root-Contract-Surface vollständig grün (`4369 passed, 4 skipped`)
 
-**Next Exact Task:** Refinement ist sauber abgeschlossen; Forward-Entwicklung kann wieder mit **Slice 12 — Anomaly Detection + Alerting** starten
+**Next Exact Task:** **Slice 13 — Energy Optimization** starten: bestehenden Energie-/Reservelogik-Stand inventarisieren, kanonisches Zone/Module-Energiemodell festziehen und erste Read-Model-/Suggestion-Contracts schneiden.
 
-**After Refinement:** Root-Contract-Surface ist grün; Slice 12+ wieder als reguläre Forward-Slices aufnehmen
+**After Refinement:** Root-Contract-Surface ist grün; Slice 13+ wieder als reguläre Forward-Slices aufnehmen
 
 **Core is now stable enough for HA/HACS lane reactivation.**
