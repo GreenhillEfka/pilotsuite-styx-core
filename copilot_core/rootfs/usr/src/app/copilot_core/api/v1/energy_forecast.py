@@ -26,10 +26,17 @@ from copilot_core.api.security import require_token
 from copilot_core.energy.forecast import EnergyForecastEngine
 from copilot_core.energy.pv_prediction import PVPredictionEngine
 from copilot_core.energy.load_shifting import LoadShiftingEngine, ShiftableDevice
+from copilot_core.energy.optimization_engine import (
+    EnergyReading,
+    EnergyUnit,
+    OptimizationType,
+    create_energy_optimization_engine,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
 energy_forecast_bp = Blueprint("energy_forecast", __name__, url_prefix="/api/v1/energy")
+_default_optimization_engine = create_energy_optimization_engine()
 
 
 def _get_weather_service():
@@ -56,6 +63,51 @@ def _get_energy_service():
         return services.get("energy_service")
     except Exception:
         return None
+
+
+def _get_optimization_engine():
+    """Hole Optimization Engine aus App Config oder nutze den Modul-Singleton."""
+    try:
+        engine = current_app.config.get("COPILOT_ENERGY_OPTIMIZATION_ENGINE")
+        if engine is not None:
+            return engine
+    except Exception:
+        pass
+    return _default_optimization_engine
+
+
+def _parse_energy_unit(raw_unit: Optional[str]) -> EnergyUnit:
+    """Parse unit names case-insensitively with sane defaults."""
+    normalized = (raw_unit or "W").strip()
+    for unit in EnergyUnit:
+        if unit.value.lower() == normalized.lower() or unit.name.lower() == normalized.lower():
+            return unit
+    raise ValueError(f"Unsupported energy unit: {raw_unit}")
+
+
+def _get_budget_value(*names: str) -> Optional[float]:
+    """Read a numeric budget value from query params if present."""
+    for name in names:
+        raw = request.args.get(name)
+        if raw in (None, ""):
+            continue
+        return float(raw)
+    return None
+
+
+def _default_suggestion_explanation(suggestion: dict) -> str:
+    """Create a compact fallback explanation string."""
+    action = suggestion.get("action_required") or {}
+    best_hour = action.get("best_start_hour")
+    parts = [suggestion.get("description", "Optimierungsvorschlag verfügbar.")]
+    savings = suggestion.get("estimated_savings")
+    unit = suggestion.get("estimated_savings_unit")
+    if savings is not None and unit:
+        parts.append(f"Erwartete Ersparnis: {savings:.3f} {unit}.")
+    if best_hour is not None:
+        parts.append(f"Empfohlenes Startfenster ab {int(best_hour):02d}:00 Uhr.")
+    parts.append("Ausführung bleibt policy-gated und erfordert bewusste Annahme.")
+    return " ".join(parts)
 
 
 def _fetch_weather_forecast(hours: int = 48) -> list[dict]:
@@ -735,6 +787,162 @@ def get_energy_summary():
         }), 500
 
 
+@energy_forecast_bp.route("/optimization/readings", methods=["POST"])
+@require_token
+def add_optimization_readings():
+    """Register one or many energy readings for optimization analysis."""
+    try:
+        data = request.get_json(silent=True) or {}
+        payload_items = data.get("readings") if isinstance(data, dict) and "readings" in data else [data]
+
+        if not payload_items:
+            return jsonify({"ok": False, "error": "Keine Readings übergeben"}), 400
+
+        engine = _get_optimization_engine()
+        accepted = 0
+        suggestions_before = len(engine.get_suggestions(unresolved_only=False))
+
+        for item in payload_items:
+            if not isinstance(item, dict):
+                return jsonify({"ok": False, "error": "Ungültiges Reading-Format"}), 400
+
+            required = ["entity_id", "zone_id", "module_id", "value"]
+            missing = [field for field in required if field not in item]
+            if missing:
+                return jsonify({"ok": False, "error": f"Fehlende Felder: {', '.join(missing)}"}), 400
+
+            reading = EnergyReading(
+                entity_id=item["entity_id"],
+                zone_id=item["zone_id"],
+                module_id=item["module_id"],
+                value=float(item["value"]),
+                unit=_parse_energy_unit(item.get("unit")),
+                timestamp=item.get("timestamp") or datetime.utcnow().isoformat() + "Z",
+                cost=float(item["cost"]) if item.get("cost") is not None else None,
+                tariff_rate=item.get("tariff_rate"),
+            )
+            engine.add_reading(reading)
+            accepted += 1
+
+        suggestions_after = len(engine.get_suggestions(unresolved_only=False))
+        summary = engine.get_energy_summary(
+            zone_id=data.get("zone_id") if isinstance(data, dict) else None,
+            period_hours=int(data.get("period_hours", 24)) if isinstance(data, dict) else 24,
+        )
+
+        return jsonify({
+            "ok": True,
+            "accepted": accepted,
+            "created_suggestions": max(0, suggestions_after - suggestions_before),
+            "summary": summary,
+        })
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    except Exception as e:
+        _LOGGER.error("Optimization readings error: %s", e)
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@energy_forecast_bp.route("/optimization/summary", methods=["GET"])
+@require_token
+def get_optimization_summary():
+    """Return optimization summary with savings tracking and tariff context."""
+    try:
+        engine = _get_optimization_engine()
+        period_hours = min(int(request.args.get("hours", 24)), 24 * 30)
+        zone_id = request.args.get("zone_id")
+        budget_eur = _get_budget_value("budget_eur", "monthly_budget_eur", "daily_budget_eur")
+        report = engine.get_report(zone_id=zone_id, period_hours=period_hours, budget_eur=budget_eur)
+
+        return jsonify({
+            "ok": True,
+            **report,
+        })
+    except Exception as e:
+        _LOGGER.error("Optimization summary error: %s", e)
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@energy_forecast_bp.route("/optimization/suggestions", methods=["GET"])
+@require_token
+def get_optimization_suggestions():
+    """Return optimization suggestions with optional filters."""
+    try:
+        engine = _get_optimization_engine()
+        unresolved_only = request.args.get("unresolved_only", "true").lower() == "true"
+        suggestion_type = request.args.get("type")
+        zone_id = request.args.get("zone_id")
+        suggestions = engine.get_suggestions(
+            unresolved_only=unresolved_only,
+            optimization_type=suggestion_type,
+            zone_id=zone_id,
+        )
+
+        return jsonify({
+            "ok": True,
+            "count": len(suggestions),
+            "suggestions": suggestions,
+        })
+    except Exception as e:
+        _LOGGER.error("Optimization suggestions error: %s", e)
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@energy_forecast_bp.route("/optimization/suggestions/<suggestion_id>/accept", methods=["POST"])
+@require_token
+def accept_optimization_suggestion(suggestion_id: str):
+    """Accept an optimization suggestion."""
+    try:
+        engine = _get_optimization_engine()
+        if not engine.accept_suggestion(suggestion_id):
+            return jsonify({"ok": False, "error": "Suggestion not found"}), 404
+        return jsonify({
+            "ok": True,
+            "suggestion": engine.get_suggestion(suggestion_id),
+            "message": "Optimierungsvorschlag akzeptiert",
+        })
+    except Exception as e:
+        _LOGGER.error("Accept optimization suggestion error: %s", e)
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@energy_forecast_bp.route("/optimization/suggestions/<suggestion_id>/reject", methods=["POST"])
+@require_token
+def reject_optimization_suggestion(suggestion_id: str):
+    """Reject an optimization suggestion with optional feedback."""
+    try:
+        engine = _get_optimization_engine()
+        data = request.get_json(silent=True) or {}
+        if not engine.reject_suggestion(suggestion_id, feedback=data.get("feedback")):
+            return jsonify({"ok": False, "error": "Suggestion not found"}), 404
+        return jsonify({
+            "ok": True,
+            "suggestion": engine.get_suggestion(suggestion_id),
+            "message": "Optimierungsvorschlag verworfen",
+        })
+    except Exception as e:
+        _LOGGER.error("Reject optimization suggestion error: %s", e)
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@energy_forecast_bp.route("/tariff/forecast", methods=["GET"])
+@require_token
+def get_tariff_forecast_route():
+    """Return the tariff forecast from the optimization engine."""
+    try:
+        engine = _get_optimization_engine()
+        hours = min(int(request.args.get("hours", 24)), 24 * 7)
+        forecast = engine.get_tariff_forecast(hours_ahead=hours)
+        return jsonify({
+            "ok": True,
+            "hours_ahead": hours,
+            "forecast": forecast,
+        })
+    except Exception as e:
+        _LOGGER.error("Tariff forecast error: %s", e)
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
 # ── Stub routes for HA sensors that poll these endpoints ──────────────
 
 
@@ -748,44 +956,109 @@ def energy_anomalies():
 @energy_forecast_bp.route("/shifting", methods=["GET"])
 @require_token
 def energy_shifting():
-    """Load shifting opportunities — stub."""
-    return jsonify({"ok": True, "opportunities": []})
+    """Load shifting opportunities backed by the optimization engine."""
+    try:
+        engine = _get_optimization_engine()
+        opportunities = engine.get_suggestions(
+            unresolved_only=True,
+            optimization_type=OptimizationType.SCHEDULE_SHIFT,
+            zone_id=request.args.get("zone_id"),
+        )
+        return jsonify({"ok": True, "count": len(opportunities), "opportunities": opportunities})
+    except Exception as e:
+        _LOGGER.error("Energy shifting error: %s", e)
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 
 @energy_forecast_bp.route("/explain/<suggestion_id>", methods=["GET"])
 @require_token
 def energy_explain(suggestion_id):
-    """Explain an energy suggestion — stub."""
-    return jsonify({
-        "ok": True,
-        "suggestion_id": suggestion_id,
-        "explanation": "Detaillierte Erklärung noch nicht verfügbar.",
-    })
+    """Explain an energy suggestion from the optimization engine."""
+    try:
+        engine = _get_optimization_engine()
+        explanation = engine.explain_suggestion(suggestion_id)
+        if explanation is None:
+            suggestion = engine.get_suggestion(suggestion_id)
+            if suggestion is None:
+                return jsonify({"ok": False, "error": "Suggestion not found"}), 404
+            explanation = {
+                "suggestion": suggestion,
+                "explanation": _default_suggestion_explanation(suggestion),
+                "policy_gate_required": True,
+                "recommended_action": suggestion.get("action_required") or {},
+            }
+        return jsonify({"ok": True, "suggestion_id": suggestion_id, **explanation})
+    except Exception as e:
+        _LOGGER.error("Energy explain error: %s", e)
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 
 @energy_forecast_bp.route("/costs", methods=["GET"])
 @require_token
 def energy_costs():
-    """Energy costs — stub."""
-    return jsonify({
-        "ok": True,
-        "status": "not_configured",
-        "costs": {},
-    })
+    """Energy cost view backed by optimization summary and tariff forecast."""
+    try:
+        engine = _get_optimization_engine()
+        period_hours = min(int(request.args.get("hours", 24)), 24 * 30)
+        summary = engine.get_energy_summary(zone_id=request.args.get("zone_id"), period_hours=period_hours)
+        tariff_forecast = engine.get_tariff_forecast(hours_ahead=min(period_hours, 24))
+        return jsonify({
+            "ok": True,
+            "period_hours": period_hours,
+            "costs": {
+                "total_cost_eur": round(summary["total_cost"], 4),
+                "average_cost_per_kwh": round(summary["total_cost"] / summary["total_consumption_kwh"], 4) if summary["total_consumption_kwh"] else 0.0,
+                "total_consumption_kwh": round(summary["total_consumption_kwh"], 4),
+            },
+            "current_tariff": tariff_forecast[0] if tariff_forecast else None,
+        })
+    except Exception as e:
+        _LOGGER.error("Energy costs error: %s", e)
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 
 @energy_forecast_bp.route("/costs/budget", methods=["GET"])
 @require_token
 def energy_costs_budget():
-    """Energy budget — stub."""
-    return jsonify({"ok": True, "status": "not_configured", "budget": {}})
+    """Budget tracking for current energy spend."""
+    try:
+        engine = _get_optimization_engine()
+        period_hours = min(int(request.args.get("hours", 24)), 24 * 30)
+        budget_eur = _get_budget_value("budget_eur", "monthly_budget_eur", "daily_budget_eur")
+        if budget_eur is None:
+            return jsonify({"ok": False, "error": "budget_eur/monthly_budget_eur/daily_budget_eur required"}), 400
+        report = engine.get_report(
+            zone_id=request.args.get("zone_id"),
+            period_hours=period_hours,
+            budget_eur=budget_eur,
+        )
+        return jsonify({"ok": True, "budget": report.get("budget"), "summary": report.get("summary")})
+    except Exception as e:
+        _LOGGER.error("Energy budget error: %s", e)
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 
 @energy_forecast_bp.route("/costs/summary", methods=["GET"])
 @require_token
 def energy_costs_summary():
-    """Energy cost summary — stub."""
-    return jsonify({"ok": True, "status": "not_configured", "summary": {}})
+    """Compact cost/savings summary."""
+    try:
+        engine = _get_optimization_engine()
+        period_hours = min(int(request.args.get("hours", 24)), 24 * 30)
+        report = engine.get_report(
+            zone_id=request.args.get("zone_id"),
+            period_hours=period_hours,
+            budget_eur=_get_budget_value("budget_eur", "monthly_budget_eur", "daily_budget_eur"),
+        )
+        return jsonify({
+            "ok": True,
+            "summary": report["summary"],
+            "savings": report["savings"],
+            "budget": report.get("budget"),
+        })
+    except Exception as e:
+        _LOGGER.error("Energy costs summary error: %s", e)
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 
 @energy_forecast_bp.route("/sankey", methods=["GET"])
@@ -807,8 +1080,19 @@ def energy_sankey_svg():
 @energy_forecast_bp.route("/reports/generate", methods=["GET"])
 @require_token
 def energy_reports_generate():
-    """Energy report — stub."""
-    return jsonify({"ok": True, "status": "not_configured", "report": None})
+    """Generate an actionable energy report with savings tracking."""
+    try:
+        engine = _get_optimization_engine()
+        period_hours = min(int(request.args.get("hours", 24)), 24 * 30)
+        report = engine.get_report(
+            zone_id=request.args.get("zone_id"),
+            period_hours=period_hours,
+            budget_eur=_get_budget_value("budget_eur", "monthly_budget_eur", "daily_budget_eur"),
+        )
+        return jsonify({"ok": True, "report": report})
+    except Exception as e:
+        _LOGGER.error("Energy report error: %s", e)
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 
 @energy_forecast_bp.route("/demand-response/status", methods=["GET"])

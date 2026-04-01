@@ -12,6 +12,15 @@ from .load_shifting import (
     OptimizationWindow,
     LoadShiftSummary,
 )
+from .optimization_engine import (
+    EnergyOptimizationEngine,
+    EnergyReading,
+    EnergyUnit,
+    OptimizationType,
+    OptimizationSuggestion,
+    TariffPeriod,
+    create_energy_optimization_engine,
+)
 
 # Global service instance for API access
 _energy_service = None
@@ -49,5 +58,13 @@ __all__ = [
     "LoadShiftRecommendation",
     "OptimizationWindow",
     "LoadShiftSummary",
+    # Optimization
+    "EnergyOptimizationEngine",
+    "EnergyReading",
+    "EnergyUnit",
+    "OptimizationType",
+    "OptimizationSuggestion",
+    "TariffPeriod",
+    "create_energy_optimization_engine",
 ]
 __version__ = "0.5.0"

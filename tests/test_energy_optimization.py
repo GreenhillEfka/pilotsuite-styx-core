@@ -306,3 +306,44 @@ class TestTariffPeriods:
         assert tariff is not None
         assert tariff.name == "weekend_off_peak"
         assert tariff.rate == 0.15
+
+    def test_custom_tariff_periods_override_defaults(self):
+        """Custom tariff periods should be used once configured."""
+        engine = EnergyOptimizationEngine()
+        engine.set_tariff_periods([
+            {"name": "cheap", "start_hour": 0, "end_hour": 12, "rate": 0.11, "days": ["mon"]},
+            {"name": "expensive", "start_hour": 12, "end_hour": 24, "rate": 0.41, "days": ["mon"]},
+        ])
+
+        morning = engine._get_tariff_for_time(9, "mon")
+        afternoon = engine._get_tariff_for_time(18, "mon")
+
+        assert morning is not None
+        assert morning.name == "cheap"
+        assert afternoon is not None
+        assert afternoon.name == "expensive"
+
+    def test_zone_filtered_summary_includes_module_breakdown(self):
+        """Zone filtering should retain module-level breakdown for the selected zone only."""
+        engine = EnergyOptimizationEngine()
+        engine.add_reading(EnergyReading(
+            entity_id="sensor.a1",
+            zone_id="zone_a",
+            module_id="energy_a",
+            value=120.0,
+            unit=EnergyUnit.W,
+        ))
+        engine.add_reading(EnergyReading(
+            entity_id="sensor.b1",
+            zone_id="zone_b",
+            module_id="energy_b",
+            value=80.0,
+            unit=EnergyUnit.W,
+        ))
+
+        summary = engine.get_energy_summary(zone_id="zone_a", period_hours=24)
+
+        assert summary["zone_id"] == "zone_a"
+        assert summary["total_consumption_wh"] == 120.0
+        assert summary["zone_consumption"] == {"zone_a": 120.0}
+        assert summary["module_consumption"] == {"energy_a": 120.0}

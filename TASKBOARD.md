@@ -569,16 +569,16 @@ Detect anomalous zone/module behavior and alert user.
 
 ## Slice 13 — Energy Optimization
 **Priority:** P2
-**Status:** not started
+**Status:** done (`v15.3.23`)
 
 **Goal**
 Optimize energy consumption across all zones/modules.
 
 ### Deliverables
-- [ ] energy monitoring per module/zone
-- [ ] optimization suggestions (policy-gated)
-- [ ] tariff-aware scheduling (time-of-use pricing)
-- [ ] energy reports + savings tracking
+- [x] energy monitoring per module/zone
+- [x] optimization suggestions (policy-gated)
+- [x] tariff-aware scheduling (time-of-use pricing)
+- [x] energy reports + savings tracking
 
 ### Acceptance criteria
 - energy consumption is visible per zone/module
@@ -648,8 +648,9 @@ Coordinate actions across multiple zones (scenes, routines, events).
 14. **✅ Slice 102 — Zone Comfort Scoring Contract Repair** — Zone-Comfort-Scores, Bedroom-Profil und Trend-Baseline wieder contract-konform; gesamtes Komfortmodul (`98/98`) grün
 15. **✅ Slice 103 — Zone Truth API Store Contract Repair** — Zone-Truth-API, Delta-Responses und Sync-Flows nutzen wieder dieselbe kanonische Store-Instanz; Contract-Surface (`74/74`) grün
 16. **✅ Slice 104 — Zone Truth Revision Contract Repair** — Zone- und Entity-Revisionen folgen wieder deterministisch der globalen Topology-History; Root-Contract-Surface vollständig grün (`4369 passed, 4 skipped`)
+17. **✅ Slice 106 — Energy Optimization Surface Delivery** — Slice-13-Energiefläche jetzt mit echten Zone/Module-Summaries, Suggestion-/Budget-/Report-Surface und Root/Runtime-Parität; Slice-13-Contracts grün (`70/70`)
 
-**Next Exact Task:** **Slice 13 — Energy Optimization** starten: bestehenden Energie-/Reservelogik-Stand inventarisieren, kanonisches Zone/Module-Energiemodell festziehen und erste Read-Model-/Suggestion-Contracts schneiden.
+**Next Exact Task:** **Slice 14 — Predictive Automation** starten: vorhandene Pattern-/Proposal-/Kalender-/Presence-Signale inventarisieren, kanonischen Prediction-Contract festziehen und erste policy-gated Predictive-Proposals mit Feedback-Loop schneiden.
 
 **After Refinement:** Root-Contract-Surface ist grün; Slice 13+ wieder als reguläre Forward-Slices aufnehmen
 

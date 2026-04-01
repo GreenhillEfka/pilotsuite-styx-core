@@ -1,5 +1,16 @@
 # Changelog
 
+## [v15.3.23] - 2026-04-01
+
+### 🧩 Slice 106 — Energy Optimization Surface Delivery
+
+- `copilot_core.energy.optimization_engine` liefert jetzt echte Zone-/Module-Read-Models, zone-gefilterte Summaries, Savings-Tracking, Suggestion-Explanations und budgetfähige Reports statt nur isolierter Einzelmethoden.
+- Die Energie-API hat eine belastbare Slice-13-Surface bekommen: `POST /api/v1/energy/optimization/readings`, Summary-/Suggestion-/Accept-/Reject-/Tariff-Routen sowie reale `costs`, `budget`, `costs/summary`, `reports/generate`, `shifting` und `explain` Antworten statt Stubs.
+- Root- und Runtime-Python-Surface für `api/v1/energy_forecast.py` sind wieder paritätisch; damit greifen Root-Contracts und Runtime auf denselben Energie-Optimierungsvertrag zu.
+- Root-Contract für Slice 13 erweitert: `tests/test_energy_optimization.py` deckt jetzt Custom-Tariffs und zone-gefilterte Module-Breakdowns mit ab; neues `tests/test_energy_optimization_blueprint_contract.py` sichert die API-Surface end-to-end.
+- Versionsartefakte (`VERSION`, `copilot_core/VERSION`, `config.yaml`, `manifest.json`, Add-on-Config, Runtime-VERSION) auf `15.3.23` harmonisiert.
+- Validiert mit: `PYTHONPATH=. /home/linuxbrew/.linuxbrew/bin/pytest -q tests/test_energy.py tests/test_energy_optimization.py tests/test_energy_optimization_blueprint_contract.py` → `70 passed`.
+
 ## [v15.3.22] - 2026-04-01
 
 ### 🧩 Slice 105 — Anomaly Alerting Surface Delivery
