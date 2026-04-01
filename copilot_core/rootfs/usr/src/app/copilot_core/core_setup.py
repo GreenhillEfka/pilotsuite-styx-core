@@ -1567,46 +1567,56 @@ def register_blueprints(app: Flask, services: dict) -> None:
     """
     Register all API blueprints with the Flask app.
     
+    Uses centralized blueprint configuration from copilot_core.blueprints_config
+    for consistent registration across all API endpoints.
+    
     Args:
         app: Flask application instance
         services: Dictionary of initialized services
     """
+    from copilot_core.blueprints_config import (
+        CORE_API_BLUEPRINTS,
+        EXTERNAL_BLUEPRINTS,
+        validate_blueprint_config
+    )
+    
     # Make services available via app.config for blueprints using current_app.config
     app.config["COPILOT_SERVICES"] = services
 
-    # ── Data-driven blueprint registration ────────────────────────────────
-    # Each entry: (module_path, blueprint_attr, url_prefix_or_None)
-    # url_prefix=None means the blueprint defines its own prefix internally.
-    # NOTE: ALL blueprints are registered FLAT (not nested) so that a single
-    # import failure does not take down all 40+ API routes.
-    _BLUEPRINTS = [
-        # Auth setup (unauthenticated — allows HA to fetch 1-Key-Flow token)
-        ("copilot_core.api.v1.auth",             "auth_bp",              None),
-        # Standalone blueprints with their own absolute prefix
-        ("copilot_core.api.v1.log_fixer_tx",    "bp",                   None),
-        # events_ingest defines absolute /api/v1/events routes itself — do not prefix again
-        ("copilot_core.api.v1.events_ingest",    "bp",                   None),
-        ("copilot_core.api.v1.sensors",          "bp",                   None),
-        ("copilot_core.api.v1.homekit",          "homekit_bp",           None),
-        ("copilot_core.api.v1.anomaly",          "anomaly_bp",           "/api/v1"),
-        ("copilot_core.api.v1.calendar",         "calendar_bp",          None),
-        ("copilot_core.api.v1.energy_forecast",  "energy_forecast_bp",   None),
-        ("copilot_core.api.v1.tag_system",       "bp",                   None),
-        ("copilot_core.api.v1.multihome",        "bp",                   None),
-        ("copilot_core.api.v1.voice",            "bp",                   None),
-        ("copilot_core.api.v1.habitus_zones",    "bp",                   None),
-        # NOTE: sonos_bp is registered individually below (after init_sonos_api wiring)
-        ("copilot_core.api.v1.module_control",   "module_control_bp",    None),
-        ("copilot_core.api.v1.rag",              "bp",                   None),
-        ("copilot_core.api.v1.synapse_api",      "bp",                   None),
-        ("copilot_core.api.v1.styx_chat",        "bp",                   None),
-        ("copilot_core.api.v1.mcp",              "bp",                   None),
-        # ── Previously nested in api_v1 (blueprint.py) — now flat ──────
-        # Blueprints with relative prefix: override to /api/v1/<prefix>
-        ("copilot_core.api.v1.candidates",              "bp",               "/api/v1/candidates"),
-        # ("copilot_core.api.v1.events",               "bp",  "/api/v1/events"),  # RETIRED 2026-03-25 — events_ingest is now canonical
-        ("copilot_core.api.v1.mood",                    "bp",               "/api/v1/mood"),
-        ("copilot_core.api.v1.graph",                   "bp",               "/api/v1/graph"),
+    # Validate blueprint configuration
+    is_valid, errors = validate_blueprint_config()
+    if not is_valid:
+        _LOGGER.warning("Blueprint config validation errors: %s", errors)
+    
+    # ── CENTRALIZED BLUEPRINT REGISTRATION ────────────────────────────────
+    # All blueprints registered from copilot_core.blueprints_config
+    # This ensures consistent prefix handling and single source of truth
+    
+    _LOGGER.info("Registering %d core API blueprints...", len(CORE_API_BLUEPRINTS))
+    
+    for module_path, bp_attr, url_prefix in CORE_API_BLUEPRINTS:
+        try:
+            module = __import__(module_path, fromlist=[bp_attr])
+            bp = getattr(module, bp_attr)
+            if url_prefix:
+                app.register_blueprint(bp, url_prefix=url_prefix)
+            else:
+                app.register_blueprint(bp)
+            _LOGGER.debug("Registered blueprint: %s.%s → %s", module_path, bp_attr, url_prefix or "(internal prefix)")
+        except Exception as e:
+            _LOGGER.exception("Failed to register blueprint %s.%s", module_path, bp_attr)
+    
+    # ── EXTERNAL BLUEPRINTS (non /api/v1) ────────────────────────────────
+    _LOGGER.info("Registering %d external blueprints...", len(EXTERNAL_BLUEPRINTS))
+    
+    for module_path, bp_attr, url_prefix in EXTERNAL_BLUEPRINTS:
+        try:
+            module = __import__(module_path, fromlist=[bp_attr])
+            bp = getattr(module, bp_attr)
+            app.register_blueprint(bp, url_prefix=url_prefix)
+            _LOGGER.debug("Registered external blueprint: %s.%s → %s", module_path, bp_attr, url_prefix)
+        except Exception as e:
+            _LOGGER.exception("Failed to register external blueprint %s.%s", module_path, bp_attr)
         ("copilot_core.api.v1.habitus",                 "bp",               "/api/v1/habitus"),
         ("copilot_core.api.v1.habitus_dashboard_cards", "bp",               "/api/v1/habitus/dashboard_cards"),
         ("copilot_core.api.v1.graph_ops",               "bp",               "/api/v1/graph"),
