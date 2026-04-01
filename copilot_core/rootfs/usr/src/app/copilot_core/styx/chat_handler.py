@@ -601,6 +601,21 @@ class ChatHandler:
         except Exception as exc:
             logger.debug("Home context: brain graph stats failed: %s", exc)
 
+        # ── 8. Action closure / outcome summary ─────────────────────
+        try:
+            from copilot_core.action_closure import get_action_closure_store
+            from copilot_core.core.action_closure_read_model import build_action_closure_context_block
+
+            closure_context = build_action_closure_context_block(
+                get_action_closure_store(),
+                recent_limit=2,
+            )
+            context_lines = closure_context.to_dict().get("context_lines", [])
+            if context_lines:
+                parts.append(" | ".join(context_lines))
+        except Exception as exc:
+            logger.debug("Home context: action closure summary failed: %s", exc)
+
         if not parts:
             return ""
 

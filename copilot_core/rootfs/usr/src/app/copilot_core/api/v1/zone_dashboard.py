@@ -30,6 +30,8 @@ from copilot_core.core.dashboard_read_models import (
     build_module_read_model,
     build_system_overview_read_model,
 )
+from copilot_core.core.action_closure_read_model import build_action_closure_summary_read_model
+from copilot_core.action_closure import get_action_closure_store
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -769,6 +771,23 @@ def _generate_quick_actions(zone: Dict[str, Any]) -> List[Dict[str, Any]]:
 def _build_global_context() -> Dict[str, Any]:
     """Build global dashboard context from available engines + example data."""
     ctx: Dict[str, Any] = {}
+
+    try:
+        closure_summary = build_action_closure_summary_read_model(get_action_closure_store())
+        if closure_summary.total_closures:
+            payload = closure_summary.to_dict()
+            ctx["action_closures"] = {
+                "total": payload.get("total_closures", 0),
+                "open": payload.get("open_count", 0),
+                "successful": payload.get("success_count", 0),
+                "problematic": payload.get("failure_count", 0),
+                "success_rate": payload.get("success_rate", 0.0),
+                "states": payload.get("states", {}),
+                "highlights": payload.get("highlights", []),
+                "recent": payload.get("recent_closures", [])[:3],
+            }
+    except Exception:
+        pass
 
     hub_energy = _svc.get("hub_energy")
     if hub_energy:

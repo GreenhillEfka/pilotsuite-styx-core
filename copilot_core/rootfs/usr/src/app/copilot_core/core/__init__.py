@@ -46,6 +46,12 @@ from .dashboard_read_models import (
     build_module_read_model,
     build_system_overview_read_model,
 )
+from .action_closure_read_model import (
+    ActionClosureSummaryReadModel,
+    ActionClosureContextBlock,
+    build_action_closure_summary_read_model,
+    build_action_closure_context_block,
+)
 
 __all__ = [
     # taxonomy
@@ -74,4 +80,9 @@ __all__ = [
     "build_zone_detail_read_model",
     "build_module_read_model",
     "build_system_overview_read_model",
+    # action_closure_read_model
+    "ActionClosureSummaryReadModel",
+    "ActionClosureContextBlock",
+    "build_action_closure_summary_read_model",
+    "build_action_closure_context_block",
 ]

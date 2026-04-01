@@ -11,6 +11,10 @@ from flask import Blueprint, jsonify, request
 
 from copilot_core.action_closure import get_action_closure_store
 from copilot_core.api.security import require_token
+from copilot_core.core.action_closure_read_model import (
+    build_action_closure_context_block,
+    build_action_closure_summary_read_model,
+)
 
 action_closure_bp = Blueprint("action_closure", __name__, url_prefix="/api/v1/action-closures")
 
@@ -22,19 +26,52 @@ def _as_text(value: Any) -> str | None:
     return text or None
 
 
+def _filters() -> dict[str, str | None]:
+    return {
+        "source": _as_text(request.args.get("source")),
+        "zone_id": _as_text(request.args.get("zone_id")),
+        "module_id": _as_text(request.args.get("module_id")),
+        "state": _as_text(request.args.get("state")),
+        "action_id": _as_text(request.args.get("action_id")),
+        "proposal_id": _as_text(request.args.get("proposal_id")),
+    }
+
+
+def _recent_limit(default: int = 5) -> int:
+    try:
+        return max(1, min(20, int(request.args.get("recent_limit", default))))
+    except Exception:
+        return default
+
+
 @action_closure_bp.route("", methods=["GET"])
 @require_token
 def list_action_closures():
     store = get_action_closure_store()
-    closures = store.list(
-        source=_as_text(request.args.get("source")),
-        zone_id=_as_text(request.args.get("zone_id")),
-        module_id=_as_text(request.args.get("module_id")),
-        state=_as_text(request.args.get("state")),
-        action_id=_as_text(request.args.get("action_id")),
-        proposal_id=_as_text(request.args.get("proposal_id")),
-    )
+    closures = store.list(**_filters())
     return jsonify({"ok": True, "closures": closures, "count": len(closures)})
+
+
+@action_closure_bp.route("/summary", methods=["GET"])
+@require_token
+def get_action_closure_summary():
+    summary = build_action_closure_summary_read_model(
+        get_action_closure_store(),
+        recent_limit=_recent_limit(),
+        **_filters(),
+    )
+    return jsonify({"ok": True, "summary": summary.to_dict()})
+
+
+@action_closure_bp.route("/context", methods=["GET"])
+@require_token
+def get_action_closure_context():
+    context_block = build_action_closure_context_block(
+        get_action_closure_store(),
+        recent_limit=_recent_limit(default=3),
+        **_filters(),
+    )
+    return jsonify({"ok": True, "context": context_block.to_dict()})
 
 
 @action_closure_bp.route("/<closure_id>", methods=["GET"])

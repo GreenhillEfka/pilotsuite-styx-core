@@ -1,5 +1,16 @@
 # Changelog
 
+## [v15.3.29] - 2026-04-01
+
+### 🧩 Slice 18 — Action Closure Summary / Context Surface
+
+- `copilot_core.core.action_closure_read_model` liefert jetzt eine kanonische `ActionClosureSummaryV1`- und `ActionClosureContextBlockV1`-Surface: Action-Closures werden nicht mehr nur gespeichert, sondern als aggregierte Outcome-/Feedback-/Source-/Zone-/Module-Summaries konsumierbar.
+- `copilot_core.api.v1.action_closure` ergänzt `GET /api/v1/action-closures/summary` und `GET /api/v1/action-closures/context`, inklusive derselben Filter (`source`, `zone_id`, `module_id`, `state`, `action_id`, `proposal_id`) wie die Listen-Surface.
+- Dashboard-Global-Context (`zone_dashboard`) exponiert Closure-/Outcome-Zustand jetzt als kompakten `action_closures`-Block mit offenen/erfolgreichen/problematischen Counts, Highlights und Recent-Items.
+- `copilot_core.styx.chat_handler` zieht dieselbe Closure-Kontext-Surface jetzt in den Live-Hauskontext ein, damit Chat-Antworten den aktuellen Feedback-/Execution-Stand kanonisch erklären koennen.
+- Versionsartefakte (`VERSION`, `copilot_core/VERSION`, Runtime-VERSION, `copilot_core/config.yaml`, `copilot_core/manifest.json`) auf `15.3.29` harmonisiert.
+- Validiert mit: `pytest -q tests/test_action_closure_contract.py tests/test_action_closure_summary_contract.py tests/test_voice_policy_contract.py tests/test_predictive_api_contract.py tests/test_multizone_runtime_contract.py tests/test_habitus_accept_contract.py` → `17 passed`.
+
 ## [v15.3.28] - 2026-04-01
 
 ### 🧩 Slice 17 — Canonical Action Closure Surface

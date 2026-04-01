@@ -719,7 +719,30 @@ Eine einzige kanonische User-Feedback-/Execution-Closure-Surface über Proposal�
 - `pytest -q tests/test_action_closure_contract.py tests/test_voice_policy_contract.py tests/test_predictive_api_contract.py tests/test_multizone_runtime_contract.py tests/test_habitus_accept_contract.py` → `12 passed`
 - `pytest -q tests/test_voice_control.py tests/test_multizone_blueprint_contract.py tests/test_multizone_coordination.py` → `50 passed`
 
-**Next Exact Task:** **Slice 18 Candidate**: Closure-/Outcome-Summaries als kanonische Read-Model-/Chat-/Dashboard-Surface ausleiten, damit Feedback und Ausführung nicht nur gespeichert, sondern systemweit erklärbar und auswertbar werden.
+### ✅ Slice 18 — Action Closure Summary / Context Surface
+**Status:** ✅ DONE (v15.3.29)
+
+**Goal**
+Closure-/Outcome-Summaries als kanonische Read-Model-/Chat-/Dashboard-Surface ausleiten, damit Feedback und Ausführung nicht nur gespeichert, sondern systemweit erklärbar und auswertbar werden.
+
+### Deliverables
+- [x] `ActionClosureSummaryV1` als aggregierte Outcome-/Feedback-/Source-/Zone-/Module-Surface
+- [x] `ActionClosureContextBlockV1` als kompakter Chat-/Context-Block
+- [x] neue `/api/v1/action-closures/summary`- und `/context`-Surface mit Closure-Filtern
+- [x] Dashboard-Global-Context exponiert Closure-Status/Highlights/Recent-Items
+- [x] Styx-Chat bindet denselben Closure-Kontext in den Haus-Status ein
+- [x] Contract-Tests fuer Read-Model, API, Dashboard-Context und Chat-Home-Context
+
+### Acceptance criteria
+- Feedback-/Execution-Closure ist nicht nur detailabfragbar, sondern als globale Summary-Surface stabil nutzbar.
+- Dashboard und Chat lesen dieselbe kanonische Closure-/Outcome-Wahrheit statt eigene Ad-hoc-Aggregationen zu bauen.
+- Offene, erfolgreiche und problematische Actions sind systemweit schnell erklaerbar.
+
+**Commit:** `feat(core): deliver slice 18 action closure summary surface`
+**Tag:** v15.3.29
+**Tests:** `pytest -q tests/test_action_closure_contract.py tests/test_action_closure_summary_contract.py tests/test_voice_policy_contract.py tests/test_predictive_api_contract.py tests/test_multizone_runtime_contract.py tests/test_habitus_accept_contract.py` → `17 passed`
+
+**Next Exact Task:** **Slice 19 Candidate**: Closure-Signale in Predictive-/Habitus-/Multi-Zone-Lern- und Priorisierungslogik rueckkoppeln, damit accept/reject/execution-outcomes nicht nur erklaert, sondern fuer kuenftige Vorschlagsqualitaet systematisch verwertet werden.
 
 **After Refinement:** Root-Contract-Surface ist grün; Slice 13+ wieder als reguläre Forward-Slices aufnehmen
 
