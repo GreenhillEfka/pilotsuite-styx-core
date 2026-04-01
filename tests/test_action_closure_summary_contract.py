@@ -130,7 +130,7 @@ def test_action_closure_summary_and_context_api_surface() -> None:
     _seed_closures()
     app = _client()
     client = app.test_client()
-    headers = {"Authorization": "Bearer test-token"}
+    headers = {"Authorization": "Bearer test-token", "X-Ingress-Path": "/api"}
 
     summary_response = client.get("/api/v1/action-closures/summary", headers=headers)
     assert summary_response.status_code == 200
@@ -159,6 +159,16 @@ def test_zone_dashboard_global_context_exposes_action_closure_summary() -> None:
     assert ctx["action_closures"]["successful"] == 1
     assert ctx["action_closures"]["problematic"] == 1
     assert ctx["action_closures"]["recent"]
+    assert ctx["action_closures"]["zones_with_closures"] == 2
+    zone_contexts = ctx["action_closures"]["zone_contexts"]
+    assert len(zone_contexts) == 2
+    living = next(item for item in zone_contexts if item["zone_id"] == "zone:living")
+    assert living["context"]["contract"] == "ActionClosureContextBlockV1"
+    assert living["context"]["summary"]["total_closures"] == 2
+    assert any(
+        "Wohnzimmer" in line or "Wohnbereich" in line
+        for line in living["context"]["context_lines"]
+    )
 
 
 def test_chat_handler_home_context_mentions_action_closure_summary() -> None:

@@ -1,5 +1,16 @@
 # Changelog
 
+## [v15.3.33] - 2026-04-01
+
+### 🧩 Slice 22 — Zone-Scoped Closure Feed for Dashboard/System Context
+
+- `copilot_core.api.v1.zone_dashboard` speist die kanonische `ActionClosureContextBlockV1`-Surface jetzt direkt in Dashboard-Zonenlisten und Zone-Detailantworten ein, sodass Dashboard-Consumer dieselbe Closure-Wahrheit zonenspezifisch lesen koennen statt nur globale Zaehler.
+- Der globale Dashboard-Kontext exponiert neben der bestehenden Gesamtzusammenfassung jetzt `zone_contexts` und `zones_with_closures`, also eine systemweite, zonenspezifische Closure-Ausleitung aus derselben kanonischen Read-Model-Schicht.
+- `copilot_core.core.action_closure_read_model` exportiert `resolve_zone_name` oeffentlich, damit Dashboard-/System-Kontext dieselbe Friendly-Name-Aufloesung nutzt wie Chat und Voice statt eigene Slug-Heuristiken zu duplizieren.
+- Contract-Tests decken jetzt sowohl die systemweite Zone-Context-Ausleitung als auch die zonenspezifische Dashboard-/Detail-Surface fuer echte Truth-Zonen ab.
+- Versionsartefakte (`VERSION`, `copilot_core/VERSION`, Runtime-VERSION, `copilot_core/config.yaml`, `copilot_core/manifest.json`) auf `15.3.33` harmonisiert.
+- Validiert mit: `pytest -q tests/test_action_closure_summary_contract.py tests/test_zone_dashboard_contract.py` → gruen.
+
 ## [v15.3.32] - 2026-04-01
 
 ### 🧩 Slice 21 — Zone-Scoped Closure Context for Voice/Chat

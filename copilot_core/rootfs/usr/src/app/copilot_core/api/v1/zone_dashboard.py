@@ -30,7 +30,11 @@ from copilot_core.core.dashboard_read_models import (
     build_module_read_model,
     build_system_overview_read_model,
 )
-from copilot_core.core.action_closure_read_model import build_action_closure_summary_read_model
+from copilot_core.core.action_closure_read_model import (
+    build_action_closure_context_block,
+    build_action_closure_summary_read_model,
+    resolve_zone_name,
+)
 from copilot_core.action_closure import get_action_closure_store
 
 _LOGGER = logging.getLogger(__name__)
@@ -768,6 +772,63 @@ def _generate_quick_actions(zone: Dict[str, Any]) -> List[Dict[str, Any]]:
 # Global Context
 # ═══════════════════════════════════════════════════════════════════════
 
+def _get_zone_display_name(zone: Dict[str, Any]) -> str | None:
+    """Return the friendliest available display name for a zone."""
+    for key in ("name_de", "name", "zone_id"):
+        value = zone.get(key)
+        if value in (None, ""):
+            continue
+        text = str(value).strip()
+        if text:
+            return text
+    return None
+
+
+def _build_zone_action_closure_context(
+    zone_id: str,
+    *,
+    zone_name: str | None = None,
+    recent_limit: int = 3,
+) -> Dict[str, Any]:
+    """Expose canonical action-closure context for one zone."""
+    resolved_zone_name = zone_name or resolve_zone_name(zone_id) or zone_id
+    context_block = build_action_closure_context_block(
+        get_action_closure_store(),
+        zone_id=zone_id,
+        zone_name=resolved_zone_name,
+        recent_limit=recent_limit,
+    )
+    return {
+        "zone_id": zone_id,
+        "zone_name": resolved_zone_name,
+        "context": context_block.to_dict(),
+    }
+
+
+def _build_zone_action_closure_contexts(zone_name_lookup: Dict[str, str] | None = None) -> List[Dict[str, Any]]:
+    """Expose zone-scoped closure contexts for system-wide dashboard consumers."""
+    zone_name_lookup = zone_name_lookup or {}
+    summary = build_action_closure_summary_read_model(get_action_closure_store())
+    payload = summary.to_dict()
+    contexts: List[Dict[str, Any]] = []
+
+    for zone_id in payload.get("zones", {}).keys():
+        context = _build_zone_action_closure_context(
+            zone_id,
+            zone_name=zone_name_lookup.get(zone_id),
+            recent_limit=2,
+        )
+        if context["context"].get("summary", {}).get("total_closures", 0):
+            contexts.append(context)
+
+    contexts.sort(
+        key=lambda item: (
+            -item["context"].get("summary", {}).get("total_closures", 0),
+            item.get("zone_name") or item.get("zone_id") or "",
+        )
+    )
+    return contexts
+
 def _build_global_context() -> Dict[str, Any]:
     """Build global dashboard context from available engines + example data."""
     ctx: Dict[str, Any] = {}
@@ -776,6 +837,22 @@ def _build_global_context() -> Dict[str, Any]:
         closure_summary = build_action_closure_summary_read_model(get_action_closure_store())
         if closure_summary.total_closures:
             payload = closure_summary.to_dict()
+            zone_name_lookup: Dict[str, str] = {}
+            for zone in _get_habitus_zones():
+                zid = None
+                if isinstance(zone, dict):
+                    raw_zone_id = zone.get("zone_id")
+                    if raw_zone_id not in (None, ""):
+                        text = str(raw_zone_id).strip()
+                        zid = text or None
+                zone_name = _get_zone_display_name(zone) if isinstance(zone, dict) else None
+                if not zid or not zone_name:
+                    continue
+                zone_name_lookup[zid] = zone_name
+                if not zid.startswith("zone:"):
+                    zone_name_lookup[f"zone:{zid}"] = zone_name
+
+            zone_contexts = _build_zone_action_closure_contexts(zone_name_lookup)
             ctx["action_closures"] = {
                 "total": payload.get("total_closures", 0),
                 "open": payload.get("open_count", 0),
@@ -785,6 +862,8 @@ def _build_global_context() -> Dict[str, Any]:
                 "states": payload.get("states", {}),
                 "highlights": payload.get("highlights", []),
                 "recent": payload.get("recent_closures", [])[:3],
+                "zones_with_closures": len(zone_contexts),
+                "zone_contexts": zone_contexts,
             }
     except Exception:
         pass
@@ -994,6 +1073,11 @@ def get_dashboard():
                 "source": zone_summary.get("source", ""),
             },
         }
+        zone_data["action_closures"] = _build_zone_action_closure_context(
+            zid,
+            zone_name=_get_zone_display_name(zone),
+            recent_limit=2,
+        )
         if include_modules:
             zone_data["modules"] = _get_zone_module_data(zid)
         if include_mood:
@@ -1186,5 +1270,10 @@ def get_zone_detail(zone_id: str):
     zone_data["mood"] = _get_zone_mood(zone_id)
     zone_data["quick_actions"] = _generate_quick_actions(zone_data)
     zone_data["entity_counts_by_domain"] = _get_entity_count(zone_data)
-    
+    zone_data["action_closures"] = _build_zone_action_closure_context(
+        zone_id,
+        zone_name=_get_zone_display_name(zone_data),
+        recent_limit=3,
+    )
+
     return jsonify({"ok": True, "zone": zone_data})

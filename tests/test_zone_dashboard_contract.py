@@ -17,6 +17,7 @@ if CORE_APP_ROOT.exists() and path_str not in sys.path:
 
 
 from copilot_core.api.v1.zone_dashboard import (  # noqa: E402
+    get_dashboard,
     get_dashboard_summary,
     get_mood,
     get_zone_detail,
@@ -24,11 +25,13 @@ from copilot_core.api.v1.zone_dashboard import (  # noqa: E402
     set_mood,
     zone_dashboard_bp,
 )
+from copilot_core.action_closure import get_action_closure_store  # noqa: E402
 from copilot_core.hub.habitus_zones import HabitusZoneEngine  # noqa: E402
 from copilot_core.hub.zone_automation import ZoneAutomationController  # noqa: E402
 
 
 def _init_services() -> tuple[HabitusZoneEngine, ZoneAutomationController]:
+    get_action_closure_store().clear()
     zone_engine = HabitusZoneEngine()
     zone_engine.sync_external_zone_topology(
         "wohnbereich",
@@ -100,6 +103,44 @@ def test_zone_dashboard_summary_prefers_truth_engine_zones() -> None:
     assert body["summary"]["total_zones"] == 1
     assert body["summary"]["zone_types"] == {"living": 1}
     assert body["summary"]["total_entities"] == 2
+
+
+def test_zone_dashboard_surfaces_zone_scoped_action_closure_context() -> None:
+    _init_services()
+    store = get_action_closure_store()
+    closure = store.upsert(
+        source="voice.accepted",
+        proposal_id="proposal:wohnbereich",
+        action_id="action:wohnbereich",
+        zone_id="wohnbereich",
+        module_id="light",
+        accepted_at="2026-04-01T21:00:00+00:00",
+    )
+    store.record_execution(
+        closure["closure_id"],
+        outcome="executed",
+        runtime_source="ha.adapter",
+        executed_at="2026-04-01T21:01:00+00:00",
+    )
+
+    app = Flask(__name__)
+    app.config["TESTING"] = True
+    app.register_blueprint(zone_dashboard_bp)
+
+    with app.test_request_context("/api/v1/zone/dashboard", method="GET"):
+        dashboard_response = get_dashboard.__wrapped__()
+    dashboard_body = dashboard_response.get_json()
+    assert dashboard_body["zones"][0]["action_closures"]["context"]["summary"]["total_closures"] == 1
+    assert any(
+        "Wohnbereich" in line
+        for line in dashboard_body["zones"][0]["action_closures"]["context"]["context_lines"]
+    )
+
+    with app.test_request_context("/api/v1/zone/dashboard/wohnbereich", method="GET"):
+        detail_response = get_zone_detail.__wrapped__("wohnbereich")
+    detail_body = detail_response.get_json()
+    assert detail_body["zone"]["action_closures"]["context"]["summary"]["total_closures"] == 1
+    assert detail_body["zone"]["action_closures"]["zone_name"] == "Wohnbereich"
 
 
 def test_zone_dashboard_mood_list_prefers_truth_engine_zones() -> None:

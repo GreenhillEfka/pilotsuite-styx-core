@@ -817,3 +817,27 @@ Die kanonische `ActionClosure`-Wahrheit wird jetzt mit zonenspezifischem Kontext
 **Tests:** `pytest -q tests/test_action_closure_contract.py tests/test_action_closure_summary_contract.py tests/test_voice_action_closure_hints_contract.py tests/test_voice_policy_contract.py tests/test_action_closure_learning_contract.py tests/test_predictive_api_contract.py tests/test_multizone_runtime_contract.py tests/test_habitus_accept_contract.py` → gruen
 
 **Next Exact Task:** Zone-Scoped Action-Closure-Feed-in fuer Dashboard-/systemweite Context-Surfaces als naechsten Forward-Slice definieren und ableiten; Persistenz und Zone-Scoped-Read-Model-Filterung fuer Closure-Delta-Responses evaluieren.
+
+### ✅ Slice 22 — Zone-Scoped Closure Feed for Dashboard/System Context
+**Status:** ✅ DONE (v15.3.33)
+
+**Goal**
+Die kanonische `ActionClosure`-Wahrheit wird jetzt nicht nur global fuer Dashboard-Highlights, sondern direkt zonenspezifisch fuer Dashboard-/System-Kontext-Surfaces ausgeleitet. Dashboard-Zonenlisten, Zone-Detail und globaler System-Context konsumieren dieselbe Closure-Read-Model-Schicht statt eigene Aggregationen zu bauen.
+
+### Deliverables
+- [x] `zone_dashboard` speist pro Zone eine kanonische `action_closures`-Surface in die Dashboard-Zonenliste ein
+- [x] Zone-Detail-Surface exponiert dieselbe zonenspezifische Closure-Context-Struktur stabil
+- [x] Globaler Dashboard-Context erweitert um `zone_contexts` und `zones_with_closures`
+- [x] Friendly Zone Naming fuer Dashboard/System-Kontext ueber dieselbe kanonische Aufloesung wie Chat/Voice
+- [x] Contract-Tests fuer globalen Zone-Context und Truth-Zone-Detail/List-Surface
+
+### Acceptance criteria
+- Dashboard-Consumer koennen dieselbe zonenspezifische Closure-Wahrheit direkt aus Listen-, Detail- und globalem Kontext lesen.
+- Friendly Zone Names werden nicht als separate Dashboard-Heuristik gepflegt, sondern aus derselben Closure-Read-Model-Schicht bzw. Truth-Zonenbasis abgeleitet.
+- Der globale Dashboard-Context bleibt kompakt, aber zeigt nachvollziehbar, welche Zonen offene/erfolgreiche/problematische Closures haben.
+
+**Commit:** `feat(core): deliver slice 22 dashboard closure zone feed`
+**Tag:** v15.3.33
+**Tests:** `pytest -q tests/test_action_closure_summary_contract.py tests/test_zone_dashboard_contract.py` → gruen
+
+**Next Exact Task:** Slice 23 als kanonische `ActionClosure`-Delta-Surface ableiten: revision-/freshness-faehige Summary/Context-Read-Models plus `since`-/zone-scoped-Filter fuer inkrementelle Dashboard-Poller auf derselben Closure-Truth evaluieren und kontraktfest machen.

@@ -268,7 +268,7 @@ def build_action_closure_summary_read_model(
     )
 
 
-def _resolve_zone_name(zone_id: str | None) -> str | None:
+def resolve_zone_name(zone_id: str | None) -> str | None:
     """Resolve a zone_id (e.g. 'zone:living') to a human-readable zone name."""
     if not zone_id:
         return None
@@ -331,7 +331,7 @@ def build_action_closure_context_block(
     payload = summary.to_dict()
 
     # Resolve human-readable zone name from zone_id when not provided
-    resolved_zone_name = zone_name or _resolve_zone_name(zone_id)
+    resolved_zone_name = zone_name or resolve_zone_name(zone_id)
 
     context_lines: list[str] = []
     if summary.total_closures:
@@ -373,4 +373,5 @@ __all__ = [
     "ActionClosureContextBlock",
     "build_action_closure_summary_read_model",
     "build_action_closure_context_block",
+    "resolve_zone_name",
 ]
