@@ -396,9 +396,9 @@ class AutomationRuleEngine:
                 for rule_id in self._zone_rules.get(zone_id, [])
             ]
     
-    def set_habitus_integration(self, integration_fn: Callable) -> None:
-        """Habitus Integration setzen."""
-        self._habitus_integration = integration_fn
+    def set_habitus_service(self, habitus_service) -> None:
+        """Habitus Service setzen (für Learning)."""
+        self._habitus_service = habitus_service
     
     @property
     def stats(self) -> Dict[str, Any]:
@@ -421,10 +421,11 @@ import hashlib
 class ZoneAutomationController:
     """Haupt-Controller für Zone-Automationen."""
     
-    def __init__(self):
+    def __init__(self, habitus_service=None):
         self._configs: Dict[str, ZoneAutomationConfig] = {}
         self._neuron_tracker = NeuronStatusTracker()
         self._rule_engine = AutomationRuleEngine()
+        self._habitus_service = habitus_service  # HabitusService für Learning
         self._lock = threading.Lock()
         
         # Default Rules erstellen
@@ -533,7 +534,7 @@ class ZoneAutomationController:
         event_type: str,
         context: Dict[str, Any],
     ) -> Dict[str, Any]:
-        """Event verarbeiten (Haupt-Logic)."""
+        """Event verarbeiten (Haupt-Logic) — MIT HABITUS LEARNING."""
         config = self.get_zone_config(zone_id)
         if not config:
             return {"success": False, "error": "Zone not configured"}
@@ -554,6 +555,37 @@ class ZoneAutomationController:
                     execute_fn=self._execute_action,
                 )
                 results.append(result)
+                
+                # ★★★ HABITUS LEARNING INTEGRATION ★★★
+                # Wenn autonomous ausgeführt → Im Habitus lernen
+                if (
+                    result.get("success") and
+                    result.get("mode") == "autonomous" and
+                    self._habitus_service
+                ):
+                    try:
+                        # Pattern beobachten/speichern
+                        self._habitus_service.observe(
+                            trigger={
+                                "event_type": event_type,
+                                "zone": zone_id,
+                                **context,
+                            },
+                            action=rule.action,
+                            zone=zone_id,
+                            module=rule.action.get("module"),
+                            context=context,
+                        )
+                        
+                        # Config updaten
+                        config.learned_patterns.append(rule.rule_id)
+                        config.last_learning = datetime.now(timezone.utc).isoformat()
+                        
+                        _LOGGER.info(
+                            f"Habitus learned from automation: {rule.rule_id} in {zone_id}"
+                        )
+                    except Exception as e:
+                        _LOGGER.error(f"Habitus learning failed: {e}")
         
         return {
             "success": True,
@@ -561,6 +593,7 @@ class ZoneAutomationController:
             "triggered_rules": len(results),
             "results": results,
             "automation_mode": config.automation_mode.value,
+            "learned": sum(1 for r in results if r.get("success") and r.get("mode") == "autonomous"),
         }
     
     def _execute_action(self, action: Dict[str, Any]) -> Any:
