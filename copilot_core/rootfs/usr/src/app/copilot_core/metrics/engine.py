@@ -202,16 +202,20 @@ class MetricsEngine:
     def _get_or_create_point(self, metric: Metric,
                             labels: Optional[Dict[str, str]],
                             timestamp: datetime) -> MetricPoint:
-        """Get existing point or create new one for label combination."""
+        """Create a fresh point seeded from the latest value for this label set."""
         labels = labels or {}
         
-        # Find matching point
+        # Seed a new time-series point from the latest matching cumulative value
+        # instead of mutating a historical point in place.
         for point in reversed(metric.points):
             if point.labels == labels:
-                return point
+                return MetricPoint(
+                    timestamp=timestamp.isoformat(),
+                    value=point.value,
+                    labels=dict(labels),
+                )
         
-        # Create new point
-        return MetricPoint(timestamp=timestamp.isoformat(), value=metric.initial_value, labels=labels)
+        return MetricPoint(timestamp=timestamp.isoformat(), value=metric.initial_value, labels=dict(labels))
     
     def _add_point(self, metric: Metric, point: MetricPoint) -> None:
         """Add point to metric, respecting max points limit."""
@@ -344,6 +348,12 @@ class MetricsEngine:
         elif aggregation == "max":
             return max(p.value for p in points)
         elif aggregation == "sum":
+            if metric.metric_type == MetricType.COUNTER:
+                latest_by_series: Dict[tuple[tuple[str, str], ...], float] = {}
+                for point in points:
+                    series_key = tuple(sorted(point.labels.items()))
+                    latest_by_series[series_key] = point.value
+                return sum(latest_by_series.values())
             return sum(p.value for p in points)
         
         return points[-1].value

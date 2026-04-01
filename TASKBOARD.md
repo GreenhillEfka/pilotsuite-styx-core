@@ -643,8 +643,9 @@ Coordinate actions across multiple zones (scenes, routines, events).
 9. **✅ Refinement — Integration/OWASP Compatibility Repair** — Legacy-Facades für Slice-67-82-Module ergänzt (`23/23` Integration grün, `57/57` ModuleRegistry grün) sowie OWASP-Request-Context-, NoSQL- und SSRF-Kanten für Root-`pytest -x` gehärtet
 10. **✅ Slice 94 — Root Contract/Test Surface Recovery** — Breite Core-Restfehler nach Slice 93 über Modul-, Query-, Scheduler-, Search-, Secrets-, Webhook-, Worker-, Workflow- und Voice-/Weather-Flächen stabilisiert; kritische Deadlocks/Retry-/Mutation-/Contract-Kanten beseitigt
 11. **✅ Slice 95 — Health Engine Surface Recovery** — Deadlock im Advanced-Health-Dependency-Pfad beseitigt, Built-in-Systemchecks von der user-facing Root-Contract-Surface getrennt, Default-Kritikalität/Overall-Health der klassischen Health-Engine wieder contract-konform gemacht und Component-Checks im Read-Model vollständig serialisiert
+12. **✅ Slice 96 — Circadian, Logging, and Metrics Contract Repair** — Night-Circadian-State liefert nachts wieder `sleep_mode_brightness`; Logging-Pattern-Filter arbeiten case-insensitive und der Default-Buffer ist wieder `100`; Counter-History wird nicht mehr in-place mutiert und `aggregation="sum"` summiert Serienstände statt aufgeblähter History-Referenzen
 
-**Next Exact Refinement Task:** `tests/test_light_extended.py::TestLightModuleExtended::test_calculate_circadian_state_night` isoliert schließen; Night-Circadian-State muss bei Nacht `sleep_mode_brightness` statt `min_brightness` liefern
+**Next Exact Refinement Task:** `tests/test_metrics_engine.py::TestMetricsEngine::test_get_metric_history_time_range` isoliert schließen; Time-Range-Queries müssen frisch geschriebene Metric-Points am oberen Zeitrand contract-konform liefern statt leer zurückzufallen
 
 **After Refinement:** Slice 12+ nur entlang der dann verbleibenden ersten echten Root-Restfehler weiterziehen; keine neuen Feature-Slices vor sauberem Restfehler-Abtrag
 

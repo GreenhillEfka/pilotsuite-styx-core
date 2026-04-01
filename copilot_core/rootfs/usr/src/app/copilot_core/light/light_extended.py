@@ -341,8 +341,10 @@ class LightModuleExtended:
             brightness = config.sleep_mode_brightness
             color_temp = config.min_color_temp
         
+        min_allowed_brightness = min(config.min_brightness, config.sleep_mode_brightness)
+
         return {
-            "brightness": max(config.min_brightness, min(config.max_brightness, brightness)),
+            "brightness": max(min_allowed_brightness, min(config.max_brightness, brightness)),
             "color_temp": max(config.min_color_temp, min(config.max_color_temp, color_temp)),
         }
     

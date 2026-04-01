@@ -130,13 +130,14 @@ class LogFilter:
             if any(entry.logger_name.startswith(prefix) for prefix in self.exclude_loggers):
                 return False
         
-        # Check message patterns
+        # Check message patterns (case-insensitive so simple keyword filters
+        # behave consistently across differently capitalized log messages).
         if self.include_patterns:
-            if not any(re.search(p, entry.message) for p in self.include_patterns):
+            if not any(re.search(p, entry.message, re.IGNORECASE) for p in self.include_patterns):
                 return False
         
         if self.exclude_patterns:
-            if any(re.search(p, entry.message) for p in self.exclude_patterns):
+            if any(re.search(p, entry.message, re.IGNORECASE) for p in self.exclude_patterns):
                 return False
         
         # Sampling
@@ -304,7 +305,7 @@ class LoggingEngine:
             return True
         return False
     
-    def create_buffer(self, name: str, max_size: int = 1000) -> str:
+    def create_buffer(self, name: str, max_size: int = 100) -> str:
         """Create a log buffer."""
         buffer_id = f"buf_{uuid.uuid4().hex[:8]}"
         self._buffers[buffer_id] = LogBuffer(max_size=max_size)

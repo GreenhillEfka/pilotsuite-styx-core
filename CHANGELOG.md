@@ -1,5 +1,16 @@
 # Changelog
 
+## [v15.3.13] - 2026-04-01
+
+### 🧩 Slice 96 — Circadian, Logging, and Metrics Contract Repair
+
+- `light.light_extended.calculate_circadian_state()` respektiert im Nachtpfad jetzt sauber `sleep_mode_brightness`; der finale Clamp lässt Nachtwerte unterhalb von `min_brightness` zu, statt sie wieder auf den Tages-Minimumwert hochzuziehen.
+- `logging.engine.LogFilter` matched Include-/Exclude-Patterns jetzt case-insensitive, damit einfache Keyword-Filter unabhängig von der Groß-/Kleinschreibung der Logmeldung contract-konform greifen.
+- `logging.engine.create_buffer()` liefert den erwarteten Default-Buffer wieder mit `max_size=100` statt `1000`.
+- `metrics.engine` mutiert Counter-Historie nicht mehr in place: neue Punkte werden aus dem letzten Serienstand gesät, und `aggregation="sum"` summiert für Counter die letzten Serienstände statt kumulierte History-Punkte mehrfach aufzublähen.
+- Versionsartefakte (`VERSION`, `copilot_core/VERSION`, `config.yaml`, `manifest.json`) auf `15.3.13` harmonisiert.
+- Validiert mit: `PYTHONPATH=. /home/linuxbrew/.linuxbrew/bin/pytest -q tests/test_light_extended.py::TestLightModuleExtended::test_calculate_circadian_state_day tests/test_light_extended.py::TestLightModuleExtended::test_calculate_circadian_state_night tests/test_light_extended.py::TestLightModuleExtended::test_calculate_circadian_disabled` → `3 passed`; `PYTHONPATH=. /home/linuxbrew/.linuxbrew/bin/pytest -q tests/test_logging_engine.py::TestLoggingEngine::test_filter_by_pattern_include tests/test_logging_engine.py::TestLoggingEngine::test_filter_by_pattern_exclude tests/test_logging_engine.py::TestLoggingEngine::test_get_buffer tests/test_logging_engine.py::TestLoggingEngine::test_create_buffer tests/test_logging_engine.py::TestLoggingEngine::test_buffer_add_entry tests/test_logging_engine.py::TestLoggingEngine::test_buffer_max_size` → `6 passed`; `PYTHONPATH=. /home/linuxbrew/.linuxbrew/bin/pytest -q tests/test_metrics_engine.py::TestMetricsEngine::test_increment_counter tests/test_metrics_engine.py::TestMetricsEngine::test_increment_counter_with_labels tests/test_metrics_engine.py::TestMetricsEngine::test_get_metric_value_aggregation_sum tests/test_metrics_engine.py::TestMetricsEngine::test_get_metric_history` → `4 passed`; `PYTHONPATH=. /home/linuxbrew/.linuxbrew/bin/pytest -x` → erster echter Restfehler jetzt bei `tests/test_metrics_engine.py::TestMetricsEngine::test_get_metric_history_time_range`.
+
 ## [v15.3.12] - 2026-04-01
 
 ### 🧩 Slice 95 — Health Engine Surface Recovery
