@@ -646,8 +646,9 @@ Coordinate actions across multiple zones (scenes, routines, events).
 12. **✅ Slice 96 — Circadian, Logging, and Metrics Contract Repair** — Night-Circadian-State liefert nachts wieder `sleep_mode_brightness`; Logging-Pattern-Filter arbeiten case-insensitive und der Default-Buffer ist wieder `100`; Counter-History wird nicht mehr in-place mutiert und `aggregation="sum"` summiert Serienstände statt aufgeblähter History-Referenzen
 13. **✅ Slice 101 — Energy Reserve Recovery Contract Repair** — Batterie-Reserveboden ist wieder echt geschützt; Low-Battery-Zonen laden auch während Peak-Hours deterministisch nach und dokumentieren den Schutzpfad mit `reserve_recovery`
 14. **✅ Slice 102 — Zone Comfort Scoring Contract Repair** — Zone-Comfort-Scores, Bedroom-Profil und Trend-Baseline wieder contract-konform; gesamtes Komfortmodul (`98/98`) grün
+15. **✅ Slice 103 — Zone Truth API Store Contract Repair** — Zone-Truth-API, Delta-Responses und Sync-Flows nutzen wieder dieselbe kanonische Store-Instanz; Contract-Surface (`74/74`) grün
 
-**Next Exact Refinement Task:** `tests/test_zone_truth_api_contract.py::TestZoneTruthApi::test_get_zone_truth_zones_returns_all_zones` isoliert schließen; `/api/v1/zone-automation/truth/zones` meldet aktuell `summary.zone_count=3`, der Contract erwartet aber `2`
+**Next Exact Refinement Task:** `tests/test_zone_truth_store.py::TestZoneTruthStore::test_create_zone` isoliert schließen; `ZoneTruthStore.create_zone()` setzt aktuell `zone.revision=0`, der Contract erwartet nach der ersten Revision `1`
 
 **After Refinement:** Slice 12+ nur entlang der dann verbleibenden ersten echten Root-Restfehler weiterziehen; keine neuen Feature-Slices vor sauberem Restfehler-Abtrag
 

@@ -1,5 +1,15 @@
 # Changelog
 
+## [v15.3.20] - 2026-04-01
+
+### 🧩 Slice 103 — Zone Truth API Store Contract Repair
+
+- `storage/zone_truth.py` bindet direkt konstruierte `ZoneTruthStore`-Instanzen jetzt an den aktiven Singleton, damit API-Blueprint, Sync-Flows und Contract-Tests nicht versehentlich gegen stale `/data`-State lesen.
+- Delta-Responses von `get_all_entities_read_model()` liefern jetzt denselben stabilen Contract wie die übrige Zone-Automation-Surface: `delta.enabled`, `zone_ids`, `returned_zone_count`, `returned_entity_count` sowie `delta_from_revision`/`delta_to_revision`.
+- Dadurch sind die Zone-Truth-API-Verträge wieder deterministisch: Zone-Liste, Delta-Query, Einzelzone, Archetypen und Sync-to-Truth greifen auf dieselbe kanonische Store-Instanz.
+- Versionsartefakte (`VERSION`, `copilot_core/VERSION`, `config.yaml`, `manifest.json`, Add-on-Config, Runtime-VERSION) auf `15.3.20` harmonisiert.
+- Validiert mit: `pytest -q tests/test_zone_truth_api_contract.py copilot_core/rootfs/usr/src/app/tests/test_zone_automation.py` → `74 passed`; `pytest -x -q` → erster echter Restfehler jetzt bei `tests/test_zone_truth_store.py::TestZoneTruthStore::test_create_zone`.
+
 ## [v15.3.19] - 2026-04-01
 
 ### 🧩 Slice 102 — Zone Comfort Scoring Contract Repair

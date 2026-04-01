@@ -300,6 +300,12 @@ class ZoneTruthStore:
         # Current topology revision counter
         self._revision_counter: int = 0
         
+        # Make directly constructed stores the active singleton as well.
+        # This keeps API handlers, sync flows, and contract tests on the same
+        # canonical store instead of accidentally reading stale /data state.
+        global _zone_truth_store
+        _zone_truth_store = self
+        
         # Load from disk if persistence enabled
         if self.persist:
             self._load()
@@ -753,22 +759,35 @@ class ZoneTruthStore:
             
             all_zones.append(zone_data)
         
+        summary = {
+            "zone_count": len(all_zones),
+            "entity_count": sum(z["entity_count"] for z in all_zones),
+            "revision": self._revision_counter,
+            "updated_at": _now_iso(),
+            "compact": compact,
+        }
+
         # Delta filtering
         if since_revision is not None and deltas:
             changed_zones = [z for z in all_zones if z["revision"] > since_revision]
-            all_zones = changed_zones
-        
-        total_entity_count = sum(z["entity_count"] for z in all_zones)
-        
+            return {
+                "zones": changed_zones,
+                "summary": {
+                    **summary,
+                    "returned_zone_count": len(changed_zones),
+                    "returned_entity_count": sum(z["entity_count"] for z in changed_zones),
+                    "delta_from_revision": since_revision,
+                    "delta_to_revision": self._revision_counter,
+                },
+                "delta": {
+                    "enabled": True,
+                    "zone_ids": [z["zone_id"] for z in changed_zones],
+                },
+            }
+
         return {
             "zones": all_zones,
-            "summary": {
-                "zone_count": len(all_zones),
-                "entity_count": total_entity_count,
-                "revision": self._revision_counter,
-                "updated_at": _now_iso(),
-                "compact": compact,
-            },
+            "summary": summary,
         }
 
     def register_archetype(self, archetype: ZoneArchetypeV1) -> None:
