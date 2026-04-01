@@ -23,6 +23,8 @@ from copilot_core.api.v1.notifications import (  # noqa: E402
     NotificationManager,
     acknowledge_action_closure_follow_up_dispatch,
     get_action_closure_follow_up_dispatch,
+    get_action_closure_follow_up_receipts,
+    record_action_closure_follow_up_receipt,
 )
 
 
@@ -200,3 +202,82 @@ def test_dispatch_cursor_tracks_delta_without_hiding_unacknowledged_candidates()
     assert unchanged_dispatch["cursor"]["changed"] is False
     assert unchanged_dispatch["cursor"]["changed_count"] == 0
     assert unchanged_dispatch["counts"]["dispatchable"] == 3
+
+
+def test_receipt_surface_tracks_delivery_retry_and_escalation_state_from_dispatch_truth() -> None:
+    seed = _seed_closures()
+    app = Flask(__name__)
+
+    with app.test_request_context(
+        "/notifications/action-closures/dispatch?delivery_mode=notification_job&recent_limit=5",
+        method="GET",
+    ):
+        dispatch_response = get_action_closure_follow_up_dispatch()
+
+    candidates = dispatch_response.get_json()["dispatch"]["candidates"]
+    open_candidate = next(item for item in candidates if item["closure_id"] == seed["open_closure_id"])
+    failing_candidate = next(item for item in candidates if item["closure_id"] == seed["failing_closure_id"])
+
+    with app.test_request_context(
+        "/notifications/action-closures/dispatch/ack",
+        method="POST",
+        json={"dispatch_id": open_candidate["dispatch_id"], "acknowledged_by": "worker.notifications"},
+    ):
+        ack_response = acknowledge_action_closure_follow_up_dispatch()
+
+    ack_body = ack_response.get_json()
+    assert ack_body["ok"] is True
+    assert ack_body["acknowledged"][0]["receipt_revision"] >= 1
+
+    with app.test_request_context(
+        "/notifications/action-closures/dispatch/receipt",
+        method="POST",
+        json={
+            "dispatch_id": open_candidate["dispatch_id"],
+            "receipt_state": "delivered",
+            "receipt_by": "worker.notifications",
+            "note": "sent to mobile",
+        },
+    ):
+        delivered_response = record_action_closure_follow_up_receipt()
+
+    assert delivered_response.get_json()["receipts"][0]["receipt_state"] == "delivered"
+
+    with app.test_request_context(
+        "/notifications/action-closures/dispatch/receipt",
+        method="POST",
+        json={
+            "dispatch_id": failing_candidate["dispatch_id"],
+            "receipt_state": "failed",
+            "receipt_by": "worker.reminders",
+            "error": "push timeout",
+            "retry_state": "scheduled",
+            "retry_count": 2,
+            "next_retry_at": "2026-04-01T21:10:00+00:00",
+            "escalation_state": "pending",
+            "escalation_reason": "second delivery failure",
+        },
+    ):
+        failed_response = record_action_closure_follow_up_receipt()
+
+    failed_receipt = failed_response.get_json()["receipts"][0]
+    assert failed_receipt["receipt_state"] == "failed"
+    assert failed_receipt["retry_state"] == "scheduled"
+    assert failed_receipt["escalation_state"] == "pending"
+
+    with app.test_request_context(
+        "/notifications/action-closures/receipts?recent_limit=5",
+        method="GET",
+    ):
+        receipts_response = get_action_closure_follow_up_receipts()
+
+    summary = receipts_response.get_json()["receipts"]
+    assert summary["contract"] == "ActionClosureFollowUpReceiptSummaryV1"
+    assert summary["counts"]["total_receipts"] == 2
+    assert summary["counts"]["acknowledged"] == 1
+    assert summary["counts"]["delivered"] == 1
+    assert summary["counts"]["failed"] == 1
+    assert summary["counts"]["retry_pending"] == 1
+    assert summary["counts"]["escalated"] == 1
+    assert summary["recent_receipts"][0]["receipt_revision"] >= summary["recent_receipts"][1]["receipt_revision"]
+    assert any("Retry offen" in line for line in summary["highlights"])

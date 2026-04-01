@@ -18,6 +18,13 @@ if CORE_APP_ROOT.exists() and path_str not in sys.path:
 
 from copilot_core.action_closure import get_action_closure_store  # noqa: E402
 from copilot_core.api.v1.action_closure import action_closure_bp  # noqa: E402
+from copilot_core.api.v1 import notifications as notifications_api  # noqa: E402
+from copilot_core.api.v1.notifications import (  # noqa: E402
+    ActionClosureFollowUpDispatchStore,
+    acknowledge_action_closure_follow_up_dispatch,
+    get_action_closure_follow_up_dispatch,
+    record_action_closure_follow_up_receipt,
+)
 from copilot_core.api.v1.zone_dashboard import _build_global_context, init_zone_dashboard_api  # noqa: E402
 from copilot_core.core.action_closure_read_model import (  # noqa: E402
     build_action_closure_context_block,
@@ -28,6 +35,7 @@ from copilot_core.styx.chat_handler import ChatHandler  # noqa: E402
 
 def setup_function() -> None:
     get_action_closure_store().clear()
+    notifications_api._action_closure_follow_up_dispatch_store = ActionClosureFollowUpDispatchStore()
     init_zone_dashboard_api()
 
 
@@ -274,6 +282,68 @@ def test_chat_handler_home_context_mentions_action_closure_summary() -> None:
 
     assert "Aktionsabschluesse" in home_context
     assert "erfolgreich" in home_context
+
+
+def test_zone_dashboard_and_chat_surface_follow_up_receipts() -> None:
+    _seed_closures()
+    app = Flask(__name__)
+
+    with app.test_request_context(
+        "/notifications/action-closures/dispatch?delivery_mode=notification_job&recent_limit=5",
+        method="GET",
+    ):
+        dispatch_response = get_action_closure_follow_up_dispatch()
+
+    candidates = dispatch_response.get_json()["dispatch"]["candidates"]
+    open_candidate = next(item for item in candidates if item["kind"] == "open")
+    failing_candidate = next(item for item in candidates if item["kind"] == "problematic")
+
+    with app.test_request_context(
+        "/notifications/action-closures/dispatch/ack",
+        method="POST",
+        json={"dispatch_id": open_candidate["dispatch_id"], "acknowledged_by": "worker.notifications"},
+    ):
+        acknowledge_action_closure_follow_up_dispatch()
+
+    with app.test_request_context(
+        "/notifications/action-closures/dispatch/receipt",
+        method="POST",
+        json={
+            "dispatch_id": open_candidate["dispatch_id"],
+            "receipt_state": "delivered",
+            "receipt_by": "worker.notifications",
+        },
+    ):
+        record_action_closure_follow_up_receipt()
+
+    with app.test_request_context(
+        "/notifications/action-closures/dispatch/receipt",
+        method="POST",
+        json={
+            "dispatch_id": failing_candidate["dispatch_id"],
+            "receipt_state": "failed",
+            "receipt_by": "worker.notifications",
+            "retry_state": "scheduled",
+            "retry_count": 1,
+            "escalation_state": "pending",
+            "escalation_reason": "needs follow-up",
+        },
+    ):
+        record_action_closure_follow_up_receipt()
+
+    ctx = _build_global_context()
+    receipt_summary = ctx["action_closures"]["receipt_summary"]
+    assert receipt_summary["contract"] == "ActionClosureFollowUpReceiptSummaryV1"
+    assert receipt_summary["counts"]["total_receipts"] == 2
+    assert receipt_summary["counts"]["retry_pending"] == 1
+    assert receipt_summary["counts"]["escalated"] == 1
+
+    with app.app_context():
+        handler = ChatHandler()
+        home_context = handler._build_home_context()
+
+    assert "Follow-up-Zustellung" in home_context
+    assert "Retry offen" in home_context
 
 
 def test_action_closure_context_block_resolves_zone_name_for_chat_voice() -> None:

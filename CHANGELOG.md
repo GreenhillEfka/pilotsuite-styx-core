@@ -1,5 +1,15 @@
 # Changelog
 
+## [v15.3.37] - 2026-04-02
+
+### 🧩 Slice 26 — Closure Follow-Up Receipt Surface
+
+- `copilot_core.api.v1.notifications` fuehrt jetzt eine kanonische Receipt-Surface fuer Closure-Follow-up-Worker ein: `POST /notifications/action-closures/dispatch/receipt` materialisiert Delivery-/Queue-/Retry-/Escalation-Ergebnisse pro Dispatch-Kandidat, waehrend `GET /notifications/action-closures/receipts` dieselbe Wahrheit als `ActionClosureFollowUpReceiptSummaryV1` mit monotone `receipt_revision`-Delta ausleitet.
+- Dispatch-Acks bleiben nicht mehr isoliert im Worker-Layer: `ActionClosureFollowUpDispatchStore` fuehrt Ack-, Receipt-, Retry- und Escalation-State pro dedupliziertem Closure-Stand zusammen, sodass Notification-Jobs und Reminder-Queues dieselbe Rueckkanal-Wahrheit lesen.
+- `ActionClosureNotificationDigestV1` und `ActionClosureFollowUpDispatchV1` betten die neue Receipt-Summary direkt ein; Dashboard-Global-/Zonen-Kontext sowie `ChatHandler._build_home_context()` spiegeln Follow-up-Zustellung, offene Retries und Eskalationen damit ohne zweite Aggregationslogik zurueck.
+- Versionsartefakte (`VERSION`, `copilot_core/VERSION`, Runtime-VERSION, `copilot_core/config.yaml`, `copilot_core/manifest.json`) auf `15.3.37` harmonisiert.
+- Validiert mit: `pytest -q tests/test_notification_action_closure_dispatch_contract.py tests/test_notification_action_closure_digest_contract.py tests/test_action_closure_summary_contract.py tests/test_zone_dashboard_contract.py tests/test_voice_action_closure_hints_contract.py` → `27 passed`.
+
 ## [v15.3.36] - 2026-04-02
 
 ### 🧩 Slice 25 — Closure Follow-Up Dispatch Worker

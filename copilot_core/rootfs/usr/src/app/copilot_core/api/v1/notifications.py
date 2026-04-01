@@ -638,6 +638,84 @@ class ActionClosureDispatchCandidate:
         }
 
 
+@dataclass
+class ActionClosureDispatchReceipt:
+    """Latest worker/result state for one closure follow-up dispatch candidate."""
+
+    receipt_id: str
+    receipt_revision: int
+    dispatch_id: str
+    dedupe_key: str
+    delivery_mode: str
+    closure_id: str
+    closure_revision: int
+    zone_id: str | None = None
+    module_id: str | None = None
+    action_id: str | None = None
+    state: str | None = None
+    kind: str = "open"
+    priority: str = "normal"
+    title: str = ""
+    message: str = ""
+    updated_at: str | None = None
+    acknowledged: bool = False
+    acknowledged_at: str | None = None
+    acknowledged_by: str | None = None
+    ack_note: str | None = None
+    receipt_state: str = "acknowledged"
+    receipt_at: str | None = None
+    receipt_by: str | None = None
+    receipt_note: str | None = None
+    error: str | None = None
+    retry_state: str | None = None
+    retry_count: int = 0
+    next_retry_at: str | None = None
+    escalation_state: str | None = None
+    escalation_at: str | None = None
+    escalation_reason: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "contract": "ActionClosureFollowUpReceiptV1",
+            "receipt_id": self.receipt_id,
+            "receipt_revision": self.receipt_revision,
+            "dispatch_id": self.dispatch_id,
+            "dedupe_key": self.dedupe_key,
+            "delivery_mode": self.delivery_mode,
+            "closure_id": self.closure_id,
+            "closure_revision": self.closure_revision,
+            "zone_id": self.zone_id,
+            "module_id": self.module_id,
+            "action_id": self.action_id,
+            "state": self.state,
+            "kind": self.kind,
+            "priority": self.priority,
+            "title": self.title,
+            "message": self.message,
+            "updated_at": self.updated_at,
+            "acknowledged": self.acknowledged,
+            "acknowledged_at": self.acknowledged_at,
+            "acknowledged_by": self.acknowledged_by,
+            "ack_note": self.ack_note,
+            "receipt_state": self.receipt_state,
+            "receipt_at": self.receipt_at,
+            "receipt_by": self.receipt_by,
+            "receipt_note": self.receipt_note,
+            "error": self.error,
+            "retry_state": self.retry_state,
+            "retry_count": self.retry_count,
+            "next_retry_at": self.next_retry_at,
+            "escalation_state": self.escalation_state,
+            "escalation_at": self.escalation_at,
+            "escalation_reason": self.escalation_reason,
+            "delivery": {
+                "mode": self.delivery_mode,
+                "queue": "notifications" if self.delivery_mode == "notification_job" else "reminders",
+                "topic": "action_closure_follow_up" if self.delivery_mode == "notification_job" else "action_closure_reminder",
+            },
+        }
+
+
 def _utcnow_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -674,10 +752,96 @@ class ActionClosureFollowUpDispatchStore:
     def __init__(self) -> None:
         self._candidate_index: dict[str, ActionClosureDispatchCandidate] = {}
         self._acknowledged: dict[str, dict[str, Any]] = {}
+        self._receipt_index: dict[str, ActionClosureDispatchReceipt] = {}
+        self._receipt_revision_counter: int = 0
 
     def clear(self) -> None:
         self._candidate_index.clear()
         self._acknowledged.clear()
+        self._receipt_index.clear()
+        self._receipt_revision_counter = 0
+
+    def _next_receipt_revision(self) -> int:
+        self._receipt_revision_counter += 1
+        return self._receipt_revision_counter
+
+    def get_current_receipt_revision(self) -> int:
+        return self._receipt_revision_counter
+
+    def _receipt_id(self, candidate: ActionClosureDispatchCandidate, revision: int) -> str:
+        digest = hashlib.sha1(f"{candidate.dedupe_key}|{revision}".encode("utf-8")).hexdigest()[:16]
+        return f"receipt:{candidate.delivery_mode}:{digest}"
+
+    def _touch_receipt(
+        self,
+        candidate: ActionClosureDispatchCandidate,
+        *,
+        receipt_state: str,
+        receipt_at: str | None = None,
+        receipt_by: str | None = None,
+        receipt_note: str | None = None,
+        error: str | None = None,
+        retry_state: str | None = None,
+        retry_count: int | None = None,
+        next_retry_at: str | None = None,
+        escalation_state: str | None = None,
+        escalation_at: str | None = None,
+        escalation_reason: str | None = None,
+    ) -> ActionClosureDispatchReceipt:
+        revision = self._next_receipt_revision()
+        existing = self._receipt_index.get(candidate.dedupe_key)
+        receipt = ActionClosureDispatchReceipt(
+            receipt_id=self._receipt_id(candidate, revision),
+            receipt_revision=revision,
+            dispatch_id=candidate.dispatch_id,
+            dedupe_key=candidate.dedupe_key,
+            delivery_mode=candidate.delivery_mode,
+            closure_id=candidate.closure_id,
+            closure_revision=candidate.closure_revision,
+            zone_id=candidate.zone_id,
+            module_id=candidate.module_id,
+            action_id=candidate.action_id,
+            state=candidate.state,
+            kind=candidate.kind,
+            priority=candidate.priority,
+            title=candidate.title,
+            message=candidate.message,
+            updated_at=candidate.updated_at,
+            acknowledged=candidate.acknowledged,
+            acknowledged_at=candidate.acknowledged_at,
+            acknowledged_by=candidate.acknowledged_by,
+            ack_note=candidate.ack_note,
+            receipt_state=str(receipt_state or "acknowledged").strip() or "acknowledged",
+            receipt_at=receipt_at or _utcnow_iso(),
+            receipt_by=str(receipt_by or candidate.acknowledged_by or "worker").strip() or "worker",
+            receipt_note=str(receipt_note or candidate.ack_note or "").strip() or None,
+            error=str(error or "").strip() or None,
+            retry_state=str(retry_state).strip() if retry_state not in (None, "") else (existing.retry_state if existing else None),
+            retry_count=int(retry_count if retry_count is not None else (existing.retry_count if existing else 0)),
+            next_retry_at=next_retry_at if next_retry_at not in ("",) else None,
+            escalation_state=(
+                str(escalation_state).strip()
+                if escalation_state not in (None, "")
+                else (existing.escalation_state if existing else None)
+            ),
+            escalation_at=(
+                escalation_at
+                if escalation_state not in (None, "")
+                else (existing.escalation_at if existing else None)
+            ),
+            escalation_reason=(
+                str(escalation_reason).strip() or None
+                if escalation_reason not in (None, "")
+                else (existing.escalation_reason if existing else None)
+            ),
+        )
+        if receipt.receipt_state in {"delivered", "sent", "queued"} and retry_state in (None, ""):
+            receipt.retry_state = None
+            receipt.next_retry_at = None
+        if receipt.escalation_state in {"escalated", "triggered"} and not receipt.escalation_at:
+            receipt.escalation_at = receipt.receipt_at
+        self._receipt_index[candidate.dedupe_key] = receipt
+        return receipt
 
     def candidate_from_follow_up(
         self,
@@ -711,6 +875,26 @@ class ActionClosureFollowUpDispatchStore:
         self._candidate_index[dispatch_id] = candidate
         return candidate
 
+    def list_receipts(
+        self,
+        *,
+        zone_id: str | None = None,
+        delivery_mode: str | None = None,
+        since_revision: int | None = None,
+    ) -> list[dict[str, Any]]:
+        receipts = list(self._receipt_index.values())
+        if zone_id:
+            receipts = [receipt for receipt in receipts if receipt.zone_id == zone_id]
+        if delivery_mode:
+            receipts = [receipt for receipt in receipts if receipt.delivery_mode == delivery_mode]
+        if since_revision is not None:
+            receipts = [receipt for receipt in receipts if receipt.receipt_revision > since_revision]
+        receipts.sort(
+            key=lambda receipt: (receipt.receipt_revision, receipt.receipt_at or "", receipt.closure_id),
+            reverse=True,
+        )
+        return [receipt.to_dict() for receipt in receipts]
+
     def acknowledge(
         self,
         dispatch_ids: list[str],
@@ -738,7 +922,54 @@ class ActionClosureFollowUpDispatchStore:
             candidate.acknowledged_at = timestamp
             candidate.acknowledged_by = ack["acknowledged_by"]
             candidate.ack_note = ack["ack_note"]
-            results.append({"contract": "ActionClosureFollowUpDispatchAckV1", **candidate.to_dict()})
+            receipt = self._touch_receipt(
+                candidate,
+                receipt_state="acknowledged",
+                receipt_at=timestamp,
+                receipt_by=ack["acknowledged_by"],
+                receipt_note=ack["ack_note"],
+            )
+            payload = candidate.to_dict()
+            payload["contract"] = "ActionClosureFollowUpDispatchAckV1"
+            payload["receipt_revision"] = receipt.receipt_revision
+            results.append(payload)
+        return results
+
+    def record_receipts(
+        self,
+        dispatch_ids: list[str],
+        *,
+        receipt_state: str,
+        receipt_by: str | None = None,
+        note: str | None = None,
+        error: str | None = None,
+        retry_state: str | None = None,
+        retry_count: int | None = None,
+        next_retry_at: str | None = None,
+        escalation_state: str | None = None,
+        escalation_reason: str | None = None,
+    ) -> list[dict[str, Any]]:
+        results: list[dict[str, Any]] = []
+        timestamp = _utcnow_iso()
+        for dispatch_id in dispatch_ids:
+            candidate = self._candidate_index.get(str(dispatch_id or "").strip())
+            if candidate is None:
+                continue
+            receipt = self._touch_receipt(
+                candidate,
+                receipt_state=receipt_state,
+                receipt_at=timestamp,
+                receipt_by=receipt_by,
+                receipt_note=note,
+                error=error,
+                retry_state=retry_state,
+                retry_count=retry_count,
+                next_retry_at=next_retry_at,
+                escalation_state=escalation_state,
+                escalation_at=timestamp if escalation_state not in (None, "") else None,
+                escalation_reason=escalation_reason,
+            )
+            results.append(receipt.to_dict())
         return results
 
 
@@ -1263,6 +1494,67 @@ def acknowledge_action_closure_follow_up_dispatch() -> tuple[dict[str, Any], int
     return jsonify({"ok": True, "acknowledged": acknowledgements, "count": len(acknowledgements)})
 
 
+@bp.route("/action-closures/dispatch/receipt", methods=["POST"])
+def record_action_closure_follow_up_receipt() -> tuple[dict[str, Any], int]:
+    """Record delivery/queue/retry/escalation results for dispatch candidates."""
+    body = request.get_json(silent=True) or {}
+    dispatch_ids = body.get("dispatch_ids") or []
+    if not dispatch_ids and body.get("dispatch_id"):
+        dispatch_ids = [body["dispatch_id"]]
+    dispatch_ids = [str(item).strip() for item in dispatch_ids if str(item).strip()]
+    if not dispatch_ids:
+        return jsonify({"ok": False, "error": "dispatch_id or dispatch_ids required"}), 400
+
+    receipt_state = str(body.get("receipt_state") or body.get("status") or "").strip()
+    if not receipt_state:
+        return jsonify({"ok": False, "error": "receipt_state required"}), 400
+
+    retry_count_raw = body.get("retry_count")
+    retry_count: int | None = None
+    if retry_count_raw not in (None, ""):
+        retry_count = int(retry_count_raw)
+        if retry_count < 0:
+            return jsonify({"ok": False, "error": "retry_count must be >= 0"}), 400
+
+    receipts = get_action_closure_follow_up_dispatch_store().record_receipts(
+        dispatch_ids,
+        receipt_state=receipt_state,
+        receipt_by=body.get("receipt_by"),
+        note=body.get("note"),
+        error=body.get("error"),
+        retry_state=body.get("retry_state"),
+        retry_count=retry_count,
+        next_retry_at=body.get("next_retry_at"),
+        escalation_state=body.get("escalation_state"),
+        escalation_reason=body.get("escalation_reason"),
+    )
+    if not receipts:
+        return jsonify({"ok": False, "error": "No matching dispatch candidates found"}), 404
+
+    return jsonify({"ok": True, "receipts": receipts, "count": len(receipts)})
+
+
+@bp.route("/action-closures/receipts", methods=["GET"])
+def get_action_closure_follow_up_receipts() -> tuple[dict[str, Any], int]:
+    """Get receipt/retry/escalation summary for closure follow-up workers."""
+    try:
+        since_revision = _parse_optional_int_arg("receipt_since")
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+
+    delivery_mode = (request.args.get("delivery_mode") or "").strip() or None
+    if delivery_mode and delivery_mode not in {"notification_job", "reminder_queue"}:
+        return jsonify({"ok": False, "error": f"Unsupported delivery_mode: {delivery_mode}"}), 400
+
+    summary = _build_action_closure_follow_up_receipt_summary(
+        zone_id=(request.args.get("zone_id") or "").strip() or None,
+        delivery_mode=delivery_mode,
+        since_revision=since_revision,
+        recent_limit=max(1, min(10, int(request.args.get("recent_limit", "5")))),
+    )
+    return jsonify({"ok": True, "receipts": summary})
+
+
 # Helper methods for NotificationManager
 def _get_stats(self) -> dict[str, Any]:
     """Get notification statistics.
@@ -1405,6 +1697,113 @@ def _build_action_closure_notification_digest(
         "total_closures": summary.get("total_closures", 0),
         "delta": summary.get("delta", {}),
         "follow_ups": follow_ups,
+        "delivery_receipts": _build_action_closure_follow_up_receipt_summary(
+            zone_id=zone_id,
+            recent_limit=recent_limit,
+        ),
+    }
+
+
+def _describe_action_closure_follow_up_receipt_summary(summary: dict[str, Any]) -> str | None:
+    counts = summary.get("counts") or {}
+    total = int(counts.get("total_receipts") or 0)
+    if total <= 0:
+        return None
+
+    parts = [f"Follow-up-Zustellung: {total} Receipts"]
+    delivered = int(counts.get("delivered") or 0)
+    failed = int(counts.get("failed") or 0)
+    retry_pending = int(counts.get("retry_pending") or 0)
+    escalated = int(counts.get("escalated") or 0)
+    acknowledged = int(counts.get("acknowledged") or 0)
+
+    if delivered:
+        parts.append(f"{delivered} zugestellt")
+    if acknowledged:
+        parts.append(f"{acknowledged} bestaetigt")
+    if failed:
+        parts.append(f"{failed} fehlgeschlagen")
+    if retry_pending:
+        parts.append(f"{retry_pending} Retry offen")
+    if escalated:
+        parts.append(f"{escalated} eskaliert")
+    return ", ".join(parts)
+
+
+def _build_action_closure_follow_up_receipt_summary(
+    *,
+    zone_id: str | None = None,
+    delivery_mode: str | None = None,
+    since_revision: int | None = None,
+    recent_limit: int = 5,
+) -> dict[str, Any]:
+    store = get_action_closure_follow_up_dispatch_store()
+    receipts = store.list_receipts(
+        zone_id=zone_id,
+        delivery_mode=delivery_mode,
+        since_revision=None,
+    )
+    delta_receipts = store.list_receipts(
+        zone_id=zone_id,
+        delivery_mode=delivery_mode,
+        since_revision=since_revision,
+    )
+
+    latest_change_at = None
+    if receipts:
+        latest_change_at = receipts[0].get("receipt_at") or receipts[0].get("acknowledged_at")
+
+    states: dict[str, int] = {}
+    delivery_modes: dict[str, int] = {}
+    counts = {
+        "total_receipts": len(receipts),
+        "acknowledged": 0,
+        "delivered": 0,
+        "failed": 0,
+        "retry_pending": 0,
+        "escalated": 0,
+    }
+
+    for receipt in receipts:
+        state = str(receipt.get("receipt_state") or "unknown")
+        states[state] = states.get(state, 0) + 1
+        mode = str(receipt.get("delivery_mode") or "unknown")
+        delivery_modes[mode] = delivery_modes.get(mode, 0) + 1
+        if receipt.get("acknowledged"):
+            counts["acknowledged"] += 1
+        if state in {"queued", "sent", "delivered"}:
+            counts["delivered"] += 1
+        if state in {"failed", "retry_failed", "delivery_failed"}:
+            counts["failed"] += 1
+        if str(receipt.get("retry_state") or "").strip() in {"scheduled", "pending", "retrying"}:
+            counts["retry_pending"] += 1
+        if str(receipt.get("escalation_state") or "").strip() in {"escalated", "triggered", "pending"}:
+            counts["escalated"] += 1
+
+    return {
+        "contract": "ActionClosureFollowUpReceiptSummaryV1",
+        "zone_id": zone_id,
+        "delivery_mode": delivery_mode,
+        "receipt_revision": store.get_current_receipt_revision(),
+        "latest_change_at": latest_change_at,
+        "counts": counts,
+        "states": dict(sorted(states.items(), key=lambda item: (-item[1], item[0]))),
+        "delivery_modes": dict(sorted(delivery_modes.items(), key=lambda item: (-item[1], item[0]))),
+        "highlights": [line for line in [_describe_action_closure_follow_up_receipt_summary({"counts": counts})] if line],
+        "recent_receipts": receipts[: max(1, recent_limit)],
+        "delta": {
+            "contract": "ActionClosureFollowUpReceiptDeltaV1",
+            "since_revision": since_revision,
+            "current_revision": store.get_current_receipt_revision(),
+            "changed": bool(delta_receipts),
+            "changed_count": len(delta_receipts),
+            "latest_change_at": (
+                (delta_receipts[0].get("receipt_at") or delta_receipts[0].get("acknowledged_at"))
+                if delta_receipts
+                else None
+            ),
+            "recent_receipts": delta_receipts[: max(1, recent_limit)],
+        },
     }
 
 
@@ -1454,6 +1853,11 @@ def _build_action_closure_follow_up_dispatch_bundle(
             "problematic": digest.get("failure_count", 0),
         },
         "digest": digest,
+        "receipts": _build_action_closure_follow_up_receipt_summary(
+            zone_id=zone_id,
+            delivery_mode=delivery_mode,
+            recent_limit=recent_limit,
+        ),
         "candidates": candidates,
     }
 
@@ -1802,11 +2206,15 @@ __all__ = [
     "bp",
     "get_notification_manager",
     "get_action_closure_follow_up_dispatch_store",
+    "_build_action_closure_follow_up_receipt_summary",
+    "_describe_action_closure_follow_up_receipt_summary",
     "NotificationManager",
     "ActionClosureFollowUpDispatchStore",
     "register_ha_device",
     "get_action_closure_follow_up_dispatch",
     "acknowledge_action_closure_follow_up_dispatch",
+    "record_action_closure_follow_up_receipt",
+    "get_action_closure_follow_up_receipts",
     "get_ha_devices",
     "send_ha_notification",
     "test_ha_connection",

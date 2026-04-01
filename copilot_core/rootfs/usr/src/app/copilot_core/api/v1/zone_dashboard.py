@@ -793,6 +793,8 @@ def _build_zone_action_closure_context(
 ) -> Dict[str, Any]:
     """Expose canonical action-closure context for one zone."""
     resolved_zone_name = zone_name or resolve_zone_name(zone_id) or zone_id
+    from copilot_core.api.v1.notifications import _build_action_closure_follow_up_receipt_summary
+
     context_block = build_action_closure_context_block(
         get_action_closure_store(),
         zone_id=zone_id,
@@ -804,6 +806,10 @@ def _build_zone_action_closure_context(
         "zone_id": zone_id,
         "zone_name": resolved_zone_name,
         "context": context_block.to_dict(),
+        "receipts": _build_action_closure_follow_up_receipt_summary(
+            zone_id=zone_id,
+            recent_limit=recent_limit,
+        ),
     }
 
 
@@ -843,6 +849,8 @@ def _build_global_context(*, since_revision: int | None = None) -> Dict[str, Any
     ctx: Dict[str, Any] = {}
 
     try:
+        from copilot_core.api.v1.notifications import _build_action_closure_follow_up_receipt_summary
+
         closure_summary = build_action_closure_summary_read_model(
             get_action_closure_store(),
             since_revision=since_revision,
@@ -882,6 +890,10 @@ def _build_global_context(*, since_revision: int | None = None) -> Dict[str, Any
                 "delta": payload.get("delta", {}),
                 "zones_with_closures": len(zone_contexts),
                 "zone_contexts": zone_contexts,
+                "receipt_summary": _build_action_closure_follow_up_receipt_summary(
+                    since_revision=since_revision,
+                    recent_limit=3,
+                ),
             }
     except Exception:
         pass

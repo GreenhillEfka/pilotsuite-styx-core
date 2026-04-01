@@ -915,3 +915,28 @@ Notification-Jobs und Reminder-Queues sollen aus derselben kanonischen `ActionCl
 **Tests:** `pytest -q tests/test_notification_action_closure_dispatch_contract.py tests/test_notification_action_closure_digest_contract.py tests/test_action_closure_contract.py tests/test_action_closure_summary_contract.py tests/test_zone_dashboard_contract.py tests/test_voice_action_closure_hints_contract.py` → `27 passed`
 
 **Next Exact Task:** Slice 26 als delivery-result-aware Closure-Follow-up-Receipt-Surface ableiten: Dispatch-Acks, Queue-/Reminder-Receipts und Retry-/Escalation-State aus derselben kanonischen Worker-/Closure-Wahrheit in Notification-/Dashboard-/Chat-Kontexte zurueckfuehren.
+
+### ✅ Slice 26 — Closure Follow-Up Receipt Surface
+**Status:** ✅ DONE (v15.3.37)
+
+**Goal**
+Dispatch-Acks, Queue-/Reminder-Receipts sowie Retry-/Escalation-State sollen nicht im Worker-Nirvana verschwinden, sondern aus derselben Closure-Follow-up-Wahrheit wieder in Notification-, Dashboard- und Chat-Kontexte zurueckgespiegelt werden.
+
+### Deliverables
+- [x] `POST /notifications/action-closures/dispatch/receipt` materialisiert workerseitige Delivery-/Queue-/Retry-/Escalation-Ergebnisse pro Dispatch-Kandidat
+- [x] `GET /notifications/action-closures/receipts` liefert eine kanonische `ActionClosureFollowUpReceiptSummaryV1`-Surface mit `receipt_revision`, Delta, Counts und Recent-Receipts
+- [x] Dispatch-Acks werden im selben Store wie die Receipt-Wahrheit gefuehrt, statt als isolierter Nebenpfad zu enden
+- [x] Notification-Digest-/Dispatch-Surfaces betten die neue Receipt-Summary direkt ein
+- [x] Dashboard- und Chat-Kontexte spiegeln Follow-up-Zustellung, offene Retries und Eskalationen aus derselben Receipt-Wahrheit zurueck
+- [x] Contract-Tests decken Receipt-Materialisierung, Retry-/Escalation-Status und die Rueckspiegelung in Digest/Dashboard/Chat ab
+
+### Acceptance criteria
+- Worker koennen Delivery-Ergebnisse pro Closure-Follow-up revisionsscharf zurueckmelden, ohne eine zweite Follow-up-Truth aufzubauen.
+- Notification-/Dashboard-/Chat-Consumer sehen denselben Ack-/Receipt-/Retry-/Escalation-Stand fuer denselben Closure-Stand.
+- `receipt_since`/`receipt_revision` erlauben inkrementelle Poller, ohne bestaetigte oder eskalierte Follow-ups unsichtbar zu machen.
+
+**Commit:** `feat(core): deliver slice 26 closure follow-up receipt surface`
+**Tag:** v15.3.37
+**Tests:** `pytest -q tests/test_notification_action_closure_dispatch_contract.py tests/test_notification_action_closure_digest_contract.py tests/test_action_closure_summary_contract.py tests/test_zone_dashboard_contract.py tests/test_voice_action_closure_hints_contract.py` → `27 passed`
+
+**Next Exact Task:** Slice 27 als delivery-staleness-/SLA-Surface aus derselben Receipt-Wahrheit ableiten: ueberfaellige/offene Follow-ups, veraltete Retries und Eskalationsfaelligkeit zonen- und worker-scharf materialisieren, ohne neue Notification-Schattenlogik einzufuehren.

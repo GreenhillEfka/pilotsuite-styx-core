@@ -19,15 +19,20 @@ if CORE_APP_ROOT.exists() and path_str not in sys.path:
 from copilot_core.action_closure import get_action_closure_store  # noqa: E402
 from copilot_core.api.v1 import notifications as notifications_api  # noqa: E402
 from copilot_core.api.v1.notifications import (  # noqa: E402
+    ActionClosureFollowUpDispatchStore,
     NotificationManager,
+    acknowledge_action_closure_follow_up_dispatch,
     get_notification_digest,
     get_pending_notifications,
+    get_action_closure_follow_up_dispatch,
+    record_action_closure_follow_up_receipt,
 )
 
 
 def setup_function() -> None:
     get_action_closure_store().clear()
     notifications_api._notification_manager = NotificationManager()
+    notifications_api._action_closure_follow_up_dispatch_store = ActionClosureFollowUpDispatchStore()
 
 
 def _seed_closures() -> int:
@@ -120,3 +125,66 @@ def test_pending_notifications_surface_closure_follow_ups_even_without_new_delta
     assert closure_digest["failure_count"] == 1
     kinds = {item["kind"] for item in closure_digest["follow_ups"]}
     assert kinds == {"open", "problematic"}
+
+
+def test_notification_digest_embeds_delivery_receipt_summary_from_dispatch_results() -> None:
+    _seed_closures()
+    app = Flask(__name__)
+
+    with app.test_request_context(
+        "/notifications/action-closures/dispatch?delivery_mode=notification_job&recent_limit=5",
+        method="GET",
+    ):
+        dispatch_response = get_action_closure_follow_up_dispatch()
+
+    candidates = dispatch_response.get_json()["dispatch"]["candidates"]
+    open_candidate = next(item for item in candidates if item["kind"] == "open")
+    problematic_candidate = next(item for item in candidates if item["kind"] == "problematic")
+
+    with app.test_request_context(
+        "/notifications/action-closures/dispatch/ack",
+        method="POST",
+        json={"dispatch_id": open_candidate["dispatch_id"], "acknowledged_by": "worker.notifications"},
+    ):
+        acknowledge_action_closure_follow_up_dispatch()
+
+    with app.test_request_context(
+        "/notifications/action-closures/dispatch/receipt",
+        method="POST",
+        json={
+            "dispatch_id": open_candidate["dispatch_id"],
+            "receipt_state": "delivered",
+            "receipt_by": "worker.notifications",
+        },
+    ):
+        record_action_closure_follow_up_receipt()
+
+    with app.test_request_context(
+        "/notifications/action-closures/dispatch/receipt",
+        method="POST",
+        json={
+            "dispatch_id": problematic_candidate["dispatch_id"],
+            "receipt_state": "failed",
+            "receipt_by": "worker.notifications",
+            "retry_state": "scheduled",
+            "retry_count": 1,
+            "escalation_state": "pending",
+            "escalation_reason": "retry needed",
+        },
+    ):
+        record_action_closure_follow_up_receipt()
+
+    with app.test_request_context(
+        "/notifications/digest?include_action_closures=true&recent_limit=5",
+        method="GET",
+    ):
+        response = get_notification_digest()
+
+    body = response.get_json()
+    receipt_summary = body["digest"]["action_closures"]["delivery_receipts"]
+    assert receipt_summary["contract"] == "ActionClosureFollowUpReceiptSummaryV1"
+    assert receipt_summary["counts"]["total_receipts"] == 2
+    assert receipt_summary["counts"]["delivered"] == 1
+    assert receipt_summary["counts"]["failed"] == 1
+    assert receipt_summary["counts"]["retry_pending"] == 1
+    assert receipt_summary["counts"]["escalated"] == 1
