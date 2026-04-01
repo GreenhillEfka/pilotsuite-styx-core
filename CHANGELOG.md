@@ -1,5 +1,16 @@
 # Changelog
 
+## [v15.3.40] - 2026-04-02
+
+### 🧩 Slice 28 — Closure Follow-Up Claim / Lease Surface
+
+- `copilot_core.api.v1.notifications` materialisiert jetzt eine kanonische Claim-/Lease-Surface fuer Closure-Follow-up-Worker: `POST /notifications/action-closures/dispatch/claim` vergibt revisionsscharfe `ActionClosureFollowUpClaimV1`-Claims mit Lease-Ablauf, Konfliktantworten und optionalem `force_reassign` auf derselben Dispatch-Wahrheit.
+- `GET /notifications/action-closures/claims` liefert eine truth-backed `ActionClosureFollowUpClaimSummaryV1` mit monotone `claim_revision`-Delta, Worker-/Delivery-Breakdowns sowie expliziten Counts fuer aktive, abgelaufene und neu zuweisbare Claims.
+- `ActionClosureFollowUpDispatchV1` und einzelne Dispatch-Kandidaten betten den aktuellen Claim-/Lease-Stand direkt ein; konkurrierende Worker sehen damit dieselbe Lock-/Reassign-Sicht statt eine zweite Queue-Schattenlogik.
+- `ActionClosureFollowUpReceiptSummaryV1` fuehrt Claim-, Lease- und Reassign-Zustand in dieselbe Receipt-/Digest-/Dashboard-/Chat-Surface zurueck, sodass Lease-Ablauf und eskalationsrelevante Problemfaelle ueberall konsistent beschrieben werden.
+- Versionsartefakte (`VERSION`, `copilot_core/VERSION`, Runtime-VERSION, `copilot_core/config.yaml`, `copilot_core/manifest.json`, `copilot_core/rootfs/usr/src/app/copilot_core/VERSION`) auf `15.3.40` harmonisiert.
+- Validiert mit: `pytest -q tests/test_notification_action_closure_dispatch_contract.py tests/test_notification_action_closure_digest_contract.py tests/test_action_closure_summary_contract.py tests/test_zone_dashboard_contract.py tests/test_voice_action_closure_hints_contract.py` → `32 passed`.
+
 ## [v15.3.39] - 2026-04-02
 
 ### 🧩 Slice 27 — Closure Follow-Up Delivery SLA Surface

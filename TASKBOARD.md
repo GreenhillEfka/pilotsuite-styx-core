@@ -965,3 +965,28 @@ Ueberfaellige offene Follow-ups, veraltete Retries und Eskalationsfaelligkeit au
 **Tests:** `pytest -q tests/test_notification_action_closure_dispatch_contract.py tests/test_notification_action_closure_digest_contract.py tests/test_action_closure_summary_contract.py tests/test_zone_dashboard_contract.py tests/test_voice_action_closure_hints_contract.py` → `29 passed`
 
 **Next Exact Task:** Slice 28 als Claim-/Lease-Surface aus derselben Dispatch-/SLA-Wahrheit ableiten: Worker sollen ueberfaellige/stale Follow-ups revisionsscharf claimen, mit Lease-Ablauf und sauberer Reassign-/Escalation-Sicht, ohne den bestehenden Dispatch-/Receipt-Contract zu duplizieren.
+
+### ✅ Slice 28 — Closure Follow-Up Claim / Lease Surface
+**Status:** ✅ DONE (v15.3.40)
+
+**Goal**
+Worker sollen Closure-Follow-ups aus derselben Dispatch-/Receipt-/SLA-Wahrheit revisionsscharf claimen koennen, inklusive Lease-Ablauf, Reassign-Sicht und Eskalationsrelevanz ohne neue Schattenlogik.
+
+### Deliverables
+- [x] `POST /notifications/action-closures/dispatch/claim` materialisiert kanonische `ActionClosureFollowUpClaimV1`-Claims mit `claimed_by`, `lease_seconds`, Konfliktantworten und optionalem `force_reassign`
+- [x] `GET /notifications/action-closures/claims` liefert eine truth-backed `ActionClosureFollowUpClaimSummaryV1`-Surface mit `claim_revision`-Delta, Worker-/Delivery-Breakdowns sowie Counts fuer aktive, abgelaufene und neu zuweisbare Leases
+- [x] Dispatch-Kandidaten und `ActionClosureFollowUpDispatchV1` betten den aktuellen Claim-/Lease-Stand direkt ein, statt eine zweite Worker-Lock-Logik zu erfinden
+- [x] Receipt-/Digest-/Dashboard-/Chat-Surfaces spiegeln dieselbe Claim-Wahrheit ueber die eingebettete Receipt-Summary zurueck, inklusive Lease-Ablauf und Reassign-Hinweisen
+- [x] Abgelaufene Claims und eskalationsrelevante Problemfaelle werden explizit als `reassignable` materialisiert, damit Worker dieselbe Reassign-/Escalation-Sicht lesen
+- [x] Contract-Tests decken Claim-Erzeugung, Konflikte bei aktiven Leases, Lease-Ablauf/Reassign und die Rueckspiegelung in Dispatch-/Dashboard-/Chat-Kontexte ab
+
+### Acceptance criteria
+- Worker koennen denselben Closure-Stand claimen, ohne Ack-/Receipt-/SLA-Wahrheit zu duplizieren oder alte Claims ueber Revisionen hinweg mitzuschleppen.
+- Aktive Leases blockieren konkurrierende Claims sauber; abgelaufene oder eskalationsrelevante Claims werden aus derselben kanonischen Surface als neu zuweisbar sichtbar.
+- Dashboard, Digest und Chat lesen denselben Claim-/Lease-Stand wie Worker-APIs und beschreiben Lease-Ablauf/Reassign ohne eigene Aggregationslogik.
+
+**Commit:** `feat(core): deliver slice 28 closure follow-up claim lease surface`
+**Tag:** v15.3.40
+**Tests:** `pytest -q tests/test_notification_action_closure_dispatch_contract.py tests/test_notification_action_closure_digest_contract.py tests/test_action_closure_summary_contract.py tests/test_zone_dashboard_contract.py tests/test_voice_action_closure_hints_contract.py` → `32 passed`
+
+**Next Exact Task:** Slice 29 als Claim-Settlement-/Release-Surface aus derselben Claim-/Receipt-Wahrheit ableiten: explizite Release-/Abandon-/Settlement-Resultate fuer Worker-Leases kanonisch materialisieren und in Dispatch-/Dashboard-/Chat-Kontexte zurueckfuehren, ohne eine zweite Queue-Historie aufzubauen.

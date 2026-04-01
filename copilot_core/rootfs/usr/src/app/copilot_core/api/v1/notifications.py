@@ -608,6 +608,7 @@ class ActionClosureDispatchCandidate:
     acknowledged_at: str | None = None
     acknowledged_by: str | None = None
     ack_note: str | None = None
+    claim: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -630,6 +631,7 @@ class ActionClosureDispatchCandidate:
             "acknowledged_at": self.acknowledged_at,
             "acknowledged_by": self.acknowledged_by,
             "ack_note": self.ack_note,
+            "claim": self.claim,
             "delivery": {
                 "mode": self.delivery_mode,
                 "queue": "notifications" if self.delivery_mode == "notification_job" else "reminders",
@@ -716,6 +718,37 @@ class ActionClosureDispatchReceipt:
         }
 
 
+@dataclass
+class ActionClosureDispatchClaim:
+    """Latest worker claim / lease state for one closure follow-up dispatch candidate."""
+
+    claim_id: str
+    claim_revision: int
+    dispatch_id: str
+    dedupe_key: str
+    delivery_mode: str
+    closure_id: str
+    closure_revision: int
+    zone_id: str | None = None
+    module_id: str | None = None
+    action_id: str | None = None
+    state: str | None = None
+    kind: str = "open"
+    priority: str = "normal"
+    title: str = ""
+    message: str = ""
+    updated_at: str | None = None
+    claim_state: str = "claimed"
+    claimed_at: str | None = None
+    claimed_by: str | None = None
+    claim_note: str | None = None
+    lease_seconds: int = 900
+    lease_expires_at: str | None = None
+    released_at: str | None = None
+    released_by: str | None = None
+    release_reason: str | None = None
+
+
 def _utcnow_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -753,24 +786,217 @@ class ActionClosureFollowUpDispatchStore:
         self._candidate_index: dict[str, ActionClosureDispatchCandidate] = {}
         self._acknowledged: dict[str, dict[str, Any]] = {}
         self._receipt_index: dict[str, ActionClosureDispatchReceipt] = {}
+        self._claim_index: dict[str, ActionClosureDispatchClaim] = {}
         self._receipt_revision_counter: int = 0
+        self._claim_revision_counter: int = 0
 
     def clear(self) -> None:
         self._candidate_index.clear()
         self._acknowledged.clear()
         self._receipt_index.clear()
+        self._claim_index.clear()
         self._receipt_revision_counter = 0
+        self._claim_revision_counter = 0
 
     def _next_receipt_revision(self) -> int:
         self._receipt_revision_counter += 1
         return self._receipt_revision_counter
 
+    def _next_claim_revision(self) -> int:
+        self._claim_revision_counter += 1
+        return self._claim_revision_counter
+
     def get_current_receipt_revision(self) -> int:
         return self._receipt_revision_counter
+
+    def get_current_claim_revision(self) -> int:
+        return self._claim_revision_counter
 
     def _receipt_id(self, candidate: ActionClosureDispatchCandidate, revision: int) -> str:
         digest = hashlib.sha1(f"{candidate.dedupe_key}|{revision}".encode("utf-8")).hexdigest()[:16]
         return f"receipt:{candidate.delivery_mode}:{digest}"
+
+    def _claim_id(self, candidate: ActionClosureDispatchCandidate, revision: int) -> str:
+        digest = hashlib.sha1(f"claim|{candidate.dedupe_key}|{revision}".encode("utf-8")).hexdigest()[:16]
+        return f"claim:{candidate.delivery_mode}:{digest}"
+
+    def _lease_state(self, claim: ActionClosureDispatchClaim, *, now: datetime | None = None) -> str:
+        current_now = now or datetime.now(timezone.utc)
+        if claim.claim_state == "released" or claim.released_at:
+            return "released"
+        remaining = _seconds_until(claim.lease_expires_at, now=current_now)
+        if remaining is not None and remaining <= 0:
+            return "expired"
+        return "active"
+
+    def _serialize_claim(
+        self,
+        claim: ActionClosureDispatchClaim,
+        *,
+        now: datetime | None = None,
+    ) -> dict[str, Any]:
+        current_now = now or datetime.now(timezone.utc)
+        receipt = self._receipt_index.get(claim.dedupe_key)
+        lease_state = self._lease_state(claim, now=current_now)
+        escalation_state = str((receipt.escalation_state if receipt else None) or "").strip() or None
+        retry_state = str((receipt.retry_state if receipt else None) or "").strip() or None
+        reassignable = lease_state in {"expired", "released"}
+        if escalation_state in {"pending", "due", "scheduled", "escalated", "triggered"}:
+            reassignable = True
+        return {
+            "contract": "ActionClosureFollowUpClaimV1",
+            "claim_id": claim.claim_id,
+            "claim_revision": claim.claim_revision,
+            "dispatch_id": claim.dispatch_id,
+            "dedupe_key": claim.dedupe_key,
+            "delivery_mode": claim.delivery_mode,
+            "closure_id": claim.closure_id,
+            "closure_revision": claim.closure_revision,
+            "zone_id": claim.zone_id,
+            "module_id": claim.module_id,
+            "action_id": claim.action_id,
+            "state": claim.state,
+            "kind": claim.kind,
+            "priority": claim.priority,
+            "title": claim.title,
+            "message": claim.message,
+            "updated_at": claim.updated_at,
+            "claim_state": claim.claim_state,
+            "claimed_at": claim.claimed_at,
+            "claimed_by": claim.claimed_by,
+            "claim_note": claim.claim_note,
+            "lease": {
+                "seconds": claim.lease_seconds,
+                "expires_at": claim.lease_expires_at,
+                "state": lease_state,
+            },
+            "released_at": claim.released_at,
+            "released_by": claim.released_by,
+            "release_reason": claim.release_reason,
+            "receipt_state": receipt.receipt_state if receipt else None,
+            "retry_state": retry_state,
+            "escalation_state": escalation_state,
+            "reassignable": reassignable,
+            "delivery": {
+                "mode": claim.delivery_mode,
+                "queue": "notifications" if claim.delivery_mode == "notification_job" else "reminders",
+                "topic": "action_closure_follow_up" if claim.delivery_mode == "notification_job" else "action_closure_reminder",
+            },
+        }
+
+    def get_claim(self, dedupe_key: str, *, now: datetime | None = None) -> dict[str, Any] | None:
+        claim = self._claim_index.get(str(dedupe_key or "").strip())
+        return self._serialize_claim(claim, now=now) if claim is not None else None
+
+    def list_claims(
+        self,
+        *,
+        zone_id: str | None = None,
+        delivery_mode: str | None = None,
+        worker: str | None = None,
+        since_revision: int | None = None,
+        now: datetime | None = None,
+    ) -> list[dict[str, Any]]:
+        current_now = now or datetime.now(timezone.utc)
+        claims = list(self._claim_index.values())
+        if zone_id:
+            claims = [claim for claim in claims if claim.zone_id == zone_id]
+        if delivery_mode:
+            claims = [claim for claim in claims if claim.delivery_mode == delivery_mode]
+        if worker:
+            claims = [claim for claim in claims if str(claim.claimed_by or "unassigned").strip() == worker]
+        if since_revision is not None:
+            claims = [claim for claim in claims if claim.claim_revision > since_revision]
+        payloads = [self._serialize_claim(claim, now=current_now) for claim in claims]
+        payloads.sort(
+            key=lambda claim: (claim.get("claim_revision") or 0, claim.get("claimed_at") or "", claim.get("closure_id") or ""),
+            reverse=True,
+        )
+        return payloads
+
+    def claim(
+        self,
+        dispatch_ids: list[str],
+        *,
+        claimed_by: str | None = None,
+        note: str | None = None,
+        lease_seconds: int = 900,
+        force_reassign: bool = False,
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        current_now = datetime.now(timezone.utc)
+        claims: list[dict[str, Any]] = []
+        conflicts: list[dict[str, Any]] = []
+        worker_name = str(claimed_by or "worker").strip() or "worker"
+        for dispatch_id in dispatch_ids:
+            candidate = self._candidate_index.get(str(dispatch_id or "").strip())
+            if candidate is None:
+                continue
+
+            existing = self._claim_index.get(candidate.dedupe_key)
+            existing_payload = self._serialize_claim(existing, now=current_now) if existing is not None else None
+            active_claimed_by_other = (
+                existing_payload is not None
+                and existing_payload.get("lease", {}).get("state") == "active"
+                and str(existing_payload.get("claimed_by") or "") != worker_name
+            )
+            if active_claimed_by_other and not force_reassign:
+                conflicts.append(
+                    {
+                        "contract": "ActionClosureFollowUpClaimConflictV1",
+                        "dispatch_id": candidate.dispatch_id,
+                        "closure_id": candidate.closure_id,
+                        "delivery_mode": candidate.delivery_mode,
+                        "reason": "already_claimed",
+                        "active_claim": existing_payload,
+                    }
+                )
+                continue
+
+            revision = self._next_claim_revision()
+            claimed_at = current_now.isoformat()
+            lease_expires_at = (current_now + timedelta(seconds=max(1, int(lease_seconds or 900)))).isoformat()
+            prior_claim = existing_payload or {}
+            claim_state = "claimed"
+            if prior_claim:
+                prior_worker = str(prior_claim.get("claimed_by") or "").strip()
+                prior_lease_state = str((prior_claim.get("lease") or {}).get("state") or "").strip()
+                if prior_worker and prior_worker != worker_name and (force_reassign or prior_lease_state != "active"):
+                    claim_state = "reassigned"
+                elif prior_worker == worker_name:
+                    claim_state = "renewed"
+
+            claim = ActionClosureDispatchClaim(
+                claim_id=self._claim_id(candidate, revision),
+                claim_revision=revision,
+                dispatch_id=candidate.dispatch_id,
+                dedupe_key=candidate.dedupe_key,
+                delivery_mode=candidate.delivery_mode,
+                closure_id=candidate.closure_id,
+                closure_revision=candidate.closure_revision,
+                zone_id=candidate.zone_id,
+                module_id=candidate.module_id,
+                action_id=candidate.action_id,
+                state=candidate.state,
+                kind=candidate.kind,
+                priority=candidate.priority,
+                title=candidate.title,
+                message=candidate.message,
+                updated_at=candidate.updated_at,
+                claim_state=claim_state,
+                claimed_at=claimed_at,
+                claimed_by=worker_name,
+                claim_note=str(note or "").strip() or None,
+                lease_seconds=max(1, int(lease_seconds or 900)),
+                lease_expires_at=lease_expires_at,
+                released_at=prior_claim.get("released_at") if claim_state == "renewed" else None,
+                released_by=prior_claim.get("released_by") if claim_state == "renewed" else None,
+                release_reason=prior_claim.get("release_reason") if claim_state == "renewed" else None,
+            )
+            self._claim_index[candidate.dedupe_key] = claim
+            candidate.claim = self._serialize_claim(claim, now=current_now)
+            claims.append(candidate.claim)
+
+        return claims, conflicts
 
     def _touch_receipt(
         self,
@@ -871,6 +1097,7 @@ class ActionClosureFollowUpDispatchStore:
             acknowledged_at=ack.get("acknowledged_at"),
             acknowledged_by=ack.get("acknowledged_by"),
             ack_note=ack.get("ack_note"),
+            claim=self.get_claim(dedupe_key),
         )
         self._candidate_index[dispatch_id] = candidate
         return candidate
@@ -1483,6 +1710,46 @@ def get_action_closure_follow_up_dispatch() -> tuple[dict[str, Any], int]:
     return jsonify({"ok": True, "dispatch": bundle})
 
 
+@bp.route("/action-closures/dispatch/claim", methods=["POST"])
+def claim_action_closure_follow_up_dispatch() -> tuple[dict[str, Any], int]:
+    """Claim worker dispatch candidates with lease expiry and reassignment visibility."""
+    body = request.get_json(silent=True) or {}
+    dispatch_ids = body.get("dispatch_ids") or []
+    if not dispatch_ids and body.get("dispatch_id"):
+        dispatch_ids = [body["dispatch_id"]]
+    dispatch_ids = [str(item).strip() for item in dispatch_ids if str(item).strip()]
+    if not dispatch_ids:
+        return jsonify({"ok": False, "error": "dispatch_id or dispatch_ids required"}), 400
+
+    lease_seconds_raw = body.get("lease_seconds", 900)
+    try:
+        lease_seconds = max(1, int(lease_seconds_raw))
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": f"Invalid integer for lease_seconds: {lease_seconds_raw}"}), 400
+
+    claims, conflicts = get_action_closure_follow_up_dispatch_store().claim(
+        dispatch_ids,
+        claimed_by=body.get("claimed_by"),
+        note=body.get("note"),
+        lease_seconds=lease_seconds,
+        force_reassign=bool(body.get("force_reassign")),
+    )
+    if not claims and conflicts:
+        return jsonify({"ok": False, "claimed": [], "conflicts": conflicts, "count": 0, "conflict_count": len(conflicts)}), 409
+    if not claims:
+        return jsonify({"ok": False, "error": "No matching dispatch candidates found"}), 404
+
+    return jsonify(
+        {
+            "ok": True,
+            "claimed": claims,
+            "conflicts": conflicts,
+            "count": len(claims),
+            "conflict_count": len(conflicts),
+        }
+    )
+
+
 @bp.route("/action-closures/dispatch/ack", methods=["POST"])
 def acknowledge_action_closure_follow_up_dispatch() -> tuple[dict[str, Any], int]:
     """Acknowledge worker dispatch candidates so they stay suppressed until closure change."""
@@ -1565,6 +1832,28 @@ def get_action_closure_follow_up_receipts() -> tuple[dict[str, Any], int]:
         recent_limit=max(1, min(10, int(request.args.get("recent_limit", "5")))),
     )
     return jsonify({"ok": True, "receipts": summary})
+
+
+@bp.route("/action-closures/claims", methods=["GET"])
+def get_action_closure_follow_up_claims() -> tuple[dict[str, Any], int]:
+    """Get claim / lease summary for closure follow-up workers."""
+    try:
+        since_revision = _parse_optional_int_arg("claim_since")
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+
+    delivery_mode = (request.args.get("delivery_mode") or "").strip() or None
+    if delivery_mode and delivery_mode not in {"notification_job", "reminder_queue"}:
+        return jsonify({"ok": False, "error": f"Unsupported delivery_mode: {delivery_mode}"}), 400
+
+    summary = _build_action_closure_follow_up_claim_summary(
+        zone_id=(request.args.get("zone_id") or "").strip() or None,
+        delivery_mode=delivery_mode,
+        worker=(request.args.get("worker") or "").strip() or None,
+        since_revision=since_revision,
+        recent_limit=max(1, min(10, int(request.args.get("recent_limit", "5")))),
+    )
+    return jsonify({"ok": True, "claims": summary})
 
 
 @bp.route("/action-closures/sla", methods=["GET"])
@@ -2018,6 +2307,155 @@ def _build_action_closure_notification_digest(
     }
 
 
+def _describe_action_closure_follow_up_claim_summary(summary: dict[str, Any]) -> str | None:
+    counts = summary.get("counts") or {}
+    total = int(counts.get("total_claims") or 0)
+    if total <= 0:
+        return None
+
+    parts = [f"Follow-up-Claims: {total} Leases"]
+    active = int(counts.get("active_leases") or 0)
+    expired = int(counts.get("expired_leases") or 0)
+    released = int(counts.get("released_claims") or 0)
+    reassignable = int(counts.get("reassignable") or 0)
+    escalation_pending = int(counts.get("escalation_pending") or 0)
+
+    if active:
+        parts.append(f"{active} aktiv")
+    if expired:
+        parts.append(f"{expired} abgelaufen")
+    if released:
+        parts.append(f"{released} freigegeben")
+    if reassignable:
+        parts.append(f"{reassignable} neu zuweisbar")
+    if escalation_pending:
+        parts.append(f"{escalation_pending} eskalationsrelevant")
+    return ", ".join(parts)
+
+
+def _build_action_closure_follow_up_claim_summary(
+    *,
+    zone_id: str | None = None,
+    delivery_mode: str | None = None,
+    worker: str | None = None,
+    since_revision: int | None = None,
+    recent_limit: int = 5,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    current_now = now or datetime.now(timezone.utc)
+    store = get_action_closure_follow_up_dispatch_store()
+    claims = store.list_claims(
+        zone_id=zone_id,
+        delivery_mode=delivery_mode,
+        worker=worker,
+        since_revision=None,
+        now=current_now,
+    )
+    delta_claims = store.list_claims(
+        zone_id=zone_id,
+        delivery_mode=delivery_mode,
+        worker=worker,
+        since_revision=since_revision,
+        now=current_now,
+    )
+
+    counts = {
+        "total_claims": len(claims),
+        "active_leases": 0,
+        "expired_leases": 0,
+        "released_claims": 0,
+        "reassigned_claims": 0,
+        "reassignable": 0,
+        "escalation_pending": 0,
+    }
+    workers: dict[str, dict[str, int]] = {}
+    delivery_modes: dict[str, dict[str, int]] = {}
+
+    for claim in claims:
+        lease_state = str((claim.get("lease") or {}).get("state") or "active")
+        claim_state = str(claim.get("claim_state") or "claimed")
+        worker_key = str(claim.get("claimed_by") or "unassigned")
+        mode_key = str(claim.get("delivery_mode") or "unknown")
+        escalation_state = str(claim.get("escalation_state") or "").strip()
+
+        if lease_state == "active":
+            counts["active_leases"] += 1
+        elif lease_state == "expired":
+            counts["expired_leases"] += 1
+        elif lease_state == "released":
+            counts["released_claims"] += 1
+        if claim_state == "reassigned":
+            counts["reassigned_claims"] += 1
+        if bool(claim.get("reassignable")):
+            counts["reassignable"] += 1
+        if escalation_state in {"pending", "due", "scheduled", "escalated", "triggered"}:
+            counts["escalation_pending"] += 1
+
+        for bucket, key in ((workers, worker_key), (delivery_modes, mode_key)):
+            target = bucket.setdefault(
+                key,
+                {
+                    "total": 0,
+                    "active": 0,
+                    "expired": 0,
+                    "released": 0,
+                    "reassignable": 0,
+                    "escalation_pending": 0,
+                },
+            )
+            target["total"] += 1
+            if lease_state == "active":
+                target["active"] += 1
+            elif lease_state == "expired":
+                target["expired"] += 1
+            elif lease_state == "released":
+                target["released"] += 1
+            if bool(claim.get("reassignable")):
+                target["reassignable"] += 1
+            if escalation_state in {"pending", "due", "scheduled", "escalated", "triggered"}:
+                target["escalation_pending"] += 1
+
+    highlights = [
+        line
+        for line in [
+            f"{counts['expired_leases']} Leases abgelaufen" if counts["expired_leases"] else None,
+            f"{counts['reassignable']} Claims neu zuweisbar" if counts["reassignable"] else None,
+            f"{counts['escalation_pending']} Claims eskalationsrelevant" if counts["escalation_pending"] else None,
+            f"{counts['active_leases']} aktive Worker-Leases" if counts["active_leases"] and not counts["expired_leases"] else None,
+        ]
+        if line
+    ]
+
+    latest_change_at = None
+    if claims:
+        latest_change_at = claims[0].get("released_at") or claims[0].get("claimed_at")
+
+    return {
+        "contract": "ActionClosureFollowUpClaimSummaryV1",
+        "zone_id": zone_id,
+        "delivery_mode": delivery_mode,
+        "worker": worker,
+        "claim_revision": store.get_current_claim_revision(),
+        "latest_change_at": latest_change_at,
+        "counts": counts,
+        "workers": dict(sorted(workers.items())),
+        "delivery_modes": dict(sorted(delivery_modes.items())),
+        "highlights": highlights,
+        "recent_claims": claims[: max(1, recent_limit)],
+        "delta": {
+            "contract": "ActionClosureFollowUpClaimDeltaV1",
+            "since_revision": since_revision,
+            "current_revision": store.get_current_claim_revision(),
+            "changed": bool(delta_claims),
+            "changed_count": len(delta_claims),
+            "latest_change_at": (
+                (delta_claims[0].get("released_at") or delta_claims[0].get("claimed_at")) if delta_claims else None
+            ),
+            "recent_claims": delta_claims[: max(1, recent_limit)],
+        },
+    }
+
+
 def _describe_action_closure_follow_up_receipt_summary(summary: dict[str, Any]) -> str | None:
     counts = summary.get("counts") or {}
     total = int(counts.get("total_receipts") or 0)
@@ -2051,6 +2489,16 @@ def _describe_action_closure_follow_up_receipt_summary(summary: dict[str, Any]) 
         parts.append(f"{stale_retries} Retry veraltet")
     if escalation_due:
         parts.append(f"{escalation_due} Eskalation faellig")
+    claim_counts = ((summary.get("claims") or {}).get("counts") or {})
+    active_claims = int(claim_counts.get("active_leases") or 0)
+    expired_claims = int(claim_counts.get("expired_leases") or 0)
+    reassignable_claims = int(claim_counts.get("reassignable") or 0)
+    if active_claims:
+        parts.append(f"{active_claims} Claims aktiv")
+    if expired_claims:
+        parts.append(f"{expired_claims} Lease abgelaufen")
+    if reassignable_claims:
+        parts.append(f"{reassignable_claims} neu zuweisbar")
     return ", ".join(parts)
 
 
@@ -2114,7 +2562,21 @@ def _build_action_closure_follow_up_receipt_summary(
         since_revision=since_revision,
         recent_limit=recent_limit,
     )
-    highlights = [line for line in [_describe_action_closure_follow_up_receipt_summary({"counts": counts, "sla": sla_summary})] if line]
+    claim_summary = _build_action_closure_follow_up_claim_summary(
+        zone_id=zone_id,
+        delivery_mode=delivery_mode,
+        worker=worker,
+        since_revision=since_revision,
+        recent_limit=recent_limit,
+    )
+    highlights = [
+        line
+        for line in [
+            _describe_action_closure_follow_up_receipt_summary({"counts": counts, "sla": sla_summary, "claims": claim_summary}),
+            _describe_action_closure_follow_up_claim_summary(claim_summary),
+        ]
+        if line
+    ]
 
     return {
         "contract": "ActionClosureFollowUpReceiptSummaryV1",
@@ -2128,6 +2590,7 @@ def _build_action_closure_follow_up_receipt_summary(
         "delivery_modes": dict(sorted(delivery_modes.items(), key=lambda item: (-item[1], item[0]))),
         "highlights": highlights,
         "sla": sla_summary,
+        "claims": claim_summary,
         "recent_receipts": receipts[: max(1, recent_limit)],
         "delta": {
             "contract": "ActionClosureFollowUpReceiptDeltaV1",
@@ -2192,6 +2655,11 @@ def _build_action_closure_follow_up_dispatch_bundle(
         },
         "digest": digest,
         "receipts": _build_action_closure_follow_up_receipt_summary(
+            zone_id=zone_id,
+            delivery_mode=delivery_mode,
+            recent_limit=recent_limit,
+        ),
+        "claims": _build_action_closure_follow_up_claim_summary(
             zone_id=zone_id,
             delivery_mode=delivery_mode,
             recent_limit=recent_limit,
@@ -2545,14 +3013,18 @@ __all__ = [
     "get_notification_manager",
     "get_action_closure_follow_up_dispatch_store",
     "_build_action_closure_follow_up_sla_summary",
+    "_build_action_closure_follow_up_claim_summary",
     "_build_action_closure_follow_up_receipt_summary",
+    "_describe_action_closure_follow_up_claim_summary",
     "_describe_action_closure_follow_up_receipt_summary",
     "NotificationManager",
     "ActionClosureFollowUpDispatchStore",
     "register_ha_device",
     "get_action_closure_follow_up_dispatch",
+    "claim_action_closure_follow_up_dispatch",
     "acknowledge_action_closure_follow_up_dispatch",
     "record_action_closure_follow_up_receipt",
+    "get_action_closure_follow_up_claims",
     "get_action_closure_follow_up_receipts",
     "get_action_closure_follow_up_sla",
     "get_ha_devices",

@@ -22,6 +22,7 @@ from copilot_core.api.v1 import notifications as notifications_api  # noqa: E402
 from copilot_core.api.v1.notifications import (  # noqa: E402
     ActionClosureFollowUpDispatchStore,
     acknowledge_action_closure_follow_up_dispatch,
+    claim_action_closure_follow_up_dispatch,
     get_action_closure_follow_up_dispatch,
     record_action_closure_follow_up_receipt,
 )
@@ -317,6 +318,20 @@ def test_zone_dashboard_and_chat_surface_follow_up_receipts() -> None:
         record_action_closure_follow_up_receipt()
 
     with app.test_request_context(
+        "/notifications/action-closures/dispatch/claim",
+        method="POST",
+        json={
+            "dispatch_id": failing_candidate["dispatch_id"],
+            "claimed_by": "worker.notifications",
+            "lease_seconds": 60,
+        },
+    ):
+        claim_action_closure_follow_up_dispatch()
+
+    claim_store = notifications_api.get_action_closure_follow_up_dispatch_store()
+    claim_store._claim_index[failing_candidate["dedupe_key"]].lease_expires_at = "2026-04-01T20:13:00+00:00"
+
+    with app.test_request_context(
         "/notifications/action-closures/dispatch/receipt",
         method="POST",
         json={
@@ -339,6 +354,8 @@ def test_zone_dashboard_and_chat_surface_follow_up_receipts() -> None:
     assert receipt_summary["counts"]["escalated"] == 1
     assert receipt_summary["sla"]["counts"]["stale_retries"] == 1
     assert "escalation_due" in receipt_summary["sla"]["counts"]
+    assert receipt_summary["claims"]["counts"]["expired_leases"] == 1
+    assert receipt_summary["claims"]["counts"]["reassignable"] == 1
 
     with app.app_context():
         handler = ChatHandler()
@@ -347,6 +364,7 @@ def test_zone_dashboard_and_chat_surface_follow_up_receipts() -> None:
     assert "Follow-up-Zustellung" in home_context
     assert "Retry offen" in home_context
     assert "Retry veraltet" in home_context
+    assert "Lease abgelaufen" in home_context
 
 
 def test_action_closure_context_block_resolves_zone_name_for_chat_voice() -> None:

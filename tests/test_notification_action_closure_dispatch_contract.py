@@ -21,10 +21,12 @@ from copilot_core.action_closure import get_action_closure_store  # noqa: E402
 from copilot_core.api.v1 import notifications as notifications_api  # noqa: E402
 from copilot_core.api.v1.notifications import (  # noqa: E402
     ActionClosureFollowUpDispatchStore,
+    claim_action_closure_follow_up_dispatch,
     NotificationManager,
     _build_action_closure_follow_up_sla_summary,
     acknowledge_action_closure_follow_up_dispatch,
     get_action_closure_follow_up_dispatch,
+    get_action_closure_follow_up_claims,
     get_action_closure_follow_up_receipts,
     get_action_closure_follow_up_sla,
     record_action_closure_follow_up_receipt,
@@ -205,6 +207,173 @@ def test_dispatch_cursor_tracks_delta_without_hiding_unacknowledged_candidates()
     assert unchanged_dispatch["cursor"]["changed"] is False
     assert unchanged_dispatch["cursor"]["changed_count"] == 0
     assert unchanged_dispatch["counts"]["dispatchable"] == 3
+
+
+def test_claim_endpoint_creates_worker_lease_and_surfaces_it_in_dispatch_and_claim_summary() -> None:
+    seed = _seed_closures()
+    app = Flask(__name__)
+
+    with app.test_request_context(
+        "/notifications/action-closures/dispatch?delivery_mode=notification_job&recent_limit=5",
+        method="GET",
+    ):
+        dispatch_response = get_action_closure_follow_up_dispatch()
+    candidate = next(
+        item for item in dispatch_response.get_json()["dispatch"]["candidates"] if item["closure_id"] == seed["open_closure_id"]
+    )
+
+    with app.test_request_context(
+        "/notifications/action-closures/dispatch/claim",
+        method="POST",
+        json={
+            "dispatch_id": candidate["dispatch_id"],
+            "claimed_by": "worker.notifications",
+            "lease_seconds": 600,
+            "note": "processing delivery",
+        },
+    ):
+        claim_response = claim_action_closure_follow_up_dispatch()
+
+    claim_body = claim_response.get_json()
+    assert claim_body["ok"] is True
+    assert claim_body["count"] == 1
+    claim = claim_body["claimed"][0]
+    assert claim["contract"] == "ActionClosureFollowUpClaimV1"
+    assert claim["claimed_by"] == "worker.notifications"
+    assert claim["lease"]["state"] == "active"
+    assert claim["reassignable"] is False
+
+    with app.test_request_context(
+        "/notifications/action-closures/dispatch?delivery_mode=notification_job&recent_limit=5",
+        method="GET",
+    ):
+        claimed_dispatch = get_action_closure_follow_up_dispatch().get_json()["dispatch"]
+
+    claimed_candidate = next(item for item in claimed_dispatch["candidates"] if item["dispatch_id"] == candidate["dispatch_id"])
+    assert claimed_candidate["claim"]["claim_id"] == claim["claim_id"]
+    assert claimed_dispatch["claims"]["counts"]["active_leases"] == 1
+
+    with app.test_request_context(
+        "/notifications/action-closures/claims?delivery_mode=notification_job&recent_limit=5",
+        method="GET",
+    ):
+        claims_response = get_action_closure_follow_up_claims()
+
+    claims_summary = claims_response.get_json()["claims"]
+    assert claims_summary["contract"] == "ActionClosureFollowUpClaimSummaryV1"
+    assert claims_summary["counts"]["total_claims"] == 1
+    assert claims_summary["counts"]["active_leases"] == 1
+    assert claims_summary["workers"]["worker.notifications"]["active"] == 1
+
+
+def test_active_claim_conflicts_until_lease_expires_then_reassignment_becomes_visible() -> None:
+    seed = _seed_closures()
+    app = Flask(__name__)
+
+    with app.test_request_context(
+        "/notifications/action-closures/dispatch?delivery_mode=notification_job&recent_limit=5",
+        method="GET",
+    ):
+        dispatch_response = get_action_closure_follow_up_dispatch()
+    candidate = next(
+        item for item in dispatch_response.get_json()["dispatch"]["candidates"] if item["closure_id"] == seed["failing_closure_id"]
+    )
+
+    with app.test_request_context(
+        "/notifications/action-closures/dispatch/claim",
+        method="POST",
+        json={"dispatch_id": candidate["dispatch_id"], "claimed_by": "worker.notifications", "lease_seconds": 300},
+    ):
+        first_claim_response = claim_action_closure_follow_up_dispatch()
+    first_claim = first_claim_response.get_json()["claimed"][0]
+
+    with app.test_request_context(
+        "/notifications/action-closures/dispatch/claim",
+        method="POST",
+        json={"dispatch_id": candidate["dispatch_id"], "claimed_by": "worker.reminders", "lease_seconds": 300},
+    ):
+        conflict_response = claim_action_closure_follow_up_dispatch()
+
+    assert conflict_response[1] == 409
+    conflict_body = conflict_response[0].get_json()
+    assert conflict_body["conflicts"][0]["reason"] == "already_claimed"
+    assert conflict_body["conflicts"][0]["active_claim"]["claim_id"] == first_claim["claim_id"]
+
+    claim_store = notifications_api.get_action_closure_follow_up_dispatch_store()
+    claim_store._claim_index[candidate["dedupe_key"]].lease_expires_at = (datetime.now(timezone.utc) - timedelta(seconds=5)).isoformat()
+
+    with app.test_request_context(
+        "/notifications/action-closures/dispatch/claim",
+        method="POST",
+        json={"dispatch_id": candidate["dispatch_id"], "claimed_by": "worker.reminders", "lease_seconds": 300},
+    ):
+        reassigned_response = claim_action_closure_follow_up_dispatch()
+
+    reassigned = reassigned_response.get_json()["claimed"][0]
+    assert reassigned["claim_state"] == "reassigned"
+    assert reassigned["claimed_by"] == "worker.reminders"
+
+    with app.test_request_context(
+        "/notifications/action-closures/claims?delivery_mode=notification_job&recent_limit=5",
+        method="GET",
+    ):
+        claims_summary = get_action_closure_follow_up_claims().get_json()["claims"]
+
+    assert claims_summary["counts"]["reassigned_claims"] == 1
+    assert claims_summary["counts"]["active_leases"] == 1
+    assert claims_summary["workers"]["worker.reminders"]["active"] == 1
+
+
+def test_claim_summary_marks_expired_problem_claims_as_reassignable_and_escalation_relevant() -> None:
+    seed = _seed_closures()
+    app = Flask(__name__)
+
+    with app.test_request_context(
+        "/notifications/action-closures/dispatch?delivery_mode=notification_job&recent_limit=5",
+        method="GET",
+    ):
+        dispatch_response = get_action_closure_follow_up_dispatch()
+    candidate = next(
+        item for item in dispatch_response.get_json()["dispatch"]["candidates"] if item["closure_id"] == seed["failing_closure_id"]
+    )
+
+    with app.test_request_context(
+        "/notifications/action-closures/dispatch/claim",
+        method="POST",
+        json={"dispatch_id": candidate["dispatch_id"], "claimed_by": "worker.notifications", "lease_seconds": 60},
+    ):
+        claim_action_closure_follow_up_dispatch()
+
+    with app.test_request_context(
+        "/notifications/action-closures/dispatch/receipt",
+        method="POST",
+        json={
+            "dispatch_id": candidate["dispatch_id"],
+            "receipt_state": "failed",
+            "receipt_by": "worker.notifications",
+            "retry_state": "scheduled",
+            "retry_count": 1,
+            "escalation_state": "pending",
+            "escalation_reason": "manual intervention",
+        },
+    ):
+        record_action_closure_follow_up_receipt()
+
+    claim_store = notifications_api.get_action_closure_follow_up_dispatch_store()
+    claim_store._claim_index[candidate["dedupe_key"]].lease_expires_at = (datetime.now(timezone.utc) - timedelta(seconds=5)).isoformat()
+
+    with app.test_request_context(
+        "/notifications/action-closures/claims?delivery_mode=notification_job&recent_limit=5",
+        method="GET",
+    ):
+        summary = get_action_closure_follow_up_claims().get_json()["claims"]
+
+    assert summary["counts"]["expired_leases"] == 1
+    assert summary["counts"]["reassignable"] == 1
+    assert summary["counts"]["escalation_pending"] == 1
+    assert summary["recent_claims"][0]["lease"]["state"] == "expired"
+    assert summary["recent_claims"][0]["reassignable"] is True
+    assert summary["recent_claims"][0]["escalation_state"] == "pending"
 
 
 def test_receipt_surface_tracks_delivery_retry_and_escalation_state_from_dispatch_truth() -> None:
