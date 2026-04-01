@@ -46,6 +46,7 @@ class NormalizedType(Enum):
     TEMPERATURE = "temperature"  # °C
     HUMIDITY = "humidity"  # %
     BRIGHTNESS = "brightness"  # 0.0-1.0
+    LIGHT = "light"  # Light actuator/output category
     COLOR_TEMP = "color_temp"  # Kelvin
     ENERGY = "energy"  # kWh
     POWER = "power"  # W
@@ -176,7 +177,7 @@ class EntityNormalizationEngine:
                   name: Optional[str] = None,
                   entity_type: Optional[EntityType] = None,
                   unit_of_measurement: Optional[str] = None,
-                  normalization_fn: str = "linear",
+                  normalization_fn: Optional[str] = None,
                   normalization_params: Optional[Dict[str, Any]] = None,
                   zone_entity_type: ZoneEntityType = ZoneEntityType.INPUT) -> str:
         """Map a HA entity to a zone with normalization."""
@@ -331,7 +332,12 @@ class EntityNormalizationEngine:
     def _normalize_value(self, state: Any, mapping: EntityMapping,
                         attributes: Optional[Dict[str, Any]] = None) -> float:
         """Normalize a value based on mapping configuration."""
-        fn_name = mapping.normalization_fn or "linear"
+        fn_name = mapping.normalization_fn
+        if not fn_name:
+            if mapping.normalized_type == NormalizedType.TEMPERATURE:
+                fn_name = "temperature"
+            else:
+                fn_name = "linear"
         fn = self._normalization_fns.get(fn_name, self._normalize_linear)
         
         return fn(state, mapping, attributes)
@@ -604,7 +610,7 @@ class EntityNormalizationEngine:
         
         for entity_id, state_data in ha_entities.items():
             # Extract keywords from entity_id
-            entity_keywords = entity_id.lower().replace("_", " ").split()
+            entity_keywords = [token for token in re.split(r"[._]+", entity_id.lower()) if token]
             
             # Try to match zone
             matched_zone = None

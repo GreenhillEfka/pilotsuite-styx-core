@@ -656,3 +656,72 @@ class PresenceModule:
 def create_presence_module() -> PresenceModule:
     """Factory function to create presence module."""
     return PresenceModule()
+
+
+class ZonePresenceEngine:
+    """Compatibility facade for legacy integration tests.
+
+    Keeps the richer ``PresenceModule`` intact but restores the small event-driven
+    surface expected by Slice 67-82 integration tests.
+    """
+
+    def __init__(self, event_bus: Any = None, zone_registry: Any = None):
+        self.event_bus = event_bus
+        self.zone_registry = zone_registry
+        self._occupants: Dict[str, Set[str]] = {}
+
+    def _zone_exists(self, zone_id: str) -> bool:
+        if not self.zone_registry or not hasattr(self.zone_registry, "get_zone"):
+            return True
+        return self.zone_registry.get_zone(zone_id) is not None
+
+    def _publish(self, topic: str, payload: Dict[str, Any]) -> None:
+        if self.event_bus and hasattr(self.event_bus, "publish"):
+            self.event_bus.publish(topic, payload)
+
+    def _emit(self, topic: str, payload: Dict[str, Any]) -> None:
+        if self.event_bus and hasattr(self.event_bus, "emit"):
+            self.event_bus.emit(topic, payload)
+
+    def on_person_entered(self, zone_id: str, person_id: str) -> None:
+        if not self._zone_exists(zone_id):
+            self._publish("presence_error", {
+                "zone_id": zone_id,
+                "person_id": person_id,
+                "error": "unknown_zone",
+            })
+            return
+
+        occupants = self._occupants.setdefault(zone_id, set())
+        occupants.add(person_id)
+
+        payload = {
+            "zone_id": zone_id,
+            "person_id": person_id,
+            "occupancy": len(occupants),
+            "state": "occupied",
+        }
+        self._emit("zone_state_updated", payload)
+        self._publish("light_automation", {**payload, "action": "turn_on"})
+        self._publish("climate_presence_sync", {**payload, "mode": "comfort"})
+
+    def on_person_left(self, zone_id: str, person_id: str) -> None:
+        occupants = self._occupants.setdefault(zone_id, set())
+        occupants.discard(person_id)
+        occupied = bool(occupants)
+        payload = {
+            "zone_id": zone_id,
+            "person_id": person_id,
+            "occupancy": len(occupants),
+            "state": "occupied" if occupied else "vacant",
+        }
+        self._emit("zone_state_updated", payload)
+
+        if occupied:
+            self._publish("presence_update", payload)
+            return
+
+        self._publish("cleanup", {**payload, "action": "cleanup"})
+        self._publish("light_cleanup", {**payload, "action": "turn_off"})
+        self._publish("climate_eco", {**payload, "mode": "eco"})
+        self._publish("energy_optimization", {**payload, "profile": "away"})

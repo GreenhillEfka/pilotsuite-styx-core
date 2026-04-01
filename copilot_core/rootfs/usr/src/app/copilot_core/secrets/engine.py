@@ -158,6 +158,16 @@ class SecretManagerEngine:
             "rotations": 0,
         }
     
+    def _resolve_secret_id(self, secret_ref: str) -> Optional[str]:
+        """Resolve a secret by ID first, then by unique name."""
+        if secret_ref in self._secrets:
+            return secret_ref
+
+        matches = [sid for sid, secret in self._secrets.items() if secret.name == secret_ref]
+        if len(matches) == 1:
+            return matches[0]
+        return None
+
     def _encrypt(self, value: str) -> str:
         """Encrypt a value (simplified)."""
         # In production: use proper encryption (AES, etc.)
@@ -198,6 +208,7 @@ class SecretManagerEngine:
             description=description,
             secret_type=SecretType(secret_type),
             value=self._encrypt(value),
+            last_accessed=now,
             expires_at=expires_at,
             rotation_days=rotation_days,
             tags=tags or [],
@@ -230,6 +241,7 @@ class SecretManagerEngine:
     
     def get_secret(self, secret_id: str, accessed_by: str = "system") -> Optional[Dict[str, Any]]:
         """Get secret metadata (without value)."""
+        secret_id = self._resolve_secret_id(secret_id) or secret_id
         if secret_id not in self._secrets:
             self._log_access(secret_id, "read", accessed_by, False, "Secret not found")
             return None
@@ -265,6 +277,7 @@ class SecretManagerEngine:
     
     def get_secret_value(self, secret_id: str, accessed_by: str = "system") -> Optional[str]:
         """Get secret value (decrypted)."""
+        secret_id = self._resolve_secret_id(secret_id) or secret_id
         if secret_id not in self._secrets:
             self._log_access(secret_id, "read", accessed_by, False, "Secret not found")
             return None
@@ -301,6 +314,7 @@ class SecretManagerEngine:
     def update_secret(self, secret_id: str, value: str,
                      updated_by: str = "system") -> bool:
         """Update secret value (creates new version)."""
+        secret_id = self._resolve_secret_id(secret_id) or secret_id
         if secret_id not in self._secrets:
             self._log_access(secret_id, "write", updated_by, False, "Secret not found")
             return False
@@ -342,6 +356,7 @@ class SecretManagerEngine:
     def rotate_secret(self, secret_id: str, new_value: str,
                      rotated_by: str = "system") -> bool:
         """Rotate secret (update with new value)."""
+        secret_id = self._resolve_secret_id(secret_id) or secret_id
         if secret_id not in self._secrets:
             return False
         
@@ -387,6 +402,7 @@ class SecretManagerEngine:
     def revoke_secret(self, secret_id: str, revoked_by: str = "system",
                      reason: str = "") -> bool:
         """Revoke a secret."""
+        secret_id = self._resolve_secret_id(secret_id) or secret_id
         if secret_id not in self._secrets:
             return False
         
@@ -405,6 +421,7 @@ class SecretManagerEngine:
     
     def delete_secret(self, secret_id: str, deleted_by: str = "system") -> bool:
         """Delete a secret permanently."""
+        secret_id = self._resolve_secret_id(secret_id) or secret_id
         if secret_id not in self._secrets:
             return False
         
@@ -431,6 +448,7 @@ class SecretManagerEngine:
     def set_access_policy(self, secret_id: str,
                          allowed_users: List[str]) -> bool:
         """Set access policy for a secret."""
+        secret_id = self._resolve_secret_id(secret_id) or secret_id
         if secret_id not in self._secrets:
             return False
         
@@ -566,6 +584,7 @@ class SecretManagerEngine:
         
         return {
             **self._stats,
+            "total_secrets": len(self._secrets),
             "by_status": by_status,
             "by_type": by_type,
             "expiring_soon": expiring_soon,

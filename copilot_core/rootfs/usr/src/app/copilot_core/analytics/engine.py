@@ -121,7 +121,7 @@ class MetricBucket:
             return None
         
         sorted_values = sorted(self.values)
-        index = int(len(sorted_values) * p / 100)
+        index = int((len(sorted_values) - 1) * p / 100)
         return sorted_values[min(index, len(sorted_values) - 1)]
     
     def to_dict(self) -> Dict[str, Any]:
@@ -151,7 +151,7 @@ class AnalyticsEngine:
         self._counters: Dict[str, float] = {}
         self._gauges: Dict[str, float] = {}
         self._event_handlers: List[Callable[[Event], None]] = []
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
         
         # Statistics
         self._stats = {
@@ -337,7 +337,7 @@ class AnalyticsEngine:
             return 0.0
         
         sorted_values = sorted(values)
-        index = int(len(sorted_values) * p / 100)
+        index = int((len(sorted_values) - 1) * p / 100)
         return sorted_values[min(index, len(sorted_values) - 1)]
     
     def get_events(self, event_type: Optional[str] = None,
@@ -446,7 +446,9 @@ class AnalyticsEngine:
                 # CSV format
                 lines = ["event_id,event_type,timestamp,user_id,session_id"]
                 for e in events:
-                    lines.append(f"{e.event_id},{e.event_type},{e.timestamp},{e.user_id or ''},{e.session_id or ''}")
+                    lines.append(
+                        f"{e['event_id']},{e['event_type']},{e['timestamp']},{e.get('user_id') or ''},{e.get('session_id') or ''}"
+                    )
                 return "\n".join(lines)
     
     def export_metrics(self, name: Optional[str] = None, format: str = "json") -> str:

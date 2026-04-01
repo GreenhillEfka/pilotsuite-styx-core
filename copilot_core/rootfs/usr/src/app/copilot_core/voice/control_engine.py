@@ -139,6 +139,15 @@ class VoiceControlEngine:
                 r"status",
                 r"wie ist.*",
             ],
+            VoiceIntentType.CLIMATE_SET: [
+                r"heizung.*\d{1,2}\s*grad",
+                r"temperatur.*\d{1,2}\s*grad",
+                r"auf\s*\d{1,2}\s*grad",
+            ],
+            VoiceIntentType.SET_TEMPERATURE: [
+                r"stelle.*\d{1,2}\s*grad",
+                r"setze.*\d{1,2}\s*grad",
+            ],
         }
         
         # Intent patterns (English)
@@ -169,6 +178,14 @@ class VoiceControlEngine:
                 r"status",
                 r"state",
                 r"what is.*",
+            ],
+            VoiceIntentType.CLIMATE_SET: [
+                r"heat.*\d{1,2}\s*(?:degree|°)",
+                r"temperature.*\d{1,2}\s*(?:degree|°)",
+                r"to\s*\d{1,2}\s*(?:degree|°)",
+            ],
+            VoiceIntentType.SET_TEMPERATURE: [
+                r"set.*\d{1,2}\s*(?:degree|°)",
             ],
         }
         

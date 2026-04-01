@@ -665,7 +665,7 @@ class TestHumidityModule:
         # Above health max but below plant target
         module.update_sensor_data("zone_1", humidity=65.0)
         
-        actions = module.evaluate_zone("zone_living")
+        actions = module.evaluate_zone("zone_1")
         
         # Plant mode should take precedence
         state = module.get_state("zone_1")

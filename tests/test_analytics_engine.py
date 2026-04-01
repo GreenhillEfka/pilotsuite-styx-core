@@ -550,13 +550,11 @@ class TestAnalyticsEngine:
         engine.track_event("old")
         
         time.sleep(0.1)
-        cutoff = datetime.now(timezone.utc) - timedelta(seconds=0.05)
-        
         engine.track_event("new")
         
         # Manually adjust timestamp for testing
         if engine._events:
-            engine._events[0].timestamp = (cutoff - timedelta(seconds=1)).isoformat()
+            engine._events[0].timestamp = (datetime.now(timezone.utc) - timedelta(days=2)).isoformat()
         
         count = engine.clear_events(older_than_days=1)
         

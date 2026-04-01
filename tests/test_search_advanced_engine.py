@@ -764,7 +764,7 @@ class TestSearchEngine:
         engine.index_document("doc2", "Bat animal")
         engine.index_document("doc3", "Car vehicle")
         
-        result = engine.search("C?t", match_type=MatchType.WILDCARD)
+        result = engine.search("?at", match_type=MatchType.WILDCARD)
         
         # Should match Cat and Bat
         assert result.total_count >= 2

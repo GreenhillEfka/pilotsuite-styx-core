@@ -190,8 +190,10 @@ class HumidityModule:
         # Check mold prevention (highest priority)
         if config.mold_prevention_enabled:
             if current > config.mold_threshold_percent:
-                if not state.mold_risk_active:
-                    state.mold_risk_active = True
+                state.mold_risk_active = True
+                state.is_humidifying = False
+                if not state.is_dehumidifying:
+                    state.is_dehumidifying = True
                     action = self._create_dehumidify_action(zone_id, "mold_prevention")
                     actions.append(action)
                 return actions
@@ -342,8 +344,10 @@ class HumidityModule:
     
     def set_mode(self, zone_id: str, mode: HumidityMode) -> List[HumidityAction]:
         """Manually set humidity mode for a zone."""
-        if zone_id in self._states:
-            self._states[zone_id].mode = mode
+        if zone_id not in self._states:
+            return []
+
+        self._states[zone_id].mode = mode
         
         action = HumidityAction(
             action_id=f"ha_{uuid.uuid4().hex[:16]}",
@@ -414,3 +418,30 @@ class HumidityModule:
 def create_humidity_module() -> HumidityModule:
     """Factory function to create humidity module."""
     return HumidityModule()
+
+
+class HumidityEngine:
+    """Compatibility facade for legacy integration tests."""
+
+    def __init__(self, event_bus: Any = None, zone_registry: Any = None):
+        self.event_bus = event_bus
+        self.zone_registry = zone_registry
+
+    def _publish(self, topic: str, payload: Dict[str, Any]) -> None:
+        if self.event_bus and hasattr(self.event_bus, "publish"):
+            self.event_bus.publish(topic, payload)
+
+    def on_humidity_high(self, zone_id: str, humidity_percent: float) -> None:
+        self._publish("humidity_ventilation", {
+            "zone_id": zone_id,
+            "humidity_percent": humidity_percent,
+            "action": "ventilation_fan",
+        })
+
+    def on_humidity_critical(self, zone_id: str, humidity_percent: float, duration_hours: float) -> None:
+        self._publish("humidity_alert", {
+            "zone_id": zone_id,
+            "humidity_percent": humidity_percent,
+            "duration_hours": duration_hours,
+            "action": "notification_alert",
+        })

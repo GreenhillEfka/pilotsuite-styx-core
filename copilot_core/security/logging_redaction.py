@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Any, Dict, Iterable, Mapping
+from typing import Any, Dict, Mapping
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 _REDACTION_PLACEHOLDER = "[REDACTED]"
@@ -79,6 +79,24 @@ def _sanitize_netloc(netloc: str) -> str:
     return f"***@{host}"
 
 
+def _sanitize_query_params(query: str) -> str:
+    """Redact secret values from a query-string fragment."""
+    if not query:
+        return query
+
+    pairs = parse_qsl(query, keep_blank_values=True)
+    redacted_pairs: list[tuple[str, str]] = []
+
+    for key, value in pairs:
+        if is_sensitive_key(key):
+            redacted_pairs.append((key, _REDACTION_PLACEHOLDER))
+        else:
+            redacted_pairs.append((key, value))
+
+    return urlencode(redacted_pairs, doseq=True)
+
+
+
 def sanitize_url(url: str) -> str:
     """Sanitize URL-like strings by redacting sensitive query values and credentials.
 
@@ -111,23 +129,6 @@ def sanitize_url(url: str) -> str:
         ))
     except Exception:
         return _sanitize_query_params(url)
-
-
-def _sanitize_query_params(query: str) -> str:
-    """Redact secret values from a query-string fragment."""
-    if not query:
-        return query
-
-    pairs = parse_qsl(query, keep_blank_values=True)
-    redacted_pairs: list[tuple[str, str]] = []
-
-    for key, value in pairs:
-        if is_sensitive_key(key):
-            redacted_pairs.append((key, _REDACTION_PLACEHOLDER))
-        else:
-            redacted_pairs.append((key, value))
-
-    return urlencode(redacted_pairs, doseq=True)
 
 
 

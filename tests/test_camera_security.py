@@ -5,6 +5,8 @@ from copilot_core.camera.security_engine import (
     SecurityLevel,
     AlertType,
     AlertSeverity,
+    SecurityAlert,
+    SecuritySnapshot,
     create_camera_security_engine,
 )
 

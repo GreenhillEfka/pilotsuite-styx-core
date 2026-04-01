@@ -154,7 +154,7 @@ class SearchEngine:
         tokens = set(content.split())
         
         # Remove very short tokens
-        tokens = {t for t in tokens if len(t) >= 2}
+        tokens = {t for t in tokens if len(t) >= 3}
         
         return tokens
     
@@ -173,7 +173,8 @@ class SearchEngine:
               document_types: Optional[List[str]] = None,
               filters: Optional[Dict[str, Any]] = None,
               limit: int = 50,
-              match_type: str = "fuzzy") -> List[SearchResult]:
+              match_type: str = "fuzzy",
+              min_score: float = 0.1) -> List[SearchResult]:
         """Search indexed documents."""
         self._stats["searches"] += 1
         self._stats["total_queries"] += 1
@@ -184,6 +185,7 @@ class SearchEngine:
             document_types=document_types,
             filters=filters or {},
             limit=limit,
+            min_score=min_score,
         )
         
         results = []
@@ -223,42 +225,49 @@ class SearchEngine:
                         match_type: SearchMatchType) -> tuple:
         """Calculate match score for an index."""
         matched_tokens = set()
-        
+
         if match_type == SearchMatchType.EXACT:
             matched_tokens = query_tokens & index.tokens
-        
+            score = len(matched_tokens) / len(query_tokens) if query_tokens else 0.0
+
         elif match_type == SearchMatchType.FUZZY:
+            total_similarity = 0.0
             for query_token in query_tokens:
+                best_similarity = 0.0
+                best_token = None
                 for index_token in index.tokens:
                     similarity = self._fuzzy_match(query_token, index_token)
-                    if similarity >= self._fuzzy_threshold:
-                        matched_tokens.add(index_token)
-                        break
-        
+                    if similarity > best_similarity:
+                        best_similarity = similarity
+                        best_token = index_token
+                if best_similarity >= self._fuzzy_threshold and best_token is not None:
+                    matched_tokens.add(best_token)
+                    total_similarity += best_similarity
+            score = total_similarity / len(query_tokens) if query_tokens else 0.0
+
         elif match_type == SearchMatchType.PREFIX:
             for query_token in query_tokens:
                 for index_token in index.tokens:
                     if index_token.startswith(query_token):
                         matched_tokens.add(index_token)
-        
+            score = len(matched_tokens) / len(query_tokens) if query_tokens else 0.0
+
         elif match_type == SearchMatchType.CONTAINS:
             for query_token in query_tokens:
                 for index_token in index.tokens:
                     if query_token in index_token:
                         matched_tokens.add(index_token)
-        
-        # Calculate score
-        if not query_tokens:
-            return 0.0, matched_tokens
-        
-        score = len(matched_tokens) / len(query_tokens)
-        
-        # Boost for exact matches
+            score = len(matched_tokens) / len(query_tokens) if query_tokens else 0.0
+
+        else:
+            score = 0.0
+
+        # Boost exact matches without fully flattening fuzzy-score differences.
         exact_matches = len(query_tokens & index.tokens)
         score += exact_matches * 0.1
-        
+
         return min(score, 1.0), matched_tokens
-    
+
     def _fuzzy_match(self, s1: str, s2: str) -> float:
         """Calculate fuzzy match similarity (Levenshtein-based)."""
         if s1 == s2:

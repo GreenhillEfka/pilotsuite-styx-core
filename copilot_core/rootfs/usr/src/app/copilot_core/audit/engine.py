@@ -62,8 +62,8 @@ class AuditEvent:
     details: Dict[str, Any]
     ip_address: Optional[str]
     user_agent: Optional[str]
-    previous_state: Optional[Dict[str, Any]]
-    new_state: Optional[Dict[str, Any]]
+    previous_state: Optional[Dict[str, Any]] = None
+    new_state: Optional[Dict[str, Any]] = None
     hash: str = ""
     
     def __post_init__(self):

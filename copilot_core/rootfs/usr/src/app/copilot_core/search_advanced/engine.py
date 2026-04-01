@@ -88,12 +88,17 @@ class SearchResult:
     total_count: int = 0
     facets: Dict[str, Facet] = field(default_factory=dict)
     execution_time_ms: float = 0.0
+
+    @property
+    def returned_count(self) -> int:
+        return len(self.hits)
     
     def to_dict(self) -> Dict[str, Any]:
         return {
             "query": self.query,
             "hits": [h.to_dict() for h in self.hits],
             "total_count": self.total_count,
+            "returned_count": self.returned_count,
             "facets": {k: v.to_dict() for k, v in self.facets.items()},
             "execution_time_ms": self.execution_time_ms,
         }
@@ -221,8 +226,15 @@ class SearchEngine:
         start = time.time()
         
         with self._lock:
-            # Parse query
-            terms = self._tokenize(query)
+            # Parse query. Wildcard and phrase searches operate on the raw
+            # query string, while other modes use tokenization with a raw-query
+            # fallback for punctuation-heavy terms like C++ or 1.2.3.
+            if match_type in (MatchType.WILDCARD, MatchType.PHRASE):
+                terms = [query.lower()]
+            else:
+                terms = self._tokenize(query)
+                if not terms and query.strip():
+                    terms = [query.strip().lower()]
             
             # Expand with synonyms
             expanded_terms = self._expand_synonyms(terms)
@@ -394,8 +406,9 @@ class SearchEngine:
         # Convert to lowercase
         text = text.lower()
         
-        # Split on non-alphanumeric
-        tokens = re.split(r'[^a-z0-9]+', text)
+        # Preserve punctuation-bearing technical tokens such as C++, C#, and
+        # dotted versions like 1.2.3.
+        tokens = re.findall(r'[a-z0-9][a-z0-9.+#]*', text)
         
         # Filter by min length and stop words
         tokens = [

@@ -100,7 +100,7 @@ class JobExecution:
     job_id: str
     status: JobStatus
     started_at: Optional[str]
-    completed_at: Optional[str]
+    completed_at: Optional[str] = None
     result: Any = None
     error_message: Optional[str] = None
     retry_count: int = 0
@@ -158,7 +158,9 @@ class SchedulerEngine:
                   action_name: str, parameters: Optional[Dict[str, Any]] = None,
                   timezone: str = "UTC", priority: int = 0,
                   tags: Optional[List[str]] = None,
-                  dependencies: Optional[List[str]] = None) -> str:
+                  dependencies: Optional[List[str]] = None,
+                  max_retries: int = 3,
+                  timeout_seconds: int = 300) -> str:
         """Create a scheduled job."""
         job_id = f"job_{uuid.uuid4().hex[:8]}"
         
@@ -172,6 +174,8 @@ class SchedulerEngine:
             parameters=parameters or {},
             timezone=timezone,
             priority=priority,
+            max_retries=max_retries,
+            timeout_seconds=timeout_seconds,
             tags=tags or [],
             dependencies=dependencies or [],
         )
@@ -190,11 +194,10 @@ class SchedulerEngine:
         now = datetime.now(timezone.utc)
         
         if job.schedule_type == ScheduleType.ONCE:
-            # Parse ISO datetime
+            # Parse ISO datetime. Past one-off jobs remain due until they are
+            # processed, which lets process_due_jobs() pick them up immediately.
             try:
                 next_run = datetime.fromisoformat(job.schedule_expression.replace("Z", "+00:00"))
-                if next_run <= now:
-                    return None  # Already passed
                 return next_run.isoformat()
             except ValueError:
                 return None
@@ -341,68 +344,65 @@ class SchedulerEngine:
     def _execute_job(self, job: ScheduledJob) -> Optional[str]:
         """Execute a job."""
         import time
+
         start_time = time.time()
-        
         execution_id = f"exec_{uuid.uuid4().hex[:8]}"
-        
         execution = JobExecution(
             execution_id=execution_id,
             job_id=job.job_id,
             status=JobStatus.RUNNING,
             started_at=datetime.now(timezone.utc).isoformat(),
         )
-        
         self._executions[execution_id] = execution
-        
-        try:
-            # Get action handler
-            if job.action_name not in self._action_registry:
-                raise ValueError(f"Unknown action: {job.action_name}")
-            
-            action = self._action_registry[job.action_name]
-            
-            # Execute with timeout
-            result = action(**job.parameters)
-            
-            duration_ms = int((time.time() - start_time) * 1000)
-            
-            execution.status = JobStatus.COMPLETED
-            execution.result = result
-            execution.completed_at = datetime.now(timezone.utc).isoformat()
-            execution.duration_ms = duration_ms
-            
-            # Update job stats
-            job.run_count += 1
-            job.last_run = execution.completed_at
-            job.next_run = self._calculate_next_run(job)
-            job.fail_count = 0  # Reset fail count on success
-            
-            logger.info("Job %s executed successfully in %dms", job.job_id, duration_ms)
-            
-        except Exception as exc:
-            logger.exception("Job %s failed: %s", job.job_id, exc)
-            
-            execution.status = JobStatus.FAILED
-            execution.error_message = str(exc)
-            execution.completed_at = datetime.now(timezone.utc).isoformat()
-            execution.retry_count += 1
-            
-            job.fail_count += 1
-            
-            # Retry logic
-            if execution.retry_count < job.max_retries:
-                logger.info("Job %s will be retried (%d/%d)", job.job_id, 
-                          execution.retry_count, job.max_retries)
-            else:
-                logger.error("Job %s exhausted retries", job.job_id)
-        
-        # Store in history
+
+        attempts = max(1, job.max_retries)
+        last_error: Optional[Exception] = None
+
+        for attempt in range(attempts):
+            try:
+                if job.action_name not in self._action_registry:
+                    raise ValueError(f"Unknown action: {job.action_name}")
+
+                action = self._action_registry[job.action_name]
+                result = action(**job.parameters)
+
+                duration_ms = int((time.time() - start_time) * 1000)
+                execution.status = JobStatus.COMPLETED
+                execution.result = result
+                execution.completed_at = datetime.now(timezone.utc).isoformat()
+                execution.duration_ms = duration_ms
+
+                job.run_count += 1
+                job.last_run = execution.completed_at
+                job.next_run = self._calculate_next_run(job)
+                job.fail_count = 0
+
+                logger.info("Job %s executed successfully in %dms", job.job_id, duration_ms)
+                break
+            except Exception as exc:
+                last_error = exc
+                execution.retry_count = attempt + 1
+                logger.exception("Job %s failed: %s", job.job_id, exc)
+
+                if attempt + 1 >= attempts:
+                    execution.status = JobStatus.FAILED
+                    execution.error_message = str(exc)
+                    execution.completed_at = datetime.now(timezone.utc).isoformat()
+                    execution.duration_ms = int((time.time() - start_time) * 1000)
+                    job.fail_count += 1
+                    job.last_run = execution.completed_at
+                    job.next_run = self._calculate_next_run(job)
+                    logger.error("Job %s exhausted retries", job.job_id)
+                else:
+                    logger.info("Job %s retrying (%d/%d)", job.job_id, attempt + 1, attempts)
+                    continue
+
         self._execution_history.append(execution)
         if len(self._execution_history) > self._max_history_size:
             self._execution_history = self._execution_history[-self._max_history_size:]
-        
+
         return execution_id
-    
+
     def get_job(self, job_id: str) -> Optional[Dict[str, Any]]:
         """Get job details."""
         if job_id not in self._jobs:

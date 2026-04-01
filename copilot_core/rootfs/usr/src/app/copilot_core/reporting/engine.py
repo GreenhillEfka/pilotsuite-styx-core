@@ -152,7 +152,7 @@ class ReportingEngine:
         if not columns and isinstance(data, list) and len(data) > 0:
             columns = list(data[0].keys())
         
-        writer = csv.DictWriter(output, fieldnames=columns, extrasaction='ignore')
+        writer = csv.DictWriter(output, fieldnames=columns, extrasaction='ignore', lineterminator='\n')
         writer.writeheader()
         
         for row in data:

@@ -157,13 +157,48 @@ class AnomalyDetectionEngine:
     def detect_anomalies(self, entity_id: str, current_value: Any, context: Optional[Dict[str, Any]] = None) -> List[Anomaly]:
         """Detect anomalies for a given entity value."""
         anomalies = []
+
+        # Rule-based detection must work even without statistical history.
+        for rule in self._rules:
+            if rule.get("entity_id") == entity_id or rule.get("entity_pattern", "*") == "*":
+                rule_anomaly = self._check_rule(rule, entity_id, current_value, context)
+                if rule_anomaly:
+                    anomalies.append(rule_anomaly)
         
         # Check if we have history
-        if entity_id not in self._history or len(self._history[entity_id].values) < 10:
-            # Not enough history for statistical detection
+        if entity_id not in self._history or not self._history[entity_id].values:
             return anomalies
         
         history = self._history[entity_id]
+
+        # Early spike/drop detection should work with limited history using the
+        # latest known value as baseline. Full z-score detection still waits for
+        # a broader sample window.
+        if isinstance(current_value, (int, float)) and len(history.values) == 1:
+            baseline = history.values[-1]
+            if isinstance(baseline, (int, float)) and baseline != 0:
+                relative_change = abs(current_value - baseline) / abs(baseline)
+                if relative_change >= self._spike_threshold:
+                    anomaly = self._create_anomaly(
+                        anomaly_type=(
+                            AnomalyType.VALUE_SPIKE
+                            if current_value > baseline
+                            else AnomalyType.VALUE_DROP
+                        ),
+                        entity_id=entity_id,
+                        current_value=current_value,
+                        expected_value=baseline,
+                        deviation_score=relative_change,
+                        description=(
+                            f"Value {current_value} changed {relative_change:.2f} relative to baseline {baseline}"
+                        ),
+                        context=context or {},
+                    )
+                    anomalies.append(anomaly)
+
+        if len(history.values) < 10:
+            # Not enough history for statistical detection
+            return anomalies
         
         # Statistical anomaly detection (z-score)
         if isinstance(current_value, (int, float)):
@@ -179,13 +214,6 @@ class AnomalyDetectionEngine:
                     context=context or {},
                 )
                 anomalies.append(anomaly)
-        
-        # Rule-based detection
-        for rule in self._rules:
-            if rule.get("entity_id") == entity_id or rule.get("entity_pattern", "*") == "*":
-                rule_anomaly = self._check_rule(rule, entity_id, current_value, context)
-                if rule_anomaly:
-                    anomalies.append(rule_anomaly)
         
         return anomalies
     

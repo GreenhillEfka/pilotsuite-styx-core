@@ -173,8 +173,29 @@ class RuleStatistics:
             "average_execution_ms": self.average_execution_ms,
             "last_execution": self.last_execution,
             "trigger_count": self.trigger_count,
+            "conditions_met_count": self.conditions_met_count,
         }
 
+
+class CappedConflictList(list):
+    """List with a fixed maximum size for conflict records."""
+
+    def __init__(self, max_size: int = 1000):
+        super().__init__()
+        self.max_size = max_size
+
+    def _trim(self) -> None:
+        excess = len(self) - self.max_size
+        if excess > 0:
+            del self[:excess]
+
+    def append(self, item):
+        super().append(item)
+        self._trim()
+
+    def extend(self, items):
+        super().extend(items)
+        self._trim()
 
 class RulesEngineExtended:
     """Extended rules engine with advanced features.
@@ -195,7 +216,7 @@ class RulesEngineExtended:
         self._templates: Dict[RuleTemplateType, Callable] = {}
         self._dependencies: Dict[str, RuleDependency] = {}
         self._variables: Dict[str, RuleVariable] = {}
-        self._conflicts: List[ConflictRecord] = []
+        self._conflicts: List[ConflictRecord] = CappedConflictList(max_size=1000)
         self._statistics: Dict[str, RuleStatistics] = {}
         self._chain_history: Dict[str, List[RuleChainNode]] = {}  # root_rule_id -> chain
         self._rule_chains: Dict[str, List[str]] = {}  # rule_id -> triggered rules
@@ -228,7 +249,7 @@ class RulesEngineExtended:
         factory = self._templates.get(template_type)
         
         if not factory:
-            logger.error("Unknown template type: %s", template_type.value)
+            logger.error("Unknown template type: %s", getattr(template_type, "value", template_type))
             return None
         
         try:
@@ -504,10 +525,7 @@ class RulesEngineExtended:
         if not variable:
             return None
         
-        if context:
-            return variable.evaluate(context)
-        
-        return variable.default_value
+        return variable.evaluate(context or {})
     
     def detect_conflicts(self, rules: List[Any]) -> List[ConflictRecord]:
         """Detect conflicts between rules."""

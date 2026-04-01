@@ -220,12 +220,13 @@ class LeakyBucket:
             self.water = max(0, self.water - elapsed * self.leak_rate)
             self.last_leak = now
             
-            if self.water < self.capacity:
-                self.water += 1
+            projected = self.water + 1
+            if projected <= self.capacity:
+                self.water = projected
                 return True, 0.0
             else:
-                # Calculate wait time
-                wait_time = (self.water - self.capacity + 1) / self.leak_rate
+                # Calculate wait time for enough water to leak out to admit one more request
+                wait_time = (projected - self.capacity) / self.leak_rate
                 return False, wait_time
     
     def get_remaining(self) -> int:

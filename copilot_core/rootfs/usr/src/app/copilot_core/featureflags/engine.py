@@ -164,13 +164,19 @@ class FeatureFlagsEngine:
         flag_id = f"flag_{uuid.uuid4().hex[:8]}"
         now = datetime.now(timezone.utc).isoformat()
         
+        resolved_flag_type = FlagType(flag_type)
+        percentage_rollout = 100.0
+        if resolved_flag_type == FlagType.BOOLEAN and default_value is False:
+            percentage_rollout = 0.0
+
         flag = FeatureFlag(
             flag_id=flag_id,
             name=name,
             description=description,
-            flag_type=FlagType(flag_type),
+            flag_type=resolved_flag_type,
             default_value=default_value,
             status=FlagStatus.DRAFT,
+            percentage_rollout=percentage_rollout,
             environments=environments or ["default"],
             tags=tags or [],
             created_by=created_by,
@@ -343,18 +349,37 @@ class FeatureFlagsEngine:
         # Evaluate rules
         for rule in flag.rules:
             if self._evaluate_rule(rule, context):
-                # Check percentage
-                if self._check_percentage(rule, context):
+                # Matching rules take precedence over the global rollout. If the
+                # rule-level percentage gate does not pass, fall back to the
+                # default flag value instead of applying the global percentage.
+                if self._check_percentage(rule, context, rule.percentage):
                     result = FlagEvaluation(
                         flag_id=flag_id,
                         value=rule.value,
                         reason="rule_match",
                         rule_id=rule.rule_id,
                     )
-                    self._cache_and_stats(cache_key, result, flag_id)
-                    return result
+                else:
+                    result = FlagEvaluation(
+                        flag_id=flag_id,
+                        value=flag.default_value,
+                        reason="default",
+                    )
+                self._cache_and_stats(cache_key, result, flag_id)
+                return result
         
-        # Check global percentage rollout
+        # Check global percentage rollout. A zero-percent rollout for a boolean
+        # flag with a false default simply means "stay at the default" rather
+        # than a special rollout mismatch.
+        if flag.percentage_rollout == 0 and flag.flag_type == FlagType.BOOLEAN and flag.default_value is False:
+            result = FlagEvaluation(
+                flag_id=flag_id,
+                value=flag.default_value,
+                reason="default",
+            )
+            self._cache_and_stats(cache_key, result, flag_id)
+            return result
+
         if not self._check_percentage(None, context, flag.percentage_rollout):
             result = FlagEvaluation(
                 flag_id=flag_id,
@@ -364,10 +389,15 @@ class FeatureFlagsEngine:
             self._cache_and_stats(cache_key, result, flag_id)
             return result
         
-        # Default value
+        # Default value. For boolean flags with an explicit percentage
+        # rollout, users inside the rollout window receive True even when the
+        # fallback default is False.
+        value = flag.default_value
+        if flag.flag_type == FlagType.BOOLEAN and flag.default_value is False and flag.percentage_rollout > 0:
+            value = True
         result = FlagEvaluation(
             flag_id=flag_id,
-            value=flag.default_value,
+            value=value,
             reason="default",
         )
         self._cache_and_stats(cache_key, result, flag_id)

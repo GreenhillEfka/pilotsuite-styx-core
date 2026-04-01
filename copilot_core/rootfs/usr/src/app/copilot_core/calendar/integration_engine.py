@@ -315,9 +315,14 @@ class CalendarIntegrationEngine:
         return events
     
     def _event_matches_automation(self, event: CalendarEvent,
-                                  automation: CalendarAutomation) -> bool:
+                                  automation: CalendarAutomation | str) -> bool:
         """Check if event matches automation criteria."""
         import re
+
+        if isinstance(automation, str):
+            automation = self._automations.get(automation)
+            if automation is None:
+                return False
         
         # Check event type
         if automation.event_type and event.event_type != automation.event_type:

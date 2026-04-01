@@ -19,9 +19,20 @@ try:
     from copilot_core.api.security import require_token
 except ImportError:
     from ..api.security import require_token
-from .auto_discovery import AutoDiscovery, DiscoveredInstance
-from .client import HomeAssistantClient, HAConnectionConfig
-from .entity_mapper import EntityMapper, EntityMapping, WidgetType
+try:
+    from .auto_discovery import AutoDiscovery, DiscoveredInstance
+    from .client import HomeAssistantClient, HAConnectionConfig
+    from .entity_mapper import EntityMapper, EntityMapping, WidgetType
+except ModuleNotFoundError as exc:  # optional aiohttp dependency in tests/minimal envs
+    if exc.name != "aiohttp":
+        raise
+    AutoDiscovery = Any  # type: ignore[assignment]
+    DiscoveredInstance = Any  # type: ignore[assignment]
+    HomeAssistantClient = Any  # type: ignore[assignment]
+    HAConnectionConfig = Any  # type: ignore[assignment]
+    EntityMapper = Any  # type: ignore[assignment]
+    EntityMapping = Any  # type: ignore[assignment]
+    WidgetType = Any  # type: ignore[assignment]
 
 logger = logging.getLogger(__name__)
 

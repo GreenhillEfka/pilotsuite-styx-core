@@ -276,6 +276,8 @@ class TimeOfDayModuleExtended:
         """Calculate precise sun times using astronomical formulas."""
         lat_rad = math.radians(location.latitude)
         
+        date_str = date.strftime("%Y-%m-%d")
+
         # Day of year
         day_of_year = date.timetuple().tm_yday
         

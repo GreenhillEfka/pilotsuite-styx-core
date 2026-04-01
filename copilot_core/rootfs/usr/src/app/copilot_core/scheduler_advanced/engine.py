@@ -91,14 +91,26 @@ class CronExpression:
         return values
     
     def matches(self, dt: datetime) -> bool:
-        """Check if datetime matches cron expression."""
-        return (
-            dt.minute in self.minute and
-            dt.hour in self.hour and
-            dt.day in self.day and
-            dt.month in self.month and
-            dt.weekday() in self.weekday
-        )
+        """Check if datetime matches cron expression.
+
+        Cron semantics treat day-of-month and day-of-week as an OR when both are
+        explicitly restricted. When either field is a wildcard, the other field
+        must match normally.
+        """
+        minute_match = dt.minute in self.minute
+        hour_match = dt.hour in self.hour
+        month_match = dt.month in self.month
+        day_match = dt.day in self.day
+        weekday_match = dt.weekday() in self.weekday
+
+        full_day = set(range(1, 32))
+        full_weekday = set(range(0, 7))
+        if self.day != full_day and self.weekday != full_weekday:
+            day_component_match = day_match or weekday_match
+        else:
+            day_component_match = day_match and weekday_match
+
+        return minute_match and hour_match and month_match and day_component_match
     
     def next_run(self, after: datetime) -> datetime:
         """Calculate next run time after given datetime."""
@@ -226,6 +238,8 @@ class SchedulerEngine:
             self._jobs[job_id] = job
             self._job_history[job_id] = []
             self._stats["total_jobs"] += 1
+            if group:
+                self._stats["by_group"].setdefault(group, 0)
         
         logger.info("Cron job scheduled: %s (%s)", name, cron_expression)
         
@@ -261,6 +275,8 @@ class SchedulerEngine:
             self._jobs[job_id] = job
             self._job_history[job_id] = []
             self._stats["total_jobs"] += 1
+            if group:
+                self._stats["by_group"].setdefault(group, 0)
         
         logger.info("Interval job scheduled: %s (%ds)", name, interval_seconds)
         
@@ -294,6 +310,8 @@ class SchedulerEngine:
             self._jobs[job_id] = job
             self._job_history[job_id] = []
             self._stats["total_jobs"] += 1
+            if group:
+                self._stats["by_group"].setdefault(group, 0)
         
         logger.info("One-time job scheduled: %s (%s)", name, run_at)
         

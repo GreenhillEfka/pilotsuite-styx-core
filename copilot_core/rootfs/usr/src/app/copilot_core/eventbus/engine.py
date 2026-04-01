@@ -82,6 +82,7 @@ class Subscription:
     subscription_id: str
     subscriber_id: str
     event_types: List[str]  # Empty = all events
+    handler: Optional[Callable[[Event], None]] = None
     filter_expr: Optional[str] = None  # Filter expression
     priority_filter: Optional[EventPriority] = None
     active: bool = True
@@ -137,7 +138,8 @@ class EventBusEngine:
                priority: EventPriority = EventPriority.NORMAL,
                correlation_id: Optional[str] = None,
                metadata: Optional[Dict[str, Any]] = None,
-               expires_at: Optional[str] = None) -> str:
+               expires_at: Optional[str] = None,
+               max_retries: int = 3) -> str:
         """Publish an event to the bus."""
         with self._lock:
             event_id = f"evt_{uuid.uuid4().hex[:12]}"
@@ -151,6 +153,7 @@ class EventBusEngine:
                 correlation_id=correlation_id,
                 metadata=metadata or {},
                 expires_at=expires_at,
+                max_retries=max_retries,
             )
             
             self._events[event_id] = event
@@ -165,9 +168,6 @@ class EventBusEngine:
             
             # Trim queue if needed
             self._trim_queue()
-            
-            # Process immediately
-            self._dispatch_event(event)
             
             logger.debug("Event published: %s (%s)", event_type, event_id)
             
@@ -185,6 +185,7 @@ class EventBusEngine:
                 subscription_id=subscription_id,
                 subscriber_id=subscriber_id,
                 event_types=event_types,
+                handler=handler,
                 filter_expr=filter_expr,
                 priority_filter=priority_filter,
             )
@@ -217,10 +218,14 @@ class EventBusEngine:
             subscription.active = False
             
             # Remove handlers
-            for event_type in subscription.event_types:
-                if event_type in self._handlers:
-                    # Remove handler (simplified - in production use weak refs)
-                    pass
+            handler = subscription.handler
+            if handler is not None:
+                handler_keys = subscription.event_types or ["*"]
+                for event_type in handler_keys:
+                    if event_type in self._handlers:
+                        self._handlers[event_type] = [h for h in self._handlers[event_type] if h is not handler]
+                        if not self._handlers[event_type]:
+                            del self._handlers[event_type]
             
             del self._subscriptions[subscription_id]
             
@@ -253,22 +258,19 @@ class EventBusEngine:
         event_type = event.event_type
         
         # Get handlers for specific type
-        handlers = self._handlers.get(event_type, [])
+        handlers = list(self._handlers.get(event_type, []))
         
-        # Get handlers for all events
+        # Get handlers for all events without mutating the registered handler list
         handlers.extend(self._handlers.get("*", []))
         
         # Get handlers for pattern matches
         for pattern_type, pattern_handlers in self._handlers.items():
-            if pattern_type.endswith("*") and event_type.startswith(pattern_type[:-1]):
+            if pattern_type != "*" and pattern_type.endswith("*") and event_type.startswith(pattern_type[:-1]):
                 handlers.extend(pattern_handlers)
         
         # Call handlers
         for handler in handlers:
-            try:
-                handler(event)
-            except Exception as exc:
-                logger.exception("Handler failed for event %s: %s", event.event_id, exc)
+            handler(event)
     
     def _process_event(self, event: Event) -> None:
         """Process a single event."""
@@ -471,6 +473,11 @@ class EventBusEngine:
                 self._events.clear()
                 for q in self._priority_queues.values():
                     q.clear()
+                self._stats["total_events"] = 0
+                self._stats["processed_events"] = 0
+                self._stats["failed_events"] = 0
+                self._stats["dead_letter_count"] = 0
+                self._stats["by_type"] = {}
             
             return count
     

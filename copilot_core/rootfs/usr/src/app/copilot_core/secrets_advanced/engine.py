@@ -96,6 +96,7 @@ class Secret:
             "status": self.status.value,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
+            "rotated_at": self.rotated_at,
             "expires_at": self.expires_at,
             "rotation_interval_days": self.rotation_interval_days,
             "access_count": self.access_count,
@@ -209,20 +210,23 @@ class SecretManagerEngine:
                      rotation_interval_days: Optional[int] = None,
                      metadata: Optional[Dict[str, Any]] = None,
                      tags: Optional[Set[str]] = None,
-                     created_by: str = "system") -> str:
+                     created_by: str = "system",
+                     created_at: Optional[str] = None) -> str:
         """Create a new secret."""
         secret_id = f"sec_{uuid.uuid4().hex[:16]}"
         
         encrypted = self._encrypt(value)
         value_hash = self._hash_value(value)
         
-        now = datetime.now(timezone.utc).isoformat()
+        now = created_at or datetime.now(timezone.utc).isoformat()
         
         secret = Secret(
             secret_id=secret_id,
             name=name,
             secret_type=secret_type,
             encrypted_value=encrypted,
+            created_at=now,
+            updated_at=now,
             expires_at=expires_at,
             rotation_interval_days=rotation_interval_days,
             metadata=metadata or {},

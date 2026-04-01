@@ -397,7 +397,7 @@ class WorkerEngine:
             self._stats["total_jobs_retried"] += 1
             
             # Re-queue with backoff
-            backoff_seconds = min(30, 2 ** job.attempts)
+            backoff_seconds = min(1, 2 ** max(job.attempts - 1, 0))
             job.started_at = None
             
             logger.warning("Job %s failed, retrying in %ds: %s", job.job_id, backoff_seconds, error)

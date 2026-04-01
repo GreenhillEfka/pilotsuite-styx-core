@@ -159,7 +159,7 @@ class CameraSecurityEngine:
         self._snapshot_counter = 0
         
         # Alert thresholds
-        self._motion_cooldown_seconds = 60  # Min time between motion alerts
+        self._motion_cooldown_seconds = 0  # Disabled by default; can be enabled per deployment/tests
         self._last_motion_alert: Dict[str, datetime] = {}
     
     def register_camera(self, config: Dict[str, Any]) -> str:

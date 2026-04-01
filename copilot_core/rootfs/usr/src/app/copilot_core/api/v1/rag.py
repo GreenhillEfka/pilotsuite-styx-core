@@ -30,7 +30,16 @@ from copilot_core.api.security import validate_token
 from copilot_core.security.rate_limiter import get_rate_limiter, rate_limit
 from copilot_core.rag.bm25 import BM25Config, BM25Document, BM25Hit, BM25SqliteIndex
 from copilot_core.rag.hybrid_search import FusedHit, RankedHit, reciprocal_rank_fusion
-from copilot_core.rag.searxng_client import SearXNGClient, SearXNGResult, get_searxng_client
+try:
+    from copilot_core.rag.searxng_client import SearXNGClient, SearXNGResult, get_searxng_client
+except ModuleNotFoundError as exc:  # optional aiohttp dependency in tests/minimal envs
+    if exc.name != "aiohttp":
+        raise
+    SearXNGClient = Any  # type: ignore[assignment]
+    SearXNGResult = Any  # type: ignore[assignment]
+
+    def get_searxng_client(*args: Any, **kwargs: Any):
+        raise RuntimeError("aiohttp is required for SearXNG client support")
 from copilot_core.rag.query_router import classify_query, QueryType
 from copilot_core.cache import get_rag_cache
 

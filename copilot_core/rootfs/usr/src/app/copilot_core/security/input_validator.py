@@ -147,7 +147,7 @@ class InputValidator:
             # Outside request context or content_length not available
             return True, None
     
-    def check_sql_injection(self, value: str) -> Tuple[bool, Optional[str]]:
+    def _check_sql_injection_pattern(self, value: str) -> Tuple[bool, Optional[str]]:
         """Check for SQL injection patterns.
         
         Args:
@@ -166,7 +166,7 @@ class InputValidator:
         
         return True, None
     
-    def check_xss(self, value: str) -> Tuple[bool, Optional[str]]:
+    def _check_xss_pattern(self, value: str) -> Tuple[bool, Optional[str]]:
         """Check for XSS patterns.
         
         Args:
@@ -185,7 +185,7 @@ class InputValidator:
         
         return True, None
     
-    def check_path_traversal(self, value: str) -> Tuple[bool, Optional[str]]:
+    def _check_path_traversal_pattern(self, value: str) -> Tuple[bool, Optional[str]]:
         """Check for path traversal patterns.
         
         Args:
@@ -229,19 +229,19 @@ class InputValidator:
         
         # Check SQL injection
         if "sql" in checks and self.check_sql_injection:
-            safe, pattern = self.check_sql_injection(value)
+            safe, pattern = self._check_sql_injection_pattern(value)
             if not safe:
                 return False, f"Potentially dangerous SQL pattern detected in '{field_name}'"
         
         # Check XSS
         if "xss" in checks and self.check_xss:
-            safe, pattern = self.check_xss(value)
+            safe, pattern = self._check_xss_pattern(value)
             if not safe:
                 return False, f"Potentially dangerous XSS pattern detected in '{field_name}'"
         
         # Check path traversal
         if "path" in checks and self.check_path_traversal:
-            safe, pattern = self.check_path_traversal(value)
+            safe, pattern = self._check_path_traversal_pattern(value)
             if not safe:
                 return False, f"Potentially dangerous path traversal pattern detected in '{field_name}'"
         

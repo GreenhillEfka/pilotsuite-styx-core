@@ -10,7 +10,7 @@ from copilot_core.timeofday.timeofday_extended import (
     MoonPhase,
     create_time_of_day_module_extended,
 )
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 
 class TestTwilightType:
@@ -509,8 +509,9 @@ class TestTimeOfDayModuleExtended:
         module = TimeOfDayModuleExtended()
         
         # Generate many dates
+        base_date = datetime(2025, 1, 1, tzinfo=timezone.utc)
         for i in range(150):
-            date = datetime(2025, 1, 1 + i, tzinfo=timezone.utc)
+            date = base_date + timedelta(days=i)
             module.get_moon_data(at_date=date)
         
         # Cache should be limited
@@ -522,8 +523,9 @@ class TestTimeOfDayModuleExtended:
         module.set_location("zone_1", 52.52, 13.41)
         
         # Generate many dates
+        base_date = datetime(2025, 1, 1, tzinfo=timezone.utc)
         for i in range(150):
-            date = datetime(2025, 1, 1 + i, tzinfo=timezone.utc)
+            date = base_date + timedelta(days=i)
             module.get_sun_times("zone_1", at_date=date)
         
         # Cache should be limited

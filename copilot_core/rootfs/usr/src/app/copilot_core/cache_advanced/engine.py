@@ -85,15 +85,17 @@ class CacheEngine:
     """Advanced cache engine."""
     
     def __init__(self, max_size: int = 10000,
-                 eviction_strategy: EvictionStrategy = EvictionStrategy.LRU,
+                 eviction_strategy: EvictionStrategy | str = EvictionStrategy.LRU,
                  default_ttl_seconds: int = 3600):
         self._max_size = max_size
+        if isinstance(eviction_strategy, str):
+            eviction_strategy = EvictionStrategy(eviction_strategy.lower())
         self._eviction_strategy = eviction_strategy
         self._default_ttl = default_ttl_seconds
         
         self._cache: OrderedDict[str, CacheEntry] = OrderedDict()
         self._tag_index: Dict[str, set] = {}  # tag -> set of keys
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
         
         # Statistics
         self._stats = {

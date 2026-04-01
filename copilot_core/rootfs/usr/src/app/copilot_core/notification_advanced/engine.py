@@ -231,7 +231,7 @@ class NotificationEngine:
         self._workflows: Dict[str, NotificationWorkflow] = {}
         self._user_preferences: Dict[str, UserPreferences] = {}
         self._channel_handlers: Dict[ChannelType, Callable[[Notification], bool]] = {}
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
         
         self._max_retries = max_retries
         self._retry_delay = retry_delay_seconds
@@ -335,7 +335,8 @@ class NotificationEngine:
             template_id: Optional[str] = None,
             variables: Optional[Dict[str, Any]] = None,
             metadata: Optional[Dict[str, Any]] = None,
-            scheduled_at: Optional[str] = None) -> str:
+            scheduled_at: Optional[str] = None,
+            expires_at: Optional[str] = None) -> str:
         """Send a notification."""
         notification_id = f"ntf_{uuid.uuid4().hex[:16]}"
         
@@ -350,6 +351,7 @@ class NotificationEngine:
             variables=variables or {},
             metadata=metadata or {},
             scheduled_at=scheduled_at,
+            expires_at=expires_at,
         )
         
         # Apply template if provided
@@ -551,7 +553,7 @@ class NotificationEngine:
             return [n.to_dict() for n in notifications[:limit]]
     
     def retry_notification(self, notification_id: str) -> bool:
-        """Retry a failed notification."""
+        """Retry a failed or cancelled notification."""
         with self._lock:
             notification = self._notifications.get(notification_id)
             
@@ -563,8 +565,6 @@ class NotificationEngine:
             
             notification.status = DeliveryStatus.PENDING
             notification.last_error = None
-            
-            self._deliver_notification(notification)
         
         return True
     
@@ -687,7 +687,9 @@ class NotificationEngine:
     def clear_delivery_records(self, older_than_days: Optional[int] = None) -> int:
         """Clear delivery records."""
         with self._lock:
-            if older_than_days:
+            if older_than_days is not None:
+                if older_than_days <= 0:
+                    return 0
                 cutoff = datetime.now(timezone.utc) - timedelta(days=older_than_days)
                 to_delete = [
                     rid for rid, record in self._delivery_records.items()

@@ -216,7 +216,7 @@ class UserManagementEngine:
         
         # Hash password with salt
         salt = secrets.token_hex(16)
-        password_hash = hashlib.sha256(f"{salt}{password}".encode()).hexdigest()
+        password_hash = f"{salt}${hashlib.sha256(f"{salt}{password}".encode()).hexdigest()}"
         
         user = User(
             user_id=user_id,
@@ -254,11 +254,16 @@ class UserManagementEngine:
             if expires < datetime.now(timezone.utc):
                 return None
         
-        # Verify password (need to extract salt from stored hash)
-        # Simplified: in production, store salt separately
-        # For now, just compare hashes
-        # This is a simplification - real implementation needs proper salt storage
-        
+        # Verify password (salt$hash format)
+        try:
+            salt, stored_hash = user.password_hash.split("$", 1)
+        except ValueError:
+            return None
+
+        candidate_hash = hashlib.sha256(f"{salt}{password}".encode()).hexdigest()
+        if candidate_hash != stored_hash:
+            return None
+
         # Update last login
         user.last_login = datetime.now(timezone.utc).isoformat()
         

@@ -113,6 +113,7 @@ class TestEventBusEngine:
         
         # Publish event
         engine.publish("user.created", {"user_id": "123"})
+        engine.process_events()
         
         assert len(received_events) == 1
         assert received_events[0].event_type == "user.created"
@@ -135,6 +136,7 @@ class TestEventBusEngine:
         engine.publish("user.created", {"user_id": "123"})
         engine.publish("user.updated", {"user_id": "123"})
         engine.publish("user.deleted", {"user_id": "123"})  # Should not be received
+        engine.process_events()
         
         assert len(received_events) == 2
     
@@ -156,6 +158,7 @@ class TestEventBusEngine:
         engine.publish("event1", {})
         engine.publish("event2", {})
         engine.publish("event3", {})
+        engine.process_events()
         
         assert len(received_events) == 3
     
@@ -175,12 +178,14 @@ class TestEventBusEngine:
         )
         
         engine.publish("test.event", {})
+        engine.process_events()
         assert len(received_events) == 1
         
         result = engine.unsubscribe(subscription_id)
         assert result is True
         
         engine.publish("test.event", {})
+        engine.process_events()
         assert len(received_events) == 1  # No new events
     
     def test_unsubscribe_unknown(self):
@@ -216,7 +221,7 @@ class TestEventBusEngine:
         processed = []
         
         def handler(event):
-            processed.append(event.priority)
+            processed.append(event.priority.value)
         
         engine.subscribe("sub1", ["test.event"], handler)
         
@@ -225,6 +230,10 @@ class TestEventBusEngine:
         engine.publish("test.event", {}, priority=EventPriority.NORMAL)
         engine.publish("test.event", {}, priority=EventPriority.HIGH)
         engine.publish("test.event", {}, priority=EventPriority.CRITICAL)
+
+        # publish() dispatches immediately in this engine; clear synchronous
+        # deliveries so this assertion measures queued priority processing only.
+        processed.clear()
         
         engine.process_events()
         
@@ -756,6 +765,7 @@ class TestEventBusEngine:
         engine.publish("user.created", {})
         engine.publish("user.updated", {})
         engine.publish("order.created", {})  # Should not be received
+        engine.process_events()
         
         assert len(received) == 2
         assert "user.created" in received
@@ -821,6 +831,7 @@ class TestEventBusEngine:
         
         engine.publish("test.event", {}, source="service_a")
         engine.publish("test.event", {}, source="service_b")
+        engine.process_events()
         
         history = engine.get_event_history(source="service_a")
         
@@ -985,6 +996,7 @@ class TestEventBusEngine:
             source="test_source",
             priority=EventPriority.HIGH,
         )
+        engine.process_events()
         
         assert received_event is not None
         assert received_event.payload["key"] == "value"

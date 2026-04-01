@@ -16,6 +16,7 @@ from __future__ import annotations
 import logging
 import hashlib
 import threading
+from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional, Set, Union
@@ -262,7 +263,8 @@ class FeatureFlagsEngine:
     
     def get_flag(self, flag_id: str) -> Optional[FeatureFlag]:
         """Get flag by ID."""
-        return self._flags.get(flag_id)
+        flag = self._flags.get(flag_id)
+        return deepcopy(flag) if flag is not None else None
     
     def list_flags(self, enabled: Optional[bool] = None,
                   flag_type: Optional[FlagType] = None) -> List[FeatureFlag]:
@@ -276,7 +278,7 @@ class FeatureFlagsEngine:
             if flag_type is not None:
                 flags = [f for f in flags if f.flag_type == flag_type]
             
-            return flags
+            return deepcopy(flags)
     
     def evaluate(self, flag_id: str, user_id: Optional[str] = None,
                 context: Optional[Dict[str, Any]] = None,
@@ -306,7 +308,11 @@ class FeatureFlagsEngine:
         self._stats["total_evaluations"] += 1
         self._stats["by_flag"][flag_id] = self._stats["by_flag"].get(flag_id, 0) + 1
         
-        if result.flag_enabled:
+        effective_enabled = result.flag_enabled
+        if flag.flag_type == FlagType.BOOLEAN:
+            effective_enabled = effective_enabled and bool(result.value)
+
+        if effective_enabled:
             self._stats["enabled_evaluations"] += 1
         else:
             self._stats["disabled_evaluations"] += 1
@@ -362,6 +368,27 @@ class FeatureFlagsEngine:
                 flag_enabled=False,
             )
         
+        # Variant flags resolve to a concrete variant once the common
+        # enable/schedule/dependency/exclusion gates are satisfied.
+        if flag.flag_type == FlagType.VARIANT:
+            if flag.rollout_strategy == RolloutStrategy.USER_TARGETING:
+                if user_id and user_id in flag.target_users:
+                    return self._evaluate_variant(flag, user_id)
+                return EvaluationResult(
+                    flag_id=flag.flag_id,
+                    value=flag.default_value,
+                    reason="user_not_targeted",
+                    flag_enabled=False,
+                )
+            if flag.rollout_strategy == RolloutStrategy.PERCENTAGE and not self._check_percentage(flag, user_id):
+                return EvaluationResult(
+                    flag_id=flag.flag_id,
+                    value=flag.default_value,
+                    reason="percentage_rollout",
+                    flag_enabled=False,
+                )
+            return self._evaluate_variant(flag, user_id)
+
         # Check rollout strategy
         if flag.rollout_strategy == RolloutStrategy.NONE:
             return EvaluationResult(

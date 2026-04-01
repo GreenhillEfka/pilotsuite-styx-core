@@ -17,6 +17,7 @@ import logging
 import os
 import json
 import threading
+from copy import deepcopy
 import copy
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -183,7 +184,6 @@ class ConfigurationEngine:
             if key in self._config:
                 old_value = self._config[key].value
                 change_type = ChangeType.UPDATED
-                self._config[key].version += 1
             else:
                 self._history[key] = []
             
@@ -220,6 +220,8 @@ class ConfigurationEngine:
                      is_secret: bool = False,
                      description: str = "") -> None:
         """Internal set without locking."""
+        value = deepcopy(value)
+
         # Infer type
         value_type = self._infer_type(value)
         
@@ -227,11 +229,15 @@ class ConfigurationEngine:
         if key in self._schema:
             value_type = self._schema[key].value_type
         
+        previous = self._config.get(key)
+        next_version = previous.version + 1 if previous else 1
+
         self._config[key] = ConfigValue(
             key=key,
             value=value,
             value_type=value_type,
             source=source,
+            version=next_version,
             is_secret=is_secret,
             description=description or (self._schema.get(key, ConfigSchema(key, value_type)).description),
         )
@@ -318,7 +324,7 @@ class ConfigurationEngine:
             self._stats["total_gets"] += 1
             
             if key in self._config:
-                return self._config[key].value
+                return deepcopy(self._config[key].value)
             
             # Check schema default
             if key in self._schema and self._schema[key].default is not None:
@@ -332,7 +338,7 @@ class ConfigurationEngine:
             self._stats["total_gets"] += 1
             
             if key in self._config:
-                return self._config[key]
+                return deepcopy(self._config[key])
             
             return None
     
@@ -404,18 +410,13 @@ class ConfigurationEngine:
         count = 0
         
         if mapping:
-            # Use explicit mapping
+            # Use explicit mapping. Preserve the raw string value unless the
+            # caller/schema chooses to coerce it later.
             for key, env_var in mapping.items():
                 value = os.environ.get(env_var)
                 if value is not None:
-                    # Try to parse JSON for complex types
-                    try:
-                        parsed = json.loads(value)
-                        if self.set(key, parsed, "env"):
-                            count += 1
-                    except json.JSONDecodeError:
-                        if self.set(key, value, "env"):
-                            count += 1
+                    if self.set(key, value, "env"):
+                        count += 1
         else:
             # Auto-discover with prefix
             for env_var, value in os.environ.items():

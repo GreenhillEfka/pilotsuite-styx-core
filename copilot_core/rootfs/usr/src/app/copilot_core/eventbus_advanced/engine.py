@@ -163,7 +163,7 @@ class EventBusEngine:
         self._dead_letter_queue: List[Event] = []
         self._event_store: Dict[str, Event] = {}
         self._delivery_records: Dict[str, DeliveryRecord] = {}
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
         self._running = False
         self._workers: List[threading.Thread] = []
         
@@ -357,25 +357,27 @@ class EventBusEngine:
         count = 0
         
         with self._lock:
-            for event in self._event_store.values():
-                if event.topic != topic:
-                    continue
-                
-                if start_time and event.created_at < start_time:
-                    continue
-                
-                if end_time and event.created_at > end_time:
-                    continue
-                
-                self.publish(
-                    topic=event.topic,
-                    event_type=event.event_type,
-                    payload=event.payload,
-                    priority=event.priority,
-                    source="replay",
-                )
-                
-                count += 1
+            events = list(self._event_store.values())
+
+        for event in events:
+            if event.topic != topic:
+                continue
+            
+            if start_time and event.created_at < start_time:
+                continue
+            
+            if end_time and event.created_at > end_time:
+                continue
+            
+            self.publish(
+                topic=event.topic,
+                event_type=event.event_type,
+                payload=event.payload,
+                priority=event.priority,
+                source="replay",
+            )
+            
+            count += 1
         
         logger.info("Replayed %d events for topic %s", count, topic)
         
@@ -603,7 +605,9 @@ class EventBusEngine:
     def clear_event_store(self, older_than_days: Optional[int] = None) -> int:
         """Clear event store."""
         with self._lock:
-            if older_than_days:
+            if older_than_days is not None:
+                if older_than_days <= 0:
+                    return 0
                 cutoff = datetime.now(timezone.utc) - timedelta(days=older_than_days)
                 to_delete = [
                     eid for eid, event in self._event_store.items()
@@ -622,7 +626,9 @@ class EventBusEngine:
     def clear_delivery_records(self, older_than_days: Optional[int] = None) -> int:
         """Clear delivery records."""
         with self._lock:
-            if older_than_days:
+            if older_than_days is not None:
+                if older_than_days <= 0:
+                    return 0
                 cutoff = datetime.now(timezone.utc) - timedelta(days=older_than_days)
                 to_delete = [
                     rid for rid, record in self._delivery_records.items()

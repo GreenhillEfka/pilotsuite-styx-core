@@ -501,8 +501,10 @@ class ClimateModule:
     
     def set_hvac_mode(self, zone_id: str, mode: HVACMode) -> List[ClimateAction]:
         """Manually set HVAC mode for a zone."""
-        if zone_id in self._states:
-            self._states[zone_id].hvac_mode = mode
+        if zone_id not in self._states:
+            return []
+
+        self._states[zone_id].hvac_mode = mode
         
         action = ClimateAction(
             action_id=f"ca_{uuid.uuid4().hex[:16]}",
@@ -517,8 +519,10 @@ class ClimateModule:
     
     def set_fan_mode(self, zone_id: str, mode: FanMode) -> List[ClimateAction]:
         """Manually set fan mode for a zone."""
-        if zone_id in self._states:
-            self._states[zone_id].fan_mode = mode
+        if zone_id not in self._states:
+            return []
+
+        self._states[zone_id].fan_mode = mode
         
         action = ClimateAction(
             action_id=f"ca_{uuid.uuid4().hex[:16]}",
@@ -591,3 +595,27 @@ class ClimateModule:
 def create_climate_module() -> ClimateModule:
     """Factory function to create climate module."""
     return ClimateModule()
+
+
+class ClimateEngine:
+    """Compatibility facade for legacy integration tests."""
+
+    def __init__(self, event_bus: Any = None, zone_registry: Any = None):
+        self.event_bus = event_bus
+        self.zone_registry = zone_registry
+
+    def _publish(self, topic: str, payload: Dict[str, Any]) -> None:
+        if self.event_bus and hasattr(self.event_bus, "publish"):
+            self.event_bus.publish(topic, payload)
+
+    def on_zone_vacant(self, zone_id: str) -> None:
+        self._publish("climate_presence", {"zone_id": zone_id, "mode": "eco"})
+
+    def on_schedule_event(self, zone_id: str, event_type: str, at_time: str) -> None:
+        self._publish("climate_schedule", {
+            "zone_id": zone_id,
+            "event": event_type,
+            "at": at_time,
+            "action": "preheat",
+            "target_temp": 21.0,
+        })

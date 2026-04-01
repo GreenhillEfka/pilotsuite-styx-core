@@ -726,7 +726,6 @@ class ZoneAutomationController:
                 logger.exception("MusikwolkeBridge.execute_actions failed for zone '%s'", zone_id)
 
         return actions
-
     def on_presence_cleared(self, zone_id: str) -> dict[str, Any]:
         """Handle presence cleared in a zone.
 
@@ -1267,3 +1266,17 @@ class ZoneAutomationController:
             "summary": dashboard["summary"],
             "evaluated_at": time.time(),
         }
+
+
+class ZoneAutomationHub:
+    """Compatibility facade for legacy integration tests."""
+
+    def __init__(self, event_bus: Any = None, zone_registry: Any = None):
+        self.event_bus = event_bus
+        self.zone_registry = zone_registry
+        self._zone_states: Dict[str, str] = {}
+
+    def update_zone_state(self, zone_id: str, state: str) -> None:
+        self._zone_states[zone_id] = state
+        if self.event_bus and hasattr(self.event_bus, "emit"):
+            self.event_bus.emit("zone_state_updated", {"zone_id": zone_id, "state": state})

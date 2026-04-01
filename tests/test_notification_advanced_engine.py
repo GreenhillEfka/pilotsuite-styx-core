@@ -295,7 +295,7 @@ class TestNotificationEngine:
     
     def test_create_template(self):
         """Test creating template."""
-        engine = NotificationEngine()
+        engine = NotificationEngine(throttle_per_minute=0)
         
         template_id = engine.create_template(
             name="Welcome Email",
@@ -313,7 +313,7 @@ class TestNotificationEngine:
     
     def test_create_template_with_subject(self):
         """Test creating template with subject."""
-        engine = NotificationEngine()
+        engine = NotificationEngine(throttle_per_minute=0)
         
         template_id = engine.create_template(
             name="Alert",
@@ -544,7 +544,7 @@ class TestNotificationEngine:
     
     def test_retry_notification(self):
         """Test retrying notification."""
-        engine = NotificationEngine()
+        engine = NotificationEngine(throttle_per_minute=0)
         
         notification_id = engine.send(
             channel=ChannelType.EMAIL,
@@ -588,7 +588,7 @@ class TestNotificationEngine:
     
     def test_cancel_notification(self):
         """Test cancelling notification."""
-        engine = NotificationEngine()
+        engine = NotificationEngine(throttle_per_minute=0)
         
         notification_id = engine.send(
             channel=ChannelType.EMAIL,

@@ -221,6 +221,7 @@ class WorkflowEngine:
                 step_id=step_def.get("step_id", f"step_{uuid.uuid4().hex[:8]}"),
                 name=step_def.get("name", "Unnamed Step"),
                 step_type=StepType(step_def.get("step_type", "action")),
+                condition=step_def.get("condition"),
                 on_success=step_def.get("on_success"),
                 on_failure=step_def.get("on_failure"),
                 timeout_seconds=step_def.get("timeout_seconds", 300),

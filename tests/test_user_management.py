@@ -538,7 +538,7 @@ class TestUserManagementEngine:
         
         assert d["user_id"] == "user_test"
         assert d["username"] == "testuser"
-        assert d["password_hash"] not in d  # Should not be exposed
+        assert "password_hash" not in d  # Should not be exposed
         assert d["enabled"] is True
     
     def test_audit_log_to_dict(self):

@@ -377,12 +377,16 @@ class WeatherIntegrationEngine:
     def _parse_condition(self, condition_str: str) -> WeatherCondition:
         """Parse weather condition from string."""
         condition_lower = condition_str.lower()
-        
+
+        best_match: Optional[WeatherCondition] = None
+        best_length = -1
         for condition, keywords in self._condition_keywords.items():
-            if any(kw in condition_lower for kw in keywords):
-                return condition
-        
-        return WeatherCondition.UNKNOWN
+            for kw in keywords:
+                if kw in condition_lower and len(kw) >= best_length:
+                    best_match = condition
+                    best_length = len(kw)
+
+        return best_match or WeatherCondition.UNKNOWN
     
     def _parse_datetime(self, value: Any) -> datetime:
         """Parse datetime from various formats."""

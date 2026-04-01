@@ -315,23 +315,36 @@ async def get_cache_stats() -> dict:
     try:
         cache = get_api_cache()
         metrics = await cache.metrics.get_stats()
+        connection = await cache.redis.get_stats() if hasattr(cache.redis, "get_stats") else {}
         
-        # Get key count from Redis
+        # Get key count from Redis or the in-memory fallback store.
         redis_client = cache.redis
         total_keys = 0
         try:
-            keys = await redis_client.keys("entity:*")
-            total_keys = len(keys)
+            if getattr(redis_client, "is_connected", True) is False:
+                fallback_store = getattr(getattr(redis_client, "_fallback", None), "_store", None)
+                total_keys = len(fallback_store) if isinstance(fallback_store, dict) else metrics.get("total", 0)
+            else:
+                keys_method = getattr(redis_client, "keys", None)
+                if callable(keys_method):
+                    keys = await keys_method("entity:*")
+                    total_keys = len(keys)
+                else:
+                    total_keys = metrics.get("total", 0)
         except Exception:
             # Fallback if Redis unavailable
-            total_keys = metrics.get("total", 0)
+            fallback_store = getattr(getattr(redis_client, "_fallback", None), "_store", None)
+            total_keys = len(fallback_store) if isinstance(fallback_store, dict) else metrics.get("total", 0)
         
         return {
             "total_keys": total_keys,
             "hits": metrics.get("hits", 0),
             "misses": metrics.get("misses", 0),
+            "total": metrics.get("total", 0),
             "hit_rate_pct": round(metrics.get("hit_ratio", 0) * 100, 2),
-            "healthy": True,
+            "hit_ratio": metrics.get("hit_ratio", 0),
+            "connection": connection,
+            "healthy": bool(connection.get("connected", False) or connection.get("using_fallback", False) or connection.get("status") == "disconnected"),
         }
     except Exception as e:
         return {

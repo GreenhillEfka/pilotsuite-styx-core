@@ -171,7 +171,7 @@ class HealthEngine:
     
     def register_check(self, name: str, check_type: CheckType,
                       handler: Callable[[], HealthCheckResult],
-                      critical: bool = True,
+                      critical: bool = False,
                       timeout_seconds: float = 10.0,
                       interval_seconds: int = 30,
                       dependencies: Optional[List[str]] = None,

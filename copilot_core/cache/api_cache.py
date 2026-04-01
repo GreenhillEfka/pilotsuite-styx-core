@@ -305,19 +305,21 @@ async def get_cache_stats() -> dict:
     # Get connection stats
     connection = await cache.redis.get_stats()
     
-    # Try to get key count from Redis
+    # Try to get key count from Redis or the fallback store
     total_keys = 0
     try:
-        if cache.redis.is_connected and cache.redis._redis:
-            import redis.asyncio as redis
+        if getattr(cache.redis, "is_connected", True) is False:
+            fallback_store = getattr(getattr(cache.redis, "_fallback", None), "_store", None)
+            total_keys = len(fallback_store) if isinstance(fallback_store, dict) else metrics.get("total", 0)
+        elif getattr(cache.redis, "_redis", None):
             keys = await cache.redis._redis.keys(f"{cache.redis.key_prefix}*")
             total_keys = len(keys)
         else:
-            # Fallback: estimate from in-memory store
-            total_keys = len(cache.redis._fallback._store)
+            total_keys = metrics.get("total", 0)
     except Exception as e:
         logger.debug(f"Could not get key count: {e}")
-        total_keys = len(cache.redis._fallback._store)
+        fallback_store = getattr(getattr(cache.redis, "_fallback", None), "_store", None)
+        total_keys = len(fallback_store) if isinstance(fallback_store, dict) else metrics.get("total", 0)
     
     return {
         "total_keys": total_keys,

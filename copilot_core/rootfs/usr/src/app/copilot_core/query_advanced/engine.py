@@ -21,6 +21,7 @@ from typing import Any, Dict, List, Optional, Callable, Set, Tuple, Union
 from enum import Enum
 import uuid
 import operator
+from copy import deepcopy
 
 logger = logging.getLogger(__name__)
 
@@ -211,7 +212,7 @@ class QueryEngine:
                  cache_ttl_seconds: int = 300):
         self._collections: Dict[str, List[Dict[str, Any]]] = {}
         self._cache: Dict[str, Tuple[QueryResult, datetime]] = {}
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
         self._cache_enabled = cache_enabled
         self._cache_ttl = cache_ttl_seconds
         
@@ -377,20 +378,21 @@ class QueryEngine:
     def _apply_sort(self, items: List[Dict[str, Any]],
                    sort_fields: List[SortField]) -> List[Dict[str, Any]]:
         """Apply sorting to items."""
-        def sort_key(item):
-            keys = []
-            for sf in sort_fields:
-                value = item.get(sf.field)
-                if value is None:
-                    value = "" if sf.order == SortOrder.ASC else chr(127)
-                keys.append(value)
-            return tuple(keys)
+
+        def field_sort_key(item: Dict[str, Any], sf: SortField):
+            value = item.get(sf.field)
+            # Keep None values sortable and stable by placing them before
+            # concrete values in ascending order and after them in descending
+            # order, matching the test expectations.
+            if value is None:
+                return (-1 if sf.order == SortOrder.ASC else 1, None)
+            return (0, value)
         
         # Sort by each field in reverse order (last field first)
         result = items.copy()
         for sf in reversed(sort_fields):
             reverse = sf.order == SortOrder.DESC
-            result.sort(key=lambda x: x.get(sf.field, ""), reverse=reverse)
+            result.sort(key=lambda x, sf=sf: field_sort_key(x, sf), reverse=reverse)
         
         return result
     
@@ -458,7 +460,7 @@ class QueryEngine:
                 age = (datetime.now(timezone.utc) - cached_at).total_seconds()
                 
                 if age < self._cache_ttl:
-                    return result
+                    return deepcopy(result)
                 else:
                     del self._cache[cache_key]
         
@@ -470,7 +472,7 @@ class QueryEngine:
             return
         
         with self._lock:
-            self._cache[cache_key] = (result, datetime.now(timezone.utc))
+            self._cache[cache_key] = (deepcopy(result), datetime.now(timezone.utc))
     
     def _invalidate_collection_cache(self, collection: str) -> None:
         """Invalidate cache for collection."""

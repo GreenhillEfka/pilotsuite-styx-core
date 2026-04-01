@@ -110,6 +110,7 @@ class EventBusEngine:
         self._event_history: List[Event] = []
         self._max_history_size = 10000
         self._dead_letter_retention_hours = dead_letter_retention_hours
+        self._max_retries = 3
         
         # Statistics
         self._stats = {
@@ -130,6 +131,7 @@ class EventBusEngine:
             source=source,
             payload=payload,
             priority=priority,
+            max_retries=self._max_retries,
             headers=headers or {},
         )
         
@@ -203,10 +205,17 @@ class EventBusEngine:
         return True
     
     def process_events(self, batch_size: int = 100) -> int:
-        """Process pending events."""
+        """Process pending events.
+
+        Only events that are already queued at the beginning of this call are
+        processed. Retries re-queued during processing are left for the next
+        invocation, which keeps retry cadence deterministic and prevents a
+        single failing event from being retried multiple times in one pass.
+        """
         processed = 0
+        pending_this_run = min(batch_size, len(self._queue))
         
-        while processed < batch_size and self._queue:
+        while processed < pending_this_run and self._queue:
             event = self._queue.popleft()
             
             if event.status != EventStatus.PENDING:

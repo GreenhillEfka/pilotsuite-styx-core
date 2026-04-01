@@ -171,10 +171,20 @@ class ModuleRegistry:
         health = registry.get_health("presence_module")
     """
     
-    def __init__(self):
+    def __init__(self, zone_registry: Any = None):
         self._modules: Dict[str, ModuleRegistration] = {}
         self._health_checks: Dict[str, Callable] = {}  # module_id -> health check function
         self._start_times: Dict[str, datetime] = {}
+        self._zone_registry = zone_registry
+        self._compat_inventory = [
+            {"module_id": "presence", "name": "presence", "type": ModuleType.SENSOR.value},
+            {"module_id": "light", "name": "light", "type": ModuleType.ACTUATOR.value},
+            {"module_id": "climate", "name": "climate", "type": ModuleType.ACTUATOR.value},
+            {"module_id": "humidity", "name": "humidity", "type": ModuleType.SENSOR.value},
+            {"module_id": "energy", "name": "energy", "type": ModuleType.LOGIC.value},
+            {"module_id": "timeofday", "name": "timeofday", "type": ModuleType.UTILITY.value},
+            {"module_id": "rules", "name": "rules", "type": ModuleType.LOGIC.value},
+        ]
         
         logger.info("ModuleRegistry initialized")
     
@@ -343,8 +353,10 @@ class ModuleRegistry:
         
         return results
     
-    def list_modules(self, enabled_only: bool = False) -> List[str]:
+    def list_modules(self, enabled_only: bool = False) -> List[Any]:
         """List all registered module IDs."""
+        if self._zone_registry is not None and not self._modules:
+            return list(self._compat_inventory)
         if enabled_only:
             return [
                 m for m, reg in self._modules.items()

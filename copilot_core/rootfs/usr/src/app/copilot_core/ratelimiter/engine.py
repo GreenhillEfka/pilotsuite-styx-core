@@ -100,7 +100,7 @@ class RateLimiterEngine:
         self._token_buckets: Dict[str, TokenBucket] = {}
         self._sliding_windows: Dict[str, List[str]] = {}  # key -> [timestamps]
         self._fixed_windows: Dict[str, WindowState] = {}
-        self._leaky_buckets: Dict[str, Tuple[int, str]] = {}  # key -> (water_level, last_update)
+        self._leaky_buckets: Dict[str, Tuple[float, str]] = {}  # key -> (water_level, last_update)
         self._lock = threading.RLock()
         
         # Statistics
@@ -247,7 +247,7 @@ class RateLimiterEngine:
             
             return RateLimitResult(
                 allowed=False,
-                remaining=0,
+                remaining=int(bucket.tokens),
                 reset_at=now_str,
                 retry_after_seconds=int(retry_seconds) + 1,
                 limit=max_tokens,
@@ -374,7 +374,7 @@ class RateLimiterEngine:
         leak_rate = config.max_requests / config.window_seconds
         
         if key not in self._leaky_buckets:
-            self._leaky_buckets[key] = (0, now_str)
+            self._leaky_buckets[key] = (0.0, now_str)
         
         water_level, last_update = self._leaky_buckets[key]
         
@@ -387,7 +387,7 @@ class RateLimiterEngine:
         if new_water_level + cost <= max_water:
             # Allow request
             new_water_level += cost
-            self._leaky_buckets[key] = (int(new_water_level), now_str)
+            self._leaky_buckets[key] = (new_water_level, now_str)
             
             remaining = int(max_water - new_water_level)
             
@@ -404,7 +404,7 @@ class RateLimiterEngine:
             )
         else:
             # Deny request
-            self._leaky_buckets[key] = (int(new_water_level), now_str)
+            self._leaky_buckets[key] = (new_water_level, now_str)
             
             # Retry when enough water has leaked
             excess = new_water_level + cost - max_water
@@ -505,14 +505,14 @@ class RateLimiterEngine:
             else:
                 # Default: clean up state older than max window
                 max_window = max((c.window_seconds for c in self._configs.values()), default=3600)
-                cutoff = now - timedelta(seconds=max_window * 2)
+                cutoff = now - timedelta(seconds=max_window)
             
             # Clean sliding windows
             for key, timestamps in list(self._sliding_windows.items()):
                 old_timestamps = [ts for ts in timestamps if datetime.fromisoformat(ts) >= cutoff]
                 if not old_timestamps:
                     del self._sliding_windows[key]
-                    removed += 1
+                    removed += len(timestamps)
                 elif len(old_timestamps) < len(timestamps):
                     self._sliding_windows[key] = old_timestamps
                     removed += len(timestamps) - len(old_timestamps)
