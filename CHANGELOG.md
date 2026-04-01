@@ -1,5 +1,16 @@
 # Changelog
 
+## [v15.3.25] - 2026-04-01
+
+### 🧩 Slice 15 — Multi-Zone Coordination Surface Delivery
+
+- `copilot_core.multizone.coordination_engine` wurde auf eine belastbare Slice-15-Surface gehärtet: Multi-Zone-Scenes und -Routines materialisieren jetzt kanonische `ZoneActionV1`-/`MultiZoneSceneV1`-/`MultiZoneRoutineV1`-Read-Models, Pending-Actions werden priorisiert ausgegeben und Konflikte bleiben als `MultiZoneConflictV1` nachvollziehbar erhalten.
+- Konflikterkennung/-auflösung arbeitet jetzt nicht mehr nur implizit innerhalb einzelner Tests, sondern über denselben Queue-Pfad wie die Runtime: widersprüchliche Kommandos auf derselben Entity werden erkannt, priority-basiert aufgelöst und in der Engine-Historie dokumentiert.
+- Neue REST-Surface `/api/v1/multizone/*` ergänzt: Scenes erstellen/aktivieren/deaktivieren, Routines erstellen/triggern/enable/disable, Pending-Actions, Konflikte und Stats laufen alle gegen dieselbe Engine-Instanz statt gegen parallele Hilfszustände.
+- Runtime-Registrierung ergänzt (`app.py`, `core_setup.py`), damit die Multi-Zone-Surface nicht nur im Test importierbar ist, sondern im echten Core-Bootpfad verfügbar bleibt.
+- Versionsartefakte (`VERSION`, `copilot_core/VERSION`, `copilot_core/config.yaml`, `copilot_core/manifest.json`, Runtime-VERSION) auf `15.3.25` harmonisiert.
+- Validiert mit: `pytest -q tests/test_multizone_coordination.py tests/test_multizone_blueprint_contract.py` → `20 passed`.
+
 ## [v15.3.24] - 2026-04-01
 
 ### 🧩 Slice 14 — Predictive Automation

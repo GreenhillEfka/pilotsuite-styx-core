@@ -196,6 +196,14 @@ def create_app() -> Flask:
     except Exception:
         logging.getLogger(__name__).exception("Failed to register Predictive Automation API blueprint")
 
+    # Multi-Zone Coordination API endpoints (/api/v1/multizone/*)
+    try:
+        from copilot_core.api.v1.multizone import multizone_bp
+        app.register_blueprint(multizone_bp)
+        logging.getLogger(__name__).info("Multi-Zone Coordination API registered")
+    except Exception:
+        logging.getLogger(__name__).exception("Failed to register Multi-Zone Coordination API blueprint")
+
     # Rate Limit Configuration API is registered via api_v1 blueprint
 
     # MCP REST API endpoints (/api/v1/mcp/*)

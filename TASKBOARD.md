@@ -613,21 +613,25 @@ Predict user intent and pre-emptively prepare automations.
 
 ## Slice 15 — Multi-Zone Coordination
 **Priority:** P2
-**Status:** not started
+**Status:** ✅ DONE (v15.3.25)
 
 **Goal**
 Coordinate actions across multiple zones (scenes, routines, events).
 
 ### Deliverables
-- [ ] cross-zone action coordination
-- [ ] scene composition (multi-zone scenes)
-- [ ] routine engine (time/event-triggered multi-zone actions)
-- [ ] conflict detection + resolution
+- [x] cross-zone action coordination
+- [x] scene composition (multi-zone scenes)
+- [x] routine engine (time/event-triggered multi-zone actions)
+- [x] conflict detection + resolution
 
 ### Acceptance criteria
 - multi-zone scenes work reliably
 - routines are easy to define
 - conflicts are detected and resolved gracefully
+
+**Commit:** `feat(multizone): deliver slice 15 coordination surface`
+**Tag:** v15.3.25
+**Tests:** `pytest -q tests/test_multizone_coordination.py tests/test_multizone_blueprint_contract.py` → `20 passed`
 
 ---
 
@@ -654,7 +658,7 @@ Coordinate actions across multiple zones (scenes, routines, events).
 16. **✅ Slice 104 — Zone Truth Revision Contract Repair** — Zone- und Entity-Revisionen folgen wieder deterministisch der globalen Topology-History; Root-Contract-Surface vollständig grün (`4369 passed, 4 skipped`)
 17. **✅ Slice 106 — Energy Optimization Surface Delivery** — Slice-13-Energiefläche jetzt mit echten Zone/Module-Summaries, Suggestion-/Budget-/Report-Surface und Root/Runtime-Parität; Slice-13-Contracts grün (`70/70`)
 
-**Next Exact Task:** **Slice 15 — Multi-Zone Coordination** starten: cross-zone action coordination, scene composition, routine engine und conflict detection implementieren.
+**Next Exact Task:** **Slice 15 Follow-up Hardening**: Multi-Zone-Scenes/Routines an truth-backed Proposal-/Action-Handoffs und scheduler-getriebene Runtime-Ausführung anbinden; zusätzlich API-/Execution-Contracts für echte Zone-/Module-Targets ergänzen.
 
 **After Refinement:** Root-Contract-Surface ist grün; Slice 13+ wieder als reguläre Forward-Slices aufnehmen
 
