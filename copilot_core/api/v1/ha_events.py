@@ -31,7 +31,7 @@ from copilot_core.homeassistant.event_handler import (
 
 logger = logging.getLogger(__name__)
 
-ha_events_bp = Blueprint("ha_events", __name__)
+ha_events_bp = Blueprint("ha_events", __name__, url_prefix="/api/v1/ha-events")
 
 # Global state
 _ws_client: Optional[HomeAssistantWebSocketClient] = None

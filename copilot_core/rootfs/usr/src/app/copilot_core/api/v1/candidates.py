@@ -5,7 +5,7 @@ from flask import Blueprint, current_app, jsonify, request
 from copilot_core.brain_graph.provider import get_graph_service
 from copilot_core.storage.candidates import CandidateStore, rank_score, generate_explanation
 
-bp = Blueprint("candidates", __name__, url_prefix="/candidates")
+bp = Blueprint("candidates", __name__, url_prefix="/api/v1/candidates")
 
 from copilot_core.api.security import validate_token as _validate_token
 

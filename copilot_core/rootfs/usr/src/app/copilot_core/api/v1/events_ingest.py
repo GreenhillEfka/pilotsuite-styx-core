@@ -20,7 +20,7 @@ from copilot_core.ingest.event_store import EventStore
 
 logger = logging.getLogger(__name__)
 
-bp = Blueprint("events_ingest", __name__)
+bp = Blueprint("events_ingest", __name__, url_prefix="/api/v1/events-ingest")
 
 # Singleton store – initialized on first request or by main.py
 _store: EventStore | None = None

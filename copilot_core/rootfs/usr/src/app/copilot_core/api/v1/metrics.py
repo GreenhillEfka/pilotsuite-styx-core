@@ -50,7 +50,7 @@ except ImportError:  # pragma: no cover - depends on optional runtime deps
 logger = logging.getLogger(__name__)
 
 # Create blueprint with relative prefix (will be nested under /api/v1)
-metrics_bp = Blueprint("metrics", __name__)
+metrics_bp = Blueprint("metrics", __name__, url_prefix="/api/v1/metrics")
 
 
 @metrics_bp.route("/metrics", methods=["GET"])

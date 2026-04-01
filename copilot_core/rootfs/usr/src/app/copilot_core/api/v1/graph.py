@@ -8,7 +8,7 @@ from flask import Blueprint, jsonify, make_response, request
 from copilot_core.brain_graph.provider import get_graph_service
 from copilot_core.performance import brain_graph_cache
 
-bp = Blueprint("graph", __name__, url_prefix="/graph")
+bp = Blueprint("graph", __name__, url_prefix="/api/v1/graph")
 
 from copilot_core.api.security import validate_token as _validate_token
 

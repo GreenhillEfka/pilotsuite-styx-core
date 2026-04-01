@@ -31,7 +31,13 @@ from flask import Blueprint, Request, jsonify, request
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
+from copilot_core.action_closure import get_action_closure_store
+from copilot_core.core.action_closure_read_model import build_action_closure_summary_read_model
+
 _LOGGER = logging.getLogger(__name__)
+
+_ACTION_CLOSURE_FAILURE_STATES = {"failed", "error", "blocked", "denied", "rejected", "cancelled"}
+_ACTION_CLOSURE_OPEN_STATES = {"accepted", "feedback_received", "queued", "pending", "scheduled", "awaiting_execution"}
 
 # Create blueprint
 bp = Blueprint("notifications", __name__, url_prefix="/notifications")
@@ -996,12 +1002,24 @@ def get_pending_notifications() -> tuple[dict[str, Any], int]:
     """
     manager = get_notification_manager()
     pending = [n for n in manager._notifications if not n.read]
-    
-    return jsonify({
+    response: dict[str, Any] = {
         "ok": True,
         "count": len(pending),
-        "notifications": [n.to_dict() for n in pending]
-    })
+        "notifications": [n.to_dict() for n in pending],
+    }
+
+    if _parse_bool_arg("include_action_closures"):
+        try:
+            since_revision = _parse_optional_int_arg("action_closure_since")
+        except ValueError as exc:
+            return jsonify({"ok": False, "error": str(exc)}), 400
+        response["action_closures"] = _build_action_closure_notification_digest(
+            zone_id=(request.args.get("zone_id") or "").strip() or None,
+            since_revision=since_revision,
+            recent_limit=max(1, min(10, int(request.args.get("recent_limit", "5")))),
+        )
+
+    return jsonify(response)
 
 
 @bp.route("/digest", methods=["GET"])
@@ -1017,11 +1035,23 @@ def get_notification_digest() -> tuple[dict[str, Any], int]:
     hours = float(request.args.get("hours", "24"))
     manager = get_notification_manager()
     digest = manager.get_digest(hours=hours)
-    
-    return jsonify({
+    response: dict[str, Any] = {
         "ok": True,
         "digest": digest
-    })
+    }
+
+    if _parse_bool_arg("include_action_closures"):
+        try:
+            since_revision = _parse_optional_int_arg("action_closure_since")
+        except ValueError as exc:
+            return jsonify({"ok": False, "error": str(exc)}), 400
+        response["digest"]["action_closures"] = _build_action_closure_notification_digest(
+            zone_id=(request.args.get("zone_id") or "").strip() or None,
+            since_revision=since_revision,
+            recent_limit=max(1, min(10, int(request.args.get("recent_limit", "5")))),
+        )
+
+    return jsonify(response)
 
 
 # Helper methods for NotificationManager
@@ -1087,6 +1117,85 @@ def _get_digest(self, hours: float = 24.0) -> dict[str, Any]:
 # Add methods to NotificationManager
 NotificationManager.get_stats = _get_stats  # type: ignore
 NotificationManager.get_digest = _get_digest  # type: ignore
+
+
+def _parse_bool_arg(name: str, default: bool = False) -> bool:
+    raw = (request.args.get(name) or "").strip().lower()
+    if not raw:
+        return default
+    return raw in {"1", "true", "yes", "on"}
+
+
+def _parse_optional_int_arg(name: str) -> int | None:
+    raw = (request.args.get(name) or "").strip()
+    if not raw:
+        return None
+    value = int(raw)
+    if value < 0:
+        raise ValueError(f"Invalid integer for {name}: {raw}")
+    return value
+
+
+def _build_action_closure_follow_up(entry: dict[str, Any]) -> dict[str, Any] | None:
+    state = str(entry.get("state") or "unknown").strip().lower()
+    if state in _ACTION_CLOSURE_FAILURE_STATES:
+        kind = "problematic"
+        priority = "high"
+        title = "Closure-Problem erkannt"
+        message = f"{entry.get('zone_id') or entry.get('module_id') or entry.get('action_id')}: Status {state}"
+    elif state in _ACTION_CLOSURE_OPEN_STATES:
+        kind = "open"
+        priority = "normal"
+        title = "Closure noch offen"
+        message = f"{entry.get('zone_id') or entry.get('module_id') or entry.get('action_id')}: wartet auf Abschluss"
+    else:
+        return None
+
+    return {
+        "closure_id": entry.get("closure_id"),
+        "zone_id": entry.get("zone_id"),
+        "module_id": entry.get("module_id"),
+        "action_id": entry.get("action_id"),
+        "state": entry.get("state"),
+        "kind": kind,
+        "priority": priority,
+        "title": title,
+        "message": message,
+        "updated_at": entry.get("updated_at"),
+    }
+
+
+def _build_action_closure_notification_digest(
+    *,
+    zone_id: str | None = None,
+    since_revision: int | None = None,
+    recent_limit: int = 5,
+) -> dict[str, Any]:
+    summary = build_action_closure_summary_read_model(
+        get_action_closure_store(),
+        zone_id=zone_id,
+        recent_limit=recent_limit,
+        since_revision=since_revision,
+    ).to_dict()
+
+    follow_ups: list[dict[str, Any]] = []
+    for entry in summary.get("recent_closures", []):
+        follow_up = _build_action_closure_follow_up(entry)
+        if follow_up is not None:
+            follow_ups.append(follow_up)
+
+    return {
+        "contract": "ActionClosureNotificationDigestV1",
+        "zone_id": zone_id,
+        "revision": summary.get("revision", 0),
+        "latest_change_at": summary.get("latest_change_at"),
+        "open_count": summary.get("open_count", 0),
+        "failure_count": summary.get("failure_count", 0),
+        "success_count": summary.get("success_count", 0),
+        "total_closures": summary.get("total_closures", 0),
+        "delta": summary.get("delta", {}),
+        "follow_ups": follow_ups,
+    }
 
 
 # =============================================================================

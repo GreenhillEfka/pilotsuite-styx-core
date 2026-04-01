@@ -14,7 +14,7 @@ from flask import Blueprint, current_app, jsonify, request, send_file
 
 from diagnostics_contract import build_bundle_zip
 
-bp = Blueprint("dev", __name__)
+bp = Blueprint("dev", __name__, url_prefix="/api/v1/dev")
 
 from copilot_core.api.security import validate_token as _validate_token
 

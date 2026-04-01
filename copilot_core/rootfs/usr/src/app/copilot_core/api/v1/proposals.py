@@ -18,7 +18,7 @@ from copilot_core.api.security import require_token
 
 _LOGGER = logging.getLogger(__name__)
 
-proposals_bp = Blueprint("proposals", __name__)
+proposals_bp = Blueprint("proposals", __name__, url_prefix="/api/v1/proposals")
 
 # Module-level service reference, set by init_proposals_api()
 _suggestion_engine: Optional[Any] = None

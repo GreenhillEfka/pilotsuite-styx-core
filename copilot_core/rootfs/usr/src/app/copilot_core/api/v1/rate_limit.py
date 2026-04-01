@@ -32,7 +32,7 @@ from copilot_core.api.security import require_admin
 logger = logging.getLogger(__name__)
 
 # Create blueprint with relative prefix (will be nested under /api/v1)
-rate_limit_bp = Blueprint("rate_limit", __name__)
+rate_limit_bp = Blueprint("rate_limit", __name__, url_prefix="/api/v1/rate-limit")
 
 # Validation boundaries for client-provided config updates.
 _MIN_REQUESTS_PER_MINUTE = 1

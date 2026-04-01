@@ -59,7 +59,7 @@ def _get_llm_provider() -> LLMProvider:
         return _llm_provider
 
 # Two blueprints: /chat/* (legacy) and /v1/* (OpenAI-compatible)
-conversation_bp = Blueprint('conversation', __name__, url_prefix='/chat')
+conversation_bp = Blueprint('conversation', __name__, url_prefix='/api/v1/conversation')
 openai_compat_bp = Blueprint('openai_compat', __name__, url_prefix='/v1')
 
 

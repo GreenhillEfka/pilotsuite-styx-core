@@ -27,7 +27,7 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-cache_control_bp = Blueprint("cache_control", __name__)
+cache_control_bp = Blueprint("cache_control", __name__, url_prefix="/api/v1/cache")
 
 
 def _run_async(coro, timeout: int = 10):

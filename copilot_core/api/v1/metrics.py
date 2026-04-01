@@ -40,7 +40,7 @@ else:
 logger = logging.getLogger(__name__)
 
 # Create blueprint with relative prefix (will be nested under /api/v1)
-metrics_bp = Blueprint("metrics", __name__)
+metrics_bp = Blueprint("metrics", __name__, url_prefix="/api/v1/metrics")
 
 
 def _metrics_unavailable_response():

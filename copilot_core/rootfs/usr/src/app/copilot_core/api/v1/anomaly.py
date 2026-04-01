@@ -57,7 +57,7 @@ except ImportError:  # pragma: no cover - depends on optional runtime deps
 logger = logging.getLogger(__name__)
 
 # Create blueprint
-anomaly_bp = Blueprint("anomaly", __name__)
+anomaly_bp = Blueprint("anomaly", __name__, url_prefix="/api/v1/anomaly")
 
 # Global detector instance (initialized on first use, double-checked locking)
 _detector: Optional[AnomalyDetector] = None

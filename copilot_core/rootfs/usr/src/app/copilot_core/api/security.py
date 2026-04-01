@@ -64,6 +64,12 @@ def get_auth_token(options_path: str = OPTIONS_PATH) -> str:
     """
     global _token_cache
 
+    env_token = os.environ.get("COPILOT_AUTH_TOKEN", "").strip()
+    if env_token:
+        with _token_lock:
+            _token_cache = (env_token, time.monotonic())
+        return env_token
+
     # Fast path (no lock): check if cache is still valid
     now = time.monotonic()
     cached_token, cached_at = _token_cache

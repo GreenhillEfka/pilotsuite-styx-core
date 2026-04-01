@@ -37,7 +37,7 @@ except ImportError as e:
 
 
 # Create blueprint
-ml_forecast_bp = Blueprint("ml_forecast", __name__)
+ml_forecast_bp = Blueprint("ml_forecast", __name__, url_prefix="/api/v1/ml")
 
 
 # Initialize managers (lazy loading)

@@ -25,7 +25,7 @@ from copilot_core.homeassistant.entity_adoption import (
 
 _LOGGER = logging.getLogger(__name__)
 
-bp = Blueprint("entity_adoption", __name__, url_prefix="/adoption")
+bp = Blueprint("entity_adoption", __name__, url_prefix="/api/v1/entity-adoption")
 
 
 @bp.before_request

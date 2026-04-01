@@ -5,7 +5,7 @@ Provides data for Home Assistant dashboard displays.
 
 from flask import Blueprint, jsonify, request
 
-bp = Blueprint("dashboard", __name__, url_prefix="/dashboard")
+bp = Blueprint("dashboard", __name__, url_prefix="/api/v1/dashboard")
 
 from copilot_core.api.security import validate_token as _validate_token
 

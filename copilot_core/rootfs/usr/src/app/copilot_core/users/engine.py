@@ -216,7 +216,7 @@ class UserManagementEngine:
         
         # Hash password with salt
         salt = secrets.token_hex(16)
-        password_hash = f"{salt}${hashlib.sha256(f"{salt}{password}".encode()).hexdigest()}"
+        password_hash = f"{salt}${hashlib.sha256((salt + password).encode()).hexdigest()}"
         
         user = User(
             user_id=user_id,
