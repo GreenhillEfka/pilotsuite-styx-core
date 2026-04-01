@@ -1,45 +1,19 @@
 """HomeAssistant Integration Package.
 
-Provides async client, auto-discovery, entity mapping, and WebSocket event handling.
+Provides async client, auto-discovery, entity mapping, and WebSocket event
+handling.
 
-Usage:
-    from copilot_core.homeassistant import (
-        HomeAssistantClient,
-        AutoDiscovery,
-        EntityMapper,
-        HomeAssistantWebSocketClient,
-        EventHandler,
-    )
-    
-    # Auto-discovery
-    discovery = AutoDiscovery()
-    instances = await discovery.discover()
-    
-    # Connect
-    client = await discovery.connect(
-        base_url="http://homeassistant.local:8123",
-        access_token="your-token"
-    )
-    
-    # Get data
-    areas = await client.get_areas()
-    states = await client.get_states()
-    
-    # Map entities
-    mapper = EntityMapper()
-    mapper.update_area_registry(areas)
-    mappings = mapper.map_entities(states)
-    
-    # WebSocket events
-    ws_client = HomeAssistantWebSocketClient()
-    await ws_client.connect()
-    await ws_client.subscribe_events(["state_changed"])
+The package import itself must stay lightweight so focused imports such as
+``copilot_core.homeassistant.zone_matcher`` do not fail just because optional
+runtime clients (for example aiohttp-backed HA clients) are unavailable.
 """
 
 from __future__ import annotations
 
+from importlib import import_module
 from pathlib import Path
 from pkgutil import extend_path
+from typing import Any, Dict, Tuple
 
 
 __path__ = extend_path(__path__, __name__)  # type: ignore[name-defined]
@@ -53,79 +27,51 @@ _runtime_pkg_path = str(_runtime_pkg_dir)
 if _runtime_pkg_dir.is_dir() and _runtime_pkg_path not in __path__:
     __path__.append(_runtime_pkg_path)
 
-from .client import (
-    HomeAssistantClient,
-    HAConnectionConfig,
-    HAConnectionStatus,
-)
-from .auto_discovery import (
-    AutoDiscovery,
-    DiscoveredInstance,
-)
-from .entity_mapper import (
-    EntityMapper,
-    EntityMapping,
-    WidgetType,
-    SensorDeviceClass,
-)
-from .websocket_client import (
-    HomeAssistantWebSocketClient,
-    WebSocketConfig,
-    WebSocketStatus,
-    ConnectionState,
-)
-from .event_handler import (
-    EventHandler,
-    HAEvent,
-    EventQueue,
-    EventHistory,
-    EventType,
-    create_standard_subscriptions,
-)
-from .api import (
-    ha_discovery_bp,
-    init_ha_discovery_api,
-)
-from ..api.v1.ha_events import (
-    ha_events_bp,
-    init_ha_events_api,
-    register_socketio_handlers,
-)
 
-__all__ = [
+_LAZY_EXPORTS: Dict[str, Tuple[str, str]] = {
     # Client
-    "HomeAssistantClient",
-    "HAConnectionConfig",
-    "HAConnectionStatus",
-    
+    "HomeAssistantClient": (".client", "HomeAssistantClient"),
+    "HAConnectionConfig": (".client", "HAConnectionConfig"),
+    "HAConnectionStatus": (".client", "HAConnectionStatus"),
     # Auto-discovery
-    "AutoDiscovery",
-    "DiscoveredInstance",
-    
+    "AutoDiscovery": (".auto_discovery", "AutoDiscovery"),
+    "DiscoveredInstance": (".auto_discovery", "DiscoveredInstance"),
     # Entity mapping
-    "EntityMapper",
-    "EntityMapping",
-    "WidgetType",
-    "SensorDeviceClass",
-    
+    "EntityMapper": (".entity_mapper", "EntityMapper"),
+    "EntityMapping": (".entity_mapper", "EntityMapping"),
+    "WidgetType": (".entity_mapper", "WidgetType"),
+    "SensorDeviceClass": (".entity_mapper", "SensorDeviceClass"),
     # WebSocket client
-    "HomeAssistantWebSocketClient",
-    "WebSocketConfig",
-    "WebSocketStatus",
-    "ConnectionState",
-    
+    "HomeAssistantWebSocketClient": (".websocket_client", "HomeAssistantWebSocketClient"),
+    "WebSocketConfig": (".websocket_client", "WebSocketConfig"),
+    "WebSocketStatus": (".websocket_client", "WebSocketStatus"),
+    "ConnectionState": (".websocket_client", "ConnectionState"),
     # Event handling
-    "EventHandler",
-    "HAEvent",
-    "EventQueue",
-    "EventHistory",
-    "EventType",
-    "create_standard_subscriptions",
-    
+    "EventHandler": (".event_handler", "EventHandler"),
+    "HAEvent": (".event_handler", "HAEvent"),
+    "EventQueue": (".event_handler", "EventQueue"),
+    "EventHistory": (".event_handler", "EventHistory"),
+    "EventType": (".event_handler", "EventType"),
+    "create_standard_subscriptions": (".event_handler", "create_standard_subscriptions"),
     # API blueprints
-    "ha_discovery_bp",
-    "ha_events_bp",
-    "init_ha_discovery_api",
-    "init_ha_events_api",
-    "register_socketio_handlers",
-]
+    "ha_discovery_bp": (".api", "ha_discovery_bp"),
+    "init_ha_discovery_api": (".api", "init_ha_discovery_api"),
+    "ha_events_bp": ("..api.v1.ha_events", "ha_events_bp"),
+    "init_ha_events_api": ("..api.v1.ha_events", "init_ha_events_api"),
+    "register_socketio_handlers": ("..api.v1.ha_events", "register_socketio_handlers"),
+}
+
+
+__all__ = list(_LAZY_EXPORTS)
+
+
+def __getattr__(name: str) -> Any:
+    target = _LAZY_EXPORTS.get(name)
+    if target is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+    module_name, attr_name = target
+    module = import_module(module_name, __name__)
+    value = getattr(module, attr_name)
+    globals()[name] = value
+    return value

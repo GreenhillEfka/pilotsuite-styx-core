@@ -1,5 +1,17 @@
 # Changelog
 
+## [v15.3.10] - 2026-04-01
+
+### 🧩 Slice 93 — Root Pytest Surface Stabilization
+
+- Repo-Root-`pytest` ist jetzt deterministisch auf die echte Root-Surface (`tests/`) fixiert; Package-/Runtime-Tests laufen nicht mehr versehentlich in denselben Default-Run hinein.
+- `copilot_core.api.v1.metrics` degradiert sauber ohne optionale Monitoring-Dependencies und erfüllt wieder den Blueprint-Contract (`metrics_unavailable` / `health_checker_unavailable`) statt schon beim Import zu kippen.
+- `copilot_core.homeassistant` und `copilot_core.notifications` importieren fokussierte Submodule jetzt lazy, damit Root-Contracts wie `zone_matcher` und die Notification-Engine nicht am Package-Init brechen.
+- Das Legacy-Flat-Modul `copilot_core.config` exponiert jetzt wieder einen Paketpfad für `copilot_core.config.*`, damit der Root-Sweep nicht auf ein Modul/Paket-Schattenproblem läuft.
+- `StorageEntry` hydriert abgeleitete Metadaten (`size_bytes`, `checksum`) wieder auch bei direkter Konstruktion; dazu offensichtlichen Syntaxfehler im Storage-Test repariert.
+- Versionsartefakte (`VERSION`, `copilot_core/VERSION`, `config.yaml`, `manifest.json`, Add-on-Config, Runtime-VERSION) auf `15.3.10` harmonisiert.
+- Validiert mit: `/home/linuxbrew/.linuxbrew/bin/pytest -q tests/test_metrics_blueprint_contract.py tests/test_core_wiring_contract.py tests/test_notification_engine.py tests/test_storage_engine.py` → `122 passed`; `/home/linuxbrew/.linuxbrew/bin/pytest -x` → erster echter Restfehler jetzt bei `tests/integration/test_module_integration_slices_67_82.py::TestPresenceIntegration::test_presence_triggers_light_automation` (`ZonePresenceEngine`-Import-Parität).
+
 ## [v15.3.9] - 2026-04-01
 
 ### 🧩 Slice 92 — Workspace Contract Bundle Recovery

@@ -639,9 +639,10 @@ Coordinate actions across multiple zones (scenes, routines, events).
 5. **✅ Slice 90 — Runtime/Test Surface Repair** — Package-Bridge, Cache/Queue/SDK/Config-Baseline für Root-Pytest stabilisiert
 6. **✅ Slice 91 — Plugin Engine Contract Recovery** — Legacy-/Current-Plugin-Engine-Verträge, Hooks, Discovery und Dependency-/Version-Checks wieder vereinheitlicht
 7. **✅ Slice 92 — Workspace Contract Bundle Recovery** — HA-Worktree-Pfadauflösung und Zone-Sync-Entity-Kompatibilität für den Core-Contract-Bundle-Lauf repariert
+8. **✅ Slice 93 — Root Pytest Surface Stabilization** — Default-Root-`pytest` auf `tests/` fixiert, optionale Metrics-/HA-/Notification-Importpfade gehärtet, Storage-Metadaten bei direkter Entry-Konstruktion repariert
 
-**Next Exact Refinement Task:** Root-Pytest Wide Sweep außerhalb des Contract-Bundles
+**Next Exact Refinement Task:** Presence-/Integration-Parität für `ZonePresenceEngine` in `tests/integration/test_module_integration_slices_67_82.py`
 
-**After Refinement:** Start Slice 12+ (Anomaly, Energy, Predictive, Multi-Zone)
+**After Refinement:** Weiter in Slice 12+ (Anomaly, Energy, Predictive, Multi-Zone) entlang der ersten echten `pytest -x`-Restfehler
 
 **Core is now stable enough for HA/HACS lane reactivation.**

@@ -773,7 +773,7 @@ class TestStorageEngine:
         """Test that query matches all filters."""
         query = StorageQuery(
             prefix="user:",
-            suffix":active",
+            suffix=":active",
             min_size=10,
         )
         

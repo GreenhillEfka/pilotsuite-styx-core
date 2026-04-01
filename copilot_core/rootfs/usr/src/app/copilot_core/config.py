@@ -2,9 +2,25 @@
 PilotSuite Core Configuration
 
 Central configuration for connection pooling, timeouts, and performance settings.
+
+This legacy flat module also exposes the structured ``copilot_core.config.*``
+package surface. Some historical imports resolve this file first; adding a
+package path keeps submodule imports like ``copilot_core.config.engine`` stable.
 """
 
+from __future__ import annotations
+
 import os
+from pathlib import Path
+
+
+_pkg_dir = Path(__file__).resolve().parent
+__path__ = [str(_pkg_dir / "config")]  # type: ignore[assignment]
+
+_repo_bridge_dir = _pkg_dir.parents[5] / "copilot_core" / "config"
+_repo_bridge_path = str(_repo_bridge_dir)
+if _repo_bridge_dir.is_dir() and _repo_bridge_path not in __path__:
+    __path__.append(_repo_bridge_path)
 
 # ---------------------------------------------------------------------------
 # Connection Pool Configuration

@@ -16,17 +16,46 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from flask import Blueprint, Response, jsonify, request
 
-from copilot_core.monitoring.metrics import get_prometheus_metrics, get_metrics_collector
-from copilot_core.monitoring.health import get_health_checker
+try:
+    from copilot_core.monitoring.metrics import get_prometheus_metrics, get_metrics_collector
+except Exception as exc:  # pragma: no cover - depends on optional runtime deps
+    get_prometheus_metrics = None  # type: ignore[assignment]
+    get_metrics_collector = None  # type: ignore[assignment]
+    _METRICS_IMPORT_ERROR: Optional[Exception] = exc
+else:
+    _METRICS_IMPORT_ERROR = None
+
+try:
+    from copilot_core.monitoring.health import get_health_checker
+except Exception as exc:  # pragma: no cover - depends on optional runtime deps
+    get_health_checker = None  # type: ignore[assignment]
+    _HEALTH_IMPORT_ERROR: Optional[Exception] = exc
+else:
+    _HEALTH_IMPORT_ERROR = None
 
 logger = logging.getLogger(__name__)
 
 # Create blueprint with relative prefix (will be nested under /api/v1)
 metrics_bp = Blueprint("metrics", __name__)
+
+
+def _metrics_unavailable_response():
+    return jsonify({
+        "error": "metrics_unavailable",
+        "message": "Optional monitoring dependencies are not installed",
+    }), 503
+
+
+def _health_checker_unavailable_response(status_code: int):
+    return jsonify({
+        "status": "degraded" if status_code == 200 else "unhealthy",
+        "error": "health_checker_unavailable",
+        "message": "Optional monitoring dependencies are not installed",
+    }), status_code
 
 
 def _run_async(coro, timeout: int = 10):
@@ -66,6 +95,11 @@ def prometheus_metrics():
     - LLM API metrics
     - Home Assistant integration metrics
     """
+    if get_prometheus_metrics is None:
+        if _METRICS_IMPORT_ERROR is not None:
+            logger.info("Prometheus metrics unavailable: %s", _METRICS_IMPORT_ERROR)
+        return _metrics_unavailable_response()
+
     try:
         data, content_type = get_prometheus_metrics()
         return Response(data, mimetype=content_type)
@@ -93,6 +127,11 @@ def health_check():
     - Storage paths
     - External services (Home Assistant, Ollama, etc.)
     """
+    if get_health_checker is None:
+        if _HEALTH_IMPORT_ERROR is not None:
+            logger.info("Health checker unavailable: %s", _HEALTH_IMPORT_ERROR)
+        return _health_checker_unavailable_response(200)
+
     try:
         full_check = request.args.get("full", "false").lower() == "true"
         timeout = int(request.args.get("timeout", "10"))
@@ -140,6 +179,11 @@ def readiness_probe():
     - 200: Ready to serve
     - 503: Not ready (still initializing or critical failure)
     """
+    if get_health_checker is None:
+        if _HEALTH_IMPORT_ERROR is not None:
+            logger.info("Readiness probe unavailable: %s", _HEALTH_IMPORT_ERROR)
+        return _health_checker_unavailable_response(503)
+
     try:
         checker = get_health_checker()
         health = _run_async(checker.get_dependency_health(), timeout=5)
@@ -189,6 +233,11 @@ def metrics_summary():
     Returns a JSON summary of key metrics instead of Prometheus format.
     Useful for quick debugging or dashboards that don't support Prometheus.
     """
+    if get_metrics_collector is None:
+        if _METRICS_IMPORT_ERROR is not None:
+            logger.info("Metrics summary unavailable: %s", _METRICS_IMPORT_ERROR)
+        return _metrics_unavailable_response()
+
     try:
         from prometheus_client import REGISTRY
         

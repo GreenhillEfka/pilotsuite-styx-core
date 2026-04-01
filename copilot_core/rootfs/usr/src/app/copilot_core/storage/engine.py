@@ -52,6 +52,29 @@ class StorageEntry:
     checksum: Optional[str] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
     storage_class: StorageClass = StorageClass.STANDARD
+
+    def __post_init__(self) -> None:
+        """Hydrate derived metadata for direct test/manual construction."""
+        if not self.size_bytes:
+            self.size_bytes = self._calculate_size_bytes(self.value)
+        if self.checksum is None:
+            self.checksum = self._calculate_checksum(self.value)
+
+    @staticmethod
+    def _serialize_value(value: Any) -> str:
+        try:
+            return json.dumps(value, sort_keys=True, ensure_ascii=False)
+        except TypeError:
+            return str(value)
+
+    @classmethod
+    def _calculate_size_bytes(cls, value: Any) -> int:
+        return len(cls._serialize_value(value).encode())
+
+    @classmethod
+    def _calculate_checksum(cls, value: Any) -> str:
+        payload = cls._serialize_value(value).encode()
+        return hashlib.sha256(payload).hexdigest()
     
     def is_expired(self) -> bool:
         """Check if entry is expired."""
