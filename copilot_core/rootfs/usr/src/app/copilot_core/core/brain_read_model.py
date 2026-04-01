@@ -39,6 +39,18 @@ class BrainGraphGrowth:
     top_active_nodes: List[Dict[str, Any]] = field(default_factory=list)
     graph_version: int = 0
 
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "total_nodes": self.total_nodes,
+            "total_edges": self.total_edges,
+            "new_nodes_since_last": self.new_nodes_since_last,
+            "new_edges_since_last": self.new_edges_since_last,
+            "nodes_by_kind": dict(self.nodes_by_kind),
+            "edges_by_type": dict(self.edges_by_type),
+            "top_active_nodes": list(self.top_active_nodes),
+            "graph_version": self.graph_version,
+        }
+
 
 @dataclass
 class NeuronSnapshot:
@@ -265,6 +277,22 @@ def update_graph_growth_snapshot(
     _brain_state["_graph_version"] = _brain_state.get("_graph_version", 0) + 1
 
 
+def reset_brain_state() -> None:
+    """Reset in-memory brain read-model state (primarily for tests)."""
+    _brain_state["last_graph_nodes"] = 0
+    _brain_state["last_graph_edges"] = 0
+    _brain_state["recent_events"] = []
+    _brain_state["max_recent_events"] = 50
+    _brain_state["_graph_nodes"] = 0
+    _brain_state["_graph_edges"] = 0
+    _brain_state["_nodes_by_kind"] = {}
+    _brain_state["_edges_by_type"] = {}
+    _brain_state["_top_active_nodes"] = []
+    _brain_state["_growth_new_nodes"] = 0
+    _brain_state["_growth_new_edges"] = 0
+    _brain_state["_graph_version"] = 0
+
+
 # ── Internal Builders ────────────────────────────────────────────────────────
 
 
@@ -456,5 +484,6 @@ __all__ = [
     "feed_brain",
     "get_brain_summary",
     "get_brain_activity_for_api",
+    "reset_brain_state",
     "update_graph_growth_snapshot",
 ]

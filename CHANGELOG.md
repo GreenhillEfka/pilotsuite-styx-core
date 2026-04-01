@@ -1,5 +1,14 @@
 # Changelog
 
+## [v15.3.4] - 2026-04-01
+
+### 🧠 Slice 87 — Brain Read-Model Test API Completion
+
+- `core/brain_read_model.py`: `BrainGraphGrowth.to_dict()` ergänzt und `reset_brain_state()` als offizieller Test-/Contract-Reset eingeführt.
+- Brain-Read-Model exportiert den Reset jetzt explizit über `__all__`, damit die v2-Contracts sauber importieren.
+- Versionsartefakte (`VERSION`, `copilot_core/VERSION`, `config.yaml`, `manifest.json`, Add-on-Config, Runtime-VERSION) auf `15.3.4` harmonisiert.
+- Validiert mit: `PYTHONPATH=copilot_core/rootfs/usr/src/app /home/linuxbrew/.linuxbrew/bin/pytest tests/test_zone_presence.py tests/test_presence_extended.py tests/test_edge_cases_refinement.py tests/test_core_contract_slice11.py tests/test_module_read_model.py tests/test_dashboard_read_models_contract.py tests/test_zone_dashboard_contract.py tests/test_dashboard_tabs.py tests/test_ha_connection_read_model.py tests/test_brain_read_model_contract.py tests/test_brain_read_model_v2.py -q` → `290 passed`.
+
 ## [v15.3.3] - 2026-04-01
 
 ### 🧠 Slice 86 — Module Read-Model Runtime State Merge
