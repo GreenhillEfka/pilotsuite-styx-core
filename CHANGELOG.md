@@ -1,5 +1,16 @@
 # Changelog
 
+## [v15.3.32] - 2026-04-01
+
+### 🧩 Slice 21 — Zone-Scoped Closure Context for Voice/Chat
+
+- `build_action_closure_context_block` akzeptiert jetzt einen expliziten `zone_name`-Parameter sowie einen optionalen `zone_id`-Filter, um Closure-Zusammenfassungen zonenspezifisch auszuleiten statt nur global.
+- `_resolve_zone_name` leitet aus einem `zone_id`-Slug (z.B. `zone:living`) automatisch einen menschenlesbaren Zonennamen ab, sodass Chat/Voice auch ohne expliziten `zone_name` einen friendly Context-label erhalten.
+- `_check_action_followups` in `ProactiveVoiceHints` leitet den `VoiceContext.zone_name` direkt an `build_action_closure_context_block` weiter, damit proaktive Voice-Hinweise zonenspezifisch auf dieselbe kanonische Closure-Wahrheit zugreifen.
+- `ChatHandler._build_home_context` nimmt jetzt einen `zone_name`-Parameter entgegen und führt ihn an `build_action_closure_context_block` durch, sodass Chat-Closure-Zeilen zonenspezifisch aufgeloest werden koennen.
+- Contract-Tests validieren die zonenspezifische Filterung und die automatische Zone-ID-Aufloesung fuer Chat- und Voice-Surfaces.
+- Versionsartefakte (`copilot_core/manifest.json`, `copilot_core/config.yaml`) auf `15.3.32` harmonisiert.
+
 ## [v15.3.31] - 2026-04-01
 
 ### 🧩 Slice 20 — Closure-Aware Voice Follow-Up Hints

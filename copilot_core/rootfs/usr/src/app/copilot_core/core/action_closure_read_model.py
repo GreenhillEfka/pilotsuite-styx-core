@@ -268,6 +268,44 @@ def build_action_closure_summary_read_model(
     )
 
 
+def _resolve_zone_name(zone_id: str | None) -> str | None:
+    """Resolve a zone_id (e.g. 'zone:living') to a human-readable zone name."""
+    if not zone_id:
+        return None
+    zone_id = str(zone_id).strip()
+    if zone_id.startswith("zone:"):
+        slug = zone_id[len("zone:") :]
+    else:
+        slug = zone_id
+    slug = slug.strip()
+    if not slug:
+        return None
+    # Try to map known zone slugs to friendly names
+    _ZONE_SLUG_MAP = {
+        "living": "Wohnzimmer",
+        "living_h": "Wohnzimmer",
+        "schlafzimmer": "Schlafzimmer",
+        "schlafzimmer_h": "Schlafzimmer",
+        "kueche": "Kueche",
+        "kueche_h": "Kueche",
+        "kitchen": "Kueche",
+        "buero": "Buero",
+        "buero_h": "Buero",
+        "office": "Buero",
+        "bad": "Bad",
+        "bathroom": "Bad",
+        "flur": "Flur",
+        "hallway": "Flur",
+        "garten": "Garten",
+        "garden": "Garten",
+        "terrasse": "Terasse",
+        "terrace": "Terasse",
+        "balkon": "Balkon",
+        "balcony": "Balkon",
+    }
+    return _ZONE_SLUG_MAP.get(slug.lower(), slug.replace("_", " ").title())
+
+
 def build_action_closure_context_block(
     store: ActionClosureStore | None = None,
     *,
@@ -278,6 +316,7 @@ def build_action_closure_context_block(
     action_id: str | None = None,
     proposal_id: str | None = None,
     recent_limit: int = 3,
+    zone_name: str | None = None,
 ) -> ActionClosureContextBlock:
     summary = build_action_closure_summary_read_model(
         store,
@@ -291,8 +330,13 @@ def build_action_closure_context_block(
     )
     payload = summary.to_dict()
 
+    # Resolve human-readable zone name from zone_id when not provided
+    resolved_zone_name = zone_name or _resolve_zone_name(zone_id)
+
     context_lines: list[str] = []
     if summary.total_closures:
+        if resolved_zone_name:
+            context_lines.append(f"Zone: {resolved_zone_name}")
         context_lines.append(
             "Aktionsabschluesse: "
             f"{summary.total_closures} gesamt, {summary.open_count} offen, "

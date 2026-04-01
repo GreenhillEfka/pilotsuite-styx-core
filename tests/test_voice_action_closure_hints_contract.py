@@ -90,6 +90,31 @@ def test_proactive_voice_hints_surface_problematic_action_closure_follow_up() ->
     assert hint.suggested_action["kind"] == "action_closure_review"
 
 
+def test_proactive_voice_hints_pass_zone_name_to_closure_context() -> None:
+    """Zone name from VoiceContext is forwarded to closure context for zone-scoped hints."""
+    _seed_failed_closure()
+
+    hints_service = ProactiveVoiceHints(
+        config=HintConfig(
+            enabled_types=[HintType.ACTION_FOLLOW_UP],
+            min_priority=HintPriority.LOW,
+            max_hints_per_hour=10,
+        )
+    )
+
+    # Use a zone context that matches the failed closure's zone
+    hints = hints_service.generate_hints(
+        VoiceContext(zone_name="Wohnzimmer", language_preference="de"),
+        force=True,
+    )
+
+    assert len(hints) == 1
+    hint = hints[0]
+    assert hint.context["contract"] == "ActionClosureVoiceHintV1"
+    assert hint.context["voice_zone"] == "Wohnzimmer"
+    assert hint.context["recent_closure"]["zone_id"] == "zone:living"
+
+
 def test_voice_hints_api_exposes_open_action_follow_up_contract(monkeypatch) -> None:
     _seed_open_closure()
     client = _client(monkeypatch)

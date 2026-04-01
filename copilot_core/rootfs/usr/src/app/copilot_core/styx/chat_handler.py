@@ -376,7 +376,7 @@ class ChatHandler:
         except Exception:
             return {}
 
-    def _build_home_context(self) -> str:
+    def _build_home_context(self, zone_name: str | None = None) -> str:
         """Build concise home context summary from live service data.
 
         Gathers data from available services:
@@ -609,6 +609,7 @@ class ChatHandler:
             closure_context = build_action_closure_context_block(
                 get_action_closure_store(),
                 recent_limit=2,
+                zone_name=zone_name,
             )
             context_lines = closure_context.to_dict().get("context_lines", [])
             if context_lines:

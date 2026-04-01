@@ -793,3 +793,27 @@ Den Roadmap-Block **Voice Integration** an die kanonische Closure-Wahrheit anbin
 **Tests:** `pytest -q tests/test_action_closure_contract.py tests/test_action_closure_summary_contract.py tests/test_voice_action_closure_hints_contract.py tests/test_voice_policy_contract.py` → `13 passed`
 
 **Next Exact Task:** Nächster Forward-Slice wieder aus Roadmap/Vision ableiten; naheliegender Kandidat ist die zonenspezifische Ausleitung derselben Closure-Wahrheit für Voice/Chat-Kontext statt globalem Follow-up.
+
+### ✅ Slice 21 — Zone-Scoped Closure Context for Voice/Chat
+**Status:** ✅ DONE (v15.3.32)
+
+**Goal**
+Die kanonische `ActionClosure`-Wahrheit wird jetzt mit zonenspezifischem Kontext fuer Voice- und Chat-Surfaces ausgegeben statt nur globalem Follow-up. VoiceHints und ChatHandler fuehren den aktuellen Zonennamen an die Closure-Surface durch, und `build_action_closure_context_block` loest automatisch menschenlesbare Zonennamen aus Zone-ID-Slugs auf.
+
+### Deliverables
+- [x] `build_action_closure_context_block` erweitert um `zone_name`-Parameter und `zone_id`-Filterung
+- [x] `_resolve_zone_name` leitet menschenlesbare Zonennamen aus `zone_id`-Slugs ab
+- [x] `_check_action_followups` in `ProactiveVoiceHints` leitet `VoiceContext.zone_name` durch
+- [x] `ChatHandler._build_home_context` nimmt `zone_name`-Parameter entgegen und fuehrt ihn durch
+- [x] Contract-Tests fuer zonenspezifische Filterung und automatische Zonenaufloesung
+
+### Acceptance criteria
+- Voice-Hinweise und Chat-Closure-Zeilen sind zonenspezifisch abfragbar und zeigen friendly Zonennamen.
+- Die Zone-ID-zu-Namens-Aufloesung funktioniert auch ohne expliziten `zone_name`-Parameter.
+- Alle drei Surface-Konsumenten (VoiceHints, Chat, globaler API) bleiben funktional und testbar.
+
+**Commit:** `feat(core): deliver slice 21 zone-scoped closure context for voice and chat`
+**Tag:** v15.3.32
+**Tests:** `pytest -q tests/test_action_closure_contract.py tests/test_action_closure_summary_contract.py tests/test_voice_action_closure_hints_contract.py tests/test_voice_policy_contract.py tests/test_action_closure_learning_contract.py tests/test_predictive_api_contract.py tests/test_multizone_runtime_contract.py tests/test_habitus_accept_contract.py` → gruen
+
+**Next Exact Task:** Zone-Scoped Action-Closure-Feed-in fuer Dashboard-/systemweite Context-Surfaces als naechsten Forward-Slice definieren und ableiten; Persistenz und Zone-Scoped-Read-Model-Filterung fuer Closure-Delta-Responses evaluieren.

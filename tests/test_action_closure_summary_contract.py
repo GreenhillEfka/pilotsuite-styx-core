@@ -172,3 +172,57 @@ def test_chat_handler_home_context_mentions_action_closure_summary() -> None:
 
     assert "Aktionsabschluesse" in home_context
     assert "erfolgreich" in home_context
+
+
+def test_action_closure_context_block_resolves_zone_name_for_chat_voice() -> None:
+    """Zone-scoped closure block resolves friendly zone name into context lines."""
+    _seed_closures()
+
+    # wohnzimmer zone - no closures
+    ctx_w = build_action_closure_context_block(
+        get_action_closure_store(),
+        zone_id="zone:wohnzimmer",
+        recent_limit=3,
+        zone_name="Wohnzimmer",
+    ).to_dict()
+    # The seed data has zone:living and zone:sleep, not zone:wohnzimmer
+    assert ctx_w["summary"]["total_closures"] == 0
+
+    # zone:living - two closures (voice + multizone)
+    ctx_l = build_action_closure_context_block(
+        get_action_closure_store(),
+        zone_id="zone:living",
+        recent_limit=3,
+        zone_name="Wohnzimmer",
+    ).to_dict()
+    assert ctx_l["summary"]["total_closures"] == 2
+    assert any("Wohnzimmer" in line for line in ctx_l["context_lines"])
+    assert any("Zone:" in line for line in ctx_l["context_lines"])
+
+    # zone:sleep - one closure (predictive, failed)
+    ctx_s = build_action_closure_context_block(
+        get_action_closure_store(),
+        zone_id="zone:sleep",
+        recent_limit=3,
+        zone_name="Schlafzimmer",
+    ).to_dict()
+    assert ctx_s["summary"]["total_closures"] == 1
+    assert ctx_s["summary"]["failure_count"] == 1
+    assert any("Schlafzimmer" in line for line in ctx_s["context_lines"])
+
+
+def test_action_closure_context_block_falls_back_to_zone_id_slug_when_zone_name_missing() -> None:
+    """When zone_name is not provided, zone_id slug is resolved to friendly name."""
+    _seed_closures()
+
+    # Pass zone_id but no explicit zone_name -> should still show "Wohnzimmer"
+    ctx = build_action_closure_context_block(
+        get_action_closure_store(),
+        zone_id="zone:living",
+        recent_limit=3,
+        # zone_name intentionally omitted
+    ).to_dict()
+
+    assert ctx["summary"]["total_closures"] == 2
+    # Zone name should be resolved from zone_id slug "living"
+    assert any("Wohnzimmer" in line or "Living" in line for line in ctx["context_lines"])

@@ -590,6 +590,7 @@ class ProactiveVoiceHints:
             closure_context = build_action_closure_context_block(
                 get_action_closure_store(),
                 recent_limit=3,
+                zone_name=context.zone_name,
             )
         except Exception as exc:
             _LOGGER.debug("Failed to build action-closure follow-up hint: %s", exc)
