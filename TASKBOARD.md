@@ -940,3 +940,28 @@ Dispatch-Acks, Queue-/Reminder-Receipts sowie Retry-/Escalation-State sollen nic
 **Tests:** `pytest -q tests/test_notification_action_closure_dispatch_contract.py tests/test_notification_action_closure_digest_contract.py tests/test_action_closure_summary_contract.py tests/test_zone_dashboard_contract.py tests/test_voice_action_closure_hints_contract.py` → `27 passed`
 
 **Next Exact Task:** Slice 27 als delivery-staleness-/SLA-Surface aus derselben Receipt-Wahrheit ableiten: ueberfaellige/offene Follow-ups, veraltete Retries und Eskalationsfaelligkeit zonen- und worker-scharf materialisieren, ohne neue Notification-Schattenlogik einzufuehren.
+
+### ✅ Slice 27 — Closure Follow-Up Delivery SLA Surface
+**Status:** ✅ DONE (v15.3.39)
+
+**Goal**
+Ueberfaellige offene Follow-ups, veraltete Retries und Eskalationsfaelligkeit aus derselben Closure-/Dispatch-/Receipt-Wahrheit ableiten, damit Worker, Dashboard und Chat denselben Delivery-SLA-Stand lesen.
+
+### Deliverables
+- [x] `GET /notifications/action-closures/sla` liefert eine kanonische `ActionClosureFollowUpSLASummaryV1`-Surface fuer zone-/worker-/delivery-mode-scoped SLA-Status
+- [x] `ActionClosureFollowUpReceiptSummaryV1` bettet dieselbe SLA-Summary direkt ein, statt eine zweite Aggregation einzufuehren
+- [x] Receipt-Worker-Filter (`worker=`) und worker-scharfe Counts fuer offene/stale/escalation-due Follow-ups implementiert
+- [x] SLA-Logik bewertet Follow-up-Alter gegen Closure-`updated_at`, Receipt-Status und `next_retry_at`, sodass frische Receipts alte Problemfaelle nicht maskieren
+- [x] Chat-/Dashboard-Kontexte lesen dieselbe erweiterte Receipt-/SLA-Wahrheit und beschreiben veraltete Retries/ueberfaellige Follow-ups explizit
+- [x] Contract-Tests decken overdue-open, stale-retry, escalation-due und worker-scoped API-Surface ab
+
+### Acceptance criteria
+- Worker und Observer koennen denselben kanonischen Delivery-SLA-Stand lesen, ohne neue Notification-Schattenlogik.
+- Zone-, Worker- und Delivery-Mode-Filter materialisieren dieselben Problemfaelle reproduzierbar.
+- Veraltete Retries/Eskalationen bleiben sichtbar, auch wenn ein Worker erst spaeter ein Receipt schreibt.
+
+**Commit:** `feat(core): deliver slice 27 closure follow-up delivery sla surface`
+**Tag:** v15.3.39
+**Tests:** `pytest -q tests/test_notification_action_closure_dispatch_contract.py tests/test_notification_action_closure_digest_contract.py tests/test_action_closure_summary_contract.py tests/test_zone_dashboard_contract.py tests/test_voice_action_closure_hints_contract.py` → `29 passed`
+
+**Next Exact Task:** Slice 28 als Claim-/Lease-Surface aus derselben Dispatch-/SLA-Wahrheit ableiten: Worker sollen ueberfaellige/stale Follow-ups revisionsscharf claimen, mit Lease-Ablauf und sauberer Reassign-/Escalation-Sicht, ohne den bestehenden Dispatch-/Receipt-Contract zu duplizieren.

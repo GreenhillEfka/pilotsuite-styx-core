@@ -337,6 +337,8 @@ def test_zone_dashboard_and_chat_surface_follow_up_receipts() -> None:
     assert receipt_summary["counts"]["total_receipts"] == 2
     assert receipt_summary["counts"]["retry_pending"] == 1
     assert receipt_summary["counts"]["escalated"] == 1
+    assert receipt_summary["sla"]["counts"]["stale_retries"] == 1
+    assert "escalation_due" in receipt_summary["sla"]["counts"]
 
     with app.app_context():
         handler = ChatHandler()
@@ -344,6 +346,7 @@ def test_zone_dashboard_and_chat_surface_follow_up_receipts() -> None:
 
     assert "Follow-up-Zustellung" in home_context
     assert "Retry offen" in home_context
+    assert "Retry veraltet" in home_context
 
 
 def test_action_closure_context_block_resolves_zone_name_for_chat_voice() -> None:

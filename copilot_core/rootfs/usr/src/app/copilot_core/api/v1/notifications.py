@@ -880,6 +880,7 @@ class ActionClosureFollowUpDispatchStore:
         *,
         zone_id: str | None = None,
         delivery_mode: str | None = None,
+        worker: str | None = None,
         since_revision: int | None = None,
     ) -> list[dict[str, Any]]:
         receipts = list(self._receipt_index.values())
@@ -887,6 +888,12 @@ class ActionClosureFollowUpDispatchStore:
             receipts = [receipt for receipt in receipts if receipt.zone_id == zone_id]
         if delivery_mode:
             receipts = [receipt for receipt in receipts if receipt.delivery_mode == delivery_mode]
+        if worker:
+            receipts = [
+                receipt
+                for receipt in receipts
+                if str(receipt.receipt_by or receipt.acknowledged_by or "unassigned").strip() == worker
+            ]
         if since_revision is not None:
             receipts = [receipt for receipt in receipts if receipt.receipt_revision > since_revision]
         receipts.sort(
@@ -894,6 +901,10 @@ class ActionClosureFollowUpDispatchStore:
             reverse=True,
         )
         return [receipt.to_dict() for receipt in receipts]
+
+    def get_receipt(self, dedupe_key: str) -> dict[str, Any] | None:
+        receipt = self._receipt_index.get(str(dedupe_key or "").strip())
+        return receipt.to_dict() if receipt is not None else None
 
     def acknowledge(
         self,
@@ -1549,10 +1560,33 @@ def get_action_closure_follow_up_receipts() -> tuple[dict[str, Any], int]:
     summary = _build_action_closure_follow_up_receipt_summary(
         zone_id=(request.args.get("zone_id") or "").strip() or None,
         delivery_mode=delivery_mode,
+        worker=(request.args.get("worker") or "").strip() or None,
         since_revision=since_revision,
         recent_limit=max(1, min(10, int(request.args.get("recent_limit", "5")))),
     )
     return jsonify({"ok": True, "receipts": summary})
+
+
+@bp.route("/action-closures/sla", methods=["GET"])
+def get_action_closure_follow_up_sla() -> tuple[dict[str, Any], int]:
+    """Get delivery staleness/SLA surface for closure follow-up workers."""
+    try:
+        since_revision = _parse_optional_int_arg("action_closure_since")
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+
+    delivery_mode = (request.args.get("delivery_mode") or "").strip() or None
+    if delivery_mode and delivery_mode not in {"notification_job", "reminder_queue"}:
+        return jsonify({"ok": False, "error": f"Unsupported delivery_mode: {delivery_mode}"}), 400
+
+    summary = _build_action_closure_follow_up_sla_summary(
+        zone_id=(request.args.get("zone_id") or "").strip() or None,
+        delivery_mode=delivery_mode,
+        worker=(request.args.get("worker") or "").strip() or None,
+        since_revision=since_revision,
+        recent_limit=max(1, min(10, int(request.args.get("recent_limit", "5")))),
+    )
+    return jsonify({"ok": True, "sla": summary})
 
 
 # Helper methods for NotificationManager
@@ -1637,6 +1671,54 @@ def _parse_optional_int_arg(name: str) -> int | None:
     return value
 
 
+def _parse_iso_datetime(value: Any) -> datetime | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    normalized = text.replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _age_seconds(reference: str | None, *, now: datetime) -> int | None:
+    parsed = _parse_iso_datetime(reference)
+    if parsed is None:
+        return None
+    return max(0, int((now - parsed).total_seconds()))
+
+
+def _seconds_until(reference: str | None, *, now: datetime) -> int | None:
+    parsed = _parse_iso_datetime(reference)
+    if parsed is None:
+        return None
+    return int((parsed - now).total_seconds())
+
+
+def _action_closure_follow_up_sla_policy(delivery_mode: str | None) -> dict[str, int]:
+    if delivery_mode == "reminder_queue":
+        return {
+            "open_timeout_seconds": 1800,
+            "retry_timeout_seconds": 3600,
+            "escalation_timeout_seconds": 5400,
+        }
+    if delivery_mode == "notification_job":
+        return {
+            "open_timeout_seconds": 900,
+            "retry_timeout_seconds": 1800,
+            "escalation_timeout_seconds": 3600,
+        }
+    return {
+        "open_timeout_seconds": 1200,
+        "retry_timeout_seconds": 2400,
+        "escalation_timeout_seconds": 4500,
+    }
+
+
 def _build_action_closure_follow_up(entry: dict[str, Any]) -> dict[str, Any] | None:
     state = str(entry.get("state") or "unknown").strip().lower()
     if state in _ACTION_CLOSURE_FAILURE_STATES:
@@ -1667,12 +1749,12 @@ def _build_action_closure_follow_up(entry: dict[str, Any]) -> dict[str, Any] | N
     }
 
 
-def _build_action_closure_notification_digest(
+def _collect_action_closure_follow_ups(
     *,
     zone_id: str | None = None,
     since_revision: int | None = None,
     recent_limit: int = 5,
-) -> dict[str, Any]:
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     summary = build_action_closure_summary_read_model(
         get_action_closure_store(),
         zone_id=zone_id,
@@ -1685,6 +1767,238 @@ def _build_action_closure_notification_digest(
         follow_up = _build_action_closure_follow_up(entry)
         if follow_up is not None:
             follow_ups.append(follow_up)
+    return summary, follow_ups
+
+
+def _summarize_action_closure_follow_up_sla_items(
+    items: list[dict[str, Any]],
+    *,
+    recent_limit: int,
+    generated_at: str,
+    zone_id: str | None,
+    delivery_mode: str | None,
+    worker: str | None,
+    policy: dict[str, int],
+) -> dict[str, Any]:
+    overdue_open = [item for item in items if item.get("sla_state") == "overdue_open"]
+    stale_retries = [item for item in items if item.get("sla_state") == "stale_retry"]
+    escalation_due = [item for item in items if item.get("sla_state") == "escalation_due"]
+    healthy = [item for item in items if item.get("sla_state") == "healthy"]
+
+    by_zone: dict[str, dict[str, int]] = {}
+    by_worker: dict[str, dict[str, int]] = {}
+    by_delivery_mode: dict[str, dict[str, int]] = {}
+    for item in items:
+        zone_key = str(item.get("zone_id") or "unknown")
+        worker_key = str(item.get("worker") or "unassigned")
+        mode_key = str(item.get("delivery_mode") or "all")
+        state = str(item.get("sla_state") or "healthy")
+        for bucket, key in ((by_zone, zone_key), (by_worker, worker_key), (by_delivery_mode, mode_key)):
+            target = bucket.setdefault(key, {"total": 0, "overdue_open": 0, "stale_retry": 0, "escalation_due": 0})
+            target["total"] += 1
+            if state in target:
+                target[state] += 1
+
+    highlights: list[str] = []
+    if overdue_open:
+        highlights.append(f"{len(overdue_open)} offene Follow-ups ueberfaellig")
+    if stale_retries:
+        highlights.append(f"{len(stale_retries)} Retries veraltet")
+    if escalation_due:
+        highlights.append(f"{len(escalation_due)} Eskalationen faellig")
+    if not highlights and healthy:
+        highlights.append(f"{len(healthy)} Follow-ups innerhalb SLA")
+
+    return {
+        "contract": "ActionClosureFollowUpSLASummaryV1",
+        "zone_id": zone_id,
+        "delivery_mode": delivery_mode,
+        "worker": worker,
+        "generated_at": generated_at,
+        "policies": policy,
+        "counts": {
+            "total_items": len(items),
+            "healthy": len(healthy),
+            "overdue_open": len(overdue_open),
+            "stale_retries": len(stale_retries),
+            "escalation_due": len(escalation_due),
+        },
+        "zones": dict(sorted(by_zone.items())),
+        "workers": dict(sorted(by_worker.items())),
+        "delivery_modes": dict(sorted(by_delivery_mode.items())),
+        "highlights": highlights,
+        "recent_items": items[: max(1, recent_limit)],
+        "overdue_open": overdue_open[: max(1, recent_limit)],
+        "stale_retries": stale_retries[: max(1, recent_limit)],
+        "escalation_due": escalation_due[: max(1, recent_limit)],
+    }
+
+
+def _build_action_closure_follow_up_sla_summary(
+    *,
+    zone_id: str | None = None,
+    delivery_mode: str | None = None,
+    worker: str | None = None,
+    since_revision: int | None = None,
+    recent_limit: int = 5,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    current_now = now or datetime.now(timezone.utc)
+    generated_at = current_now.isoformat()
+    policy = _action_closure_follow_up_sla_policy(delivery_mode)
+    store = get_action_closure_follow_up_dispatch_store()
+    _, follow_ups = _collect_action_closure_follow_ups(
+        zone_id=zone_id,
+        since_revision=since_revision,
+        recent_limit=recent_limit,
+    )
+
+    items: list[dict[str, Any]] = []
+
+    receipts = store.list_receipts(
+        zone_id=zone_id,
+        delivery_mode=delivery_mode,
+        worker=worker,
+        since_revision=None,
+    )
+    for receipt in receipts:
+        worker_name = str(receipt.get("receipt_by") or receipt.get("acknowledged_by") or "unassigned").strip() or "unassigned"
+        reference_at = receipt.get("updated_at") or receipt.get("receipt_at") or receipt.get("acknowledged_at")
+        age = _age_seconds(reference_at, now=current_now)
+        retry_due_in = _seconds_until(receipt.get("next_retry_at"), now=current_now)
+        state = "healthy"
+        reason = "within_sla"
+        receipt_state = str(receipt.get("receipt_state") or "").strip().lower()
+        retry_state = str(receipt.get("retry_state") or "").strip().lower()
+        escalation_state = str(receipt.get("escalation_state") or "").strip().lower()
+        if retry_state in {"scheduled", "pending", "retrying"}:
+            if retry_due_in is not None and retry_due_in <= 0:
+                state = "stale_retry"
+                reason = "next_retry_overdue"
+            elif age is not None and age >= policy["retry_timeout_seconds"]:
+                state = "stale_retry"
+                reason = "retry_timeout_exceeded"
+        if state == "healthy" and escalation_state in {"pending", "due", "scheduled"}:
+            if age is not None and age >= policy["escalation_timeout_seconds"]:
+                state = "escalation_due"
+                reason = "escalation_timeout_exceeded"
+        if state == "healthy" and receipt_state in {"acknowledged", "queued", "sent"}:
+            if age is not None and age >= policy["open_timeout_seconds"]:
+                state = "overdue_open"
+                reason = "delivery_open_timeout"
+
+        items.append(
+            {
+                "contract": "ActionClosureFollowUpSLAItemV1",
+                "dispatch_id": receipt.get("dispatch_id"),
+                "receipt_id": receipt.get("receipt_id"),
+                "closure_id": receipt.get("closure_id"),
+                "closure_revision": receipt.get("closure_revision"),
+                "zone_id": receipt.get("zone_id"),
+                "module_id": receipt.get("module_id"),
+                "action_id": receipt.get("action_id"),
+                "kind": receipt.get("kind"),
+                "priority": receipt.get("priority"),
+                "delivery_mode": receipt.get("delivery_mode"),
+                "worker": worker_name,
+                "receipt_state": receipt.get("receipt_state"),
+                "retry_state": receipt.get("retry_state"),
+                "retry_count": receipt.get("retry_count"),
+                "next_retry_at": receipt.get("next_retry_at"),
+                "escalation_state": receipt.get("escalation_state"),
+                "escalation_at": receipt.get("escalation_at"),
+                "sla_state": state,
+                "sla_reason": reason,
+                "age_seconds": age,
+                "retry_due_in_seconds": retry_due_in,
+                "updated_at": receipt.get("updated_at"),
+                "receipt_at": receipt.get("receipt_at"),
+                "title": receipt.get("title"),
+                "message": receipt.get("message"),
+            }
+        )
+
+    for follow_up in follow_ups:
+        worker_name = "unassigned"
+        if worker and worker != worker_name:
+            continue
+
+        receipt_exists = False
+        if delivery_mode:
+            candidate = store.candidate_from_follow_up(follow_up, delivery_mode=delivery_mode)
+            receipt_exists = store.get_receipt(candidate.dedupe_key) is not None
+        else:
+            for mode in ("notification_job", "reminder_queue"):
+                candidate = store.candidate_from_follow_up(follow_up, delivery_mode=mode)
+                if store.get_receipt(candidate.dedupe_key) is not None:
+                    receipt_exists = True
+                    break
+        if receipt_exists:
+            continue
+
+        age = _age_seconds(follow_up.get("updated_at"), now=current_now)
+        state = "overdue_open" if age is not None and age >= policy["open_timeout_seconds"] else "healthy"
+        reason = "follow_up_open_timeout" if state == "overdue_open" else "awaiting_worker_ack"
+        items.append(
+            {
+                "contract": "ActionClosureFollowUpSLAItemV1",
+                "dispatch_id": None,
+                "receipt_id": None,
+                "closure_id": follow_up.get("closure_id"),
+                "closure_revision": follow_up.get("revision"),
+                "zone_id": follow_up.get("zone_id"),
+                "module_id": follow_up.get("module_id"),
+                "action_id": follow_up.get("action_id"),
+                "kind": follow_up.get("kind"),
+                "priority": follow_up.get("priority"),
+                "delivery_mode": delivery_mode,
+                "worker": worker_name,
+                "receipt_state": None,
+                "retry_state": None,
+                "retry_count": 0,
+                "next_retry_at": None,
+                "escalation_state": None,
+                "escalation_at": None,
+                "sla_state": state,
+                "sla_reason": reason,
+                "age_seconds": age,
+                "retry_due_in_seconds": None,
+                "updated_at": follow_up.get("updated_at"),
+                "receipt_at": None,
+                "title": follow_up.get("title"),
+                "message": follow_up.get("message"),
+            }
+        )
+
+    items.sort(
+        key=lambda item: (
+            0 if item.get("sla_state") != "healthy" else 1,
+            -(int(item.get("age_seconds") or 0)),
+            str(item.get("closure_id") or ""),
+        )
+    )
+    return _summarize_action_closure_follow_up_sla_items(
+        items,
+        recent_limit=recent_limit,
+        generated_at=generated_at,
+        zone_id=zone_id,
+        delivery_mode=delivery_mode,
+        worker=worker,
+        policy=policy,
+    )
+
+
+def _build_action_closure_notification_digest(
+    *,
+    zone_id: str | None = None,
+    since_revision: int | None = None,
+    recent_limit: int = 5,
+) -> dict[str, Any]:
+    summary, follow_ups = _collect_action_closure_follow_ups(
+        zone_id=zone_id,
+        since_revision=since_revision,
+        recent_limit=recent_limit,
+    )
 
     return {
         "contract": "ActionClosureNotificationDigestV1",
@@ -1716,6 +2030,10 @@ def _describe_action_closure_follow_up_receipt_summary(summary: dict[str, Any]) 
     retry_pending = int(counts.get("retry_pending") or 0)
     escalated = int(counts.get("escalated") or 0)
     acknowledged = int(counts.get("acknowledged") or 0)
+    sla_counts = ((summary.get("sla") or {}).get("counts") or {})
+    overdue_open = int(sla_counts.get("overdue_open") or 0)
+    stale_retries = int(sla_counts.get("stale_retries") or 0)
+    escalation_due = int(sla_counts.get("escalation_due") or 0)
 
     if delivered:
         parts.append(f"{delivered} zugestellt")
@@ -1727,6 +2045,12 @@ def _describe_action_closure_follow_up_receipt_summary(summary: dict[str, Any]) 
         parts.append(f"{retry_pending} Retry offen")
     if escalated:
         parts.append(f"{escalated} eskaliert")
+    if overdue_open:
+        parts.append(f"{overdue_open} ueberfaellig")
+    if stale_retries:
+        parts.append(f"{stale_retries} Retry veraltet")
+    if escalation_due:
+        parts.append(f"{escalation_due} Eskalation faellig")
     return ", ".join(parts)
 
 
@@ -1734,6 +2058,7 @@ def _build_action_closure_follow_up_receipt_summary(
     *,
     zone_id: str | None = None,
     delivery_mode: str | None = None,
+    worker: str | None = None,
     since_revision: int | None = None,
     recent_limit: int = 5,
 ) -> dict[str, Any]:
@@ -1741,11 +2066,13 @@ def _build_action_closure_follow_up_receipt_summary(
     receipts = store.list_receipts(
         zone_id=zone_id,
         delivery_mode=delivery_mode,
+        worker=worker,
         since_revision=None,
     )
     delta_receipts = store.list_receipts(
         zone_id=zone_id,
         delivery_mode=delivery_mode,
+        worker=worker,
         since_revision=since_revision,
     )
 
@@ -1780,16 +2107,27 @@ def _build_action_closure_follow_up_receipt_summary(
         if str(receipt.get("escalation_state") or "").strip() in {"escalated", "triggered", "pending"}:
             counts["escalated"] += 1
 
+    sla_summary = _build_action_closure_follow_up_sla_summary(
+        zone_id=zone_id,
+        delivery_mode=delivery_mode,
+        worker=worker,
+        since_revision=since_revision,
+        recent_limit=recent_limit,
+    )
+    highlights = [line for line in [_describe_action_closure_follow_up_receipt_summary({"counts": counts, "sla": sla_summary})] if line]
+
     return {
         "contract": "ActionClosureFollowUpReceiptSummaryV1",
         "zone_id": zone_id,
         "delivery_mode": delivery_mode,
+        "worker": worker,
         "receipt_revision": store.get_current_receipt_revision(),
         "latest_change_at": latest_change_at,
         "counts": counts,
         "states": dict(sorted(states.items(), key=lambda item: (-item[1], item[0]))),
         "delivery_modes": dict(sorted(delivery_modes.items(), key=lambda item: (-item[1], item[0]))),
-        "highlights": [line for line in [_describe_action_closure_follow_up_receipt_summary({"counts": counts})] if line],
+        "highlights": highlights,
+        "sla": sla_summary,
         "recent_receipts": receipts[: max(1, recent_limit)],
         "delta": {
             "contract": "ActionClosureFollowUpReceiptDeltaV1",
@@ -2206,6 +2544,7 @@ __all__ = [
     "bp",
     "get_notification_manager",
     "get_action_closure_follow_up_dispatch_store",
+    "_build_action_closure_follow_up_sla_summary",
     "_build_action_closure_follow_up_receipt_summary",
     "_describe_action_closure_follow_up_receipt_summary",
     "NotificationManager",
@@ -2215,6 +2554,7 @@ __all__ = [
     "acknowledge_action_closure_follow_up_dispatch",
     "record_action_closure_follow_up_receipt",
     "get_action_closure_follow_up_receipts",
+    "get_action_closure_follow_up_sla",
     "get_ha_devices",
     "send_ha_notification",
     "test_ha_connection",

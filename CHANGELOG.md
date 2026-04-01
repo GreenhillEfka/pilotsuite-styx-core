@@ -1,5 +1,16 @@
 # Changelog
 
+## [v15.3.39] - 2026-04-02
+
+### 🧩 Slice 27 — Closure Follow-Up Delivery SLA Surface
+
+- `copilot_core.api.v1.notifications` leitet jetzt eine kanonische Delivery-SLA-/Staleness-Surface aus derselben Closure-/Dispatch-/Receipt-Wahrheit ab: `GET /notifications/action-closures/sla` materialisiert ueberfaellige offene Follow-ups, veraltete Retries und faellige Eskalationen zonen-, worker- und delivery-mode-scharf.
+- `ActionClosureFollowUpReceiptSummaryV1` bettet die neue `ActionClosureFollowUpSLASummaryV1` direkt ein; Receipt- und Digest-Surfaces behalten damit eine einzige Follow-up-Truth, statt eine zweite Notification-Schattenlogik aufzubauen.
+- Worker-Scopes (`worker=`) und Retry-/Escalation-SLA werden jetzt aus Closure-`updated_at`, Receipt-Status und optionalen `next_retry_at`-Zeitpunkten abgeleitet, sodass ein frisch geschriebenes Receipt veraltete Follow-ups nicht mehr kuenstlich „gesund“ aussehen laesst.
+- Chat-/Dashboard-Kontexte lesen ueber dieselbe Receipt-Summary jetzt auch veraltete Retries/ueberfaellige Follow-ups mit, und die Contract-Surface deckt explizit Worker-Scopes sowie SLA-Kategorien ab.
+- Versionsartefakte (`VERSION`, `copilot_core/VERSION`, Runtime-VERSION, `copilot_core/config.yaml`, `copilot_core/manifest.json`) auf `15.3.39` harmonisiert.
+- Validiert mit: `pytest -q tests/test_notification_action_closure_dispatch_contract.py tests/test_notification_action_closure_digest_contract.py tests/test_action_closure_summary_contract.py tests/test_zone_dashboard_contract.py tests/test_voice_action_closure_hints_contract.py` → `29 passed`.
+
 ## [v15.3.37] - 2026-04-02
 
 ### 🧩 Slice 26 — Closure Follow-Up Receipt Surface
