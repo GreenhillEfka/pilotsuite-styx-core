@@ -1,5 +1,18 @@
 # Changelog
 
+## [v15.3.28] - 2026-04-01
+
+### 🧩 Slice 17 — Canonical Action Closure Surface
+
+- `copilot_core.action_closure` ergänzt eine einzige kanonische `ActionClosureV1`-Spur für Proposal→Action→Runtime: akzeptierte Aktionen können jetzt auf derselben Surface Feedback-Events und Execution-Outcomes sammeln, statt pro Feature eigene Rückmeldepfade zu erfinden.
+- Neue REST-Surface `/api/v1/action-closures/*` erlaubt listing, detail lookup sowie das nachträgliche Anhängen von User-Feedback und Runtime-Ausführungsresultaten an dieselbe Closure-ID.
+- `copilot_core.api.v1.voice`, `copilot_core.api.v1.predictive` und `copilot_core.api.v1.habitus` materialisieren beim Confirm/Accept jetzt sofort eine kanonische `action_closure` neben `ProposalIntentV1`, `ActionIntentV1` und dem HA-Handoff.
+- `copilot_core.multizone.coordination_engine` hängt Multi-Zone-Pending-Actions jetzt an dieselbe Closure-Surface: Pending-Actions exponieren `action_closure_id` + `action_closure`, inklusive Subject-/Queue-Kontext für Scene-/Routine-Runtime.
+- App-/Core-Setup registrieren die neue Closure-API zentral; Versionsartefakte (`VERSION`, `copilot_core/VERSION`, `copilot_core/config.yaml`, `copilot_core/manifest.json`, Runtime-VERSION) sind auf `15.3.28` harmonisiert.
+- Validiert mit:
+  - `pytest -q tests/test_action_closure_contract.py tests/test_voice_policy_contract.py tests/test_predictive_api_contract.py tests/test_multizone_runtime_contract.py tests/test_habitus_accept_contract.py` → `12 passed`
+  - `pytest -q tests/test_voice_control.py tests/test_multizone_blueprint_contract.py tests/test_multizone_coordination.py` → `50 passed`
+
 ## [v15.3.27] - 2026-04-01
 
 ### 🧩 Slice 16 — Voice Control / Policy Gate Surface

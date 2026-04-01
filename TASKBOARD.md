@@ -695,7 +695,31 @@ Voice-Control auf denselben Proposal→Action→Runtime-Vertrag wie Predictive, 
 **Tag:** v15.3.27
 **Tests:** `pytest -q tests/test_voice_control.py tests/test_voice_policy_contract.py tests/test_habitus_accept_contract.py tests/test_predictive_api_contract.py` → `37 passed`
 
-**Next Exact Task:** **Slice 17 Candidate**: Proposal→Action→Runtime um eine kanonische User-Feedback-/Execution-Closure-Surface ergänzen, damit Voice/Predictive/Multi-Zone nach Ausführung dieselbe Rückmelde- und Lernspur teilen.
+### ✅ Slice 17 — Canonical Action Closure Surface
+**Status:** ✅ DONE (v15.3.28)
+
+**Goal**
+Eine einzige kanonische User-Feedback-/Execution-Closure-Surface über Proposal→Action→Runtime legen, damit Voice, Predictive, Habitus und Multi-Zone dieselbe Rückmelde- und Lernspur teilen.
+
+### Deliverables
+- [x] neues `ActionClosureV1`-Store-/Contract-Layer für accept → feedback → execution
+- [x] neue `/api/v1/action-closures/*`-Surface für list/detail/feedback/execution
+- [x] Voice/Predictive/Habitus confirm/accept liefern jetzt dieselbe `action_closure`
+- [x] Multi-Zone-Pending-Actions exponieren `action_closure_id` + `action_closure` mit Scene-/Routine-Kontext
+- [x] Contract-Tests für Voice, Predictive und Multi-Zone gegen dieselbe Closure-Surface
+
+### Acceptance criteria
+- Feedback- und Execution-Rückmeldungen laufen nicht mehr feature-spezifisch auseinander.
+- Confirmed Actions aus Voice/Predictive/Habitus und queued Multi-Zone-Actions können über dieselbe Closure-ID verfolgt werden.
+- Runtime-/User-Feedback bleibt als gemeinsame Lernspur abfragbar.
+
+**Commit:** `feat(core): deliver slice 17 action closure surface`
+**Tag:** v15.3.28
+**Tests:**
+- `pytest -q tests/test_action_closure_contract.py tests/test_voice_policy_contract.py tests/test_predictive_api_contract.py tests/test_multizone_runtime_contract.py tests/test_habitus_accept_contract.py` → `12 passed`
+- `pytest -q tests/test_voice_control.py tests/test_multizone_blueprint_contract.py tests/test_multizone_coordination.py` → `50 passed`
+
+**Next Exact Task:** **Slice 18 Candidate**: Closure-/Outcome-Summaries als kanonische Read-Model-/Chat-/Dashboard-Surface ausleiten, damit Feedback und Ausführung nicht nur gespeichert, sondern systemweit erklärbar und auswertbar werden.
 
 **After Refinement:** Root-Contract-Surface ist grün; Slice 13+ wieder als reguläre Forward-Slices aufnehmen
 

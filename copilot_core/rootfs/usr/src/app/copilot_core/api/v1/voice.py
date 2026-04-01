@@ -27,6 +27,7 @@ from typing import Any, Dict, Optional
 
 from flask import Blueprint, current_app, jsonify, request
 
+from copilot_core.action_closure import get_action_closure_store
 from copilot_core.homeassistant.habitat_adapter import wrap_accepted_proposal_action
 from copilot_core.homeassistant.habitus_zones import (
     ZoneType,
@@ -429,6 +430,22 @@ def _materialize_voice_confirmation_response(proposal: dict[str, Any], payload: 
         source="voice.accepted",
         policy_gate=policy_gate,
     )
+    action_closure = get_action_closure_store().upsert(
+        source="voice.accepted",
+        proposal_id=proposal_id,
+        action_id=action_intent_id,
+        proposal_intent=proposal_intent,
+        action_intent=action_intent,
+        zone_id=zone_id,
+        module_id=module_id,
+        service_call=action_preview,
+        policy_gate=policy_gate,
+        accepted_at=accepted_at,
+        metadata={
+            "surface": "voice",
+            "voice_command_id": str((proposal.get("voice_command") or {}).get("command_id") or "").strip() or None,
+        },
+    )
 
     return {
         "status": "ok",
@@ -437,6 +454,7 @@ def _materialize_voice_confirmation_response(proposal: dict[str, Any], payload: 
         "voice_response": proposal.get("voice_response"),
         "proposal_intent": proposal_intent,
         "action_intent": action_intent,
+        "action_closure": action_closure,
         "habitat_module_command": habitat_module_command,
         "ha_output": ha_output,
         "policy_gate": policy_gate,

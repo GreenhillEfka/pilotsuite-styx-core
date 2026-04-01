@@ -204,6 +204,14 @@ def create_app() -> Flask:
     except Exception:
         logging.getLogger(__name__).exception("Failed to register Multi-Zone Coordination API blueprint")
 
+    # Canonical Action Closure API endpoints (/api/v1/action-closures/*)
+    try:
+        from copilot_core.api.v1.action_closure import action_closure_bp
+        app.register_blueprint(action_closure_bp)
+        logging.getLogger(__name__).info("Action Closure API registered")
+    except Exception:
+        logging.getLogger(__name__).exception("Failed to register Action Closure API blueprint")
+
     # Rate Limit Configuration API is registered via api_v1 blueprint
 
     # MCP REST API endpoints (/api/v1/mcp/*)

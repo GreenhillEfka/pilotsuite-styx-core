@@ -15,6 +15,8 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
+from copilot_core.action_closure import get_action_closure_store
+
 logger = logging.getLogger(__name__)
 
 
@@ -110,6 +112,8 @@ class ZoneAction:
     scene_id: Optional[str] = None
     routine_id: Optional[str] = None
     scheduled_job_id: Optional[str] = None
+    action_closure_id: Optional[str] = None
+    action_closure: Optional[Dict[str, Any]] = None
 
     def normalized_target(self) -> Dict[str, Any]:
         target = dict(self.target)
@@ -173,6 +177,8 @@ class ZoneAction:
             "scene_id": self.scene_id,
             "routine_id": self.routine_id,
             "scheduled_job_id": self.scheduled_job_id,
+            "action_closure_id": self.action_closure_id,
+            "action_closure": _copy_optional_mapping(self.action_closure),
         }
 
 
@@ -731,6 +737,7 @@ class MultiZoneCoordinationEngine:
         scheduled_job_id: str | None = None,
     ) -> list[ZoneAction]:
         queued_at = _utcnow()
+        store = get_action_closure_store()
         for action in actions:
             action.target = action.normalized_target()
             if action.action_intent and isinstance(action.action_intent.get("source"), str):
@@ -747,6 +754,34 @@ class MultiZoneCoordinationEngine:
                 action.routine_id = subject_id
             if scheduled_job_id:
                 action.scheduled_job_id = scheduled_job_id
+            action.action_closure = store.upsert(
+                source=action.source or runtime_source,
+                proposal_id=str((action.proposal_intent or {}).get("proposal_id") or "").strip() or None,
+                action_id=str(
+                    (action.action_intent or {}).get("action_intent_id")
+                    or (action.action_intent or {}).get("action_id")
+                    or action.action_id
+                ).strip(),
+                proposal_intent=action.proposal_intent,
+                action_intent=action.action_intent,
+                zone_id=action.zone_id,
+                module_id=action.module_id,
+                service_call={
+                    "domain": action.domain,
+                    "service": action.service,
+                    "target": action.target,
+                    "payload": dict(action.data),
+                },
+                accepted_at=queued_at,
+                subject_type=subject_type,
+                subject_id=subject_id,
+                metadata={
+                    "surface": "multizone",
+                    "queue_source": runtime_source,
+                    "scheduled_job_id": scheduled_job_id,
+                },
+            )
+            action.action_closure_id = str((action.action_closure or {}).get("closure_id") or "").strip() or None
         return actions
 
     def _queue_with_conflict_resolution(self, actions: List[ZoneAction]) -> bool:

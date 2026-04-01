@@ -9,6 +9,7 @@ from typing import Any
 
 from flask import Blueprint, current_app, jsonify, request
 
+from copilot_core.action_closure import get_action_closure_store
 from copilot_core.habitus_miner.service import HabitusMinerService
 from copilot_core.habitus_miner.model import MiningConfig
 from copilot_core.homeassistant.habitat_adapter import wrap_accepted_proposal_action
@@ -419,11 +420,25 @@ def accept_zone_proposal():
             source="proposal.accepted",
             policy_gate=policy_gate,
         )
+        action_closure = get_action_closure_store().upsert(
+            source="proposal.accepted",
+            proposal_id=proposal_id,
+            action_id=action_intent_id,
+            proposal_intent=proposal_intent,
+            action_intent=action_intent,
+            zone_id=zone_id,
+            module_id=module_id,
+            service_call=action_preview,
+            policy_gate=policy_gate,
+            accepted_at=accepted_at,
+            metadata={"surface": "habitus"},
+        )
 
         return jsonify({
             "status": "ok",
             "proposal_intent": proposal_intent,
             "action_intent": action_intent,
+            "action_closure": action_closure,
             "habitat_module_command": habitat_module_command,
             "ha_output": ha_output,
             "policy_gate": policy_gate,

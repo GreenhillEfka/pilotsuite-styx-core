@@ -15,6 +15,7 @@ from typing import Any
 
 from flask import Blueprint, current_app, jsonify, request
 
+from copilot_core.action_closure import get_action_closure_store
 from copilot_core.api.security import require_token
 from copilot_core.homeassistant.habitat_adapter import wrap_accepted_proposal_action
 from copilot_core.homeassistant.habitus_zones import (
@@ -212,12 +213,29 @@ def _materialize_confirmation_response(proposal: dict[str, Any], payload: dict[s
         source="predictive.accepted",
         policy_gate=policy_gate,
     )
+    action_closure = get_action_closure_store().upsert(
+        source="predictive.accepted",
+        proposal_id=proposal_id,
+        action_id=action_intent_id,
+        proposal_intent=proposal_intent,
+        action_intent=action_intent,
+        zone_id=zone_id,
+        module_id=module_id,
+        service_call=action_preview,
+        policy_gate=policy_gate,
+        accepted_at=accepted_at,
+        metadata={
+            "surface": "predictive",
+            "pattern_id": proposal.get("pattern_id"),
+        },
+    )
 
     return {
         "status": "ok",
         "proposal": proposal,
         "proposal_intent": proposal_intent,
         "action_intent": action_intent,
+        "action_closure": action_closure,
         "habitat_module_command": habitat_module_command,
         "ha_output": ha_output,
         "policy_gate": policy_gate,

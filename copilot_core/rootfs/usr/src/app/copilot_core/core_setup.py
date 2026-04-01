@@ -1931,6 +1931,7 @@ def register_blueprints(app: Flask, services: dict) -> None:
         ("copilot_core.api.v1.onyx_bridge",        "onyx_bridge_bp",       None),
         ("copilot_core.api.v1.predictive",         "predictive_bp",        None),
         ("copilot_core.api.v1.presence",           "presence_bp",          None),
+        ("copilot_core.api.v1.action_closure",     "action_closure_bp",    None),
         ("copilot_core.api.v1.multizone",          "multizone_bp",         None),
         ("copilot_core.api.v1.scenes",             "scenes_bp",            None),
         ("copilot_core.api.v1.shopping",           "shopping_bp",          None),
