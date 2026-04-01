@@ -420,30 +420,36 @@ class HealthEngine:
     
     def run_check(self, check_id: str) -> Optional[HealthCheckResult]:
         """Run a specific health check."""
+        dependency_failure: Optional[HealthCheckResult] = None
+
         with self._lock:
             check = self._checks.get(check_id)
-            
+
             if not check or not check.enabled:
                 return None
-            
-            # Check dependencies
+
+            # Check dependencies while holding the state lock, but defer
+            # result recording until after the lock is released so we do not
+            # re-enter _record_result() under the same non-reentrant lock.
             if not self._check_dependencies(check):
-                result = HealthCheckResult(
+                dependency_failure = HealthCheckResult(
                     check_id=check_id,
                     name=check.name,
                     status=HealthStatus.UNHEALTHY,
                     message="Dependencies not healthy",
                 )
-                self._record_result(check_id, result)
-                return result
-        
+
+        if dependency_failure is not None:
+            self._record_result(check_id, dependency_failure)
+            return dependency_failure
+
         # Run handler with timeout
         result = self._run_with_timeout(check)
         result.check_id = check_id
-        
+
         # Record result
         self._record_result(check_id, result)
-        
+
         return result
     
     def _run_with_timeout(self, check: HealthCheck) -> HealthCheckResult:

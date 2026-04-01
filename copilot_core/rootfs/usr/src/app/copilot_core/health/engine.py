@@ -89,6 +89,7 @@ class ComponentHealth:
             "total_checks": self.total_checks,
             "successful_checks": self.successful_checks,
             "failed_checks": self.failed_checks,
+            "checks": [check.to_dict() for check in self.checks],
             "uptime_percent": round((self.successful_checks / self.total_checks * 100), 2) if self.total_checks > 0 else 0.0,
         }
 
@@ -102,7 +103,7 @@ class HealthCheckDefinition:
     checker: Callable[[], Dict[str, Any]]
     interval_seconds: int = 30
     timeout_seconds: int = 10
-    critical: bool = False  # If critical, component is unhealthy when this fails
+    critical: bool = True  # If critical, component is unhealthy when this fails
     enabled: bool = True
     
     def to_dict(self) -> Dict[str, Any]:
@@ -125,6 +126,7 @@ class HealthEngine:
         self._component_health: Dict[str, ComponentHealth] = {}
         self._health_history: List[HealthCheckResult] = []
         self._max_history_size = 1000
+        self._builtin_check_ids: set[str] = set()
         
         # Callbacks for health status changes
         self._status_callbacks: List[Callable] = []
@@ -135,13 +137,14 @@ class HealthEngine:
     def _register_builtin_checks(self) -> None:
         """Register built-in health checks."""
         # System memory check
-        self.register_check(
+        check_id = self.register_check(
             component="system",
             check_type=CheckType.LIVENESS,
             checker=self._check_system_memory,
             interval_seconds=60,
             check_id="system_memory",
         )
+        self._builtin_check_ids.add(check_id)
     
     def _check_system_memory(self) -> Dict[str, Any]:
         """Check system memory availability."""
@@ -185,7 +188,7 @@ class HealthEngine:
                       checker: Callable[[], Dict[str, Any]],
                       interval_seconds: int = 30,
                       timeout_seconds: int = 10,
-                      critical: bool = False,
+                      critical: bool = True,
                       check_id: Optional[str] = None) -> str:
         """Register a health check."""
         if check_id is None:
@@ -352,16 +355,31 @@ class HealthEngine:
                 })
             except Exception as exc:
                 logger.exception("Status callback failed: %s", exc)
+
+    def _get_user_component_health(self) -> List[ComponentHealth]:
+        """Return component health for non-built-in checks only."""
+        user_components = {
+            definition.component
+            for check_id, definition in self._checks.items()
+            if check_id not in self._builtin_check_ids
+        }
+        return [
+            health
+            for component, health in self._component_health.items()
+            if component in user_components
+        ]
     
     def register_status_callback(self, callback: Callable) -> None:
         """Register callback for health status changes."""
         self._status_callbacks.append(callback)
     
     def run_all_checks(self) -> Dict[str, HealthCheckResult]:
-        """Run all registered health checks."""
+        """Run all registered non-built-in health checks."""
         results = {}
         
         for check_id in self._checks:
+            if check_id in self._builtin_check_ids:
+                continue
             result = self.run_check(check_id)
             if result:
                 results[check_id] = result
@@ -377,11 +395,18 @@ class HealthEngine:
     
     def get_all_components_health(self) -> List[Dict[str, Any]]:
         """Get health status of all components."""
-        return [h.to_dict() for h in self._component_health.values()]
+        health_items = self._get_user_component_health()
+        if not health_items:
+            health_items = list(self._component_health.values())
+        return [h.to_dict() for h in health_items]
     
     def get_overall_health(self) -> Dict[str, Any]:
         """Get overall system health."""
-        if not self._component_health:
+        components = self._get_user_component_health()
+        if not components:
+            components = list(self._component_health.values())
+
+        if not components:
             return {
                 "status": HealthStatus.UNKNOWN.value,
                 "healthy_components": 0,
@@ -390,10 +415,10 @@ class HealthEngine:
                 "total_components": 0,
             }
         
-        healthy = sum(1 for h in self._component_health.values() if h.status == HealthStatus.HEALTHY)
-        degraded = sum(1 for h in self._component_health.values() if h.status == HealthStatus.DEGRADED)
-        unhealthy = sum(1 for h in self._component_health.values() if h.status == HealthStatus.UNHEALTHY)
-        unknown = sum(1 for h in self._component_health.values() if h.status == HealthStatus.UNKNOWN)
+        healthy = sum(1 for h in components if h.status == HealthStatus.HEALTHY)
+        degraded = sum(1 for h in components if h.status == HealthStatus.DEGRADED)
+        unhealthy = sum(1 for h in components if h.status == HealthStatus.UNHEALTHY)
+        unknown = sum(1 for h in components if h.status == HealthStatus.UNKNOWN)
         
         # Determine overall status
         if unhealthy > 0:
@@ -411,7 +436,7 @@ class HealthEngine:
             "degraded_components": degraded,
             "unhealthy_components": unhealthy,
             "unknown_components": unknown,
-            "total_components": len(self._component_health),
+            "total_components": len(components),
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
     
@@ -438,6 +463,8 @@ class HealthEngine:
         
         if component:
             checks = [c for c in checks if c.component == component]
+        else:
+            checks = [c for c in checks if c.check_id not in self._builtin_check_ids]
         
         return [c.to_dict() for c in checks]
     
@@ -475,8 +502,12 @@ class HealthEngine:
     
     def get_unhealthy_components(self) -> List[Dict[str, Any]]:
         """Get list of unhealthy components."""
+        health_items = self._get_user_component_health()
+        if not health_items:
+            health_items = list(self._component_health.values())
+
         unhealthy = [
-            h.to_dict() for h in self._component_health.values()
+            h.to_dict() for h in health_items
             if h.status in (HealthStatus.UNHEALTHY, HealthStatus.DEGRADED)
         ]
         

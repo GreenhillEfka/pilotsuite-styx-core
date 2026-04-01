@@ -642,8 +642,9 @@ Coordinate actions across multiple zones (scenes, routines, events).
 8. **✅ Slice 93 — Root Pytest Surface Stabilization** — Default-Root-`pytest` auf `tests/` fixiert, optionale Metrics-/HA-/Notification-Importpfade gehärtet, Storage-Metadaten bei direkter Entry-Konstruktion repariert
 9. **✅ Refinement — Integration/OWASP Compatibility Repair** — Legacy-Facades für Slice-67-82-Module ergänzt (`23/23` Integration grün, `57/57` ModuleRegistry grün) sowie OWASP-Request-Context-, NoSQL- und SSRF-Kanten für Root-`pytest -x` gehärtet
 10. **✅ Slice 94 — Root Contract/Test Surface Recovery** — Breite Core-Restfehler nach Slice 93 über Modul-, Query-, Scheduler-, Search-, Secrets-, Webhook-, Worker-, Workflow- und Voice-/Weather-Flächen stabilisiert; kritische Deadlocks/Retry-/Mutation-/Contract-Kanten beseitigt
+11. **✅ Slice 95 — Health Engine Surface Recovery** — Deadlock im Advanced-Health-Dependency-Pfad beseitigt, Built-in-Systemchecks von der user-facing Root-Contract-Surface getrennt, Default-Kritikalität/Overall-Health der klassischen Health-Engine wieder contract-konform gemacht und Component-Checks im Read-Model vollständig serialisiert
 
-**Next Exact Refinement Task:** Nächsten verbliebenen Root-`pytest -q`-Hänger oder Restfehler nach dem aktuellen Slice-94-Stabilisierungsstand identifizieren und isoliert schließen
+**Next Exact Refinement Task:** `tests/test_light_extended.py::TestLightModuleExtended::test_calculate_circadian_state_night` isoliert schließen; Night-Circadian-State muss bei Nacht `sleep_mode_brightness` statt `min_brightness` liefern
 
 **After Refinement:** Slice 12+ nur entlang der dann verbleibenden ersten echten Root-Restfehler weiterziehen; keine neuen Feature-Slices vor sauberem Restfehler-Abtrag
 

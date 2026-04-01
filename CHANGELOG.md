@@ -1,5 +1,16 @@
 # Changelog
 
+## [v15.3.12] - 2026-04-01
+
+### 🧩 Slice 95 — Health Engine Surface Recovery
+
+- `health_advanced.engine.run_check()` entkoppelt Dependency-Fail-Recording vom internen Lock; damit hängt der Root-Sweep nicht mehr in `test_run_check_dependency_unhealthy` an einem Re-Entry-Deadlock.
+- `health.engine` trennt Built-in-Systemchecks jetzt sauber von der user-facing Test-/Contract-Surface: `get_checks()`, `run_all_checks()`, Aggregation und Unhealthy-Listen berücksichtigen standardmäßig nur nicht-Built-ins, während `component="system"` die Default-Memory-Checks weiter sichtbar hält.
+- Die klassische Health-Surface harmonisiert die Kritikalitäts-Defaults wieder auf den erwarteten Contract (`critical=True` by default), sodass einzelne ungesunde Default-Checks Komponenten/Overall-Health wieder korrekt rot markieren; explizit nicht-kritische Checks behalten die 3-Failures-Regel.
+- `ComponentHealth.to_dict()` liefert die getrimmte `checks`-Liste wieder mit aus, damit Component-Read-Models/Tests die letzten Prüfläufe direkt sehen.
+- Versionsartefakte (`VERSION`, `copilot_core/VERSION`, `config.yaml`, `manifest.json`) auf `15.3.12` harmonisiert.
+- Validiert mit: `pytest -q tests/test_health_engine.py tests/test_health_advanced_engine.py -x` → `131 passed`; `pytest -q -x` → erster echter Restfehler jetzt bei `tests/test_light_extended.py::TestLightModuleExtended::test_calculate_circadian_state_night` (Night-Circadian-Brightness bleibt auf `min_brightness` statt `sleep_mode_brightness`).
+
 ## [v15.3.10] - 2026-04-01
 
 ### 🧩 Slice 93 — Root Pytest Surface Stabilization
