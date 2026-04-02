@@ -1354,4 +1354,32 @@ Hold-State-Änderungen sollen als benachrichtigbare Events ausleitbar sein, dami
 **Tag:** v15.3.56
 **Tests:** `pytest -q tests/test_zone_presence_hold_notifications_contract.py` → `23 passed`
 
-**Next Exact Task:** Slice 44 als Hold-Expiration-Cron-Surface ableiten: automatische Benachrichtigungen bei Hold-Verfall und Auto-Release nach Expiration mit Cron-Job-Integration.
+### ✅ Slice 44 — Hold Expiration Cron Surface
+**Status:** ✅ DONE (v15.3.57)
+
+**Goal**
+Automatische Hold-Expiration-Prüfung mit Benachrichtigungen und Auto-Release.
+
+### Deliverables
+- [x] `ZonePresenceHoldCronService` für periodische Hold-Expiration-Prüfung
+- [x] Automatische Benachrichtigungen bei `expiring_soon` (innerhalb Warnfenster)
+- [x] Automatische Benachrichtigungen bei `expired` + Auto-Release (konfigurierbar)
+- [x] API-Endpoints: `POST /api/v1/presence/holds/cron/run`, `GET /status|revision|config`
+- [x] `HoldExpirationCheckResultV1` und `HoldExpirationCronSummaryV1` Contracts
+- [x] `expiring_soon_window_minutes` und `auto_release_on_expire` Konfiguration
+- [x] Cron-Revisionstracking für Delta-Polling
+- [x] Contract-Tests (17 Tests grün)
+
+### Acceptance criteria
+- Cron-Service prüft alle aktiven Holds auf bevorstehenden/abgelaufenen Verfall
+- `expiring_soon`-Benachrichtigungen werden innerhalb des Warnfensters ausgelöst
+- `expired`-Benachrichtigungen werden bei Verfall ausgelöst
+- Auto-Release erfolgt deterministisch nach Expiration (wenn aktiviert)
+- API ermöglicht manuelle Trigger und Scheduler-Integration
+- Cron-Revision ermöglicht Delta-Polling für Worker/UIs
+
+**Commit:** `feat(presence): deliver slice 44 hold expiration cron surface`
+**Tag:** v15.3.57
+**Tests:** `pytest -q tests/test_zone_presence_hold_cron_contract.py` → `17 passed`
+
+**Next Exact Task:** Slice 45 als Zone-Presence-Hold-Scheduler-Integration ableiten: Cron-Job für periodische Hold-Expiration-Prüfung im Core-Scheduler registrieren, mit konfigurierbarem Intervall und Lifecycle-Management.
