@@ -407,3 +407,9 @@ def get_zone_presence_hold_store() -> ZonePresenceHoldStore:
     if _zone_presence_hold_store is None:
         _zone_presence_hold_store = ZonePresenceHoldStore()
     return _zone_presence_hold_store
+
+
+def reset_zone_presence_hold_store() -> None:
+    """Reset the zone presence hold store (for testing)."""
+    global _zone_presence_hold_store
+    _zone_presence_hold_store = None
