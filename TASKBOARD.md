@@ -1439,4 +1439,28 @@ Hold-Usage-Historie, Zone-spezifische Hold-Patterns und Hold-Effectiveness-Metri
 **Tag:** v15.3.59
 **Tests:** `pytest -q tests/test_hold_analytics_contract.py` → `17 passed`
 
-**Next Exact Task:** Slice 47 als Energy-Analytics-Surface ableiten: Energy-Usage-Historie, Zone-spezifische Energy-Patterns und Energy-Effectiveness-Metriken aus derselben Energy-/Optimization-Wahrheit materialisieren.
+### ✅ Slice 47 — Energy Analytics Surface
+**Status:** ✅ DONE (v15.3.60)
+
+**Goal**
+Energy-Usage-Historie, Zone-spezifische Energy-Patterns und Energy-Effectiveness-Metriken aus derselben Energy-/Optimization-Wahrheit materialisieren.
+
+### Deliverables
+- [x] `EnergyUsageHistoryV1` / `EnergyZonePatternsV1` / `EnergyEffectivenessMetricsV1` als Read-Models
+- [x] `EnergyAnalyticsStore` mit `build_usage_history()`, `build_zone_patterns()`, `get_effectiveness_metrics()`
+- [x] GET `/api/v1/energy/analytics/usage|patterns|effectiveness|summary` APIs
+- [x] Zone-/Time-Range-Filter und Revisionstracking für Delta-Polling
+- [x] Contract-Tests (17 Tests grün)
+- [x] App-Integration für Flask-Blueprint
+
+### Acceptance criteria
+- Dashboard-/UI-Poller können Energy-Usage mit Delta-Cursor inkrementell abfragen
+- Zone-spezifische Patterns zeigen Hold-Häufigkeit, Duration und State-Verteilung pro Zone
+- Effectiveness-Metriken quantifizieren Savings, Success-Rate und PV/Battery-Effizienz
+- Alle Surfaces lesen dieselbe kanonische Energy-Wahrheit ohne Schattenlogik
+
+**Commit:** `feat(energy): deliver slice 47 energy analytics surface`
+**Tag:** v15.3.60
+**Tests:** `pytest -q tests/test_energy_analytics_contract.py` → `17 passed`
+
+**Next Exact Task:** Slice 48 als Predictive-Analytics-Surface ableiten: Predictive-Usage-Historie, Zone-spezifische Predictive-Patterns und Predictive-Effectiveness-Metriken aus derselben Predictive-/Proposal-Wahrheit materialisieren.
