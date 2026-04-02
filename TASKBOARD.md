@@ -1300,4 +1300,32 @@ Dashboard-Zonenlisten und Zone-Detail sollen Hold-State exponieren, damit UIs An
 **Tag:** v15.3.54
 **Tests:** `pytest -q tests/test_zone_presence_hold_dashboard.py tests/test_zone_dashboard_contract.py` → `15 passed`
 
-**Next Exact Task:** Slice 42 als Zone-Presence-Hold-API-Endpoints ableiten: `/api/v1/presence/zones/<zone_id>/hold` CRUD-Endpoints für Dashboard-Direktsteuerung ohne Workaround-Flächen.
+### ✅ Slice 42 — Zone Presence Hold API Endpoints
+**Status:** ✅ DONE (v15.3.55)
+
+**Goal**
+CRUD-Endpoints für Zone-Presence-Hold-Direktsteuerung bereitstellen, damit Dashboard/UIs Hold-Zustände ohne Workaround-Flächen setzen/freigeben/abfragen können.
+
+### Deliverables
+- [x] `POST /presence/zones/<zone_id>/hold` zum Setzen von Hold-State (auto/force_on/force_off) mit optionalem duration_seconds
+- [x] `DELETE /presence/zones/<zone_id>/hold` zum Freigeben eines Holds
+- [x] `GET /presence/zones/<zone_id>/hold` für einzelnen Hold-Status
+- [x] `GET /presence/zones/<zone_id>/state` für effektiven Hold-State mit is_enforced-Flag
+- [x] `GET /presence/zones/holds` für aggregierte Summary mit Revision/Delta
+- [x] `GET /presence/zones/holds/<hold_id>` für einzelnen Hold by ID
+- [x] Blueprint-Registrierung in app.py
+- [x] Contract-Tests für API-Endpoints
+
+### Acceptance criteria
+- Hold-State kann via POST deterministisch gesetzt werden (auto/force_on/force_off)
+- Hold kann via DELETE manuell freigegeben werden
+- Einzelne Hold-States sind via GET abfragbar
+- Effektiver Hold-State mit is_enforced-Flag ist verfügbar
+- Summary-Surface unterstützt Delta-Polling mit since_revision
+- API-Endpoints sind in app.py registriert und testbar
+
+**Commit:** `feat(presence): deliver slice 42 zone presence hold api endpoints`
+**Tag:** v15.3.55
+**Tests:** `pytest -q tests/test_zone_presence_hold_api.py` → `19 passed`
+
+**Next Exact Task:** Slice 43 als Zone-Presence-Hold-Notification-Surface ableiten: Hold-State-Änderungen sollen als benachrichtigbare Events ausleitbar sein, damit User bei manuellen Overrides/Verfall informiert werden.
