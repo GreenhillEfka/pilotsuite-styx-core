@@ -39,6 +39,10 @@ from copilot_core.core.proposal_lifecycle_read_model import (
     build_proposal_lifecycle_context_block,
     describe_proposal_lifecycle_summary,
 )
+from copilot_core.core.proposal_lifecycle_dispatch import (
+    ProposalLifecycleDispatchStore,
+    get_proposal_lifecycle_dispatch_store,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -1402,6 +1406,7 @@ class ActionClosureFollowUpDispatchStore:
 # Singleton instances
 _notification_manager: Optional[NotificationManager] = None
 _action_closure_follow_up_dispatch_store: Optional[ActionClosureFollowUpDispatchStore] = None
+_proposal_lifecycle_dispatch_store: Optional[ProposalLifecycleDispatchStore] = None
 
 
 def get_notification_manager() -> NotificationManager:
@@ -1421,6 +1426,13 @@ def get_action_closure_follow_up_dispatch_store() -> ActionClosureFollowUpDispat
     if _action_closure_follow_up_dispatch_store is None:
         _action_closure_follow_up_dispatch_store = ActionClosureFollowUpDispatchStore()
     return _action_closure_follow_up_dispatch_store
+
+
+def get_proposal_lifecycle_dispatch_store() -> ProposalLifecycleDispatchStore:
+    global _proposal_lifecycle_dispatch_store
+    if _proposal_lifecycle_dispatch_store is None:
+        _proposal_lifecycle_dispatch_store = ProposalLifecycleDispatchStore()
+    return _proposal_lifecycle_dispatch_store
 
 
 # =============================================================================
@@ -2162,6 +2174,318 @@ def get_action_closure_follow_up_sla() -> tuple[dict[str, Any], int]:
         recent_limit=max(1, min(10, int(request.args.get("recent_limit", "5")))),
     )
     return jsonify({"ok": True, "sla": summary})
+
+
+# =============================================================================
+# Proposal Lifecycle Dispatch Endpoints
+# =============================================================================
+
+
+def _build_proposal_lifecycle_dispatch_bundle(
+    delivery_mode: str = "notification_job",
+    recent_limit: int = 10,
+    since_revision: int | None = None,
+) -> dict[str, Any]:
+    """Build proposal lifecycle dispatch bundle from canonical lifecycle truth."""
+    from copilot_core.core.proposal_lifecycle_read_model import build_proposal_lifecycle_status_summary
+    
+    lifecycle_summary = build_proposal_lifecycle_status_summary(
+        since_revision=since_revision,
+        recent_limit=recent_limit,
+    )
+    
+    store = get_proposal_lifecycle_dispatch_store()
+    bundle = store.materialize_candidates(
+        lifecycle_summary=lifecycle_summary,
+        delivery_mode=delivery_mode,
+        recent_limit=recent_limit,
+    )
+    
+    return {
+        "ok": True,
+        "contract": "ProposalLifecycleDispatchV1",
+        "delivery_mode": bundle.delivery_mode,
+        "cursor": bundle.cursor.to_dict(),
+        "counts": bundle.to_dict()["counts"],
+        "candidates": [c.to_dict() for c in bundle.candidates],
+    }
+
+
+@bp.route("/proposals/dispatch", methods=["GET"])
+def get_proposal_lifecycle_dispatch() -> tuple[dict[str, Any], int]:
+    """Get proposal lifecycle dispatch candidates for notification workers.
+    
+    Query params:
+        delivery_mode: notification_job | reminder_queue (default: notification_job)
+        recent_limit: max candidates to return (default: 10)
+        since_revision: delta cursor for incremental polling
+    
+    Returns:
+        tuple[dict[str, Any], int]: JSON response with dispatch bundle and HTTP status code.
+    """
+    try:
+        since_revision = _parse_optional_int_arg("since_revision")
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    
+    delivery_mode = (request.args.get("delivery_mode") or "").strip() or "notification_job"
+    if delivery_mode not in {"notification_job", "reminder_queue"}:
+        return jsonify({"ok": False, "error": f"Unsupported delivery_mode: {delivery_mode}"}), 400
+    
+    recent_limit = max(1, min(100, int(request.args.get("recent_limit", "10"))))
+    
+    bundle = _build_proposal_lifecycle_dispatch_bundle(
+        delivery_mode=delivery_mode,
+        recent_limit=recent_limit,
+        since_revision=since_revision,
+    )
+    return jsonify(bundle)
+
+
+@bp.route("/proposals/dispatch/claim", methods=["POST"])
+def claim_proposal_lifecycle_dispatch() -> tuple[dict[str, Any], int]:
+    """Claim proposal dispatch candidates for a worker.
+    
+    JSON body:
+        {
+            "candidate_ids": [str],
+            "worker_id": str,
+            "lease_seconds": int (optional, default: 300)
+        }
+    
+    Returns:
+        tuple[dict[str, Any], int]: JSON response with claims and conflicts.
+    """
+    body = request.get_json() or {}
+    candidate_ids = body.get("candidate_ids", [])
+    worker_id = (body.get("worker_id") or "").strip()
+    
+    if not worker_id:
+        return jsonify({"ok": False, "error": "worker_id is required"}), 400
+    if not candidate_ids:
+        return jsonify({"ok": False, "error": "candidate_ids is required"}), 400
+    
+    lease_seconds = max(60, min(3600, int(body.get("lease_seconds", 300))))
+    
+    store = get_proposal_lifecycle_dispatch_store()
+    claims, conflicts = store.claim(
+        candidate_ids=candidate_ids,
+        worker_id=worker_id,
+        lease_seconds=lease_seconds,
+    )
+    
+    if not claims and conflicts:
+        return jsonify({"ok": False, "claims": [], "conflicts": conflicts, "count": 0, "conflict_count": len(conflicts)}), 409
+    if not claims:
+        return jsonify({"ok": False, "error": "No matching dispatch candidates found"}), 404
+    
+    return jsonify(
+        {
+            "ok": True,
+            "claims": claims,
+            "conflicts": conflicts,
+            "count": len(claims),
+            "conflict_count": len(conflicts),
+        }
+    )
+
+
+@bp.route("/proposals/dispatch/ack", methods=["POST"])
+def acknowledge_proposal_lifecycle_dispatch() -> tuple[dict[str, Any], int]:
+    """Acknowledge proposal dispatch candidates.
+    
+    JSON body:
+        {
+            "candidate_ids": [str],
+            "worker_id": str
+        }
+    
+    Returns:
+        tuple[dict[str, Any], int]: JSON response with acknowledgements.
+    """
+    body = request.get_json() or {}
+    candidate_ids = body.get("candidate_ids", [])
+    worker_id = (body.get("worker_id") or "").strip()
+    
+    if not worker_id:
+        return jsonify({"ok": False, "error": "worker_id is required"}), 400
+    if not candidate_ids:
+        return jsonify({"ok": False, "error": "candidate_ids is required"}), 400
+    
+    store = get_proposal_lifecycle_dispatch_store()
+    acknowledgements = store.acknowledge(
+        candidate_ids=candidate_ids,
+        worker_id=worker_id,
+    )
+    
+    return jsonify(
+        {
+            "ok": True,
+            "acknowledgements": acknowledgements,
+            "count": len(acknowledgements),
+        }
+    )
+
+
+@bp.route("/proposals/dispatch/receipt", methods=["POST"])
+def record_proposal_lifecycle_receipt() -> tuple[dict[str, Any], int]:
+    """Record delivery receipts for proposal dispatch candidates.
+    
+    JSON body:
+        {
+            "receipts": [
+                {
+                    "candidate_id": str,
+                    "delivery_status": str,
+                    "delivered_at": str (optional),
+                    "error": str (optional),
+                    "retry_count": int (optional),
+                }
+            ]
+        }
+    
+    Returns:
+        tuple[dict[str, Any], int]: JSON response with recorded receipts.
+    """
+    body = request.get_json() or {}
+    receipts = body.get("receipts", [])
+    
+    if not receipts:
+        return jsonify({"ok": False, "error": "receipts is required"}), 400
+    
+    store = get_proposal_lifecycle_dispatch_store()
+    recorded = store.record_receipts(receipts=receipts)
+    
+    return jsonify(
+        {
+            "ok": True,
+            "receipts": recorded,
+            "count": len(recorded),
+        }
+    )
+
+
+@bp.route("/proposals/dispatch/settle", methods=["POST"])
+def settle_proposal_lifecycle_dispatch() -> tuple[dict[str, Any], int]:
+    """Settle claims for proposal dispatch candidates.
+    
+    JSON body:
+        {
+            "settlements": [
+                {
+                    "candidate_id": str,
+                    "settlement_status": str (completed | abandoned),
+                    "outcome": str (optional)
+                }
+            ]
+        }
+    
+    Returns:
+        tuple[dict[str, Any], int]: JSON response with settlements and conflicts.
+    """
+    body = request.get_json() or {}
+    settlements = body.get("settlements", [])
+    
+    if not settlements:
+        return jsonify({"ok": False, "error": "settlements is required"}), 400
+    
+    store = get_proposal_lifecycle_dispatch_store()
+    settled, conflicts = store.settle_claims(settlements=settlements)
+    
+    if not settled and conflicts:
+        return jsonify({"ok": False, "settlements": [], "conflicts": conflicts, "count": 0, "conflict_count": len(conflicts)}), 409
+    if not settled:
+        return jsonify({"ok": False, "error": "No matching dispatch candidates found"}), 404
+    
+    return jsonify(
+        {
+            "ok": True,
+            "settlements": settled,
+            "conflicts": conflicts,
+            "count": len(settled),
+            "conflict_count": len(conflicts),
+        }
+    )
+
+
+@bp.route("/proposals/receipts", methods=["GET"])
+def get_proposal_lifecycle_receipts() -> tuple[dict[str, Any], int]:
+    """Get receipt summary for proposal dispatch workers."""
+    try:
+        since_revision = _parse_optional_int_arg("receipt_since")
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    
+    delivery_mode = (request.args.get("delivery_mode") or "").strip() or None
+    worker = (request.args.get("worker") or "").strip() or None
+    
+    store = get_proposal_lifecycle_dispatch_store()
+    receipts = list(store._receipts.values())
+    
+    if delivery_mode:
+        receipts = [r for r in receipts if r.get("delivery_mode") == delivery_mode]
+    if worker:
+        receipts = [r for r in receipts if r.get("worker_id") == worker]
+    
+    return jsonify(
+        {
+            "ok": True,
+            "receipts": receipts,
+            "count": len(receipts),
+        }
+    )
+
+
+@bp.route("/proposals/claims", methods=["GET"])
+def get_proposal_lifecycle_claims() -> tuple[dict[str, Any], int]:
+    """Get claim/lease summary for proposal dispatch workers."""
+    try:
+        since_revision = _parse_optional_int_arg("claim_since")
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    
+    worker = (request.args.get("worker") or "").strip() or None
+    
+    store = get_proposal_lifecycle_dispatch_store()
+    claims = list(store._claims.values())
+    
+    if worker:
+        claims = [c for c in claims if c.get("worker_id") == worker]
+    
+    return jsonify(
+        {
+            "ok": True,
+            "claims": claims,
+            "count": len(claims),
+            "revision": store.get_revision(),
+        }
+    )
+
+
+@bp.route("/proposals/settlements", methods=["GET"])
+def get_proposal_lifecycle_settlements() -> tuple[dict[str, Any], int]:
+    """Get settlement summary for proposal dispatch workers."""
+    try:
+        since_revision = _parse_optional_int_arg("settlement_since")
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    
+    worker = (request.args.get("worker") or "").strip() or None
+    
+    store = get_proposal_lifecycle_dispatch_store()
+    settlements = list(store._settlements.values())
+    
+    if worker:
+        settlements = [s for s in settlements if s.get("worker_id") == worker]
+    
+    return jsonify(
+        {
+            "ok": True,
+            "settlements": settlements,
+            "count": len(settlements),
+            "revision": store.get_revision(),
+        }
+    )
 
 
 # Helper methods for NotificationManager
@@ -3564,6 +3888,7 @@ __all__ = [
     "bp",
     "get_notification_manager",
     "get_action_closure_follow_up_dispatch_store",
+    "get_proposal_lifecycle_dispatch_store",
     "_build_action_closure_follow_up_sla_summary",
     "_build_action_closure_follow_up_claim_summary",
     "_build_action_closure_follow_up_settlement_summary",
@@ -3573,6 +3898,7 @@ __all__ = [
     "_describe_action_closure_follow_up_receipt_summary",
     "NotificationManager",
     "ActionClosureFollowUpDispatchStore",
+    "ProposalLifecycleDispatchStore",
     "register_ha_device",
     "get_action_closure_follow_up_dispatch",
     "claim_action_closure_follow_up_dispatch",
@@ -3583,6 +3909,14 @@ __all__ = [
     "get_action_closure_follow_up_settlements",
     "get_action_closure_follow_up_receipts",
     "get_action_closure_follow_up_sla",
+    "get_proposal_lifecycle_dispatch",
+    "claim_proposal_lifecycle_dispatch",
+    "acknowledge_proposal_lifecycle_dispatch",
+    "record_proposal_lifecycle_receipt",
+    "settle_proposal_lifecycle_dispatch",
+    "get_proposal_lifecycle_claims",
+    "get_proposal_lifecycle_settlements",
+    "get_proposal_lifecycle_receipts",
     "get_ha_devices",
     "send_ha_notification",
     "test_ha_connection",

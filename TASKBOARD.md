@@ -1066,6 +1066,31 @@ Die kanonische Proposal-Lifecycle-Wahrheit zonenscharf fuer Dashboard- und Zone-
 
 **Next Exact Task:** Slice 33 als voice-spezifische Proposal-Hints ableiten: proaktive Voice-Hinweise sollen offene/vorgeschlagene Proposals aus derselben kanonischen Lifecycle-Schicht als Follow-up-/Status-Hinweise sprechen, analog zu Slice 20 für Closures.
 
+### ✅ Slice 34 — Zone-Scoped Proposal Lifecycle Feed Surface
+**Status:** ✅ DONE (v15.3.47)
+
+**Goal**
+Die kanonische Proposal-Lifecycle-Wahrheit als zonenspezifischen Feed fuer Dashboard-Poller und System-Kontexte ausleiten, damit inkrementelle Poller mit Delta-Cursor dieselbe Proposal-/Action-/Closure-Truth konsumieren.
+
+**Deliverables**
+- [x] ZoneProposalFeedEntryV1/ZoneProposalFeedV1/ZoneProposalFeedSummaryV1 als kanonische Read-Models
+- [x] ZoneProposalFeedStore mit build_zone_feed() und build_zone_feed_summary()
+- [x] GET /api/v1/proposals/feed mit zone_id/zone_ids/since/include_empty-Filtern
+- [x] GET /api/v1/proposals/feed/zone/<zone_id> mit since-Cursor fuer Delta-Responses
+- [x] Zone-Namen-Aufloesung aus ZoneTruthStore fuer menschenlesbare Darstellung
+- [x] Revisionstracking und latest_change_at fuer alle Feed-Surfaces
+- [x] Contract-Tests fuer Store, API und Delta-Verhalten
+
+**Acceptance criteria**
+- Dashboard-Poller koennen zonenspezifische Proposal-Feeds mit Delta-Cursor abfragen
+- Zone-Namen werden aus derselben ZoneTruth-Wahrheit aufgelost
+- Revision/has_changes-Logik erlaubt effizientes inkrementelles Polling
+- Proposal-Lifecycle-Feed ist als eigene API-Surface unter /api/v1/proposals/feed erreichbar
+
+**Commit:** `feat(core): deliver slice 34 zone-scoped proposal lifecycle feed surface`
+**Tag:** v15.3.47
+**Tests:** `pytest -q tests/test_proposal_lifecycle_feed_contract.py` → `12 passed`
+
 ### ✅ Slice 33 — Closure-Aware Proposal Follow-Up Hints for Voice
 **Status:** ✅ DONE (v15.3.45)
 
@@ -1084,8 +1109,37 @@ Den Roadmap-Block **Voice Integration** an die kanonische Proposal-Lifecycle-Wah
 - Follow-up-Hinweise bleiben source-grounded: Status, Summary und letzte Proposal sind im Hint-Kontext transparent enthalten.
 - Die Voice-Surface erfindet keine separaten Outcome-Heuristiken neben dem bestehenden Lifecycle-Contract.
 
-**Commit:** `feat(core): deliver slice 33 closure-aware proposal follow-up hints for voice`
-**Tag:** v15.3.45
-**Tests:** `pytest -q tests/test_voice_proposal_lifecycle_hints_contract.py tests/test_voice_action_closure_hints_contract.py tests/test_proposal_lifecycle_status_contract.py` → `9 passed`
+**Commit:** `feat(core): deliver slice 34 zone-scoped proposal lifecycle feed surface`
+**Tag:** v15.3.47
+**Tests:** `pytest -q tests/test_proposal_lifecycle_feed_contract.py` → `12 passed`
 
-**Next Exact Task:** Nächster Forward-Slice wieder aus Roadmap/Vision ableiten; zonenspezifische Proposal-Lifecycle-Feeds für Dashboard-/System-Kontext als Slice 34 evaluieren.
+**Next Exact Task:** Slice 35 als notification-basierte Proposal-Dispatch-Surface ableiten: offene/vorgeschlagene Proposals aus derselben Lifecycle-Wahrheit in benachrichtigbare Dispatch-Kandidaten mit Delta-Cursor und Delivery-Modus materialisieren.
+
+### ✅ Slice 35 — Proposal Lifecycle Notification Dispatch
+**Status:** ✅ DONE (v15.3.48)
+
+**Goal**
+Notification- und Digest-Worker sollen offene bzw. vorgeschlagene `ProposalLifecycle`-Folgen direkt aus derselben kanonischen Lifecycle-Wahrheit beziehen können — ohne zweite Aggregationslogik, aber mit demselben Revisionscursor wie Dashboard- und Context-Poller.
+
+### Deliverables
+- [x] `ProposalLifecycleDispatchStore` materialisiert Dispatch-Kandidaten aus `ProposalLifecycleStatusSummaryV1`
+- [x] `ProposalLifecycleDispatchCandidateV1` exponiert `proposal_id`, `lifecycle_status`, `zone_id`, `module_id`, `source`, `priority`, `delivery_mode`, `revision`
+- [x] `GET /notifications/proposals/dispatch` mit `delivery_mode`, `recent_limit`, `since_revision`-Filtern
+- [x] `POST /notifications/proposals/dispatch/claim` für Worker-Claims mit Lease-Mechanik
+- [x] `POST /notifications/proposals/dispatch/ack` für Acknowledgements
+- [x] `POST /notifications/proposals/dispatch/receipt` für Delivery-Receipts
+- [x] `POST /notifications/proposals/dispatch/settle` für Claim-Settlements
+- [x] `GET /notifications/proposals/claims|receipts|settlements` für Worker-Observability
+- [x] Priority-Determination basierend auf `lifecycle_status` (failed=high, accepted=normal, proposed=low)
+- [x] Contract-Tests für Store, API und Worker-Surfaces
+
+### Acceptance criteria
+- Notification-/Digest-Worker müssen keine eigene Proposal-Zusammenfassung mehr pflegen, sondern können denselben Delta-Cursor wie andere Lifecycle-Consumer verwenden.
+- Offene/vorgeschlagene/gescheiterte Proposals sind in Dispatch-Payloads strukturiert sichtbar und lassen sich ohne weitere Join-Logik priorisieren.
+- Claim-/Ack-/Receipt-/Settlement-Surfaces folgen demselben Muster wie Action-Closure-Dispatch.
+
+**Commit:** `feat(core): deliver slice 35 proposal lifecycle notification dispatch`
+**Tag:** v15.3.48
+**Tests:** `pytest -q tests/test_notification_proposal_lifecycle_dispatch_contract.py` → `10 passed`
+
+**Next Exact Task:** Slice 36 als delivery-faehigen Proposal-Follow-up-Worker ableiten: aus `ProposalLifecycleDispatchV1` deduplizierte Dispatch-Kandidaten plus Cursor-/Ack-Mechanik fuer echte Notification-Jobs und Reminder-Queues materialisieren.
