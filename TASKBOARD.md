@@ -1414,3 +1414,29 @@ Automatische Hold-Expiration-Prüfung im Core-Scheduler registrieren, mit konfig
 **Tests:** `pytest -q tests/test_zone_presence_hold_scheduler_contract.py tests/test_zone_presence_hold_scheduler_api.py` → `41 passed`
 
 **Next Exact Task:** Slice 46 als Hold-Statistik-/Analytics-Surface ableiten: Hold-Usage-Historie, Zone-spezifische Hold-Patterns und Hold-Effectiveness-Metriken aus derselben Hold-/Notification-/Scheduler-Wahrheit materialisieren.
+
+### ✅ Slice 46 — Hold Statistics / Analytics Surface
+**Status:** ✅ DONE (v15.3.59)
+
+**Goal**
+Hold-Usage-Historie, Zone-spezifische Hold-Patterns und Hold-Effectiveness-Metriken aus derselben Hold-/Notification-/Scheduler-Wahrheit materialisieren.
+
+### Deliverables
+- [x] `HoldUsageHistoryV1` / `HoldZonePatternsV1` / `HoldEffectivenessMetricsV1` als Read-Models
+- [x] `HoldAnalyticsStore` mit `build_usage_history()`, `build_zone_patterns()`, `build_effectiveness_metrics()`
+- [x] GET `/presence/holds/analytics/usage|patterns|effectiveness|summary` APIs
+- [x] Zone-/Time-Range-Filter und Revisionstracking für Delta-Polling
+- [x] Contract-Tests (17 Tests grün)
+- [x] App-Integration für Flask-Blueprint
+
+### Acceptance criteria
+- Dashboard-/UI-Poller können Hold-Usage mit Delta-Cursor inkrementell abfragen
+- Zone-spezifische Patterns zeigen Hold-Häufigkeit, Duration und State-Verteilung pro Zone
+- Effectiveness-Metriken quantifizieren Flapping-Prevention und Conflict-Rate
+- Alle Surfaces lesen dieselbe kanonische Hold-Wahrheit ohne Schattenlogik
+
+**Commit:** `feat(presence): deliver slice 46 hold statistics analytics surface`
+**Tag:** v15.3.59
+**Tests:** `pytest -q tests/test_hold_analytics_contract.py` → `17 passed`
+
+**Next Exact Task:** Slice 47 als Energy-Analytics-Surface ableiten: Energy-Usage-Historie, Zone-spezifische Energy-Patterns und Energy-Effectiveness-Metriken aus derselben Energy-/Optimization-Wahrheit materialisieren.

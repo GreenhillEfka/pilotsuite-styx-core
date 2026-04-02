@@ -80,6 +80,7 @@ CORE_API_BLUEPRINTS: List[Tuple[str, str, Optional[str]]] = [
     ("copilot_core.api.v1.energy_forecast", "energy_forecast_bp", None),
     ("copilot_core.api.v1.ml_forecast", "ml_forecast_bp", None),
     ("copilot_core.api.v1.anomaly", "anomaly_bp", None),
+    ("copilot_core.api.v1.energy_analytics", "analytics_bp", None),
     
     # RAG & Search
     ("copilot_core.api.v1.search", "bp", None),
