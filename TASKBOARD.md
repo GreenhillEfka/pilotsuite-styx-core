@@ -1224,3 +1224,34 @@ Worker sollen Proposal-Follow-ups aus derselben Dispatch-/Receipt-Wahrheit revis
 **Tests:** `pytest -q tests/test_proposal_claims_api.py tests/test_proposal_follow_up_claim_contract.py tests/test_proposal_follow_up_dispatch_contract.py tests/test_proposal_follow_up_receipt_contract.py` → `63 passed`
 
 **Next Exact Task:** Slice 39 als Zone-Presence-Hold-/Release-Surface ableiten: Zone-Presence-Events sollen deterministisch gehalten/freigegeben werden koennen, damit Anwesenheitserkennung nicht bei kurzen Abwesenheitsfenstern flackert.
+
+### ✅ Slice 39 — Zone Presence Hold / Release Surface
+**Status:** ✅ DONE (v15.3.52)
+
+**Goal**
+Zone-Presence-Events sollen deterministisch gehalten/freigegeben werden koennen, damit Anwesenheitserkennung nicht bei kurzen Abwesenheitsfenstern flackert. Bietet kanonische Hold-State-Tracking mit Expiration, Reason-Tracking und zone-scoped Hold-Visibility.
+
+### Deliverables
+- [x] `ZonePresenceHoldV1` als kanonische Hold-Record mit `hold_id`, `zone_id`, `hold_state`, `reason`, `set_at`, `expires_at`, `released`, `released_at`
+- [x] `ZoneHoldState` Enum (`auto`, `force_on`, `force_off`) fuer Hold-States
+- [x] `ZonePresenceHoldStore` mit `set_hold()`, `release_hold()`, `get_hold_by_zone()`, `get_active_hold_state()`, `get_hold_summary()`
+- [x] `POST /presence/zones/<zone_id>/hold` fuer Setzen von Hold mit optionalem `duration_seconds` (Auto-Expire)
+- [x] `GET /presence/zones/<zone_id>/hold` fuer einzelnen Hold-Status
+- [x] `DELETE /presence/zones/<zone_id>/hold` fuer Release (Reset auf Auto)
+- [x] `GET /presence/zones/<zone_id>/state` fuer effektiven Hold-State (`is_enforced` Flag)
+- [x] `GET /presence/zones/holds` fuer aggregierte Summary mit `hold_revision`, Delta-Cursor, Counts nach State
+- [x] `GET /presence/zones/holds/<hold_id>` fuer einzelnen Hold by ID
+- [x] Contract-Tests fuer Store, API und Hold-State-Logik
+
+### Acceptance criteria
+- Zone-Presence kann via Hold deterministisch auf `force_on`/`force_off` gesetzt werden, ohne dass Sensor-Updates den State ueberschreiben.
+- Hold kann mit `duration_seconds` auto-expirieren oder manuell via DELETE release werden.
+- Effektiver Hold-State (`auto` vs `force_on`/`force_off`) ist via `/state` abfragbar mit `is_enforced` Flag.
+- Hold-Revisionen werden fuer inkrementelle Poller mitgefuehrt; Summary unterstuetzt `since_revision`-Delta.
+- Hold-States werden nicht als zweite Schattenlogik gepflegt, sondern als kanonische Core-Surface.
+
+**Commit:** `feat(core): deliver slice 39 zone presence hold release surface`
+**Tag:** v15.3.52
+**Tests:** `pytest -q tests/test_zone_presence_hold_contract.py tests/test_zone_presence_hold_api.py` → `39 passed`
+
+**Next Exact Task:** Slice 40 als Zone-Presence-Hold-Integration-in-Presence-Engine ableiten: bestehende Presence-Aggregation soll Hold-State konsultieren, bevor Sensor-States angewendet werden.
