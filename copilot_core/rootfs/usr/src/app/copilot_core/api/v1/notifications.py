@@ -34,6 +34,11 @@ if TYPE_CHECKING:
 
 from copilot_core.action_closure import get_action_closure_store
 from copilot_core.core.action_closure_read_model import build_action_closure_summary_read_model
+from copilot_core.core.proposal_lifecycle_read_model import (
+    build_proposal_lifecycle_status_summary,
+    build_proposal_lifecycle_context_block,
+    describe_proposal_lifecycle_summary,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -1836,6 +1841,17 @@ def get_pending_notifications() -> tuple[dict[str, Any], int]:
             recent_limit=max(1, min(10, int(request.args.get("recent_limit", "5")))),
         )
 
+    if _parse_bool_arg("include_proposal_lifecycle"):
+        try:
+            since_revision = _parse_optional_int_arg("proposal_lifecycle_since")
+        except ValueError as exc:
+            return jsonify({"ok": False, "error": str(exc)}), 400
+        response["proposal_lifecycle"] = _build_proposal_lifecycle_notification_digest(
+            zone_id=(request.args.get("zone_id") or "").strip() or None,
+            since_revision=since_revision,
+            recent_limit=max(1, min(10, int(request.args.get("recent_limit", "5")))),
+        )
+
     return jsonify(response)
 
 
@@ -1863,6 +1879,17 @@ def get_notification_digest() -> tuple[dict[str, Any], int]:
         except ValueError as exc:
             return jsonify({"ok": False, "error": str(exc)}), 400
         response["digest"]["action_closures"] = _build_action_closure_notification_digest(
+            zone_id=(request.args.get("zone_id") or "").strip() or None,
+            since_revision=since_revision,
+            recent_limit=max(1, min(10, int(request.args.get("recent_limit", "5")))),
+        )
+
+    if _parse_bool_arg("include_proposal_lifecycle"):
+        try:
+            since_revision = _parse_optional_int_arg("proposal_lifecycle_since")
+        except ValueError as exc:
+            return jsonify({"ok": False, "error": str(exc)}), 400
+        response["digest"]["proposal_lifecycle"] = _build_proposal_lifecycle_notification_digest(
             zone_id=(request.args.get("zone_id") or "").strip() or None,
             since_revision=since_revision,
             recent_limit=max(1, min(10, int(request.args.get("recent_limit", "5")))),
@@ -2563,6 +2590,87 @@ def _build_action_closure_notification_digest(
             zone_id=zone_id,
             recent_limit=recent_limit,
         ),
+    }
+
+
+def _collect_proposal_lifecycle_follow_ups(
+    *,
+    zone_id: str | None = None,
+    since_revision: int | None = None,
+    recent_limit: int = 5,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    from copilot_core.core.proposal_lifecycle_read_model import build_proposal_lifecycle_status_summary
+
+    summary = build_proposal_lifecycle_status_summary(
+        get_action_closure_store(),
+        zone_id=zone_id,
+        recent_limit=recent_limit,
+        since_revision=since_revision,
+    ).to_dict()
+
+    follow_ups: list[dict[str, Any]] = []
+    for entry in summary.get("recent_statuses", []):
+        follow_up = _build_proposal_lifecycle_follow_up(entry)
+        if follow_up is not None:
+            follow_ups.append(follow_up)
+    return summary, follow_ups
+
+
+def _build_proposal_lifecycle_follow_up(entry: dict[str, Any]) -> dict[str, Any] | None:
+    lifecycle_status = str(entry.get("lifecycle_status") or "unknown").strip().lower()
+    if lifecycle_status in {"failed", "rejected", "cancelled", "blocked", "denied"}:
+        kind = "problematic"
+        priority = "high"
+        title = "Proposal gescheitert"
+        message = f"{entry.get('zone_id') or entry.get('module_id') or entry.get('proposal_id')}: Status {lifecycle_status}"
+    elif lifecycle_status in {"suggested", "follow_up_open"}:
+        kind = "open"
+        priority = "normal"
+        title = "Proposal noch offen"
+        message = f"{entry.get('zone_id') or entry.get('module_id') or entry.get('proposal_id')}: wartet auf Entscheidung ({lifecycle_status})"
+    else:
+        return None
+
+    return {
+        "proposal_id": entry.get("proposal_id"),
+        "revision": int(entry.get("revision") or 0),
+        "zone_id": entry.get("zone_id"),
+        "module_id": entry.get("module_id"),
+        "lifecycle_status": entry.get("lifecycle_status"),
+        "kind": kind,
+        "priority": priority,
+        "title": title,
+        "message": message,
+        "latest_change_at": entry.get("latest_change_at"),
+    }
+
+
+def _build_proposal_lifecycle_notification_digest(
+    *,
+    zone_id: str | None = None,
+    since_revision: int | None = None,
+    recent_limit: int = 5,
+) -> dict[str, Any]:
+    summary, follow_ups = _collect_proposal_lifecycle_follow_ups(
+        zone_id=zone_id,
+        since_revision=since_revision,
+        recent_limit=recent_limit,
+    )
+
+    return {
+        "contract": "ProposalLifecycleNotificationDigestV1",
+        "zone_id": zone_id,
+        "revision": summary.get("revision", 0),
+        "latest_change_at": summary.get("latest_change_at"),
+        "suggested_count": summary.get("lifecycle_statuses", {}).get("suggested", 0),
+        "accepted_count": summary.get("lifecycle_statuses", {}).get("accepted", 0),
+        "executed_count": summary.get("lifecycle_statuses", {}).get("executed", 0),
+        "failed_count": summary.get("lifecycle_statuses", {}).get("failed", 0),
+        "follow_up_open_count": summary.get("lifecycle_statuses", {}).get("follow_up_open", 0),
+        "settled_count": summary.get("lifecycle_statuses", {}).get("settled", 0),
+        "total_proposals": summary.get("total_proposals", 0),
+        "delta": summary.get("delta", {}),
+        "follow_ups": follow_ups,
     }
 
 
