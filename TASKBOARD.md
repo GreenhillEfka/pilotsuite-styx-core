@@ -1014,3 +1014,26 @@ Explizite Release-/Abandon-/Settlement-Resultate fuer Closure-Follow-up-Worker-L
 **Tests:** `pytest -q tests/test_notification_action_closure_dispatch_contract.py tests/test_notification_action_closure_digest_contract.py tests/test_action_closure_summary_contract.py tests/test_zone_dashboard_contract.py tests/test_voice_action_closure_hints_contract.py` → `35 passed`
 
 **Next Exact Task:** Slice 30 als Proposal-Lifecycle-Status-Surface aus derselben Proposal-/Action-/Closure-/Settlement-Wahrheit ableiten: pro Proposal den letzten kanonischen Lifecycle-Stand (suggested/accepted/executed/failed/follow-up-open/settled) revisionsscharf fuer Dashboard/Chat/Worker materialisieren, ohne eine separate Timeline-Tabelle aufzubauen.
+
+### ✅ Slice 30 — Proposal Lifecycle Status Surface
+**Status:** ✅ DONE (v15.3.42)
+
+**Goal**
+Den letzten kanonischen Lifecycle-Stand pro Proposal direkt aus bestehender Proposal-/Action-/Closure-/Settlement-Wahrheit materialisieren, damit Worker, Dashboard und Chat dieselbe revisionsscharfe Proposal-Sicht lesen koennen, ohne eine zweite Timeline-/History-Tabelle aufzubauen.
+
+### Deliverables
+- [x] `copilot_core.core.proposal_lifecycle_read_model` fuehrt truth-backed `ProposalLifecycleStatusV1` und `ProposalLifecycleStatusSummaryV1` ein und leitet `suggested`/`accepted`/`executed`/`failed`/`follow_up_open`/`settled` direkt aus Suggestion-, Closure-, Receipt-/Claim- und Settlement-Wahrheit ab
+- [x] `GET /api/v1/proposals/status` und `GET /api/v1/proposals/<proposal_id>/status` exponieren die kanonische Lifecycle-Surface fuer Worker-/Dashboard-Consumer; die Proposal-Routen liegen wieder sauber unter `/api/v1/proposals`
+- [x] Dashboard-Global-Kontext und `ChatHandler._build_home_context()` spiegeln dieselbe Proposal-Lifecycle-Summary zurueck statt eigener Sonderaggregation
+- [x] Contract-Tests decken die Status-Ableitung ueber Suggestion-, Closure-, Receipt-/Claim- und Settlement-Zustaende sowie die Rueckspiegelung in Proposal-API, Dashboard und Chat ab
+
+### Acceptance criteria
+- Pro Proposal ist genau ein letzter kanonischer Lifecycle-Status aus derselben Truth ableitbar; Worker-/Dashboard-/Chat-Surfaces muessen keine eigene Timeline rekonstruieren.
+- `follow_up_open` und `settled` werden aus derselben Claim-/Receipt-/Settlement-Wahrheit gelesen, statt aus Closure-Status allein erraten zu werden.
+- Proposal-API, Dashboard und Chat beschreiben denselben Proposal-Stand fuer denselben Revisionsstand.
+
+**Commit:** `feat(core): deliver slice 30 proposal lifecycle status surface`
+**Tag:** v15.3.42
+**Tests:** `pytest -q tests/test_notification_action_closure_dispatch_contract.py tests/test_notification_action_closure_digest_contract.py tests/test_action_closure_summary_contract.py tests/test_zone_dashboard_contract.py tests/test_voice_action_closure_hints_contract.py tests/test_proposal_lifecycle_status_contract.py tests/test_proposal_lifecycle_api.py` → `41 passed`
+
+**Next Exact Task:** Slice 31 als zone-scoped Proposal-Lifecycle-Context-Surface aus derselben Proposal-/Action-/Closure-/Settlement-Wahrheit ableiten: zonenscharfe Proposal-Status-Feeds und Delta-Cursor fuer Zone-Detail-/Dashboard-Poller materialisieren, ohne die neue Lifecycle-Logik zu duplizieren.

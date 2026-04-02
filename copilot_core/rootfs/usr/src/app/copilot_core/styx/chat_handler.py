@@ -605,6 +605,10 @@ class ChatHandler:
         try:
             from copilot_core.action_closure import get_action_closure_store
             from copilot_core.core.action_closure_read_model import build_action_closure_context_block
+            from copilot_core.core.proposal_lifecycle_read_model import (
+                build_proposal_lifecycle_status_summary,
+                describe_proposal_lifecycle_summary,
+            )
             from copilot_core.api.v1.notifications import (
                 _build_action_closure_follow_up_receipt_summary,
                 _describe_action_closure_follow_up_receipt_summary,
@@ -623,6 +627,15 @@ class ChatHandler:
             receipt_line = _describe_action_closure_follow_up_receipt_summary(receipt_summary)
             if receipt_line:
                 parts.append(receipt_line)
+
+            proposal_summary = build_proposal_lifecycle_status_summary(
+                get_action_closure_store(),
+                proposal_provider=services.get("suggestion_engine"),
+                recent_limit=2,
+            ).to_dict()
+            proposal_line = describe_proposal_lifecycle_summary(proposal_summary)
+            if proposal_line:
+                parts.append(proposal_line)
         except Exception as exc:
             logger.debug("Home context: action closure summary failed: %s", exc)
 

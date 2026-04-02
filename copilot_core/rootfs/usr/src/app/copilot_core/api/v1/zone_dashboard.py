@@ -35,6 +35,7 @@ from copilot_core.core.action_closure_read_model import (
     build_action_closure_summary_read_model,
     resolve_zone_name,
 )
+from copilot_core.core.proposal_lifecycle_read_model import build_proposal_lifecycle_status_summary
 from copilot_core.action_closure import get_action_closure_store
 
 _LOGGER = logging.getLogger(__name__)
@@ -894,6 +895,30 @@ def _build_global_context(*, since_revision: int | None = None) -> Dict[str, Any
                     since_revision=since_revision,
                     recent_limit=3,
                 ),
+            }
+    except Exception:
+        pass
+
+    try:
+        proposal_summary = build_proposal_lifecycle_status_summary(
+            get_action_closure_store(),
+            proposal_provider=_svc.get("suggestion_engine"),
+            recent_limit=3,
+            since_revision=since_revision,
+        )
+        if proposal_summary.total_proposals:
+            payload = proposal_summary.to_dict()
+            ctx["proposal_lifecycle"] = {
+                "revision": payload.get("revision", 0),
+                "freshness": payload.get("latest_change_at") or payload.get("freshness"),
+                "total": payload.get("total_proposals", 0),
+                "statuses": payload.get("lifecycle_statuses", {}),
+                "sources": payload.get("sources", {}),
+                "zones": payload.get("zones", {}),
+                "modules": payload.get("modules", {}),
+                "recent": payload.get("recent_statuses", [])[:3],
+                "highlights": payload.get("highlights", []),
+                "delta": payload.get("delta", {}),
             }
     except Exception:
         pass

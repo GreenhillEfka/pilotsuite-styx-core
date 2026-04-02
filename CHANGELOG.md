@@ -1,5 +1,16 @@
 # Changelog
 
+## [v15.3.42] - 2026-04-02
+
+### 🧩 Slice 30 — Proposal Lifecycle Status Surface
+
+- `copilot_core.core.proposal_lifecycle_read_model` materialisiert jetzt eine kanonische `ProposalLifecycleStatusV1`-/`ProposalLifecycleStatusSummaryV1`-Surface direkt aus bestehender Proposal-/Action-/Closure-/Follow-up-Truth, ohne eine separate Timeline-Tabelle einzufuehren.
+- `copilot_core.api.v1.proposals` exponiert mit `GET /api/v1/proposals/status` und `GET /api/v1/proposals/<proposal_id>/status` revisionsscharfe Worker-/Dashboard-faehige Lifecycle-Staende (`suggested`, `accepted`, `executed`, `failed`, `follow_up_open`, `settled`) und korrigiert zugleich die Proposal-Routen auf den kanonischen `/api/v1/proposals`-Prefix.
+- Dashboard-Global-Kontext (`copilot_core.api.v1.zone_dashboard._build_global_context`) und `ChatHandler._build_home_context()` spiegeln dieselbe Proposal-Lifecycle-Wahrheit jetzt als kompakte Summary zurueck statt aus parallelen Hilfslogiken.
+- Contract-Coverage deckt die Status-Ableitung ueber Suggestion-, Closure-, Receipt-/Claim- und Settlement-Zustaende sowie die Rueckspiegelung in Proposal-API, Dashboard und Chat ab.
+- Versionsartefakte (`VERSION`, `copilot_core/VERSION`, Runtime-VERSION, `copilot_core/config.yaml`, `copilot_core/manifest.json`, `copilot_core/rootfs/usr/src/app/copilot_core/VERSION`) auf `15.3.42` harmonisiert.
+- Validiert mit: `pytest -q tests/test_notification_action_closure_dispatch_contract.py tests/test_notification_action_closure_digest_contract.py tests/test_action_closure_summary_contract.py tests/test_zone_dashboard_contract.py tests/test_voice_action_closure_hints_contract.py tests/test_proposal_lifecycle_status_contract.py tests/test_proposal_lifecycle_api.py` → `41 passed`.
+
 ## [v15.3.41] - 2026-04-02
 
 ### 🧩 Slice 29 — Closure Follow-Up Claim Settlement / Release Surface
