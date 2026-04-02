@@ -1254,4 +1254,28 @@ Zone-Presence-Events sollen deterministisch gehalten/freigegeben werden koennen,
 **Tag:** v15.3.52
 **Tests:** `pytest -q tests/test_zone_presence_hold_contract.py tests/test_zone_presence_hold_api.py` → `39 passed`
 
-**Next Exact Task:** Slice 40 als Zone-Presence-Hold-Integration-in-Presence-Engine ableiten: bestehende Presence-Aggregation soll Hold-State konsultieren, bevor Sensor-States angewendet werden.
+### ✅ Slice 40 — Zone Presence Hold Integration into Presence Engine
+**Status:** ✅ DONE (v15.3.53)
+
+**Goal**
+Bestehende Presence-Aggregation soll Hold-State konsultieren, bevor Sensor-States angewendet werden, damit Hold-Zustände (FORCE_ON/FORCE_OFF) sensorbasierte Erkennung deterministisch überschreiben.
+
+### Deliverables
+- [x] `_determine_state()` returns `Tuple[PresenceState, float]` für hold-enforced confidence
+- [x] `get_zone_presence()` wendet Hold-State zur Lesezeit an für sofortige Sichtbarkeit
+- [x] Hold-Zustände propagieren ohne Sensor-Update
+- [x] Graceful Degradation bei nicht verfügbarem Hold-Store
+- [x] Integrationstests für Hold→Presence-Interaktion
+
+### Acceptance criteria
+- FORCE_ON Hold liefert immer PRESENT mit confidence=1.0
+- FORCE_OFF Hold liefert immer ABSENT mit confidence=1.0
+- AUTO Hold erlaubt normale sensorbasierte Erkennung
+- Hold-Änderungen sind sofort in Zone Presence State sichtbar
+- Tests verifizieren Integration, API und Contract-Surfaces
+
+**Commit:** `feat(presence): deliver slice 40 zone presence hold integration`
+**Tag:** v15.3.53
+**Tests:** `pytest -q tests/test_zone_presence_hold_integration.py tests/test_zone_presence_hold_contract.py tests/test_zone_presence_hold_api.py` → `51 passed`
+
+**Next Exact Task:** Slice 41 als Zone-Presence-Hold-API-in-Zone-Dashboard ableiten: Dashboard-Zonenlisten und Zone-Detail sollen Hold-State exponieren, damit UIs Anwesenheits-Overrides visuell kennzeichnen können.
