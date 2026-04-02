@@ -1720,6 +1720,21 @@ def register_blueprints(app: Flask, services: dict) -> None:
     except Exception:
         _LOGGER.exception("Failed to register proposals_bp")
 
+    # Register Proposal Lifecycle Feed API (Zone-Scoped Feeds - Slice 34)
+    try:
+        from copilot_core.api.v1.proposal_lifecycle_feed import (
+            create_proposal_lifecycle_feed_blueprint,
+        )
+        from copilot_core.automations.suggestion_engine import AutomationSuggestionEngine
+        suggestion_engine = services.get("suggestion_engine")
+        if not suggestion_engine:
+            suggestion_engine = AutomationSuggestionEngine()
+        feed_bp = create_proposal_lifecycle_feed_blueprint(suggestion_engine)
+        _register_blueprint_once(feed_bp)
+        _LOGGER.info("Proposal Lifecycle Feed API registered (Slice 34)")
+    except Exception:
+        _LOGGER.exception("Failed to register proposal_lifecycle_feed_bp")
+
     # Register Zone Automation API (presence-based light + music + entity management)
     from copilot_core.api.v1.zone_automation import zone_automation_bp, init_zone_automation_api
     try:
