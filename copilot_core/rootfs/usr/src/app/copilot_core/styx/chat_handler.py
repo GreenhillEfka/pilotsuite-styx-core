@@ -606,6 +606,7 @@ class ChatHandler:
             from copilot_core.action_closure import get_action_closure_store
             from copilot_core.core.action_closure_read_model import build_action_closure_context_block
             from copilot_core.core.proposal_lifecycle_read_model import (
+                build_proposal_lifecycle_context_block,
                 build_proposal_lifecycle_status_summary,
                 describe_proposal_lifecycle_summary,
             )
@@ -636,8 +637,19 @@ class ChatHandler:
             proposal_line = describe_proposal_lifecycle_summary(proposal_summary)
             if proposal_line:
                 parts.append(proposal_line)
+
+            # Zone-scoped proposal lifecycle context (Slice 32)
+            proposal_context = build_proposal_lifecycle_context_block(
+                get_action_closure_store(),
+                proposal_provider=services.get("suggestion_engine"),
+                recent_limit=2,
+                zone_name=zone_name,
+            )
+            proposal_context_lines = proposal_context.to_dict().get("context_lines", [])
+            if proposal_context_lines:
+                parts.append(" | ".join(proposal_context_lines))
         except Exception as exc:
-            logger.debug("Home context: action closure summary failed: %s", exc)
+            logger.debug("Home context: action closure / proposal lifecycle summary failed: %s", exc)
 
         if not parts:
             return ""
