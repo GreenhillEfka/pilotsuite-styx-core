@@ -151,6 +151,19 @@ class ZonePresenceHoldStore:
                 self._revision += 1
                 self._latest_change_at = now.isoformat()
                 
+                # Record notification for hold update
+                try:
+                    from copilot_core.core.zone_presence_hold_notifications import record_hold_set_notification
+                    record_hold_set_notification(
+                        zone_id=zone_id,
+                        hold_state=hold_state,
+                        reason=reason,
+                        hold_set_at=now.isoformat(),
+                        hold_expires_at=expires_at,
+                    )
+                except Exception:
+                    pass  # Graceful degradation if notification store unavailable
+                
                 return self.get_hold(existing_hold_id)
         
         # Create new hold
@@ -185,6 +198,19 @@ class ZonePresenceHoldStore:
         self._revision += 1
         self._latest_change_at = now.isoformat()
         
+        # Record notification for new hold
+        try:
+            from copilot_core.core.zone_presence_hold_notifications import record_hold_set_notification
+            record_hold_set_notification(
+                zone_id=zone_id,
+                hold_state=hold_state,
+                reason=reason,
+                hold_set_at=now.isoformat(),
+                hold_expires_at=expires_at,
+            )
+        except Exception:
+            pass  # Graceful degradation if notification store unavailable
+        
         return hold
     
     def release_hold(
@@ -205,14 +231,31 @@ class ZonePresenceHoldStore:
         if not hold or hold.get("released", False):
             return False
         
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(timezone.utc)
+        now_iso = now.isoformat()
+        old_hold_state = ZoneHoldState(hold["hold_state"])
+        old_hold_set_at = hold.get("set_at")
+        
         hold["released"] = True
-        hold["released_at"] = now
+        hold["released_at"] = now_iso
         hold["released_reason"] = reason
         hold["hold_state"] = ZoneHoldState.AUTO.value
         
         self._revision += 1
-        self._latest_change_at = now
+        self._latest_change_at = now_iso
+        
+        # Record notification for hold release
+        try:
+            from copilot_core.core.zone_presence_hold_notifications import record_hold_released_notification
+            record_hold_released_notification(
+                zone_id=zone_id,
+                hold_state=old_hold_state,
+                reason=reason,
+                hold_set_at=old_hold_set_at,
+                hold_released_at=now_iso,
+            )
+        except Exception:
+            pass  # Graceful degradation if notification store unavailable
         
         return True
     

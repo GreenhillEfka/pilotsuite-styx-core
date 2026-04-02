@@ -267,6 +267,14 @@ def create_app() -> Flask:
     except Exception:
         logging.getLogger(__name__).exception("Failed to register Zone Presence Hold API blueprint")
 
+    # Zone Presence Hold Notifications API endpoints (/api/v1/presence/holds/notifications)
+    try:
+        from copilot_core.api.v1.zone_presence_hold_notifications import setup_routes as setup_zone_presence_hold_notifications
+        setup_zone_presence_hold_notifications(app)
+        logging.getLogger(__name__).info("Zone Presence Hold Notifications API registered")
+    except Exception:
+        logging.getLogger(__name__).exception("Failed to register Zone Presence Hold Notifications API blueprint")
+
     # Initialize Tags API v2 (FIX: Flask Blueprint rewrite)
     from copilot_core.tags.api import init_tags_api
     from copilot_core.tags import TagRegistry
