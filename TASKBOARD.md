@@ -1143,3 +1143,29 @@ Notification- und Digest-Worker sollen offene bzw. vorgeschlagene `ProposalLifec
 **Tests:** `pytest -q tests/test_notification_proposal_lifecycle_dispatch_contract.py` → `10 passed`
 
 **Next Exact Task:** Slice 36 als delivery-faehigen Proposal-Follow-up-Worker ableiten: aus `ProposalLifecycleDispatchV1` deduplizierte Dispatch-Kandidaten plus Cursor-/Ack-Mechanik fuer echte Notification-Jobs und Reminder-Queues materialisieren.
+
+### ✅ Slice 36 — Proposal Follow-Up Dispatch Worker
+**Status:** ✅ DONE (v15.3.49)
+
+**Goal**
+Notification-Jobs und Reminder-Queues sollen aus derselben `ProposalLifecycleDispatchV1`-Wahrheit worker-faehige Dispatch-Kandidaten ziehen koennen — inklusive Delta-Cursor, Acknowledgement-Mechanik und Delivery-Status-Tracking, damit offene/vorgeschlagene Proposals nicht doppelt versendet werden.
+
+### Deliverables
+- [x] `ProposalFollowUpDispatchStore` materialisiert aus `ProposalLifecycleDispatchV1`
+- [x] `ProposalFollowUpDispatchCandidateV1` mit `dispatch_id`, `proposal_id`, `lifecycle_status`, `zone_id`, `module_id`, `priority`, `delivery_mode`
+- [x] `ProposalFollowUpDispatchCursorV1` mit `pending_ack_count` fuer Worker-Observability
+- [x] `acknowledge()` fuer Worker-Acks mit Revisionstracking
+- [x] `record_receipts()` fuer Delivery-Status-Tracking
+- [x] `get_pending_ack_count()` fuer Worker-Monitoring
+- [x] Contract-Tests fuer Store, Materialization, Ack/Receipt-Surfaces
+
+### Acceptance criteria
+- Notification-Worker und Reminder-Queues lesen dieselben offenen/vorgeschlagenen Proposals aus derselben kanonischen Dispatch-Wahrheit.
+- Ein acknowledged Dispatch-Kandidat wird im pending_ack_count korrekt beruecksichtigt.
+- Delivery-Status (delivered/failed) wird revisionsscharf gespeichert.
+
+**Commit:** `feat(core): deliver slice 36 proposal follow-up dispatch worker`
+**Tag:** v15.3.49
+**Tests:** `pytest -q tests/test_proposal_follow_up_dispatch_contract.py` → `10 passed`
+
+**Next Exact Task:** Slice 37 als delivery-result-aware Proposal-Follow-up-Receipt-Surface ableiten: Dispatch-Acks, Queue-/Reminder-Receipts und Retry-/Escalation-State aus derselben Worker-/Dispatch-Wahrheit wieder in Notification-/Dashboard-/Chat-Kontexte zurueckfuehren.
