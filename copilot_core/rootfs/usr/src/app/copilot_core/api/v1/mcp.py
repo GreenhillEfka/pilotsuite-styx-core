@@ -21,6 +21,7 @@ from copilot_core.api.security import validate_token as _validate_token
 from copilot_core.mcp_server import mcp_bp as mcp_rpc_bp
 
 bp = Blueprint("mcp_rest", __name__, url_prefix="/api/v1/mcp")
+mcp_bp = mcp_rpc_bp
 
 # In-memory MCP server connections
 _MCP_CONNECTIONS: dict = {}

@@ -25,6 +25,7 @@ def _run_async(coro, timeout: int = 10):
     return asyncio.run(asyncio.wait_for(coro, timeout=timeout))
 
 bp = Blueprint('user_hints', __name__, url_prefix='/hints')
+user_hints_bp = bp
 
 from copilot_core.api.security import validate_token as _validate_token
 

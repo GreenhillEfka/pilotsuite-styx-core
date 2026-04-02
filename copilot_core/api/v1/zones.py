@@ -6,11 +6,13 @@ Endpoints für Habituszone-Zuordnung, Matching und Review.
 
 from fastapi import APIRouter, HTTPException, Query, Body
 from fastapi.responses import JSONResponse
+from flask import Blueprint, jsonify, request
 from pydantic import BaseModel, Field
 from typing import Any, List, Dict, Optional
 import logging
 
 from copilot_core.api.error_models import ErrorResponse, error_response_payload
+from copilot_core.api.security import validate_token
 from copilot_core.homeassistant.habitus_zones import (
     HABITUS_ZONES, ZoneType, HabitusZone, get_all_zones
 )
@@ -21,6 +23,7 @@ from copilot_core.homeassistant.zone_matcher import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/zones", tags=["zones"])
+zones_bp = Blueprint("zones", __name__, url_prefix="/api/v1/zones")
 
 
 # === Request/Response Models ===
@@ -374,3 +377,32 @@ async def match_batch_rooms(
         )
         for r in results
     ]
+
+
+@zones_bp.before_request
+def _require_auth():
+    if not validate_token(request):
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+
+
+@zones_bp.get("")
+def list_zones_blueprint():
+    zones = get_all_zones()
+    return jsonify(
+        {
+            "ok": True,
+            "zones": [
+                {
+                    "zone_type": zone.zone_type.value,
+                    "name_de": zone.name_de,
+                    "name_en": zone.name_en,
+                    "description": zone.description,
+                    "keywords_de": zone.keywords_de,
+                    "keywords_en": zone.keywords_en,
+                    "priority": zone.priority,
+                }
+                for zone in zones
+            ],
+            "count": len(zones),
+        }
+    )

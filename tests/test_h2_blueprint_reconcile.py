@@ -15,12 +15,13 @@ sys.modules[spec.name] = module
 spec.loader.exec_module(module)
 
 
-def test_h2_blueprint_reconcile_detects_remaining_drift() -> None:
+def test_h2_blueprint_reconcile_reports_clean_registry() -> None:
     data = module.build_report(REPO_ROOT)
 
     assert data["summary"]["total_entries"] >= 90
-    assert data["summary"]["drift_entries"] > 0
-    assert len(data["top_priorities"]) > 0
+    assert data["summary"]["drift_entries"] == 0
+    assert data["summary"]["ok_entries"] == data["summary"]["total_entries"]
+    assert data["top_priorities"] == []
 
 
 def test_h2_blueprint_reconcile_includes_fix_commands() -> None:

@@ -283,6 +283,14 @@ def create_app() -> Flask:
     except Exception:
         logging.getLogger(__name__).exception("Failed to register Zone Presence Hold Scheduler API blueprint")
 
+    # Zone Presence Hold Analytics API endpoints (/api/v1/presence/holds/analytics/*)
+    try:
+        from copilot_core.api.v1.presence_hold_analytics import create_blueprint as create_presence_hold_analytics_bp
+        app.register_blueprint(create_presence_hold_analytics_bp())
+        logging.getLogger(__name__).info("Zone Presence Hold Analytics API registered")
+    except Exception:
+        logging.getLogger(__name__).exception("Failed to register Zone Presence Hold Analytics API blueprint")
+
     # Initialize Tags API v2 (FIX: Flask Blueprint rewrite)
     from copilot_core.tags.api import init_tags_api
     from copilot_core.tags import TagRegistry
