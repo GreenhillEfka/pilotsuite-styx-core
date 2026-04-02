@@ -10,6 +10,7 @@ Features:
 - Confidence Scoring
 - Presence History
 - Zone Occupancy Events
+- Slice 40: Zone Presence Hold Integration
 """
 from __future__ import annotations
 
@@ -22,6 +23,22 @@ import threading
 import uuid
 
 logger = logging.getLogger(__name__)
+
+# Slice 40: Import hold state for integration
+try:
+    from copilot_core.core.zone_presence_hold import ZoneHoldState, get_zone_presence_hold_store
+    HOLD_INTEGRATION_AVAILABLE = True
+except ImportError:
+    # Fallback for environments without hold module
+    class ZoneHoldState(Enum):  # type: ignore
+        AUTO = "auto"
+        FORCE_ON = "force_on"
+        FORCE_OFF = "force_off"
+    
+    def get_zone_presence_hold_store():  # type: ignore
+        return None
+    
+    HOLD_INTEGRATION_AVAILABLE = False
 
 
 class PresenceState(Enum):
@@ -311,10 +328,13 @@ class PresenceModule:
         # Get previous state
         previous_state = self._zone_states[zone_id].state if zone_id in self._zone_states else PresenceState.ABSENT
         
-        # Determine new state based on config
-        new_state = self._determine_state(
+        # Determine new state based on config (returns tuple of state + confidence)
+        new_state, effective_confidence = self._determine_state(
             zone_id, active_sensors, inactive_sensors, confidence, config, now,
         )
+        
+        # Use effective_confidence when hold-enforced, otherwise use sensor-based confidence
+        final_confidence = effective_confidence if effective_confidence == 1.0 else confidence
         
         # Create event if state changed
         event = None
@@ -340,7 +360,7 @@ class PresenceModule:
             self._zone_states[zone_id] = zone_state
         
         zone_state.state = new_state
-        zone_state.confidence = confidence
+        zone_state.confidence = final_confidence
         zone_state.active_sensors = active_sensors.copy()
         zone_state.inactive_sensors = inactive_sensors.copy()
         zone_state.last_update = now.isoformat()
@@ -367,9 +387,25 @@ class PresenceModule:
         return event
     
     def _determine_state(self, zone_id: str, active_sensors: List[str],
-                        inactive_sensors: List[str], confidence: float,
-                        config: PresenceConfig, now: datetime) -> PresenceState:
-        """Determine presence state based on sensors and config."""
+                        inactive_sensors: List[str], sensor_confidence: float,
+                        config: PresenceConfig, now: datetime) -> Tuple[PresenceState, float]:
+        """Determine presence state based on sensors and config.
+        
+        Slice 40: Checks ZonePresenceHold state first before applying sensor logic.
+        Hold states (FORCE_ON/FORCE_OFF) override sensor-based detection.
+        
+        Returns:
+            Tuple[PresenceState, float]: (state, confidence) — confidence is 1.0 when hold-enforced,
+                                         otherwise returns sensor_confidence for normal logic paths
+        """
+        # Slice 40: Check hold state first — holds override sensor logic
+        hold_state = self._get_effective_hold_state(zone_id)
+        if hold_state == ZoneHoldState.FORCE_ON:
+            return PresenceState.PRESENT, 1.0
+        elif hold_state == ZoneHoldState.FORCE_OFF:
+            return PresenceState.ABSENT, 1.0
+        # hold_state == AUTO: continue with normal sensor-based detection
+        
         # Check for extended absence
         zone_state = self._zone_states.get(zone_id)
         
@@ -378,7 +414,7 @@ class PresenceModule:
             absent_duration = (now - absent_time).total_seconds()
             
             if absent_duration >= config.extended_absence_threshold_seconds:
-                return PresenceState.EXTENDED_ABSENT
+                return PresenceState.EXTENDED_ABSENT, sensor_confidence
         
         # Check on-delay
         if active_sensors and config.on_delay_seconds > 0:
@@ -387,8 +423,8 @@ class PresenceModule:
                 if sensor_id in self._sensor_timers:
                     trigger_time = self._sensor_timers[sensor_id]
                     if (now - trigger_time).total_seconds() >= config.on_delay_seconds:
-                        return PresenceState.PRESENT
-            return PresenceState.UNCERTAIN
+                        return PresenceState.PRESENT, sensor_confidence
+            return PresenceState.UNCERTAIN, sensor_confidence
         
         # Check off-delay
         if not active_sensors and config.off_delay_seconds > 0:
@@ -403,24 +439,24 @@ class PresenceModule:
                         break
             
             if not all_inactive_long_enough:
-                return PresenceState.UNCERTAIN
+                return PresenceState.UNCERTAIN, sensor_confidence
 
         # Check require_multiple_sensors only when presence is otherwise active.
         if active_sensors and config.require_multiple_sensors and len(active_sensors) < 2:
-            return PresenceState.ABSENT
+            return PresenceState.ABSENT, sensor_confidence
 
         # Confidence threshold only applies to active detections. When a zone
         # has no active sensors, off-delay / extended-absence semantics must be
         # able to yield UNCERTAIN or EXTENDED_ABSENT instead of short-circuiting
         # to ABSENT due to 0.0 confidence.
-        if active_sensors and confidence < config.min_confidence_threshold:
-            return PresenceState.ABSENT
+        if active_sensors and sensor_confidence < config.min_confidence_threshold:
+            return PresenceState.ABSENT, sensor_confidence
         
         # Normal presence detection
         if active_sensors:
-            return PresenceState.PRESENT
+            return PresenceState.PRESENT, sensor_confidence
         else:
-            return PresenceState.ABSENT
+            return PresenceState.ABSENT, sensor_confidence
     
     def _create_presence_event(self, zone_id: str, previous_state: PresenceState,
                                new_state: PresenceState, confidence: float,
@@ -482,8 +518,48 @@ class PresenceModule:
             self._presence_history[zone_id] = self._presence_history[zone_id][-1000:]
     
     def get_zone_presence(self, zone_id: str) -> Optional[ZonePresenceState]:
-        """Get current presence state for a zone."""
-        return self._zone_states.get(zone_id)
+        """Get current presence state for a zone.
+        
+        Slice 40: Applies hold state at read time so hold changes are immediately visible
+        without requiring a sensor update.
+        """
+        zone_state = self._zone_states.get(zone_id)
+        
+        if not zone_state:
+            return None
+        
+        # Slice 40: Apply hold state at read time
+        hold_state = self._get_effective_hold_state(zone_id)
+        
+        if hold_state == ZoneHoldState.FORCE_ON:
+            # Return a modified state showing PRESENT with hold-enforced confidence
+            return ZonePresenceState(
+                zone_id=zone_id,
+                state=PresenceState.PRESENT,
+                confidence=1.0,
+                active_sensors=zone_state.active_sensors.copy(),
+                inactive_sensors=zone_state.inactive_sensors.copy(),
+                present_since=zone_state.present_since,
+                absent_since=None,
+                last_motion=zone_state.last_motion,
+                last_update=datetime.now(timezone.utc).isoformat(),
+            )
+        elif hold_state == ZoneHoldState.FORCE_OFF:
+            # Return a modified state showing ABSENT with hold-enforced confidence
+            return ZonePresenceState(
+                zone_id=zone_id,
+                state=PresenceState.ABSENT,
+                confidence=1.0,
+                active_sensors=zone_state.active_sensors.copy(),
+                inactive_sensors=zone_state.inactive_sensors.copy(),
+                present_since=None,
+                absent_since=zone_state.absent_since,
+                last_motion=zone_state.last_motion,
+                last_update=datetime.now(timezone.utc).isoformat(),
+            )
+        
+        # AUTO: return sensor-based state as-is
+        return zone_state
     
     def get_all_zone_presence(self) -> Dict[str, ZonePresenceState]:
         """Get presence states for all zones."""
@@ -647,6 +723,48 @@ class PresenceModule:
             "total_events": sum(len(e) for e in self._presence_events.values()),
             "total_history_entries": sum(len(h) for h in self._presence_history.values()),
         }
+    
+    def _get_effective_hold_state(self, zone_id: str) -> ZoneHoldState:
+        """Slice 40: Get effective hold state for a zone.
+        
+        Returns ZoneHoldState.FORCE_ON, FORCE_OFF, or AUTO based on
+        active hold records. Hold states override sensor-based detection.
+        
+        Returns:
+            ZoneHoldState: Current effective hold state (AUTO if no hold or hold integration unavailable)
+        """
+        if not HOLD_INTEGRATION_AVAILABLE:
+            return ZoneHoldState.AUTO
+        
+        try:
+            store = get_zone_presence_hold_store()
+            if store is None:
+                return ZoneHoldState.AUTO
+            
+            hold_state = store.get_active_hold_state(zone_id)
+            return hold_state
+        except Exception:
+            # Graceful degradation: if hold store fails, fall back to AUTO
+            logger.warning("Failed to get hold state for zone %s, defaulting to AUTO", zone_id)
+            return ZoneHoldState.AUTO
+    
+    def get_hold_state(self, zone_id: str) -> str:
+        """Slice 40: Get human-readable hold state for a zone.
+        
+        Returns:
+            str: 'force_on', 'force_off', or 'auto'
+        """
+        hold_state = self._get_effective_hold_state(zone_id)
+        return hold_state.value
+    
+    def is_hold_enforced(self, zone_id: str) -> bool:
+        """Slice 40: Check if hold is currently enforced for a zone.
+        
+        Returns:
+            bool: True if hold state is FORCE_ON or FORCE_OFF
+        """
+        hold_state = self._get_effective_hold_state(zone_id)
+        return hold_state in (ZoneHoldState.FORCE_ON, ZoneHoldState.FORCE_OFF)
     
     def _lock(self):
         """Simple context manager for thread safety."""
