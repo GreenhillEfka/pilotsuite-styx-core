@@ -1199,23 +1199,28 @@ Dispatch-Acks, Queue-/Reminder-Receipts sowie Retry-/Escalation-State sollen nic
 **Status:** ✅ DONE (v15.3.51)
 
 **Goal**
-Worker sollen Proposal-Follow-ups aus derselben Dispatch-/Receipt-/SLA-Wahrheit revisionsscharf claimen koennen, inklusive Lease-Ablauf, Reassign-Sicht und Eskalationsrelevanz ohne neue Schattenlogik.
+Worker sollen Proposal-Follow-ups aus derselben Dispatch-/Receipt-Wahrheit revisionsscharf claimen koennen, inklusive Lease-Ablauf, Reassign-Sicht und Settlement-Status ohne neue Schattenlogik.
 
 ### Deliverables
 - [x] `POST /notifications/proposals/dispatch/claim` materialisiert kanonische `ProposalFollowUpClaimV1`-Claims mit `claimed_by`, `lease_seconds`, Konfliktantworten und optionalem `force_reassign`
-- [x] `GET /notifications/proposals/claims` liefert eine truth-backed `ProposalFollowUpClaimSummaryV1`-Surface mit `claim_revision`-Delta, Worker-/Delivery-Breakdowns sowie Counts fuer aktive, abgelaufene und neu zuweisbare Leases
-- [x] Dispatch-Kandidaten und `ProposalFollowUpDispatchV1` betten den aktuellen Claim-/Lease-Stand direkt ein, statt eine zweite Worker-Lock-Logik zu erfinden
+- [x] `GET /notifications/proposals/claims` liefert eine truth-backed `ProposalFollowUpClaimSummaryV1`-Surface mit `claim_revision`-Delta, Worker-/Delivery-Breakdowns sowie Counts fuer aktive, abgelaufene, released und settled Claims
+- [x] `GET /notifications/proposals/claims/<claim_id>` fuer einzelnen Claim-Status
+- [x] `POST /notifications/proposals/claims/<claim_id>/release` fuer Release ohne Settlement
+- [x] `POST /notifications/proposals/claims/<claim_id>/settle` fuer Settlement mit `completed|abandoned|failed`
+- [x] `GET /notifications/proposals/claims/worker/<worker_id>` fuer Worker-spezifische Claims
+- [x] Dispatch-Kandidaten betten den aktuellen Claim-/Lease-Stand direkt ein, statt eine zweite Worker-Lock-Logik zu erfinden
 - [x] Receipt-/Digest-/Dashboard-/Chat-Surfaces spiegeln dieselbe Claim-Wahrheit ueber die eingebettete Receipt-Summary zurueck, inklusive Lease-Ablauf und Reassign-Hinweisen
-- [x] Abgelaufene Claims und eskalationsrelevante Problemfaelle werden explizit als `reassignable` materialisiert, damit Worker dieselbe Reassign-/Escalation-Sicht lesen
-- [x] Contract-Tests decken Claim-Erzeugung, Konflikte bei aktiven Leases, Lease-Ablauf/Reassign und die Rueckspiegelung in Dispatch-/Dashboard-/Chat-Kontexte ab
+- [x] Abgelaufene Claims und eskalationsrelevante Problemfaelle werden explizit als `reassignable` materialisiert
+- [x] Contract-Tests decken Claim-Erzeugung, Konflikte bei aktiven Leases, Lease-Ablauf/Release/Settle und die Rueckspiegelung in Dispatch-/Dashboard-/Chat-Kontexte ab
 
 ### Acceptance criteria
-- Worker koennen denselben Proposal-Stand claimen, ohne Ack-/Receipt-/SLA-Wahrheit zu duplizieren oder alte Claims ueber Revisionen hinweg mitzuschleppen.
-- Aktive Leases blockieren konkurrierende Claims sauber; abgelaufene oder eskalationsrelevante Claims werden aus derselben kanonischen Surface als neu zuweisbar sichtbar.
+- Worker koennen denselben Proposal-Stand claimen, ohne Ack-/Receipt-Wahrheit zu duplizieren oder alte Claims ueber Revisionen hinweg mitzuschleppen.
+- Aktive Leases blockieren konkurrierende Claims sauber; abgelaufene oder released Claims werden aus derselben kanonischen Surface als neu zuweisbar sichtbar.
+- Settlement-Status (`completed|abandoned|failed`) wird im Claim selbst gefuehrt und ist ueber Claim-Summary abfragbar.
 - Dashboard, Digest und Chat lesen denselben Claim-/Lease-Stand wie Worker-APIs und beschreiben Lease-Ablauf/Reassign ohne eigene Aggregationslogik.
 
 **Commit:** `feat(core): deliver slice 38 proposal follow-up claim/lease surface`
 **Tag:** v15.3.51
-**Tests:** `pytest -q tests/test_proposal_follow_up_claim_contract.py tests/test_proposal_follow_up_dispatch_contract.py tests/test_proposal_follow_up_receipt_contract.py` → `24 passed`
+**Tests:** `pytest -q tests/test_proposal_claims_api.py tests/test_proposal_follow_up_claim_contract.py tests/test_proposal_follow_up_dispatch_contract.py tests/test_proposal_follow_up_receipt_contract.py` → `63 passed`
 
-**Next Exact Task:** Slice 39 als Claim-Settlement-/Release-Surface aus derselben Claim-/Receipt-Wahrheit ableiten: explizite Release-/Abandon-/Settlement-Resultate fuer Worker-Leases kanonisch materialisieren und in Dispatch-/Dashboard-/Chat-Kontexte zurueckfuehren, ohne eine zweite Queue-Historie aufzubauen.
+**Next Exact Task:** Slice 39 als Zone-Presence-Hold-/Release-Surface ableiten: Zone-Presence-Events sollen deterministisch gehalten/freigegeben werden koennen, damit Anwesenheitserkennung nicht bei kurzen Abwesenheitsfenstern flackert.
