@@ -39,6 +39,10 @@ from copilot_core.core.proposal_lifecycle_read_model import (
     build_proposal_lifecycle_context_block,
     build_proposal_lifecycle_status_summary,
 )
+from copilot_core.core.zone_presence_hold import (
+    get_zone_presence_hold_store,
+    ZoneHoldState,
+)
 from copilot_core.action_closure import get_action_closure_store
 
 _LOGGER = logging.getLogger(__name__)
@@ -387,11 +391,15 @@ def _collect_bewegung(zone_id: str) -> Optional[Dict[str, Any]]:
 
 
 def _collect_praesenz(zone_id: str) -> Optional[Dict[str, Any]]:
+    """Collect presence data for a zone.
+    
+    Slice 41: Includes hold_state from ZonePresenceHoldStore.
+    """
     hub = _svc.get("hub_praesenz")
     if not hub:
         return None
     s = hub.get_zone_presence(zone_id)
-    return {
+    data: Dict[str, Any] = {
         "is_occupied": s.is_occupied, "person_count": s.person_count,
         "persons": s.persons,
         "last_entered": _iso_or_none(s.last_entered),
@@ -399,6 +407,25 @@ def _collect_praesenz(zone_id: str) -> Optional[Dict[str, Any]]:
         "occupied_since": _iso_or_none(s.occupied_since),
         "sources_active": s.sources_active, "sources_total": s.sources_total,
     }
+    # Slice 41: Add hold state from ZonePresenceHoldStore
+    try:
+        hold_store = get_zone_presence_hold_store()
+        if hold_store:
+            hold = hold_store.get_hold_by_zone(zone_id)
+            if hold and hold.is_active():
+                data["hold_state"] = hold.hold_state.value
+                data["hold_reason"] = hold.reason
+                data["hold_set_at"] = hold.set_at
+                data["hold_expires_at"] = hold.expires_at
+                data["hold_enforced"] = True
+            else:
+                data["hold_state"] = "auto"
+                data["hold_enforced"] = False
+    except Exception:
+        # Graceful degradation: hold info unavailable
+        data["hold_state"] = "auto"
+        data["hold_enforced"] = False
+    return data
 
 
 def _collect_light_intelligence(zone_id: str) -> Optional[Dict[str, Any]]:
