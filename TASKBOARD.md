@@ -1169,3 +1169,53 @@ Notification-Jobs und Reminder-Queues sollen aus derselben `ProposalLifecycleDis
 **Tests:** `pytest -q tests/test_proposal_follow_up_dispatch_contract.py` → `10 passed`
 
 **Next Exact Task:** Slice 37 als delivery-result-aware Proposal-Follow-up-Receipt-Surface ableiten: Dispatch-Acks, Queue-/Reminder-Receipts und Retry-/Escalation-State aus derselben Worker-/Dispatch-Wahrheit wieder in Notification-/Dashboard-/Chat-Kontexte zurueckfuehren.
+
+### ✅ Slice 37 — Proposal Follow-Up Receipt Surface
+**Status:** ✅ DONE (v15.3.50)
+
+**Goal**
+Dispatch-Acks, Queue-/Reminder-Receipts sowie Retry-/Escalation-State sollen nicht im Worker-Nirvana verschwinden, sondern aus derselben Proposal-Follow-up-Wahrheit wieder in Notification-, Dashboard- und Chat-Kontexte zurueckgespiegelt werden.
+
+### Deliverables
+- [x] `POST /notifications/proposals/dispatch/receipt` materialisiert workerseitige Delivery-/Queue-/Retry-/Escalation-Ergebnisse pro Dispatch-Kandidat
+- [x] `GET /notifications/proposals/receipts` liefert eine kanonische `ProposalFollowUpReceiptSummaryV1`-Surface mit `receipt_revision`, Delta, Counts und Recent-Receipts
+- [x] Dispatch-Acks werden im selben Store wie die Receipt-Wahrheit gefuehrt, statt als isolierter Nebenpfad zu enden
+- [x] Notification-Digest-/Dispatch-Surfaces betten die neue Receipt-Summary direkt ein
+- [x] Dashboard- und Chat-Kontexte spiegeln Follow-up-Zustellung, offene Retries und Eskalationen aus derselben Receipt-Wahrheit zurueck
+- [x] Contract-Tests decken Receipt-Materialisierung, Retry-/Escalation-Status und die Rueckspiegelung in Digest/Dashboard/Chat ab
+
+### Acceptance criteria
+- Worker koennen Delivery-Ergebnisse pro Proposal-Follow-up revisionsscharf zurueckmelden, ohne eine zweite Follow-up-Truth aufzubauen.
+- Notification-/Dashboard-/Chat-Consumer sehen denselben Ack-/Receipt-/Retry-/Escalation-Stand fuer denselben Proposal-Stand.
+- `receipt_since`/`receipt_revision` erlauben inkrementelle Poller, ohne bestaetigte oder eskalierte Follow-ups unsichtbar zu machen.
+
+**Commit:** `feat(core): deliver slice 37 proposal follow-up receipt surface`
+**Tag:** v15.3.50
+**Tests:** `pytest -q tests/test_proposal_follow_up_receipt_contract.py tests/test_proposal_follow_up_dispatch_contract.py` → `18 passed`
+
+**Next Exact Task:** Slice 38 als Claim-/Lease-Surface aus derselben Dispatch-/Receipt-/SLA-Wahrheit ableiten: Worker sollen ueberfaellige/stale Proposal-Follow-ups revisionsscharf claimen, mit Lease-Ablauf und sauberer Reassign-/Escalation-Sicht, ohne den bestehenden Dispatch-/Receipt-Contract zu duplizieren.
+
+### ✅ Slice 38 — Proposal Follow-Up Claim / Lease Surface
+**Status:** ✅ DONE (v15.3.51)
+
+**Goal**
+Worker sollen Proposal-Follow-ups aus derselben Dispatch-/Receipt-/SLA-Wahrheit revisionsscharf claimen koennen, inklusive Lease-Ablauf, Reassign-Sicht und Eskalationsrelevanz ohne neue Schattenlogik.
+
+### Deliverables
+- [x] `POST /notifications/proposals/dispatch/claim` materialisiert kanonische `ProposalFollowUpClaimV1`-Claims mit `claimed_by`, `lease_seconds`, Konfliktantworten und optionalem `force_reassign`
+- [x] `GET /notifications/proposals/claims` liefert eine truth-backed `ProposalFollowUpClaimSummaryV1`-Surface mit `claim_revision`-Delta, Worker-/Delivery-Breakdowns sowie Counts fuer aktive, abgelaufene und neu zuweisbare Leases
+- [x] Dispatch-Kandidaten und `ProposalFollowUpDispatchV1` betten den aktuellen Claim-/Lease-Stand direkt ein, statt eine zweite Worker-Lock-Logik zu erfinden
+- [x] Receipt-/Digest-/Dashboard-/Chat-Surfaces spiegeln dieselbe Claim-Wahrheit ueber die eingebettete Receipt-Summary zurueck, inklusive Lease-Ablauf und Reassign-Hinweisen
+- [x] Abgelaufene Claims und eskalationsrelevante Problemfaelle werden explizit als `reassignable` materialisiert, damit Worker dieselbe Reassign-/Escalation-Sicht lesen
+- [x] Contract-Tests decken Claim-Erzeugung, Konflikte bei aktiven Leases, Lease-Ablauf/Reassign und die Rueckspiegelung in Dispatch-/Dashboard-/Chat-Kontexte ab
+
+### Acceptance criteria
+- Worker koennen denselben Proposal-Stand claimen, ohne Ack-/Receipt-/SLA-Wahrheit zu duplizieren oder alte Claims ueber Revisionen hinweg mitzuschleppen.
+- Aktive Leases blockieren konkurrierende Claims sauber; abgelaufene oder eskalationsrelevante Claims werden aus derselben kanonischen Surface als neu zuweisbar sichtbar.
+- Dashboard, Digest und Chat lesen denselben Claim-/Lease-Stand wie Worker-APIs und beschreiben Lease-Ablauf/Reassign ohne eigene Aggregationslogik.
+
+**Commit:** `feat(core): deliver slice 38 proposal follow-up claim/lease surface`
+**Tag:** v15.3.51
+**Tests:** `pytest -q tests/test_proposal_follow_up_claim_contract.py tests/test_proposal_follow_up_dispatch_contract.py tests/test_proposal_follow_up_receipt_contract.py` → `24 passed`
+
+**Next Exact Task:** Slice 39 als Claim-Settlement-/Release-Surface aus derselben Claim-/Receipt-Wahrheit ableiten: explizite Release-/Abandon-/Settlement-Resultate fuer Worker-Leases kanonisch materialisieren und in Dispatch-/Dashboard-/Chat-Kontexte zurueckfuehren, ohne eine zweite Queue-Historie aufzubauen.
