@@ -1735,6 +1735,15 @@ def register_blueprints(app: Flask, services: dict) -> None:
     except Exception:
         _LOGGER.exception("Failed to register proposal_lifecycle_feed_bp")
 
+    # Register Proposal Follow-Up Receipt API (Slice 37)
+    try:
+        from copilot_core.api.v1.proposal_receipts import create_blueprint as create_proposal_receipts_blueprint
+        proposal_receipts_bp = create_proposal_receipts_blueprint()
+        _register_blueprint_once(proposal_receipts_bp)
+        _LOGGER.info("Proposal Follow-Up Receipt API registered (Slice 37)")
+    except Exception:
+        _LOGGER.exception("Failed to register proposal_receipts_bp")
+
     # Register Zone Automation API (presence-based light + music + entity management)
     from copilot_core.api.v1.zone_automation import zone_automation_bp, init_zone_automation_api
     try:
