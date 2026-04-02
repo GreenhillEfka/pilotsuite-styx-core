@@ -1328,4 +1328,30 @@ CRUD-Endpoints für Zone-Presence-Hold-Direktsteuerung bereitstellen, damit Dash
 **Tag:** v15.3.55
 **Tests:** `pytest -q tests/test_zone_presence_hold_api.py` → `19 passed`
 
-**Next Exact Task:** Slice 43 als Zone-Presence-Hold-Notification-Surface ableiten: Hold-State-Änderungen sollen als benachrichtigbare Events ausleitbar sein, damit User bei manuellen Overrides/Verfall informiert werden.
+### ✅ Slice 43 — Zone Presence Hold Notification Surface
+**Status:** ✅ DONE (v15.3.56)
+
+**Goal**
+Hold-State-Änderungen sollen als benachrichtigbare Events ausleitbar sein, damit User bei manuellen Overrides/Verfall informiert werden.
+
+### Deliverables
+- [x] `ZonePresenceHoldNotificationV1` und `ZonePresenceHoldNotificationSummaryV1` als kanonische Contracts
+- [x] `ZonePresenceHoldNotificationStore` mit Revisionstracking und Delta-Support
+- [x] Notification-Typen: `hold_set`, `hold_released`, `hold_expired`, `hold_expiring_soon`
+- [x] API-Endpoints: list, summary, single, mark-read, mark-all-read
+- [x] Integration in app.py Blueprint-Registrierung
+- [x] Folgt demselben Muster wie Action Closure und Proposal Lifecycle Notifications
+- [x] Contract-Tests (23 Tests grün)
+
+### Acceptance criteria
+- Hold-State-Änderungen werden als revisionsscharfe Notifications materialisiert
+- Delta-Polling mit `since_revision` für effiziente UI-Poller
+- Zone- und Type-Filter für gezielte Abfragen
+- Unread-Tracking für Benachrichtigungsstatus
+- Notification-Typen decken alle Hold-Lebenszyklus-Events ab
+
+**Commit:** `feat(presence): deliver slice 43 zone presence hold notification surface`
+**Tag:** v15.3.56
+**Tests:** `pytest -q tests/test_zone_presence_hold_notifications_contract.py` → `23 passed`
+
+**Next Exact Task:** Slice 44 als Hold-Expiration-Cron-Surface ableiten: automatische Benachrichtigungen bei Hold-Verfall und Auto-Release nach Expiration mit Cron-Job-Integration.
