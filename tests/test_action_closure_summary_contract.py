@@ -25,6 +25,7 @@ from copilot_core.api.v1.notifications import (  # noqa: E402
     claim_action_closure_follow_up_dispatch,
     get_action_closure_follow_up_dispatch,
     record_action_closure_follow_up_receipt,
+    settle_action_closure_follow_up_dispatch,
 )
 from copilot_core.api.v1.zone_dashboard import _build_global_context, init_zone_dashboard_api  # noqa: E402
 from copilot_core.core.action_closure_read_model import (  # noqa: E402
@@ -365,6 +366,78 @@ def test_zone_dashboard_and_chat_surface_follow_up_receipts() -> None:
     assert "Retry offen" in home_context
     assert "Retry veraltet" in home_context
     assert "Lease abgelaufen" in home_context
+
+
+def test_zone_dashboard_and_chat_surface_follow_up_settlements() -> None:
+    _seed_closures()
+    app = Flask(__name__)
+
+    with app.test_request_context(
+        "/notifications/action-closures/dispatch?delivery_mode=notification_job&recent_limit=5",
+        method="GET",
+    ):
+        dispatch_response = get_action_closure_follow_up_dispatch()
+
+    candidates = dispatch_response.get_json()["dispatch"]["candidates"]
+    open_candidate = next(item for item in candidates if item["kind"] == "open")
+    failing_candidate = next(item for item in candidates if item["kind"] == "problematic")
+
+    with app.test_request_context(
+        "/notifications/action-closures/dispatch/claim",
+        method="POST",
+        json={"dispatch_id": open_candidate["dispatch_id"], "claimed_by": "worker.notifications", "lease_seconds": 120},
+    ):
+        claim_action_closure_follow_up_dispatch()
+
+    with app.test_request_context(
+        "/notifications/action-closures/dispatch/settle",
+        method="POST",
+        json={
+            "dispatch_id": open_candidate["dispatch_id"],
+            "settlement_state": "settled",
+            "settled_by": "worker.notifications",
+            "receipt_state": "delivered",
+            "note": "mobile done",
+        },
+    ):
+        settle_action_closure_follow_up_dispatch()
+
+    with app.test_request_context(
+        "/notifications/action-closures/dispatch/claim",
+        method="POST",
+        json={"dispatch_id": failing_candidate["dispatch_id"], "claimed_by": "worker.notifications", "lease_seconds": 120},
+    ):
+        claim_action_closure_follow_up_dispatch()
+
+    with app.test_request_context(
+        "/notifications/action-closures/dispatch/settle",
+        method="POST",
+        json={
+            "dispatch_id": failing_candidate["dispatch_id"],
+            "settlement_state": "abandoned",
+            "settled_by": "worker.notifications",
+            "receipt_state": "failed",
+            "retry_state": "scheduled",
+            "retry_count": 1,
+            "escalation_state": "pending",
+            "escalation_reason": "needs human follow-up",
+        },
+    ):
+        settle_action_closure_follow_up_dispatch()
+
+    ctx = _build_global_context()
+    receipt_summary = ctx["action_closures"]["receipt_summary"]
+    assert receipt_summary["settlements"]["contract"] == "ActionClosureFollowUpSettlementSummaryV1"
+    assert receipt_summary["settlements"]["counts"]["settled"] == 1
+    assert receipt_summary["settlements"]["counts"]["abandoned"] == 1
+    assert receipt_summary["settlements"]["counts"]["reassignable"] == 1
+
+    with app.app_context():
+        handler = ChatHandler()
+        home_context = handler._build_home_context()
+
+    assert "abgeschlossen" in home_context
+    assert "abgebrochen" in home_context
 
 
 def test_action_closure_context_block_resolves_zone_name_for_chat_voice() -> None:

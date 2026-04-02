@@ -28,8 +28,10 @@ from copilot_core.api.v1.notifications import (  # noqa: E402
     get_action_closure_follow_up_dispatch,
     get_action_closure_follow_up_claims,
     get_action_closure_follow_up_receipts,
+    get_action_closure_follow_up_settlements,
     get_action_closure_follow_up_sla,
     record_action_closure_follow_up_receipt,
+    settle_action_closure_follow_up_dispatch,
 )
 
 
@@ -616,3 +618,126 @@ def test_sla_endpoint_supports_worker_scope_without_shadow_logic() -> None:
     assert body["worker"] == "worker.notifications"
     assert body["counts"]["stale_retries"] == 1
     assert body["workers"]["worker.notifications"]["stale_retry"] == 1
+
+
+def test_settlement_surface_materializes_release_abandon_and_settled_results_from_claim_truth() -> None:
+    seed = _seed_closures()
+    app = Flask(__name__)
+
+    with app.test_request_context(
+        "/notifications/action-closures/dispatch?delivery_mode=notification_job&recent_limit=5",
+        method="GET",
+    ):
+        dispatch_response = get_action_closure_follow_up_dispatch()
+    candidates = dispatch_response.get_json()["dispatch"]["candidates"]
+    open_candidate = next(item for item in candidates if item["closure_id"] == seed["open_closure_id"])
+    failing_candidate = next(item for item in candidates if item["closure_id"] == seed["failing_closure_id"])
+
+    with app.test_request_context(
+        "/notifications/action-closures/dispatch/claim",
+        method="POST",
+        json={"dispatch_id": open_candidate["dispatch_id"], "claimed_by": "worker.notifications", "lease_seconds": 300},
+    ):
+        claim_action_closure_follow_up_dispatch()
+
+    with app.test_request_context(
+        "/notifications/action-closures/dispatch/settle",
+        method="POST",
+        json={
+            "dispatch_id": open_candidate["dispatch_id"],
+            "settlement_state": "released",
+            "settled_by": "worker.notifications",
+            "note": "handoff to reminder queue",
+        },
+    ):
+        released_response = settle_action_closure_follow_up_dispatch()
+
+    released_claim = released_response.get_json()["settlements"][0]
+    assert released_claim["claim_state"] == "released"
+    assert released_claim["lease"]["state"] == "released"
+    assert released_claim["settlement"]["state"] == "released"
+    assert released_claim["settlement"]["receipt_state"] is None
+    assert released_claim["reassignable"] is True
+
+    with app.test_request_context(
+        "/notifications/action-closures/dispatch/claim",
+        method="POST",
+        json={"dispatch_id": open_candidate["dispatch_id"], "claimed_by": "worker.reminders", "lease_seconds": 300},
+    ):
+        reclaimed_response = claim_action_closure_follow_up_dispatch()
+
+    assert reclaimed_response.get_json()["claimed"][0]["claim_state"] == "reassigned"
+
+    with app.test_request_context(
+        "/notifications/action-closures/dispatch/settle",
+        method="POST",
+        json={
+            "dispatch_id": open_candidate["dispatch_id"],
+            "settlement_state": "settled",
+            "settled_by": "worker.reminders",
+            "receipt_state": "delivered",
+            "note": "mobile delivered",
+        },
+    ):
+        settled_response = settle_action_closure_follow_up_dispatch()
+
+    settled_claim = settled_response.get_json()["settlements"][0]
+    assert settled_claim["claim_state"] == "settled"
+    assert settled_claim["lease"]["state"] == "settled"
+    assert settled_claim["settlement"]["state"] == "settled"
+    assert settled_claim["settlement"]["receipt_state"] == "delivered"
+    assert settled_claim["reassignable"] is False
+
+    with app.test_request_context(
+        "/notifications/action-closures/dispatch/claim",
+        method="POST",
+        json={"dispatch_id": failing_candidate["dispatch_id"], "claimed_by": "worker.notifications", "lease_seconds": 300},
+    ):
+        claim_action_closure_follow_up_dispatch()
+
+    with app.test_request_context(
+        "/notifications/action-closures/dispatch/settle",
+        method="POST",
+        json={
+            "dispatch_id": failing_candidate["dispatch_id"],
+            "settlement_state": "abandoned",
+            "settled_by": "worker.notifications",
+            "receipt_state": "failed",
+            "retry_state": "scheduled",
+            "retry_count": 1,
+            "escalation_state": "pending",
+            "escalation_reason": "manual takeover needed",
+        },
+    ):
+        abandoned_response = settle_action_closure_follow_up_dispatch()
+
+    abandoned_claim = abandoned_response.get_json()["settlements"][0]
+    assert abandoned_claim["claim_state"] == "abandoned"
+    assert abandoned_claim["settlement"]["state"] == "abandoned"
+    assert abandoned_claim["settlement"]["receipt_state"] == "failed"
+    assert abandoned_claim["reassignable"] is True
+
+    with app.test_request_context(
+        "/notifications/action-closures/settlements?delivery_mode=notification_job&recent_limit=5",
+        method="GET",
+    ):
+        settlements_response = get_action_closure_follow_up_settlements()
+
+    settlements_summary = settlements_response.get_json()["settlements"]
+    assert settlements_summary["contract"] == "ActionClosureFollowUpSettlementSummaryV1"
+    assert settlements_summary["counts"]["total_settlements"] == 2
+    assert settlements_summary["counts"]["settled"] == 1
+    assert settlements_summary["counts"]["abandoned"] == 1
+    assert settlements_summary["counts"]["released"] == 0
+    assert settlements_summary["counts"]["reassignable"] == 1
+    assert settlements_summary["receipt_outcomes"]["delivered"] == 1
+    assert settlements_summary["receipt_outcomes"]["failed"] == 1
+
+    with app.test_request_context(
+        "/notifications/action-closures/dispatch?delivery_mode=notification_job&recent_limit=5",
+        method="GET",
+    ):
+        dispatch_with_settlements = get_action_closure_follow_up_dispatch().get_json()["dispatch"]
+
+    assert dispatch_with_settlements["settlements"]["counts"]["settled"] == 1
+    assert dispatch_with_settlements["settlements"]["counts"]["abandoned"] == 1

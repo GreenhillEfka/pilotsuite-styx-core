@@ -22,10 +22,12 @@ from copilot_core.api.v1.notifications import (  # noqa: E402
     ActionClosureFollowUpDispatchStore,
     NotificationManager,
     acknowledge_action_closure_follow_up_dispatch,
+    claim_action_closure_follow_up_dispatch,
     get_notification_digest,
     get_pending_notifications,
     get_action_closure_follow_up_dispatch,
     record_action_closure_follow_up_receipt,
+    settle_action_closure_follow_up_dispatch,
 )
 
 
@@ -188,3 +190,75 @@ def test_notification_digest_embeds_delivery_receipt_summary_from_dispatch_resul
     assert receipt_summary["counts"]["failed"] == 1
     assert receipt_summary["counts"]["retry_pending"] == 1
     assert receipt_summary["counts"]["escalated"] == 1
+
+
+def test_notification_digest_embeds_claim_settlement_summary_from_dispatch_results() -> None:
+    _seed_closures()
+    app = Flask(__name__)
+
+    with app.test_request_context(
+        "/notifications/action-closures/dispatch?delivery_mode=notification_job&recent_limit=5",
+        method="GET",
+    ):
+        dispatch_response = get_action_closure_follow_up_dispatch()
+
+    candidates = dispatch_response.get_json()["dispatch"]["candidates"]
+    open_candidate = next(item for item in candidates if item["kind"] == "open")
+    problematic_candidate = next(item for item in candidates if item["kind"] == "problematic")
+
+    with app.test_request_context(
+        "/notifications/action-closures/dispatch/claim",
+        method="POST",
+        json={"dispatch_id": open_candidate["dispatch_id"], "claimed_by": "worker.notifications", "lease_seconds": 120},
+    ):
+        claim_action_closure_follow_up_dispatch()
+
+    with app.test_request_context(
+        "/notifications/action-closures/dispatch/settle",
+        method="POST",
+        json={
+            "dispatch_id": open_candidate["dispatch_id"],
+            "settlement_state": "settled",
+            "settled_by": "worker.notifications",
+            "receipt_state": "delivered",
+            "note": "delivery done",
+        },
+    ):
+        settle_action_closure_follow_up_dispatch()
+
+    with app.test_request_context(
+        "/notifications/action-closures/dispatch/claim",
+        method="POST",
+        json={"dispatch_id": problematic_candidate["dispatch_id"], "claimed_by": "worker.notifications", "lease_seconds": 120},
+    ):
+        claim_action_closure_follow_up_dispatch()
+
+    with app.test_request_context(
+        "/notifications/action-closures/dispatch/settle",
+        method="POST",
+        json={
+            "dispatch_id": problematic_candidate["dispatch_id"],
+            "settlement_state": "abandoned",
+            "settled_by": "worker.notifications",
+            "receipt_state": "failed",
+            "retry_state": "scheduled",
+            "retry_count": 1,
+            "escalation_state": "pending",
+            "escalation_reason": "handoff",
+        },
+    ):
+        settle_action_closure_follow_up_dispatch()
+
+    with app.test_request_context(
+        "/notifications/digest?include_action_closures=true&recent_limit=5",
+        method="GET",
+    ):
+        response = get_notification_digest()
+
+    body = response.get_json()
+    settlement_summary = body["digest"]["action_closures"]["delivery_receipts"]["settlements"]
+    assert settlement_summary["contract"] == "ActionClosureFollowUpSettlementSummaryV1"
+    assert settlement_summary["counts"]["total_settlements"] == 2
+    assert settlement_summary["counts"]["settled"] == 1
+    assert settlement_summary["counts"]["abandoned"] == 1
+    assert settlement_summary["counts"]["reassignable"] == 1

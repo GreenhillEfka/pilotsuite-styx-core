@@ -1,5 +1,16 @@
 # Changelog
 
+## [v15.3.41] - 2026-04-02
+
+### 🧩 Slice 29 — Closure Follow-Up Claim Settlement / Release Surface
+
+- `copilot_core.api.v1.notifications` materialisiert jetzt explizite Worker-Lease-Abschluesse aus derselben Claim-/Receipt-Wahrheit: `POST /notifications/action-closures/dispatch/settle` kanonisiert `released`, `abandoned` und `settled` fuer bestehende Claims, optional mit atomarem Receipt-/Retry-/Escalation-Update statt einer zweiten Queue-Historie.
+- `GET /notifications/action-closures/settlements` liefert eine truth-backed `ActionClosureFollowUpSettlementSummaryV1` mit monotone `settlement_revision`, Worker-/Delivery-Breakdowns, Receipt-Outcomes und Delta-Sicht ueber Claim-Abschluesse.
+- `ActionClosureFollowUpClaimV1` traegt jetzt eine explizite `settlement`-Struktur; Lease-State unterscheidet aktive, released und settled Claims sauber, sodass Reassignability und Receipt-Anbindung aus derselben Claim-Surface gelesen werden.
+- `ActionClosureFollowUpDispatchV1`, `ActionClosureFollowUpReceiptSummaryV1`, Notification-Digest, Dashboard-Global-/Zonen-Kontext und `ChatHandler._build_home_context()` spiegeln dieselbe Settlement-/Release-Wahrheit zurueck und beschreiben abgeschlossene bzw. abgebrochene Follow-ups ohne Parallel-Aggregation.
+- Versionsartefakte (`VERSION`, `copilot_core/VERSION`, Runtime-VERSION, `copilot_core/config.yaml`, `copilot_core/manifest.json`, `copilot_core/rootfs/usr/src/app/copilot_core/VERSION`) auf `15.3.41` harmonisiert.
+- Validiert mit: `pytest -q tests/test_notification_action_closure_dispatch_contract.py tests/test_notification_action_closure_digest_contract.py tests/test_action_closure_summary_contract.py tests/test_zone_dashboard_contract.py tests/test_voice_action_closure_hints_contract.py` → `35 passed`.
+
 ## [v15.3.40] - 2026-04-02
 
 ### 🧩 Slice 28 — Closure Follow-Up Claim / Lease Surface

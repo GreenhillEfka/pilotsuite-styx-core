@@ -990,3 +990,27 @@ Worker sollen Closure-Follow-ups aus derselben Dispatch-/Receipt-/SLA-Wahrheit r
 **Tests:** `pytest -q tests/test_notification_action_closure_dispatch_contract.py tests/test_notification_action_closure_digest_contract.py tests/test_action_closure_summary_contract.py tests/test_zone_dashboard_contract.py tests/test_voice_action_closure_hints_contract.py` → `32 passed`
 
 **Next Exact Task:** Slice 29 als Claim-Settlement-/Release-Surface aus derselben Claim-/Receipt-Wahrheit ableiten: explizite Release-/Abandon-/Settlement-Resultate fuer Worker-Leases kanonisch materialisieren und in Dispatch-/Dashboard-/Chat-Kontexte zurueckfuehren, ohne eine zweite Queue-Historie aufzubauen.
+
+### ✅ Slice 29 — Closure Follow-Up Claim Settlement / Release Surface
+**Status:** ✅ DONE (v15.3.41)
+
+**Goal**
+Explizite Release-/Abandon-/Settlement-Resultate fuer Closure-Follow-up-Worker-Leases aus derselben Claim-/Receipt-Wahrheit materialisieren, damit Dispatch, Dashboard und Chat dieselben Lease-Abschluesse ohne zweite Queue-Historie lesen.
+
+### Deliverables
+- [x] `POST /notifications/action-closures/dispatch/settle` materialisiert kanonische `released`-/`abandoned`-/`settled`-Resultate fuer bestehende `ActionClosureFollowUpClaimV1`-Claims, optional zusammen mit Receipt-/Retry-/Escalation-Daten in einem Schritt
+- [x] `GET /notifications/action-closures/settlements` liefert eine truth-backed `ActionClosureFollowUpSettlementSummaryV1` mit `settlement_revision`-Delta, Worker-/Delivery-Breakdowns und Receipt-Outcomes
+- [x] `ActionClosureFollowUpClaimV1` bettet einen expliziten `settlement`-Block ein; Lease-State unterscheidet aktive, released und settled Claims sauber, statt Release nur implizit ueber Nebenfelder zu erraten
+- [x] Dispatch-, Receipt-, Digest-, Dashboard- und Chat-Surfaces fuehren dieselbe Settlement-/Release-Wahrheit direkt zurueck, inklusive `abgeschlossen`-/`abgebrochen`-Hinweisen und Reassignability aus derselben Claim-Wahrheit
+- [x] Contract-Tests decken Release → Reclaim → Settled, Abandon mit Receipt-/Escalation-Daten sowie die Rueckspiegelung in Digest-/Dashboard-/Chat-Kontexte ab
+
+### Acceptance criteria
+- Worker koennen aktive Leases explizit freigeben, abbrechen oder abschliessen, ohne eine zweite History neben Claims/Receipts zu erzeugen.
+- Claim-/Settlement-/Receipt-Summaries bleiben konsistent: Reassignability, Receipt-Outcomes und Settlement-Status werden aus derselben kanonischen Wahrheit gelesen.
+- Dashboard, Digest und Chat beschreiben abgeschlossene bzw. abgebrochene Follow-ups mit derselben Surface wie die Worker-APIs.
+
+**Commit:** `feat(core): deliver slice 29 closure follow-up claim settlement surface`
+**Tag:** v15.3.41
+**Tests:** `pytest -q tests/test_notification_action_closure_dispatch_contract.py tests/test_notification_action_closure_digest_contract.py tests/test_action_closure_summary_contract.py tests/test_zone_dashboard_contract.py tests/test_voice_action_closure_hints_contract.py` → `35 passed`
+
+**Next Exact Task:** Slice 30 als Proposal-Lifecycle-Status-Surface aus derselben Proposal-/Action-/Closure-/Settlement-Wahrheit ableiten: pro Proposal den letzten kanonischen Lifecycle-Stand (suggested/accepted/executed/failed/follow-up-open/settled) revisionsscharf fuer Dashboard/Chat/Worker materialisieren, ohne eine separate Timeline-Tabelle aufzubauen.
