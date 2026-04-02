@@ -1545,6 +1545,25 @@ async def init_services(hass=None, config: dict = None):
     except Exception:
         _LOGGER.exception("Failed to init AutomationSuggestionEngine")
 
+    # Initialize Scheduler Engine
+    try:
+        from copilot_core.scheduler.engine import create_scheduler_engine
+        scheduler_engine = create_scheduler_engine()
+        services["scheduler_engine"] = scheduler_engine
+        _LOGGER.info("SchedulerEngine initialized")
+    except Exception:
+        _LOGGER.exception("Failed to init SchedulerEngine")
+        services["scheduler_engine"] = None
+
+    # Attach Zone Presence Hold Scheduler Integration
+    try:
+        from copilot_core.core.zone_presence_hold_scheduler import attach_hold_scheduler_to_engine
+        scheduler_engine = services.get("scheduler_engine")
+        attach_hold_scheduler_to_engine(scheduler_engine)
+        _LOGGER.info("ZonePresenceHoldSchedulerIntegration attached")
+    except Exception:
+        _LOGGER.exception("Failed to attach ZonePresenceHoldSchedulerIntegration")
+
     # Calculate startup time
     services["startup_time_ms"] = (time.perf_counter() - start_time) * 1000
     

@@ -1382,4 +1382,35 @@ Automatische Hold-Expiration-Prüfung mit Benachrichtigungen und Auto-Release.
 **Tag:** v15.3.57
 **Tests:** `pytest -q tests/test_zone_presence_hold_cron_contract.py` → `17 passed`
 
-**Next Exact Task:** Slice 45 als Zone-Presence-Hold-Scheduler-Integration ableiten: Cron-Job für periodische Hold-Expiration-Prüfung im Core-Scheduler registrieren, mit konfigurierbarem Intervall und Lifecycle-Management.
+### ✅ Slice 45 — Zone Presence Hold Scheduler Integration
+**Status:** ✅ DONE (v15.3.58)
+
+**Goal**
+Automatische Hold-Expiration-Prüfung im Core-Scheduler registrieren, mit konfigurierbarem Intervall und Lifecycle-Management.
+
+### Deliverables
+- [x] `ZonePresenceHoldSchedulerIntegration` für Scheduler-Anbindung des Cron-Services
+- [x] Action-Registrierung (`presence.hold_expiration_check`) im Scheduler-Engine
+- [x] Periodischer Job mit konfigurierbarem Intervall (default 5 Minuten, minimum 30 Sekunden)
+- [x] API-Endpoints: `GET|PUT /config`, `GET /status`, `POST /run|enable|disable|attach`
+- [x] Scheduler-Integration in `core_setup.py` bei Service-Initialisierung
+- [x] Blueprint-Registrierung in `app.py`
+- [x] Enable/Disable mit Job-Status-Sync im Scheduler
+- [x] Interval-Update mit Job-Recreation
+- [x] Contract-Tests (41 Tests grün)
+
+### Acceptance criteria
+- Scheduler-Engine wird in `core_setup.py` initialisiert und zu Services hinzugefügt
+- Hold-Scheduler-Integration wird automatisch an Scheduler-Engine angebunden
+- Periodischer Job läuft mit konfigurierbarem Intervall (default 300s)
+- Job kann via API enabled/disabled werden
+- Interval kann via API geändert werden (minimum 30s)
+- Manual trigger via `/run` Endpoint möglich
+- Status und Config sind via API abfragbar
+- Alle Endpoints sind revisionsscharf und testbar
+
+**Commit:** `feat(presence): deliver slice 45 zone presence hold scheduler integration`
+**Tag:** v15.3.58
+**Tests:** `pytest -q tests/test_zone_presence_hold_scheduler_contract.py tests/test_zone_presence_hold_scheduler_api.py` → `41 passed`
+
+**Next Exact Task:** Slice 46 als Hold-Statistik-/Analytics-Surface ableiten: Hold-Usage-Historie, Zone-spezifische Hold-Patterns und Hold-Effectiveness-Metriken aus derselben Hold-/Notification-/Scheduler-Wahrheit materialisieren.
