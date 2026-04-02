@@ -26,6 +26,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 from .context_builder import VoiceContextBuilder, VoiceContext, TimeOfDay, MoodState
 from ..mood.engine import MoodEngine, MoodState as EngineMoodState, MoodResult
 from ..habitus.service import HabitusService
+from ..action_closure import get_action_closure_store
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -55,6 +56,10 @@ class HintType(str, Enum):
     # Pattern-based hints
     HABITUS_PATTERN = "habitus_pattern"
     PREDICTIVE_ACTION = "predictive_action"
+    
+    # Proposal-based hints
+    PROPOSAL_FOLLOW_UP = "proposal_follow_up"
+    PROPOSAL_SUGGESTION = "proposal_suggestion"
     
     # Event-based hints
     IMPORTANT_EVENT = "important_event"
@@ -363,6 +368,7 @@ class ProactiveVoiceHints:
         hints.extend(self._check_mood_changes(context))
         hints.extend(self._check_time_routines(context))
         hints.extend(self._check_habitus_patterns(context))
+        hints.extend(self._check_proposal_lifecycle(context))
         hints.extend(self._check_action_followups(context))
         hints.extend(self._check_environment_hints(context))
         
@@ -580,6 +586,159 @@ class ProactiveVoiceHints:
             _LOGGER.debug("Failed to check habitus patterns: %s", e)
         
         return hints
+
+    def _check_proposal_lifecycle(self, context: VoiceContext) -> List[ProactiveHint]:
+        """Check canonical proposal-lifecycle truth and suggest follow-ups for open/suggested proposals."""
+        try:
+            from copilot_core.core.proposal_lifecycle_read_model import build_proposal_lifecycle_context_block
+
+            proposal_context = build_proposal_lifecycle_context_block(
+                get_action_closure_store(),
+                recent_limit=3,
+                zone_name=context.zone_name,
+            )
+        except Exception as exc:
+            _LOGGER.debug("Failed to build proposal-lifecycle follow-up hint: %s", exc)
+            return []
+
+        summary = dict(proposal_context.summary)
+        total_proposals = int(summary.get("total_proposals") or 0)
+        if total_proposals <= 0:
+            return []
+
+        lifecycle_statuses = summary.get("lifecycle_statuses") or {}
+        suggested_count = int(lifecycle_statuses.get("suggested") or 0)
+        accepted_count = int(lifecycle_statuses.get("accepted") or 0)
+        follow_up_open_count = int(lifecycle_statuses.get("follow_up_open") or 0)
+        failed_count = int(lifecycle_statuses.get("failed") or 0)
+
+        recent_statuses = [dict(item) for item in proposal_context.recent_statuses]
+
+        base_context = {
+            "contract": "ProposalLifecycleVoiceHintV1",
+            "summary": summary,
+            "voice_zone": context.zone_name,
+        }
+
+        # Priority 1: Failed proposals need immediate follow-up
+        failed_proposal = next(
+            (item for item in recent_statuses if item.get("lifecycle_status") == "failed"),
+            None,
+        )
+        if failed_proposal or failed_count:
+            target = self._describe_proposal_target(failed_proposal)
+            return [
+                ProactiveHint(
+                    hint_type=HintType.PROPOSAL_FOLLOW_UP,
+                    priority=HintPriority.HIGH,
+                    title_de="Vorschlag gescheitert",
+                    title_en="Proposal Failed",
+                    message_de=(
+                        f"Der letzte Vorschlag bei {target} ist gescheitert. "
+                        "Soll ich den Status pruefen oder einen neuen Versuch vorbereiten?"
+                    ),
+                    message_en=(
+                        f"The latest proposal for {target} failed. "
+                        "Should I check the status or prepare a retry?"
+                    ),
+                    suggested_action={
+                        "kind": "proposal_lifecycle_review",
+                        "proposal_id": failed_proposal.get("proposal_id") if failed_proposal else None,
+                        "lifecycle_status": "failed",
+                    },
+                    context={
+                        **base_context,
+                        "recent_proposal": failed_proposal,
+                    },
+                )
+            ]
+
+        # Priority 2: Follow-up open (accepted but awaiting execution/settlement)
+        follow_up_proposal = next(
+            (item for item in recent_statuses if item.get("lifecycle_status") == "follow_up_open"),
+            None,
+        )
+        if follow_up_proposal or follow_up_open_count:
+            target = self._describe_proposal_target(follow_up_proposal)
+            return [
+                ProactiveHint(
+                    hint_type=HintType.PROPOSAL_FOLLOW_UP,
+                    priority=HintPriority.MEDIUM,
+                    title_de="Vorschlag in Bearbeitung",
+                    title_en="Proposal In Progress",
+                    message_de=(
+                        f"Es gibt offene Vorschlaege rund um {target}. "
+                        "Soll ich den aktuellen Status zusammenfassen?"
+                    ),
+                    message_en=(
+                        f"There are open proposals around {target}. "
+                        "Should I summarize the current status?"
+                    ),
+                    suggested_action={
+                        "kind": "proposal_lifecycle_summary",
+                        "open_count": follow_up_open_count,
+                        "proposal_id": follow_up_proposal.get("proposal_id") if follow_up_proposal else None,
+                    },
+                    context={
+                        **base_context,
+                        "recent_proposal": dict(follow_up_proposal) if follow_up_proposal else None,
+                    },
+                )
+            ]
+
+        # Priority 3: New suggestions awaiting acceptance
+        suggested_proposal = next(
+            (item for item in recent_statuses if item.get("lifecycle_status") == "suggested"),
+            None,
+        )
+        if suggested_proposal or suggested_count:
+            target = self._describe_proposal_target(suggested_proposal)
+            return [
+                ProactiveHint(
+                    hint_type=HintType.PROPOSAL_SUGGESTION,
+                    priority=HintPriority.MEDIUM,
+                    title_de="Neuer Vorschlag verfuegbar",
+                    title_en="New Proposal Available",
+                    message_de=(
+                        f"Es gibt einen neuen Vorschlag fuer {target}. "
+                        "Soll ich ihn vorstellen?"
+                    ),
+                    message_en=(
+                        f"There is a new proposal for {target}. "
+                        "Should I present it?"
+                    ),
+                    suggested_action={
+                        "kind": "proposal_present",
+                        "proposal_id": suggested_proposal.get("proposal_id") if suggested_proposal else None,
+                    },
+                    context={
+                        **base_context,
+                        "recent_proposal": dict(suggested_proposal) if suggested_proposal else None,
+                    },
+                )
+            ]
+
+        return []
+
+    @staticmethod
+    def _describe_proposal_target(proposal: Optional[Dict[str, Any]]) -> str:
+        """Build a short human-readable target label for a proposal hint."""
+        if not proposal:
+            return "dem letzten Vorschlag"
+
+        zone_id = str(proposal.get("zone_id") or "").strip()
+        module_id = str(proposal.get("module_id") or "").strip()
+        proposal_id = str(proposal.get("proposal_id") or "").strip()
+
+        if zone_id and module_id:
+            return f"{zone_id}/{module_id}"
+        if zone_id:
+            return zone_id
+        if module_id:
+            return module_id
+        if proposal_id:
+            return proposal_id
+        return "dem letzten Vorschlag"
 
     def _check_action_followups(self, context: VoiceContext) -> List[ProactiveHint]:
         """Check shared action-closure truth and suggest follow-ups for open/problematic actions."""

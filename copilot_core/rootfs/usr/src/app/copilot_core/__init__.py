@@ -9,7 +9,26 @@ Core services for PilotSuite:
 - SystemHealth: Zigbee/Z-Wave/Recorder monitoring
 - UniFi: Network monitoring (WAN, clients, roaming)
 - Dev Surface: Development utilities
+
+Runtime package bridge:
+- extends the package path back to the repo-level `copilot_core/`
+- keeps shared modules like `copilot_core.blueprints_config` importable when
+  tests/runtime only add `rootfs/usr/src/app` to `sys.path`
 """
+
+from __future__ import annotations
+
+from pathlib import Path
+from pkgutil import extend_path
+
+
+__path__ = extend_path(__path__, __name__)  # type: ignore[name-defined]
+
+_pkg_dir = Path(__file__).resolve().parent
+_repo_bridge_dir = _pkg_dir.parents[5] / "copilot_core"
+_repo_bridge_path = str(_repo_bridge_dir)
+if _repo_bridge_dir.is_dir() and _repo_bridge_path not in __path__:
+    __path__.append(_repo_bridge_path)
 
 from .versioning import get_runtime_version
 

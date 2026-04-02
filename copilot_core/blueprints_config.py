@@ -39,7 +39,7 @@ CORE_API_BLUEPRINTS: List[Tuple[str, str, Optional[str]]] = [
     ("copilot_core.api.v1.modules", "modules_bp", None),
     ("copilot_core.api.v1.module_control", "module_control_bp", None),
     ("copilot_core.api.v1.module_health", "module_health_bp", None),
-    ("copilot_core.api.v1.module_router", "module_router_bp", None),
+    ("copilot_core.api.v1.module_router_api", "module_router_bp", None),
     ("copilot_core.api.v1.zigbee_module", "zigbee_module_bp", None),
     ("copilot_core.api.v1.zwave_module", "zwave_module_bp", None),
     ("copilot_core.api.v1.thread_module", "thread_module_bp", None),
@@ -50,28 +50,28 @@ CORE_API_BLUEPRINTS: List[Tuple[str, str, Optional[str]]] = [
     ("copilot_core.api.v1.comfort_stub", "comfort_stub_bp", None),
     
     # Brain & Knowledge
-    ("copilot_core.api.v1.habitus", "habitus_bp", None),
-    ("copilot_core.api.v1.habitus_dashboard_cards", "dashboard_cards_bp", None),
-    ("copilot_core.api.v1.graph", "graph_bp", None),
-    ("copilot_core.api.v1.graph_ops", "graph_ops_bp", None),
-    ("copilot_core.api.v1.vector", "vector_bp", None),
-    ("copilot_core.api.v1.neurons", "neurons_bp", None),
+    ("copilot_core.api.v1.habitus", "bp", None),
+    ("copilot_core.api.v1.habitus_dashboard_cards", "bp", None),
+    ("copilot_core.api.v1.graph", "bp", None),
+    ("copilot_core.api.v1.graph_ops", "bp", None),
+    ("copilot_core.api.v1.vector", "bp", None),
+    ("copilot_core.api.v1.neurons", "bp", None),
     ("copilot_core.api.v1.neurons_ui", "neurons_ui_bp", None),
-    ("copilot_core.api.v1.neurons_visualization", "neurons_viz_bp", None),
+    ("copilot_core.api.v1.neurons_visualization", "bp", None),
     ("copilot_core.api.v1.neuron_layers", "neuron_layers_bp", None),
     ("copilot_core.api.v1.brain_growth", "brain_growth_bp", None),
-    ("copilot_core.api.v1.knowledge_graph", "knowledge_graph_bp", None),
+    ("copilot_core.knowledge_graph.api", "bp", None),
     
     # Automation & Learning
-    ("copilot_core.api.v1.mood", "mood_bp", None),
+    ("copilot_core.api.v1.mood", "bp", None),
     ("copilot_core.api.v1.learning_viz", "learning_viz_bp", None),
     ("copilot_core.api.v1.predictive", "predictive_bp", None),
     ("copilot_core.api.v1.suggestions", "suggestions_bp", None),
     ("copilot_core.api.v1.proposals", "proposals_bp", None),
-    ("copilot_core.api.v1.candidates", "candidates_bp", None),
+    ("copilot_core.api.v1.candidates", "bp", None),
     ("copilot_core.api.v1.action_closure", "action_closure_bp", None),
-    ("copilot_core.api.v1.action_attribution", "action_attribution_bp", None),
-    ("copilot_core.api.v1.automation", "automation_bp", None),
+    ("copilot_core.api.v1.action_attribution", "bp", None),
+    ("copilot_core.api.v1.automation_api", "automation_bp", None),
     ("copilot_core.api.v1.autonomy", "autonomy_bp", None),
     ("copilot_core.api.v1.scenes", "scenes_bp", None),
     ("copilot_core.api.v1.multizone", "multizone_bp", None),
@@ -82,15 +82,15 @@ CORE_API_BLUEPRINTS: List[Tuple[str, str, Optional[str]]] = [
     ("copilot_core.api.v1.anomaly", "anomaly_bp", None),
     
     # RAG & Search
-    ("copilot_core.api.v1.search", "search_bp", None),
+    ("copilot_core.api.v1.search", "bp", None),
     ("copilot_core.api.v1.rag", "rag_bp", None),
     ("copilot_core.api.v1.rag_ui", "rag_ui_bp", None),
     
     # Notifications & Communication
-    ("copilot_core.api.v1.notifications", "notifications_bp", None),
+    ("copilot_core.api.v1.notifications", "bp", None),
     ("copilot_core.api.v1.chat", "chat_bp", None),
     ("copilot_core.api.v1.conversation", "conversation_bp", None),
-    ("copilot_core.api.v1.voice_context_bp", "voice_context_bp", None),
+    ("copilot_core.api.v1.voice_context_bp", "bp", None),
     ("copilot_core.api.v1.styx_voice", "styx_voice_bp", None),
     ("copilot_core.api.v1.user_hints", "user_hints_bp", None),
     ("copilot_core.api.v1.reminders", "reminders_bp", None),
@@ -98,7 +98,7 @@ CORE_API_BLUEPRINTS: List[Tuple[str, str, Optional[str]]] = [
     # Calendar & Events
     ("copilot_core.api.v1.calendar", "calendar_bp", None),
     ("copilot_core.api.v1.ha_events", "ha_events_bp", None),
-    ("copilot_core.api.v1.events_ingest", "events_ingest_bp", None),
+    ("copilot_core.api.v1.events_ingest", "bp", None),
     
     # Cache & Performance
     ("copilot_core.api.v1.cache_control", "cache_control_bp", None),
@@ -112,19 +112,19 @@ CORE_API_BLUEPRINTS: List[Tuple[str, str, Optional[str]]] = [
     
     # Dashboard & UI
     ("copilot_core.api.v1.backend_ui", "backend_ui_bp", None),
-    ("copilot_core.api.v1.dashboard", "dashboard_bp", None),
+    ("copilot_core.api.v1.dashboard", "bp", None),
     ("copilot_core.api.v1.styx_dashboard", "styx_dashboard_bp", None),
-    ("copilot_core.api.v1.widget_positions", "widget_positions_bp", None),
+    ("dashboard.api.v1.widget_positions", "widget_positions_bp", None),
     
     # Config & Preferences
     ("copilot_core.api.v1.config", "config_bp", None),
-    ("copilot_core.api.v1.user_preferences", "user_preferences_bp", None),
+    ("copilot_core.api.v1.user_preferences", "bp", None),
     ("copilot_core.api.v1.user_management", "user_management_bp", None),
     
     # Home & Multi-Home
     ("copilot_core.api.v1.homekit", "homekit_bp", None),
     ("copilot_core.sharing.api", "sharing_bp", None),
-    ("copilot_core.api.v1.multihoming", "multihoming_bp", None),
+    ("copilot_core.api.v1.multihome", "bp", None),
     
     # Collective Intelligence
     ("copilot_core.collective_intelligence.api", "federated_bp", None),
@@ -135,27 +135,27 @@ CORE_API_BLUEPRINTS: List[Tuple[str, str, Optional[str]]] = [
     
     # Errors & Debugging
     ("copilot_core.api.v1.error_digest", "error_digest_bp", None),
-    ("copilot_core.api.v1.dev", "dev_bp", None),
-    ("copilot_core.api.v1.debug", "debug_bp", None),
-    ("copilot_core.api.v1.swagger_ui", "swagger_ui_bp", None),
+    ("copilot_core.api.v1.dev", "bp", None),
+    ("copilot_core.api.v1.debug", "bp", None),
+    ("copilot_core.api.v1.swagger_ui", "bp", None),
     
     # Entity Management
-    ("copilot_core.api.v1.entity_adoption", "entity_adoption_bp", None),
+    ("copilot_core.api.v1.entity_adoption", "bp", None),
     ("copilot_core.api.v1.entity_assignment", "entity_assignment_bp", None),
     ("copilot_core.api.v1.entity_normalization", "entity_normalization_bp", None),
     
     # Advanced Features
     ("copilot_core.api.v1.alarm", "alarm_bp", None),
-    ("copilot_core.api.v1.conflict_resolution", "conflict_resolution_bp", None),
+    ("copilot_core.api.v1.conflict_resolution", "bp", None),
     ("copilot_core.api.v1.explain", "explain_bp", None),
-    ("copilot_core.api.v1.character", "character_bp", None),
+    ("copilot_core.api.v1.character", "bp", None),
     ("copilot_core.api.v1.openai_compat", "openai_compat_bp", None),
     ("copilot_core.api.v1.onyx_bridge", "onyx_bridge_bp", None),
-    ("copilot_core.api.v1.mcp", "mcp_bp", None),
-    ("copilot_core.api.v1.weather", "weather_bp", None),
+    ("copilot_core.api.v1.mcp", "bp", None),
+    ("copilot_core.api.v1.weather", "bp", None),
     
     # Security
-    ("copilot_core.api.v1.security", "security_bp", None),
+    ("copilot_core.api.v1.security", "bp", None),
 ]
 
 # ============================================================================

@@ -27,7 +27,7 @@ media_ui_bp = Blueprint("media_ui", __name__, url_prefix="/api/v1/media")
 # API Endpoints
 # =============================================================================
 
-@backend_ui_bp.route("", methods=["GET"])
+@media_ui_bp.route("", methods=["GET"])
 def get_media_overview():
     """Media Overview — Sonos, Musikwolke, Cameras."""
     return jsonify({
@@ -49,7 +49,7 @@ def get_media_overview():
     })
 
 
-@backend_ui_bp.route("/sonos", methods=["GET"])
+@media_ui_bp.route("/sonos", methods=["GET"])
 def get_sonos_players():
     """Sonos Players — Status + Controls."""
     # TODO: Echte Sonos-Player aus SonosHTTPClient laden
@@ -106,7 +106,7 @@ def get_sonos_players():
     })
 
 
-@backend_ui_bp.route("/sonos/favorites", methods=["GET"])
+@media_ui_bp.route("/sonos/favorites", methods=["GET"])
 def get_sonos_favorites():
     """Sonos Favorites — Alle Favorites."""
     # TODO: Echte Favorites aus Sonos laden
@@ -128,7 +128,7 @@ def get_sonos_favorites():
     })
 
 
-@backend_ui_bp.route("/sonos/play", methods=["POST"])
+@media_ui_bp.route("/sonos/play", methods=["POST"])
 def sonos_play():
     """Sonos Favorite abspielen."""
     data = request.get_json()
@@ -150,7 +150,7 @@ def sonos_play():
     })
 
 
-@backend_ui_bp.route("/musikwolke", methods=["GET"])
+@media_ui_bp.route("/musikwolke", methods=["GET"])
 def get_musikwolke():
     """Musikwolke — Zonenabhängige Musik-Konfiguration."""
     # TODO: Echte Musikwolke-Konfiguration laden
@@ -190,7 +190,7 @@ def get_musikwolke():
     return jsonify(musikwolke)
 
 
-@backend_ui_bp.route("/musikwolke/zone/<zone_id>", methods=["PUT"])
+@media_ui_bp.route("/musikwolke/zone/<zone_id>", methods=["PUT"])
 def update_musikwolke_zone(zone_id: str):
     """Musikwolke pro Zone konfigurieren."""
     data = request.get_json()
@@ -209,7 +209,7 @@ def update_musikwolke_zone(zone_id: str):
     })
 
 
-@backend_ui_bp.route("/cameras", methods=["GET"])
+@media_ui_bp.route("/cameras", methods=["GET"])
 def get_cameras():
     """Camera Status — Alle Kameras."""
     # TODO: Echte Camera-Status laden
@@ -247,7 +247,7 @@ def get_cameras():
     })
 
 
-@backend_ui_bp.route("/cameras/<camera_id>/snapshot", methods=["GET"])
+@media_ui_bp.route("/cameras/<camera_id>/snapshot", methods=["GET"])
 def get_camera_snapshot(camera_id: str):
     """Camera Snapshot — als Bild."""
     # TODO: Echten Snapshot von Camera laden

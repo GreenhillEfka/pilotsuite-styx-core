@@ -1060,4 +1060,32 @@ Die kanonische Proposal-Lifecycle-Wahrheit zonenscharf fuer Dashboard- und Zone-
 **Tag:** v15.3.43
 **Tests:** `pytest -q tests/test_notification_action_closure_dispatch_contract.py tests/test_notification_action_closure_digest_contract.py tests/test_action_closure_summary_contract.py tests/test_zone_dashboard_contract.py tests/test_voice_action_closure_hints_contract.py tests/test_proposal_lifecycle_status_contract.py tests/test_proposal_lifecycle_api.py` → `46 passed`
 
-**Next Exact Task:** Slice 32 als zone-scoped Proposal-Lifecycle-Context fuer Chat-/Voice-Kontext ableiten: zonenspezifische Proposal-Highlights und Delta-sensitive Kontextzeilen aus derselben Lifecycle-Schicht in `ChatHandler` und proaktive Voice-Hinweise zurueckfuehren, ohne neue Feature-spezifische Proposal-Heuristiken einzufuehren.
+**Commit:** `feat(core): deliver slice 32 zone-scoped proposal lifecycle context for chat`
+**Tag:** v15.3.44
+**Tests:** `pytest -q tests/test_proposal_lifecycle_status_contract.py tests/test_proposal_lifecycle_api.py tests/test_zone_dashboard_contract.py tests/test_voice_action_closure_hints_contract.py` → `20 passed`
+
+**Next Exact Task:** Slice 33 als voice-spezifische Proposal-Hints ableiten: proaktive Voice-Hinweise sollen offene/vorgeschlagene Proposals aus derselben kanonischen Lifecycle-Schicht als Follow-up-/Status-Hinweise sprechen, analog zu Slice 20 für Closures.
+
+### ✅ Slice 33 — Closure-Aware Proposal Follow-Up Hints for Voice
+**Status:** ✅ DONE (v15.3.45)
+
+**Goal**
+Den Roadmap-Block **Voice Integration** an die kanonische Proposal-Lifecycle-Wahrheit anbinden, damit proaktive Sprachhinweise offene/gescheiterte/vorgeschlagene Proposals aus derselben Proposal→Action→Runtime-Spur ableiten statt nur generische Zeit-/Mood-Hinweise zu sprechen.
+
+### Deliverables
+- [x] neuer Voice-Hint-Typ `proposal_follow_up` und `proposal_suggestion` in der proaktiven Hint-Pipeline
+- [x] Proactive Voice liest `ProposalLifecycleContextBlockV1` direkt aus der kanonischen Lifecycle-Surface
+- [x] gescheiterte Proposals erzeugen High-Priority-Nachfass-Hinweise; offene Proposals erzeugen Medium-Priority-Statushinweise; vorgeschlagene Proposals erzeugen Presentation-Hinweise
+- [x] `/api/v1/voice/hints` exponiert denselben Lifecycle-Summary-/Recent-Proposal-Kontext stabil im Hint-Payload
+- [x] Contract-Tests für direkte Hint-Generierung und API-Surface gegen dieselbe Lifecycle-Wahrheit
+
+### Acceptance criteria
+- Voice-Hinweise sprechen bei realen offenen/gescheiterten/vorgeschlagenen Proposals dieselbe Lifecycle-Wahrheit wie Dashboard, Chat, Predictive und Multi-Zone.
+- Follow-up-Hinweise bleiben source-grounded: Status, Summary und letzte Proposal sind im Hint-Kontext transparent enthalten.
+- Die Voice-Surface erfindet keine separaten Outcome-Heuristiken neben dem bestehenden Lifecycle-Contract.
+
+**Commit:** `feat(core): deliver slice 33 closure-aware proposal follow-up hints for voice`
+**Tag:** v15.3.45
+**Tests:** `pytest -q tests/test_voice_proposal_lifecycle_hints_contract.py tests/test_voice_action_closure_hints_contract.py tests/test_proposal_lifecycle_status_contract.py` → `9 passed`
+
+**Next Exact Task:** Nächster Forward-Slice wieder aus Roadmap/Vision ableiten; zonenspezifische Proposal-Lifecycle-Feeds für Dashboard-/System-Kontext als Slice 34 evaluieren.

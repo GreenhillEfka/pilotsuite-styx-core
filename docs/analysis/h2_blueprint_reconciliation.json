@@ -1,0 +1,297 @@
+{
+  "repo_root": "/config/clawd/team/worktrees/pilotsuite-styx-core-current",
+  "summary": {
+    "total_entries": 101,
+    "ok_entries": 89,
+    "drift_entries": 12,
+    "status_breakdown": {
+      "import_failed": 9,
+      "ok": 89,
+      "attribute_missing": 3
+    },
+    "error_type_breakdown": {
+      "ModuleNotFoundError": 8,
+      "ImportError": 1,
+      "AttributeError": 3
+    }
+  },
+  "drifts": [
+    {
+      "lane": "core",
+      "module_path": "copilot_core.api.v1.config",
+      "attr_name": "config_bp",
+      "url_prefix": null,
+      "import_ok": false,
+      "attr_ok": false,
+      "status": "import_failed",
+      "error_type": "ModuleNotFoundError",
+      "error": "No module named 'copilot_core.api.v1.config'"
+    },
+    {
+      "lane": "core",
+      "module_path": "copilot_core.api.v1.entity_normalization",
+      "attr_name": "entity_normalization_bp",
+      "url_prefix": null,
+      "import_ok": false,
+      "attr_ok": false,
+      "status": "import_failed",
+      "error_type": "ModuleNotFoundError",
+      "error": "No module named 'copilot_core.api.v1.entity_normalization'"
+    },
+    {
+      "lane": "core",
+      "module_path": "copilot_core.api.v1.health",
+      "attr_name": "health_bp",
+      "url_prefix": null,
+      "import_ok": false,
+      "attr_ok": false,
+      "status": "import_failed",
+      "error_type": "ModuleNotFoundError",
+      "error": "No module named 'copilot_core.api.v1.health'"
+    },
+    {
+      "lane": "core",
+      "module_path": "copilot_core.api.v1.openai_compat",
+      "attr_name": "openai_compat_bp",
+      "url_prefix": null,
+      "import_ok": false,
+      "attr_ok": false,
+      "status": "import_failed",
+      "error_type": "ModuleNotFoundError",
+      "error": "No module named 'copilot_core.api.v1.openai_compat'"
+    },
+    {
+      "lane": "external",
+      "module_path": "copilot_core.api.v1.openai_compat",
+      "attr_name": "openai_compat_bp",
+      "url_prefix": "/v1",
+      "import_ok": false,
+      "attr_ok": false,
+      "status": "import_failed",
+      "error_type": "ModuleNotFoundError",
+      "error": "No module named 'copilot_core.api.v1.openai_compat'"
+    },
+    {
+      "lane": "core",
+      "module_path": "copilot_core.api.v1.rag",
+      "attr_name": "rag_bp",
+      "url_prefix": null,
+      "import_ok": false,
+      "attr_ok": false,
+      "status": "import_failed",
+      "error_type": "ImportError",
+      "error": "cannot import name 'NamespaceIndex' from 'copilot_core.rag.indexer' (/config/clawd/team/worktrees/pilotsuite-styx-core-current/copilot_core/rootfs/usr/src/app/copilot_core/rag/indexer.py)"
+    },
+    {
+      "lane": "core",
+      "module_path": "copilot_core.api.v1.user_management",
+      "attr_name": "user_management_bp",
+      "url_prefix": null,
+      "import_ok": false,
+      "attr_ok": false,
+      "status": "import_failed",
+      "error_type": "ModuleNotFoundError",
+      "error": "No module named 'copilot_core.api.v1.user_management'"
+    },
+    {
+      "lane": "core",
+      "module_path": "copilot_core.api.v1.users",
+      "attr_name": "users_bp",
+      "url_prefix": null,
+      "import_ok": false,
+      "attr_ok": false,
+      "status": "import_failed",
+      "error_type": "ModuleNotFoundError",
+      "error": "No module named 'copilot_core.api.v1.users'"
+    },
+    {
+      "lane": "core",
+      "module_path": "copilot_core.api.v1.version",
+      "attr_name": "version_bp",
+      "url_prefix": null,
+      "import_ok": false,
+      "attr_ok": false,
+      "status": "import_failed",
+      "error_type": "ModuleNotFoundError",
+      "error": "No module named 'copilot_core.api.v1.version'"
+    },
+    {
+      "lane": "external",
+      "module_path": "copilot_core.api.v1.mcp",
+      "attr_name": "mcp_bp",
+      "url_prefix": "/mcp",
+      "import_ok": true,
+      "attr_ok": false,
+      "status": "attribute_missing",
+      "error_type": "AttributeError",
+      "error": "copilot_core.api.v1.mcp has no attribute mcp_bp"
+    },
+    {
+      "lane": "core",
+      "module_path": "copilot_core.api.v1.user_hints",
+      "attr_name": "user_hints_bp",
+      "url_prefix": null,
+      "import_ok": true,
+      "attr_ok": false,
+      "status": "attribute_missing",
+      "error_type": "AttributeError",
+      "error": "copilot_core.api.v1.user_hints has no attribute user_hints_bp"
+    },
+    {
+      "lane": "core",
+      "module_path": "copilot_core.api.v1.zones",
+      "attr_name": "zones_bp",
+      "url_prefix": null,
+      "import_ok": true,
+      "attr_ok": false,
+      "status": "attribute_missing",
+      "error_type": "AttributeError",
+      "error": "copilot_core.api.v1.zones has no attribute zones_bp"
+    }
+  ],
+  "top_priorities": [
+    {
+      "lane": "core",
+      "module_path": "copilot_core.api.v1.config",
+      "attr_name": "config_bp",
+      "url_prefix": null,
+      "import_ok": false,
+      "attr_ok": false,
+      "status": "import_failed",
+      "error_type": "ModuleNotFoundError",
+      "error": "No module named 'copilot_core.api.v1.config'"
+    },
+    {
+      "lane": "core",
+      "module_path": "copilot_core.api.v1.entity_normalization",
+      "attr_name": "entity_normalization_bp",
+      "url_prefix": null,
+      "import_ok": false,
+      "attr_ok": false,
+      "status": "import_failed",
+      "error_type": "ModuleNotFoundError",
+      "error": "No module named 'copilot_core.api.v1.entity_normalization'"
+    },
+    {
+      "lane": "core",
+      "module_path": "copilot_core.api.v1.health",
+      "attr_name": "health_bp",
+      "url_prefix": null,
+      "import_ok": false,
+      "attr_ok": false,
+      "status": "import_failed",
+      "error_type": "ModuleNotFoundError",
+      "error": "No module named 'copilot_core.api.v1.health'"
+    },
+    {
+      "lane": "core",
+      "module_path": "copilot_core.api.v1.openai_compat",
+      "attr_name": "openai_compat_bp",
+      "url_prefix": null,
+      "import_ok": false,
+      "attr_ok": false,
+      "status": "import_failed",
+      "error_type": "ModuleNotFoundError",
+      "error": "No module named 'copilot_core.api.v1.openai_compat'"
+    },
+    {
+      "lane": "external",
+      "module_path": "copilot_core.api.v1.openai_compat",
+      "attr_name": "openai_compat_bp",
+      "url_prefix": "/v1",
+      "import_ok": false,
+      "attr_ok": false,
+      "status": "import_failed",
+      "error_type": "ModuleNotFoundError",
+      "error": "No module named 'copilot_core.api.v1.openai_compat'"
+    },
+    {
+      "lane": "core",
+      "module_path": "copilot_core.api.v1.rag",
+      "attr_name": "rag_bp",
+      "url_prefix": null,
+      "import_ok": false,
+      "attr_ok": false,
+      "status": "import_failed",
+      "error_type": "ImportError",
+      "error": "cannot import name 'NamespaceIndex' from 'copilot_core.rag.indexer' (/config/clawd/team/worktrees/pilotsuite-styx-core-current/copilot_core/rootfs/usr/src/app/copilot_core/rag/indexer.py)"
+    },
+    {
+      "lane": "core",
+      "module_path": "copilot_core.api.v1.user_management",
+      "attr_name": "user_management_bp",
+      "url_prefix": null,
+      "import_ok": false,
+      "attr_ok": false,
+      "status": "import_failed",
+      "error_type": "ModuleNotFoundError",
+      "error": "No module named 'copilot_core.api.v1.user_management'"
+    },
+    {
+      "lane": "core",
+      "module_path": "copilot_core.api.v1.users",
+      "attr_name": "users_bp",
+      "url_prefix": null,
+      "import_ok": false,
+      "attr_ok": false,
+      "status": "import_failed",
+      "error_type": "ModuleNotFoundError",
+      "error": "No module named 'copilot_core.api.v1.users'"
+    },
+    {
+      "lane": "core",
+      "module_path": "copilot_core.api.v1.version",
+      "attr_name": "version_bp",
+      "url_prefix": null,
+      "import_ok": false,
+      "attr_ok": false,
+      "status": "import_failed",
+      "error_type": "ModuleNotFoundError",
+      "error": "No module named 'copilot_core.api.v1.version'"
+    },
+    {
+      "lane": "external",
+      "module_path": "copilot_core.api.v1.mcp",
+      "attr_name": "mcp_bp",
+      "url_prefix": "/mcp",
+      "import_ok": true,
+      "attr_ok": false,
+      "status": "attribute_missing",
+      "error_type": "AttributeError",
+      "error": "copilot_core.api.v1.mcp has no attribute mcp_bp"
+    },
+    {
+      "lane": "core",
+      "module_path": "copilot_core.api.v1.user_hints",
+      "attr_name": "user_hints_bp",
+      "url_prefix": null,
+      "import_ok": true,
+      "attr_ok": false,
+      "status": "attribute_missing",
+      "error_type": "AttributeError",
+      "error": "copilot_core.api.v1.user_hints has no attribute user_hints_bp"
+    },
+    {
+      "lane": "core",
+      "module_path": "copilot_core.api.v1.zones",
+      "attr_name": "zones_bp",
+      "url_prefix": null,
+      "import_ok": true,
+      "attr_ok": false,
+      "status": "attribute_missing",
+      "error_type": "AttributeError",
+      "error": "copilot_core.api.v1.zones has no attribute zones_bp"
+    }
+  ],
+  "recommended_fix_order": [
+    "1. Fix SyntaxError/NameError modules first because they break registration deterministically.",
+    "2. Fix ModuleNotFoundError/ImportError next by restoring bridge paths or correcting module references.",
+    "3. Fix AttributeError mismatches by aligning blueprint attr names in blueprints_config to real exports.",
+    "4. Re-run core wiring tests after each batch, then regenerate this report."
+  ],
+  "check_commands": [
+    "python3 -m py_compile copilot_core/rootfs/usr/src/app/copilot_core/core_setup.py",
+    "python3 -m pytest -q tests/test_h1_truth_map.py tests/test_api_v1_syntax_contract.py tests/test_core_wiring_contract.py",
+    "python3 scripts/h2_blueprint_reconcile.py --repo . --md-out docs/analysis/H2_BLUEPRINT_RECONCILIATION.md --json-out docs/analysis/h2_blueprint_reconciliation.json"
+  ]
+}

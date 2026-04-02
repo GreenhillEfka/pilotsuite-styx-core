@@ -2,6 +2,11 @@
 
 Provides async client, auto-discovery, and entity mapping for HomeAssistant.
 
+Runtime bridge:
+- extends this subpackage path back to the repo-level `copilot_core/homeassistant`
+- keeps modules like `websocket_client` importable when runtime/tests only add
+  `rootfs/usr/src/app` to `sys.path`
+
 Usage:
     from copilot_core.homeassistant import HomeAssistantClient, AutoDiscovery, EntityMapper
     
@@ -24,6 +29,21 @@ Usage:
     mapper.update_area_registry(areas)
     mappings = mapper.map_entities(states)
 """
+
+from __future__ import annotations
+
+from pathlib import Path
+from pkgutil import extend_path
+
+
+__path__ = extend_path(__path__, __name__)  # type: ignore[name-defined]
+
+_pkg_dir = Path(__file__).resolve().parent
+_repo_bridge_dir = _pkg_dir.parents[6] / "copilot_core" / "homeassistant"
+_repo_bridge_path = str(_repo_bridge_dir)
+if _repo_bridge_dir.is_dir() and _repo_bridge_path not in __path__:
+    __path__.append(_repo_bridge_path)
+
 
 try:
     from .client import (

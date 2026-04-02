@@ -1583,6 +1583,22 @@ def register_blueprints(app: Flask, services: dict) -> None:
     # Make services available via app.config for blueprints using current_app.config
     app.config["COPILOT_SERVICES"] = services
 
+    def _register_blueprint_once(blueprint, *, url_prefix=None) -> bool:
+        """Register blueprint only when its name is not already present.
+
+        The codebase is in the middle of moving from ad-hoc manual registration
+        to centralized `blueprints_config` registration. During reconciliation we
+        must avoid duplicate-name crashes while still allowing late init wiring.
+        """
+        if blueprint.name in app.blueprints:
+            _LOGGER.debug("Skip already-registered blueprint: %s", blueprint.name)
+            return False
+        if url_prefix is not None:
+            app.register_blueprint(blueprint, url_prefix=url_prefix)
+        else:
+            app.register_blueprint(blueprint)
+        return True
+
     # Validate blueprint configuration
     is_valid, errors = validate_blueprint_config()
     if not is_valid:
@@ -1617,45 +1633,6 @@ def register_blueprints(app: Flask, services: dict) -> None:
             _LOGGER.debug("Registered external blueprint: %s.%s → %s", module_path, bp_attr, url_prefix)
         except Exception as e:
             _LOGGER.exception("Failed to register external blueprint %s.%s", module_path, bp_attr)
-        ("copilot_core.api.v1.habitus",                 "bp",               "/api/v1/habitus"),
-        ("copilot_core.api.v1.habitus_dashboard_cards", "bp",               "/api/v1/habitus/dashboard_cards"),
-        ("copilot_core.api.v1.graph_ops",               "bp",               "/api/v1/graph"),
-        ("copilot_core.api.v1.vector",                  "bp",               "/api/v1/vector"),
-        ("copilot_core.api.v1.neurons",                 "bp",               "/api/v1/neurons"),
-        ("copilot_core.api.v1.neurons_visualization",   "bp",               "/api/v1/neurons"),
-        ("copilot_core.api.v1.weather",                 "bp",               "/api/v1/weather"),
-        ("copilot_core.api.v1.voice_context_bp",        "bp",               "/api/v1/voice"),
-        ("copilot_core.api.v1.user_preferences",        "bp",               "/api/v1/user"),
-        ("copilot_core.api.v1.dashboard",               "bp",               "/api/v1/dashboard"),
-        ("copilot_core.knowledge_graph.api",             "bp",               "/api/v1/kg"),
-        ("copilot_core.api.v1.search",                  "bp",               "/api/v1/search"),
-        ("copilot_core.api.v1.notifications",           "bp",               "/api/v1/notifications"),
-        ("copilot_core.api.v1.user_hints",              "bp",               "/api/v1/hints"),
-        ("copilot_core.api.v1.conversation",            "conversation_bp",  "/api/v1/chat"),
-        # Blueprints with None prefix: routes have /api/v1/ baked into paths
-        ("copilot_core.api.v1.dev",                     "bp",               "/api/v1"),
-        ("copilot_core.api.v1.swagger_ui",              "bp",               "/api/v1/docs"),
-        ("copilot_core.api.v1.swagger_ui",              "openapi_bp",       "/api/v1"),
-        ("copilot_core.sharing.api",                    "sharing_bp",       "/api/v1"),
-        ("copilot_core.collective_intelligence.api",    "federated_bp",     "/api/v1"),
-        ("copilot_core.api.v1.rate_limit",              "rate_limit_bp",    "/api/v1"),
-        ("copilot_core.homeassistant.api",              "ha_discovery_bp",  "/api/v1"),
-        ("copilot_core.api.v1.metrics",                 "metrics_bp",       "/api/v1"),
-        # ── Stub blueprints for endpoints HA sensors poll ──────────
-        ("copilot_core.api.v1.unifi_stub",              "unifi_stub_bp",    None),
-        ("copilot_core.api.v1.regional_stub",           "regional_stub_bp", None),
-    ]
-
-    for module_path, bp_attr, prefix in _BLUEPRINTS:
-        try:
-            mod = importlib.import_module(module_path)
-            bp = getattr(mod, bp_attr)
-            if prefix is not None:
-                app.register_blueprint(bp, url_prefix=prefix)
-            else:
-                app.register_blueprint(bp)
-        except Exception:
-            _LOGGER.exception("Failed to register blueprint %s.%s", module_path, bp_attr)
 
     # ── Blueprints requiring service wiring before registration ───────────
 
@@ -1668,9 +1645,9 @@ def register_blueprints(app: Flask, services: dict) -> None:
             init_zone_editor_api,
         )
         init_zone_editor_api(services.get("hub_zones"))
-        app.register_blueprint(zone_editor_bp)
-        app.register_blueprint(zone_editor_legacy_bp)
-        app.register_blueprint(zone_legacy_alias_bp)
+        _register_blueprint_once(zone_editor_bp)
+        _register_blueprint_once(zone_editor_legacy_bp)
+        _register_blueprint_once(zone_legacy_alias_bp)
     except Exception:
         _LOGGER.exception("Failed to register zone_editor blueprints")
 
@@ -1688,7 +1665,7 @@ def register_blueprints(app: Flask, services: dict) -> None:
             media_mgr=services.get("media_zone_manager"),
             proactive_engine=services.get("proactive_engine"),
         )
-        app.register_blueprint(media_zones_bp)  # uses own prefix /api/v1/media
+        _register_blueprint_once(media_zones_bp)  # uses own prefix /api/v1/media
     except Exception:
         _LOGGER.exception("Failed to register media_zones blueprint")
 
@@ -1702,7 +1679,7 @@ def register_blueprints(app: Flask, services: dict) -> None:
     # Register PilotSuite Module endpoints (Licht, Helligkeit, Heiz, Bewegung, Praesenz)
     try:
         from copilot_core.api.v1.module_endpoints import modules_bp
-        app.register_blueprint(modules_bp)
+        _register_blueprint_once(modules_bp)
     except Exception:
         _LOGGER.exception("Failed to register PilotSuite Module endpoints")
 
@@ -1716,14 +1693,14 @@ def register_blueprints(app: Flask, services: dict) -> None:
     # Register Neuron Layers Visualization API
     try:
         from copilot_core.api.v1.neuron_layers import neuron_layers_bp
-        app.register_blueprint(neuron_layers_bp)
+        _register_blueprint_once(neuron_layers_bp)
     except Exception:
         _LOGGER.exception("Failed to register neuron_layers_bp")
 
     # Register Module Health Dashboard API
     try:
         from copilot_core.api.v1.module_health import module_health_bp
-        app.register_blueprint(module_health_bp)
+        _register_blueprint_once(module_health_bp)
     except Exception:
         _LOGGER.exception("Failed to register module_health_bp")
 
@@ -1731,7 +1708,7 @@ def register_blueprints(app: Flask, services: dict) -> None:
     try:
         from copilot_core.api.v1.suggestions import suggestions_bp, init_suggestions_api
         init_suggestions_api(services.get("suggestion_engine"))
-        app.register_blueprint(suggestions_bp)
+        _register_blueprint_once(suggestions_bp)
     except Exception:
         _LOGGER.exception("Failed to register suggestions_bp")
 
@@ -1739,7 +1716,7 @@ def register_blueprints(app: Flask, services: dict) -> None:
     try:
         from copilot_core.api.v1.proposals import proposals_bp, init_proposals_api
         init_proposals_api(services.get("suggestion_engine"))
-        app.register_blueprint(proposals_bp)
+        _register_blueprint_once(proposals_bp)
     except Exception:
         _LOGGER.exception("Failed to register proposals_bp")
 
@@ -1753,7 +1730,7 @@ def register_blueprints(app: Flask, services: dict) -> None:
     except Exception as exc:
         _LOGGER.warning("Zone Automation init failed: %s", exc)
         init_zone_automation_api(None)
-    app.register_blueprint(zone_automation_bp)
+    _register_blueprint_once(zone_automation_bp)
 
     # Wire Musikwolke Bridge (connects ZoneAutomation → Sonos + MediaFollow)
     try:
@@ -1777,7 +1754,7 @@ def register_blueprints(app: Flask, services: dict) -> None:
     # Register Musikwolke API (zone-based Sonos control)
     from copilot_core.api.v1.musikwolke import musikwolke_bp, init_musikwolke_api
     init_musikwolke_api(services.get("musikwolke_bridge"))
-    app.register_blueprint(musikwolke_bp)
+    _register_blueprint_once(musikwolke_bp)
 
     # Re-wire AutonomyExecutor with late-bound services (zone_automation, musikwolke_bridge)
     try:
@@ -1794,7 +1771,7 @@ def register_blueprints(app: Flask, services: dict) -> None:
     try:
         from copilot_core.api.v1.autonomy import autonomy_bp, init_autonomy_api
         init_autonomy_api(services.get("autonomy_executor"), services.get("module_registry"))
-        app.register_blueprint(autonomy_bp)
+        _register_blueprint_once(autonomy_bp)
     except Exception:
         _LOGGER.exception("Failed to register autonomy_bp")
 
@@ -1827,7 +1804,7 @@ def register_blueprints(app: Flask, services: dict) -> None:
             bus=services.get("integration_bus"),
             habitus_zones=services.get("hub_zones"),
         )
-        app.register_blueprint(zone_aggregates_bp)
+        _register_blueprint_once(zone_aggregates_bp)
         _LOGGER.info("Zone Aggregates API registered")
     except Exception:
         _LOGGER.exception("Failed to register zone_aggregates_bp")
@@ -1840,7 +1817,7 @@ def register_blueprints(app: Flask, services: dict) -> None:
             module_registry=services.get("module_registry"),
             habitus_zones=services.get("hub_zones"),
         )
-        app.register_blueprint(zone_health_bp)
+        _register_blueprint_once(zone_health_bp)
         _LOGGER.info("Zone Health API registered")
     except Exception:
         _LOGGER.exception("Failed to register zone_health_bp")
@@ -1868,12 +1845,12 @@ def register_blueprints(app: Flask, services: dict) -> None:
         hub_notifications=services.get("hub_notifications"),
         hub_musikwolke=services.get("musikwolke_bridge"),
     )
-    app.register_blueprint(zone_dashboard_bp)
+    _register_blueprint_once(zone_dashboard_bp)
 
     # Register Styx Dashboard API
     from copilot_core.api.v1.styx_dashboard import styx_dashboard_bp, init_styx_dashboard_api
     init_styx_dashboard_api(services)
-    app.register_blueprint(styx_dashboard_bp)
+    _register_blueprint_once(styx_dashboard_bp)
 
     # Register Styx Voice API (STT + TTS)
     try:
