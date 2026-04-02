@@ -1,5 +1,16 @@
 # Changelog
 
+## [v15.3.43] - 2026-04-02
+
+### 🧩 Slice 31 — Zone-Scoped Proposal Lifecycle Context Surface
+
+- `copilot_core.core.proposal_lifecycle_read_model` fuehrt jetzt einen kanonischen `ProposalLifecycleContextBlockV1` ein, der dieselbe Proposal-/Action-/Closure-/Settlement-Wahrheit zonenscharf als Kontextblock mit Delta-Cursor und kompakten Context-Lines materialisiert.
+- `copilot_core.api.v1.zone_dashboard` bettet Proposal-Lifecycle jetzt direkt in Zone-Liste, Zone-Detail und den globalen Dashboard-Kontext ein: jede Zone bekommt eine eigene `proposal_lifecycle`-Surface, waehrend `global.proposal_lifecycle.zone_contexts` geaenderte Zonen fuer Poller dedupliziert aus derselben Lifecycle-Logik ausleitet.
+- Dashboard-Poller koennen Proposal-Deltas jetzt explizit ueber `proposal_lifecycle_since` fuer Listen- und Detail-Surfaces abfragen, ohne eine zweite zonenspezifische Proposal-Aggregation aufzubauen.
+- Contract-Coverage prueft den neuen Kontextblock, globale Zone-Feeds sowie Delta-Verhalten auf Zone-Detail-/Dashboard-Surfaces; die Dashboard-Testhilfe setzt zusaetzlich den Follow-up-Dispatch-Store pro Lauf zurueck, damit Proposal-Revisionen nicht durch fremde Worker-Revisionen verdeckt werden.
+- Versionsartefakte (`VERSION`, `copilot_core/VERSION`, Runtime-VERSION, `copilot_core/config.yaml`, `copilot_core/manifest.json`, `copilot_core/rootfs/usr/src/app/copilot_core/VERSION`) auf `15.3.43` harmonisiert.
+- Validiert mit: `pytest -q tests/test_notification_action_closure_dispatch_contract.py tests/test_notification_action_closure_digest_contract.py tests/test_action_closure_summary_contract.py tests/test_zone_dashboard_contract.py tests/test_voice_action_closure_hints_contract.py tests/test_proposal_lifecycle_status_contract.py tests/test_proposal_lifecycle_api.py` → `46 passed`.
+
 ## [v15.3.42] - 2026-04-02
 
 ### 🧩 Slice 30 — Proposal Lifecycle Status Surface

@@ -26,12 +26,16 @@ from copilot_core.api.v1.zone_dashboard import (  # noqa: E402
     zone_dashboard_bp,
 )
 from copilot_core.action_closure import get_action_closure_store  # noqa: E402
+from copilot_core.api.v1 import notifications as notifications_api  # noqa: E402
+from copilot_core.api.v1.notifications import ActionClosureFollowUpDispatchStore  # noqa: E402
+from copilot_core.core.proposal_lifecycle_read_model import build_proposal_lifecycle_status_summary  # noqa: E402
 from copilot_core.hub.habitus_zones import HabitusZoneEngine  # noqa: E402
 from copilot_core.hub.zone_automation import ZoneAutomationController  # noqa: E402
 
 
 def _init_services() -> tuple[HabitusZoneEngine, ZoneAutomationController]:
     get_action_closure_store().clear()
+    notifications_api._action_closure_follow_up_dispatch_store = ActionClosureFollowUpDispatchStore()
     zone_engine = HabitusZoneEngine()
     zone_engine.sync_external_zone_topology(
         "wohnbereich",
@@ -143,6 +147,38 @@ def test_zone_dashboard_surfaces_zone_scoped_action_closure_context() -> None:
     assert detail_body["zone"]["action_closures"]["zone_name"] == "Wohnbereich"
 
 
+def test_zone_dashboard_surfaces_zone_scoped_proposal_lifecycle_context() -> None:
+    _init_services()
+    store = get_action_closure_store()
+    store.upsert(
+        source="voice.accepted",
+        proposal_id="proposal:wohnbereich:lifecycle",
+        action_id="action:wohnbereich:lifecycle",
+        zone_id="wohnbereich",
+        module_id="light",
+        accepted_at="2026-04-01T21:05:00+00:00",
+    )
+
+    app = Flask(__name__)
+    app.config["TESTING"] = True
+    app.register_blueprint(zone_dashboard_bp)
+
+    with app.test_request_context("/api/v1/zone/dashboard", method="GET"):
+        dashboard_response = get_dashboard.__wrapped__()
+    dashboard_body = dashboard_response.get_json()
+    assert dashboard_body["zones"][0]["proposal_lifecycle"]["context"]["summary"]["total_proposals"] == 1
+    assert any(
+        "Wohnbereich" in line
+        for line in dashboard_body["zones"][0]["proposal_lifecycle"]["context"]["context_lines"]
+    )
+
+    with app.test_request_context("/api/v1/zone/dashboard/wohnbereich", method="GET"):
+        detail_response = get_zone_detail.__wrapped__("wohnbereich")
+    detail_body = detail_response.get_json()
+    assert detail_body["zone"]["proposal_lifecycle"]["context"]["summary"]["total_proposals"] == 1
+    assert detail_body["zone"]["proposal_lifecycle"]["zone_name"] == "Wohnbereich"
+
+
 def test_zone_dashboard_action_closure_since_param_surfaces_delta_state() -> None:
     _init_services()
     store = get_action_closure_store()
@@ -182,6 +218,49 @@ def test_zone_dashboard_action_closure_since_param_surfaces_delta_state() -> Non
 
     unchanged_body = unchanged_response.get_json()
     unchanged_delta = unchanged_body["zone"]["action_closures"]["context"]["delta"]
+    assert unchanged_delta["changed"] is False
+    assert unchanged_delta["changed_count"] == 0
+
+
+def test_zone_dashboard_proposal_lifecycle_since_param_surfaces_delta_state() -> None:
+    _init_services()
+    base_revision = build_proposal_lifecycle_status_summary(get_action_closure_store()).to_dict()["revision"]
+    store = get_action_closure_store()
+    store.upsert(
+        source="voice.accepted",
+        proposal_id="proposal:wohnbereich:proposal-delta",
+        action_id="action:wohnbereich:proposal-delta",
+        zone_id="wohnbereich",
+        module_id="light",
+        accepted_at="2026-04-01T21:06:00+00:00",
+    )
+
+    app = Flask(__name__)
+    app.config["TESTING"] = True
+    app.register_blueprint(zone_dashboard_bp)
+
+    with app.test_request_context(
+        f"/api/v1/zone/dashboard/wohnbereich?proposal_lifecycle_since={base_revision}",
+        method="GET",
+    ):
+        detail_response = get_zone_detail.__wrapped__("wohnbereich")
+
+    detail_body = detail_response.get_json()
+    delta = detail_body["zone"]["proposal_lifecycle"]["context"]["delta"]
+    assert delta["since_revision"] == base_revision
+    assert delta["changed"] is True
+    assert delta["changed_count"] == 1
+    assert delta["recent_statuses"][0]["proposal_id"] == "proposal:wohnbereich:proposal-delta"
+
+    current_revision = build_proposal_lifecycle_status_summary(get_action_closure_store()).to_dict()["revision"]
+    with app.test_request_context(
+        f"/api/v1/zone/dashboard/wohnbereich?proposal_lifecycle_since={current_revision}",
+        method="GET",
+    ):
+        unchanged_response = get_zone_detail.__wrapped__("wohnbereich")
+
+    unchanged_body = unchanged_response.get_json()
+    unchanged_delta = unchanged_body["zone"]["proposal_lifecycle"]["context"]["delta"]
     assert unchanged_delta["changed"] is False
     assert unchanged_delta["changed_count"] == 0
 

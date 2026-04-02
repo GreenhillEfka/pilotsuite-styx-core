@@ -28,6 +28,7 @@ from copilot_core.api.v1.notifications import (  # noqa: E402
 from copilot_core.api.v1.proposals import init_proposals_api, proposals_bp  # noqa: E402
 from copilot_core.automations.suggestion_engine import AutomationSuggestionEngine  # noqa: E402
 from copilot_core.core.proposal_lifecycle_read_model import (  # noqa: E402
+    build_proposal_lifecycle_context_block,
     build_proposal_lifecycle_status_summary,
     get_proposal_lifecycle_status,
 )
@@ -224,6 +225,22 @@ def test_proposal_lifecycle_status_summary_materializes_canonical_statuses() -> 
     ).to_dict()["lifecycle_status"] == "suggested"
 
 
+def test_proposal_lifecycle_context_block_is_zone_ready() -> None:
+    _seed_statuses()
+
+    context = build_proposal_lifecycle_context_block(
+        get_action_closure_store(),
+        zone_id="zone:living",
+        recent_limit=2,
+    ).to_dict()
+
+    assert context["contract"] == "ProposalLifecycleContextBlockV1"
+    assert context["summary"]["total_proposals"] == 1
+    assert context["summary"]["lifecycle_statuses"]["accepted"] == 1
+    assert any("Wohnzimmer" in line for line in context["context_lines"])
+    assert any("Proposal-Lifecycle" in line for line in context["context_lines"])
+
+
 def test_proposals_status_api_uses_correct_prefix_and_detail_surface(monkeypatch) -> None:
     engine = AutomationSuggestionEngine()
     suggestion = engine.suggest_from_presence(away_minutes=30)
@@ -280,3 +297,47 @@ def test_zone_dashboard_and_chat_surface_proposal_lifecycle_summary() -> None:
 
     assert "Proposal-Lifecycle" in home_context
     assert "follow-up-open" in home_context
+
+
+def test_zone_dashboard_global_context_exposes_zone_scoped_proposal_lifecycle_summary() -> None:
+    _seed_statuses()
+
+    ctx = _build_global_context()
+
+    assert ctx["proposal_lifecycle"]["revision"] >= 1
+    assert ctx["proposal_lifecycle"]["freshness"]
+    assert ctx["proposal_lifecycle"]["total"] == 5
+    assert ctx["proposal_lifecycle"]["zones_with_proposals"] == 5
+    zone_contexts = ctx["proposal_lifecycle"]["zone_contexts"]
+    assert len(zone_contexts) == 5
+    living = next(item for item in zone_contexts if item["zone_id"] == "zone:living")
+    assert living["context"]["contract"] == "ProposalLifecycleContextBlockV1"
+    assert living["context"]["summary"]["total_proposals"] == 1
+    assert any(
+        "Wohnzimmer" in line or "Wohnbereich" in line
+        for line in living["context"]["context_lines"]
+    )
+
+
+def test_zone_dashboard_global_context_delta_filters_unchanged_proposal_zone_contexts() -> None:
+    _seed_statuses()
+    base_revision = build_proposal_lifecycle_status_summary(get_action_closure_store()).to_dict()["revision"]
+
+    ctx = _build_global_context(proposal_since_revision=base_revision)
+    assert ctx["proposal_lifecycle"]["delta"]["changed"] is False
+    assert ctx["proposal_lifecycle"]["zone_contexts"] == []
+
+    get_action_closure_store().upsert(
+        source="predictive.accepted",
+        proposal_id="proposal:delta-zone-sleep",
+        action_id="action:delta-zone-sleep",
+        zone_id="zone:sleep",
+        module_id="climate",
+        accepted_at="2026-04-02T00:30:00+00:00",
+    )
+
+    changed_ctx = _build_global_context(proposal_since_revision=base_revision)
+    assert changed_ctx["proposal_lifecycle"]["delta"]["changed"] is True
+    assert changed_ctx["proposal_lifecycle"]["delta"]["changed_count"] == 1
+    assert len(changed_ctx["proposal_lifecycle"]["zone_contexts"]) == 1
+    assert changed_ctx["proposal_lifecycle"]["zone_contexts"][0]["zone_id"] == "zone:sleep"

@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from typing import Any, Mapping, Sequence
 
 from copilot_core.action_closure import ActionClosureStore, get_action_closure_store
+from copilot_core.core.action_closure_read_model import resolve_zone_name
 from copilot_core.core.dashboard_read_models import ReadModelMeta
 
 _SUCCESS_STATES = {"executed", "completed", "succeeded", "success"}
@@ -152,6 +153,29 @@ class ProposalLifecycleStatusSummaryReadModel:
             "modules": dict(self.modules),
             "recent_statuses": [dict(item) for item in self.recent_statuses],
             "highlights": list(self.highlights),
+            "delta": dict(self.delta),
+        }
+
+
+@dataclass
+class ProposalLifecycleContextBlock:
+    meta: ReadModelMeta
+    revision: int = 0
+    latest_change_at: str | None = None
+    summary: dict[str, Any] = field(default_factory=dict)
+    recent_statuses: list[dict[str, Any]] = field(default_factory=list)
+    context_lines: list[str] = field(default_factory=list)
+    delta: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "contract": "ProposalLifecycleContextBlockV1",
+            **self.meta.to_dict(),
+            "revision": self.revision,
+            "latest_change_at": self.latest_change_at,
+            "summary": dict(self.summary),
+            "recent_statuses": [dict(item) for item in self.recent_statuses],
+            "context_lines": list(self.context_lines),
             "delta": dict(self.delta),
         }
 
@@ -585,10 +609,79 @@ def describe_proposal_lifecycle_summary(summary: Mapping[str, Any]) -> str | Non
     return ", ".join(parts)
 
 
+def build_proposal_lifecycle_context_block(
+    store: ActionClosureStore | None = None,
+    *,
+    proposal_provider: Any | None = None,
+    proposal_id: str | None = None,
+    zone_id: str | None = None,
+    module_id: str | None = None,
+    lifecycle_status: str | None = None,
+    recent_limit: int = 3,
+    zone_name: str | None = None,
+    since_revision: int | None = None,
+) -> ProposalLifecycleContextBlock:
+    summary = build_proposal_lifecycle_status_summary(
+        store,
+        proposal_provider=proposal_provider,
+        proposal_id=proposal_id,
+        zone_id=zone_id,
+        module_id=module_id,
+        lifecycle_status=lifecycle_status,
+        recent_limit=recent_limit,
+        since_revision=since_revision,
+    )
+    payload = summary.to_dict()
+    resolved_zone_name = zone_name or resolve_zone_name(zone_id)
+
+    context_lines: list[str] = []
+    if summary.total_proposals:
+        if resolved_zone_name:
+            context_lines.append(f"Zone: {resolved_zone_name}")
+        proposal_line = describe_proposal_lifecycle_summary(payload)
+        if proposal_line:
+            context_lines.append(proposal_line)
+        recent_line = _describe_recent_status(summary.recent_statuses[0]) if summary.recent_statuses else None
+        if recent_line:
+            context_lines.append(recent_line)
+    elif since_revision is not None and resolved_zone_name:
+        context_lines.append(f"Zone: {resolved_zone_name}")
+
+    delta_payload = payload.get("delta", {})
+    if since_revision is not None:
+        if delta_payload.get("changed"):
+            context_lines.append(
+                f"Proposal-Deltas seit Revision {since_revision}: {delta_payload.get('changed_count', 0)}"
+            )
+        else:
+            context_lines.append(f"Keine Proposal-Aenderungen seit Revision {since_revision}")
+
+    return ProposalLifecycleContextBlock(
+        meta=ReadModelMeta(
+            source="proposal_lifecycle.context",
+            freshness=payload.get("latest_change_at") or payload.get("freshness") or ReadModelMeta().freshness,
+        ),
+        revision=payload.get("revision", 0),
+        latest_change_at=payload.get("latest_change_at"),
+        summary={
+            "total_proposals": payload.get("total_proposals", 0),
+            "lifecycle_statuses": payload.get("lifecycle_statuses", {}),
+            "sources": payload.get("sources", {}),
+            "zones": payload.get("zones", {}),
+            "modules": payload.get("modules", {}),
+        },
+        recent_statuses=payload.get("recent_statuses", []),
+        context_lines=context_lines,
+        delta=delta_payload,
+    )
+
+
 __all__ = [
     "ProposalLifecycleStatus",
     "ProposalLifecycleStatusSummaryReadModel",
+    "ProposalLifecycleContextBlock",
     "build_proposal_lifecycle_status_summary",
+    "build_proposal_lifecycle_context_block",
     "get_proposal_lifecycle_status",
     "describe_proposal_lifecycle_summary",
 ]

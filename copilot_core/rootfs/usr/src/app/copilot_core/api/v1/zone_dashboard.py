@@ -35,7 +35,10 @@ from copilot_core.core.action_closure_read_model import (
     build_action_closure_summary_read_model,
     resolve_zone_name,
 )
-from copilot_core.core.proposal_lifecycle_read_model import build_proposal_lifecycle_status_summary
+from copilot_core.core.proposal_lifecycle_read_model import (
+    build_proposal_lifecycle_context_block,
+    build_proposal_lifecycle_status_summary,
+)
 from copilot_core.action_closure import get_action_closure_store
 
 _LOGGER = logging.getLogger(__name__)
@@ -845,9 +848,74 @@ def _build_zone_action_closure_contexts(
     )
     return contexts
 
-def _build_global_context(*, since_revision: int | None = None) -> Dict[str, Any]:
+
+def _build_zone_proposal_lifecycle_context(
+    zone_id: str,
+    *,
+    zone_name: str | None = None,
+    recent_limit: int = 3,
+    since_revision: int | None = None,
+) -> Dict[str, Any]:
+    """Expose canonical proposal-lifecycle context for one zone."""
+    resolved_zone_name = zone_name or resolve_zone_name(zone_id) or zone_id
+    context_block = build_proposal_lifecycle_context_block(
+        get_action_closure_store(),
+        proposal_provider=_svc.get("suggestion_engine"),
+        zone_id=zone_id,
+        zone_name=resolved_zone_name,
+        recent_limit=recent_limit,
+        since_revision=since_revision,
+    )
+    return {
+        "zone_id": zone_id,
+        "zone_name": resolved_zone_name,
+        "context": context_block.to_dict(),
+    }
+
+
+def _build_zone_proposal_lifecycle_contexts(
+    zone_name_lookup: Dict[str, str] | None = None,
+    *,
+    since_revision: int | None = None,
+) -> List[Dict[str, Any]]:
+    """Expose zone-scoped proposal lifecycle contexts for dashboard pollers."""
+    zone_name_lookup = zone_name_lookup or {}
+    summary = build_proposal_lifecycle_status_summary(
+        get_action_closure_store(),
+        proposal_provider=_svc.get("suggestion_engine"),
+    )
+    payload = summary.to_dict()
+    contexts: List[Dict[str, Any]] = []
+
+    for zone_id in payload.get("zones", {}).keys():
+        context = _build_zone_proposal_lifecycle_context(
+            zone_id,
+            zone_name=zone_name_lookup.get(zone_id),
+            recent_limit=2,
+            since_revision=since_revision,
+        )
+        if context["context"].get("summary", {}).get("total_proposals", 0):
+            if since_revision is not None and not context["context"].get("delta", {}).get("changed"):
+                continue
+            contexts.append(context)
+
+    contexts.sort(
+        key=lambda item: (
+            -item["context"].get("summary", {}).get("total_proposals", 0),
+            item.get("zone_name") or item.get("zone_id") or "",
+        )
+    )
+    return contexts
+
+
+def _build_global_context(
+    *,
+    since_revision: int | None = None,
+    proposal_since_revision: int | None = None,
+) -> Dict[str, Any]:
     """Build global dashboard context from available engines + example data."""
     ctx: Dict[str, Any] = {}
+    proposal_since_revision = since_revision if proposal_since_revision is None else proposal_since_revision
 
     try:
         from copilot_core.api.v1.notifications import _build_action_closure_follow_up_receipt_summary
@@ -904,10 +972,29 @@ def _build_global_context(*, since_revision: int | None = None) -> Dict[str, Any
             get_action_closure_store(),
             proposal_provider=_svc.get("suggestion_engine"),
             recent_limit=3,
-            since_revision=since_revision,
+            since_revision=proposal_since_revision,
         )
         if proposal_summary.total_proposals:
             payload = proposal_summary.to_dict()
+            zone_name_lookup: Dict[str, str] = {}
+            for zone in _get_habitus_zones():
+                zid = None
+                if isinstance(zone, dict):
+                    raw_zone_id = zone.get("zone_id")
+                    if raw_zone_id not in (None, ""):
+                        text = str(raw_zone_id).strip()
+                        zid = text or None
+                zone_name = _get_zone_display_name(zone) if isinstance(zone, dict) else None
+                if not zid or not zone_name:
+                    continue
+                zone_name_lookup[zid] = zone_name
+                if not zid.startswith("zone:"):
+                    zone_name_lookup[f"zone:{zid}"] = zone_name
+
+            zone_contexts = _build_zone_proposal_lifecycle_contexts(
+                zone_name_lookup,
+                since_revision=proposal_since_revision,
+            )
             ctx["proposal_lifecycle"] = {
                 "revision": payload.get("revision", 0),
                 "freshness": payload.get("latest_change_at") or payload.get("freshness"),
@@ -919,6 +1006,8 @@ def _build_global_context(*, since_revision: int | None = None) -> Dict[str, Any
                 "recent": payload.get("recent_statuses", [])[:3],
                 "highlights": payload.get("highlights", []),
                 "delta": payload.get("delta", {}),
+                "zones_with_proposals": len(zone_contexts),
+                "zone_contexts": zone_contexts,
             }
     except Exception:
         pass
@@ -1113,6 +1202,7 @@ def get_dashboard():
         return jsonify({"ok": False, "error": f"Invalid zone_type: {requested_zone_type}"}), 400
     try:
         action_closure_since = _parse_optional_int_param("action_closure_since")
+        proposal_lifecycle_since = _parse_optional_int_param("proposal_lifecycle_since")
     except ValueError as exc:
         return jsonify({"ok": False, "error": str(exc)}), 400
 
@@ -1151,6 +1241,12 @@ def get_dashboard():
             recent_limit=2,
             since_revision=action_closure_since,
         )
+        zone_data["proposal_lifecycle"] = _build_zone_proposal_lifecycle_context(
+            zid,
+            zone_name=_get_zone_display_name(zone),
+            recent_limit=2,
+            since_revision=proposal_lifecycle_since,
+        )
         if include_modules:
             zone_data["modules"] = _get_zone_module_data(zid)
         if include_mood:
@@ -1168,7 +1264,10 @@ def get_dashboard():
         "count": len(dashboard_zones),
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }
-    global_ctx = _build_global_context(since_revision=action_closure_since)
+    global_ctx = _build_global_context(
+        since_revision=action_closure_since,
+        proposal_since_revision=proposal_lifecycle_since,
+    )
     if global_ctx:
         response["global"] = global_ctx
 
@@ -1324,6 +1423,7 @@ def get_zone_detail(zone_id: str):
     zone_id = _resolve_zone_id(zone_id)
     try:
         action_closure_since = _parse_optional_int_param("action_closure_since")
+        proposal_lifecycle_since = _parse_optional_int_param("proposal_lifecycle_since")
     except ValueError as exc:
         return jsonify({"ok": False, "error": str(exc)}), 400
 
@@ -1352,6 +1452,12 @@ def get_zone_detail(zone_id: str):
         zone_name=_get_zone_display_name(zone_data),
         recent_limit=3,
         since_revision=action_closure_since,
+    )
+    zone_data["proposal_lifecycle"] = _build_zone_proposal_lifecycle_context(
+        zone_id,
+        zone_name=_get_zone_display_name(zone_data),
+        recent_limit=3,
+        since_revision=proposal_lifecycle_since,
     )
 
     return jsonify({"ok": True, "zone": zone_data})

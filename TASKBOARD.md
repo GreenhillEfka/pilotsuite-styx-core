@@ -1037,3 +1037,27 @@ Den letzten kanonischen Lifecycle-Stand pro Proposal direkt aus bestehender Prop
 **Tests:** `pytest -q tests/test_notification_action_closure_dispatch_contract.py tests/test_notification_action_closure_digest_contract.py tests/test_action_closure_summary_contract.py tests/test_zone_dashboard_contract.py tests/test_voice_action_closure_hints_contract.py tests/test_proposal_lifecycle_status_contract.py tests/test_proposal_lifecycle_api.py` → `41 passed`
 
 **Next Exact Task:** Slice 31 als zone-scoped Proposal-Lifecycle-Context-Surface aus derselben Proposal-/Action-/Closure-/Settlement-Wahrheit ableiten: zonenscharfe Proposal-Status-Feeds und Delta-Cursor fuer Zone-Detail-/Dashboard-Poller materialisieren, ohne die neue Lifecycle-Logik zu duplizieren.
+
+### ✅ Slice 31 — Zone-Scoped Proposal Lifecycle Context Surface
+**Status:** ✅ DONE (v15.3.43)
+
+**Goal**
+Die kanonische Proposal-Lifecycle-Wahrheit zonenscharf fuer Dashboard- und Zone-Detail-Poller ausleiten, damit zonenbezogene Proposal-Feeds und Delta-Cursor dieselbe Proposal-/Action-/Closure-/Settlement-Truth konsumieren statt lokaler Sonderaggregation.
+
+### Deliverables
+- [x] `ProposalLifecycleContextBlockV1` als kompakte Kontext-Surface fuer zonenscharfe Proposal-Lifecycle-Read-Models eingefuehrt
+- [x] `zone_dashboard` exponiert pro Zone eine kanonische `proposal_lifecycle`-Surface in Zone-Liste und Zone-Detail
+- [x] globaler Dashboard-Kontext erweitert um `proposal_lifecycle.zone_contexts` und `zones_with_proposals`
+- [x] `proposal_lifecycle_since` als Delta-Cursor fuer Listen-/Detail-Poller auf derselben Lifecycle-Wahrheit angebunden
+- [x] Contract-Tests fuer Kontextblock, globale Zone-Feeds, Delta-Verhalten und isolierte Revisionen gegen fremde Dispatch-Worker-Staende ergaenzt
+
+### Acceptance criteria
+- Dashboard-/Zone-Detail-Poller koennen dieselbe zonenscharfe Proposal-Lifecycle-Wahrheit direkt lesen, ohne zonenspezifische Proposal-Aggregation neu zu bauen.
+- Friendly Zone Names und Delta-Cursor bleiben an dieselbe kanonische Lifecycle-Schicht gebunden.
+- Proposal-Revisionen werden fuer zonenscharfe Poller nicht durch fremde Follow-up-/Dispatch-Revisionen maskiert.
+
+**Commit:** `feat(core): deliver slice 31 zone scoped proposal lifecycle context`
+**Tag:** v15.3.43
+**Tests:** `pytest -q tests/test_notification_action_closure_dispatch_contract.py tests/test_notification_action_closure_digest_contract.py tests/test_action_closure_summary_contract.py tests/test_zone_dashboard_contract.py tests/test_voice_action_closure_hints_contract.py tests/test_proposal_lifecycle_status_contract.py tests/test_proposal_lifecycle_api.py` → `46 passed`
+
+**Next Exact Task:** Slice 32 als zone-scoped Proposal-Lifecycle-Context fuer Chat-/Voice-Kontext ableiten: zonenspezifische Proposal-Highlights und Delta-sensitive Kontextzeilen aus derselben Lifecycle-Schicht in `ChatHandler` und proaktive Voice-Hinweise zurueckfuehren, ohne neue Feature-spezifische Proposal-Heuristiken einzufuehren.
