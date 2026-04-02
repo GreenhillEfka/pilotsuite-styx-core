@@ -1278,4 +1278,26 @@ Bestehende Presence-Aggregation soll Hold-State konsultieren, bevor Sensor-State
 **Tag:** v15.3.53
 **Tests:** `pytest -q tests/test_zone_presence_hold_integration.py tests/test_zone_presence_hold_contract.py tests/test_zone_presence_hold_api.py` → `51 passed`
 
-**Next Exact Task:** Slice 41 als Zone-Presence-Hold-API-in-Zone-Dashboard ableiten: Dashboard-Zonenlisten und Zone-Detail sollen Hold-State exponieren, damit UIs Anwesenheits-Overrides visuell kennzeichnen können.
+### ✅ Slice 41 — Zone Presence Hold API in Zone Dashboard
+**Status:** ✅ DONE (v15.3.54)
+
+**Goal**
+Dashboard-Zonenlisten und Zone-Detail sollen Hold-State exponieren, damit UIs Anwesenheits-Overrides visuell kennzeichnen können.
+
+### Deliverables
+- [x] `_collect_praesenz` includes `hold_state`, `hold_reason`, `hold_set_at`, `hold_expires_at`, `hold_enforced`
+- [x] Graceful Degradation bei nicht verfügbarem Hold-Store
+- [x] Contract-Tests für Dashboard-Hold-Integration
+
+### Acceptance criteria
+- Dashboard-Presence-Daten enthalten `hold_state` (force_on/force_off/auto)
+- `hold_enforced`-Flag zeigt an, ob Hold Sensoren überschreibt
+- `hold_reason` und Timestamps für UI-Anzeige verfügbar
+- Verfallene/freigegebene Holds zeigen als auto mit `hold_enforced=false`
+- Tests verifizieren Dashboard-Hold-Integration
+
+**Commit:** `feat(dashboard): deliver slice 41 zone presence hold in dashboard`
+**Tag:** v15.3.54
+**Tests:** `pytest -q tests/test_zone_presence_hold_dashboard.py tests/test_zone_dashboard_contract.py` → `15 passed`
+
+**Next Exact Task:** Slice 42 als Zone-Presence-Hold-API-Endpoints ableiten: `/api/v1/presence/zones/<zone_id>/hold` CRUD-Endpoints für Dashboard-Direktsteuerung ohne Workaround-Flächen.
