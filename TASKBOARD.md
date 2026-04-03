@@ -1756,4 +1756,43 @@ Voice-Command-Historie, Intent-spezifische Patterns und Voice-Effectiveness-Metr
 **Tag:** v15.3.71
 **Tests:** `pytest -q tests/test_voice_analytics_contract.py` → `17 passed`
 
-**Next Exact Task:** Kein weiterer Analytics-Slice definiert; nächster Schritt ist Roadmap-Review oder neue Feature-Slices aus Vision ableiten.
+### ✅ Slice 62 — Analytics Gap Closure Complete
+**Status:** ✅ DONE (v15.3.75)
+
+**Goal**
+Alle Analytics-Surfaces vervollständigen: Zone Truth, Proposal Lifecycle, Action Closure, Brain/Neuron.
+
+### Deliverables
+- [x] Slice 58 — Zone Truth Analytics (v15.3.72)
+  - ZoneSyncEventEntryV1/ZoneSyncHistoryV1
+  - ZonePatternEntryV1/ZonePatternsV1
+  - ZoneEffectivenessMetricsV1
+  - GET /api/v1/zone-truth/analytics/sync/executions|patterns|effectiveness|summary
+- [x] Slice 59 — Proposal Lifecycle Analytics (v15.3.73)
+  - ProposalLifecycleEventV1/ProposalLifecycleHistoryV1
+  - ProposalPatternEntryV1/ProposalPatternsV1
+  - ProposalEffectivenessMetricsV1
+  - GET /api/v1/proposal-lifecycle/analytics/events|patterns|effectiveness|summary
+- [x] Slice 60 — Action Closure Analytics (v15.3.74)
+  - ActionClosureEventV1/ActionClosureHistoryV1
+  - ClosurePatternEntryV1/ClosurePatternsV1
+  - ClosureEffectivenessMetricsV1
+  - GET /api/v1/action-closure/analytics/events|patterns|effectiveness|summary
+- [x] Slice 61 — Brain/Neuron Analytics (v15.3.75)
+  - NeuronEventV1/NeuronHistoryV1
+  - NeuronPatternEntryV1/NeuronPatternsV1
+  - BrainEffectivenessMetricsV1
+  - GET /api/v1/brain/analytics/events|patterns|effectiveness|summary
+
+### Acceptance criteria
+- Alle Analytics-Surfaces folgen demselben Contract-Muster (Events, Patterns, Effectiveness, Summary)
+- Revisionstracking für Delta-Polling auf allen Surfaces
+- SQLite-Backed Stores für persistente Historie
+- Contract-Tests für alle Stores (66 Tests grün insgesamt)
+- API-Endpoints in app.py registriert
+
+**Commit:** `feat(core): deliver slices 58-61 analytics gap closure`
+**Tag:** v15.3.75
+**Tests:** `pytest -q tests/test_*_analytics_contract.py` → 66 passed
+
+**Next Exact Task:** Analytics-Lücke geschlossen; nächste Forward-Slices aus Roadmap/Vision ableiten oder Refinement/Härtung bestehender Surfaces.
