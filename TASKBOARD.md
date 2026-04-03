@@ -1520,4 +1520,152 @@ Music-Usage-Historie, Zone-spezifische Music-Patterns und Music-Effectiveness-Me
 **Tag:** v15.3.62
 **Tests:** `pytest -q tests/test_music_analytics_contract.py` → `13 passed`
 
-**Next Exact Task:** Slice 50 als Camera-Analytics-Surface ableiten: Camera-Usage-Historie, Zone-spezifische Camera-Patterns und Camera-Effectiveness-Metriken aus derselben Camera-Wahrheit materialisieren.
+### ✅ Slice 50 — Camera Analytics Surface
+**Status:** ✅ DONE (v15.3.63)
+
+**Goal**
+Camera-Usage-Historie, Zone-spezifische Camera-Patterns und Camera-Effectiveness-Metriken aus derselben Camera-Wahrheit materialisieren.
+
+### Deliverables
+- [x] `CameraUsageEntryV1` / `CameraUsageHistoryV1` als Read-Models
+- [x] `CameraZonePatternEntryV1` / `CameraZonePatternsV1` als Read-Models
+- [x] `CameraEffectivenessMetricsV1` mit Events-by-Type/Source, Motion-to-Person-Ratio, Notification-Delivery-Rate
+- [x] `CameraEventType` / `CameraSource` Enums für Typisierung
+- [x] `CameraAnalyticsStore` mit `add_usage_entry()`, `build_usage_history()`, `build_zone_patterns()`, `get_effectiveness_metrics()`, `build_summary()`
+- [x] SQLite-Speicher für Usage-History, Zone-Patterns, Effectiveness-Metrics
+- [x] API-Endpoints: `/api/v1/camera/analytics/usage|patterns|effectiveness|summary`
+- [x] Revisionstracking für Delta-Polling
+- [x] Contract-Tests (20 Tests grün)
+- [x] App-Integration in `copilot_core/app.py`
+
+### Acceptance criteria
+- Dashboard-/UI-Poller können Camera-Usage mit Delta-Cursor inkrementell abfragen
+- Zone-spezifische Patterns zeigen Event-Häufigkeit, Typ-Verteilung und Aktivitätsmuster pro Zone
+- Effectiveness-Metriken quantifizieren Notification-Delivery, Snapshot-Capture und Recording-Trigger-Rates
+- Alle Surfaces lesen dieselbe kanonische Camera-Wahrheit ohne Schattenlogik
+
+**Commit:** `feat(camera): deliver slice 50 camera analytics surface`
+**Tag:** v15.3.63
+**Tests:** `pytest -q tests/test_camera_analytics_contract.py tests/test_camera_analytics_api.py` → `20 passed`
+
+**Next Exact Task:** Slice 51 als Weather-Analytics-Surface ableiten: Weather-Usage-Historie, Zone-spezifische Weather-Patterns und Weather-Effectiveness-Metriken aus derselben Weather-/Automation-Wahrheit materialisieren.
+
+### ✅ Slice 51 — Weather Analytics Surface
+**Status:** ✅ DONE (v15.3.64)
+
+**Goal**
+Weather-Observation-Historie, Zone-spezifische Weather-Patterns und Weather-Effectiveness-Metriken aus derselben Weather-Wahrheit materialisieren.
+
+### Deliverables
+- [x] `WeatherObservationEntryV1` / `WeatherObservationHistoryV1` als Read-Models
+- [x] `WeatherZonePatternEntryV1` / `WeatherZonePatternsV1` als Read-Models
+- [x] `WeatherEffectivenessMetricsV1` mit Observations-by-Type/Source, Alert-Accuracy, Notification-/Automation-Trigger-Rates
+- [x] `WeatherEventType` / `WeatherDataSource` Enums für Typisierung
+- [x] `WeatherAnalyticsStore` mit `add_observation()`, `build_observation_history()`, `build_zone_patterns()`, `get_effectiveness_metrics()`, `build_summary()`
+- [x] SQLite-Speicher für Observation-History, Zone-Patterns, Effectiveness-Metrics
+- [x] API-Endpoints: `/api/v1/weather/analytics/usage|patterns|effectiveness|summary`
+- [x] Revisionstracking für Delta-Polling
+- [x] Contract-Tests (20 Tests grün)
+- [x] App-Integration in `copilot_core/app.py`
+
+### Acceptance criteria
+- Dashboard-/UI-Poller können Weather-Observations mit Delta-Cursor inkrementell abfragen
+- Zone-spezifische Patterns zeigen Temperatur-, Niederschlags- und Alert-Häufigkeit pro Zone
+- Effectiveness-Metriken quantifizieren Notification-Delivery, Automation-Trigger und Forecast-Accuracy
+- Alle Surfaces lesen dieselbe kanonische Weather-Wahrheit ohne Schattenlogik
+
+**Commit:** `feat(weather): deliver slice 51 weather analytics surface`
+**Tag:** v15.3.64
+**Tests:** `pytest -q tests/test_weather_analytics_contract.py tests/test_weather_analytics_api.py` → `20 passed`
+
+**Next Exact Task:** Slice 52 als Notification-Analytics-Surface ableiten: Notification-Delivery-Historie, Channel-spezifische Patterns und Delivery-Effectiveness-Metriken aus derselben Notification-Wahrheit materialisieren.
+
+### ✅ Slice 52 — Notification Analytics Surface
+**Status:** ✅ DONE (v15.3.65)
+
+**Goal**
+Notification-Delivery-Historie, Channel-spezifische Patterns und Delivery-Effectiveness-Metriken aus derselben Notification-Wahrheit materialisieren.
+
+### Deliverables
+- [x] `NotificationDeliveryEntryV1` / `NotificationDeliveryHistoryV1` als Read-Models
+- [x] `NotificationChannelPatternEntryV1` / `NotificationChannelPatternsV1` als Read-Models
+- [x] `NotificationEffectivenessMetricsV1` mit Delivery-/Read-/Ack-Rates, Delivery-Time-by-Channel, Failure-Rates
+- [x] `NotificationChannel` / `NotificationType` / `DeliveryStatus` Enums für Typisierung
+- [x] `NotificationAnalyticsStore` mit `add_delivery_entry()`, `build_delivery_history()`, `build_channel_patterns()`, `get_effectiveness_metrics()`, `build_summary()`
+- [x] SQLite-Speicher für Delivery-History, Channel-Patterns, Effectiveness-Metrics
+- [x] API-Endpoints: `/api/v1/notifications/analytics/delivery|channels|effectiveness|summary`
+- [x] Revisionstracking für Delta-Polling
+- [x] Contract-Tests (14 Tests grün)
+- [x] App-Integration in `copilot_core/app.py`
+
+### Acceptance criteria
+- Dashboard-/UI-Poller können Notification-Delivery mit Delta-Cursor inkrementell abfragen
+- Channel-spezifische Patterns zeigen Delivery-Rates, Failure-Rates und Nutzungsmuster pro Channel
+- Effectiveness-Metriken quantifizieren Delivery-/Read-/Ack-Rates und Delivery-Time-by-Channel
+- Alle Surfaces lesen dieselbe kanonische Notification-Wahrheit ohne Schattenlogik
+
+**Commit:** `feat(notifications): deliver slice 52 notification analytics surface`
+**Tag:** v15.3.65
+**Tests:** `pytest -q tests/test_notification_analytics_contract.py` → `14 passed`
+
+**Next Exact Task:** Slice 53 als Scheduler-Analytics-Surface ableiten: Scheduler-Job-Historie, Job-spezifische Patterns und Scheduler-Effectiveness-Metriken aus derselben Scheduler-Wahrheit materialisieren.
+
+### ✅ Slice 53 — Scheduler Analytics Surface
+**Status:** ✅ DONE (v15.3.66)
+
+**Goal**
+Scheduler-Job-Execution-Historie, Job-spezifische Patterns und Scheduler-Effectiveness-Metriken aus derselben Scheduler-Wahrheit materialisieren.
+
+### Deliverables
+- [x] `SchedulerJobExecutionEntryV1` / `SchedulerJobExecutionHistoryV1` als Read-Models
+- [x] `SchedulerJobPatternEntryV1` / `SchedulerJobPatternsV1` als Read-Models
+- [x] `SchedulerEffectivenessMetricsV1` mit Success-/Failure-Rates, Duration-by-Job-Type, Reliability-Score
+- [x] `JobStatus` / `JobType` Enums für Typisierung
+- [x] `SchedulerAnalyticsStore` mit `add_execution_entry()`, `build_execution_history()`, `build_job_patterns()`, `get_effectiveness_metrics()`, `build_summary()`
+- [x] SQLite-Speicher für Execution-History, Job-Patterns, Effectiveness-Metrics
+- [x] API-Endpoints: `/api/v1/scheduler/analytics/executions|jobs|effectiveness|summary`
+- [x] Revisionstracking für Delta-Polling
+- [x] Contract-Tests (13 Tests grün)
+- [x] App-Integration in `copilot_core/app.py`
+
+### Acceptance criteria
+- Dashboard-/UI-Poller können Scheduler-Executions mit Delta-Cursor inkrementell abfragen
+- Job-spezifische Patterns zeigen Success-Rates, Failure-Rates und Duration-Statistiken pro Job
+- Effectiveness-Metriken quantifizieren Reliability-Score, Success-/Failure-Rates und Duration-by-Job-Type
+- Alle Surfaces lesen dieselbe kanonische Scheduler-Wahrheit ohne Schattenlogik
+
+**Commit:** `feat(scheduler): deliver slice 53 scheduler analytics surface`
+**Tag:** v15.3.66
+**Tests:** `pytest -q tests/test_scheduler_analytics_contract.py` → `13 passed`
+
+**Next Exact Task:** Slice 54 als Automation-Analytics-Surface ableiten: Automation-Execution-Historie, Rule-spezifische Patterns und Automation-Effectiveness-Metriken aus derselben Automation-Wahrheit materialisieren.
+
+### ✅ Slice 54 — Automation Analytics Surface
+**Status:** ✅ DONE (v15.3.67)
+
+**Goal**
+Automation-Execution-Historie, Rule-spezifische Patterns und Automation-Effectiveness-Metriken aus derselben Automation-Wahrheit materialisieren.
+
+### Deliverables
+- [x] `AutomationExecutionEntryV1` / `AutomationExecutionHistoryV1` als Read-Models
+- [x] `AutomationRulePatternEntryV1` / `AutomationRulePatternsV1` als Read-Models
+- [x] `AutomationEffectivenessMetricsV1` mit Success-/Failure-Rates, Duration-by-Trigger, Reliability-Score
+- [x] `AutomationStatus` / `AutomationTriggerType` Enums für Typisierung
+- [x] `AutomationAnalyticsStore` mit `add_execution_entry()`, `build_execution_history()`, `build_rule_patterns()`, `get_effectiveness_metrics()`, `build_summary()`
+- [x] SQLite-Speicher für Execution-History, Rule-Patterns, Effectiveness-Metrics
+- [x] API-Endpoints: `/api/v1/automation/analytics/executions|rules|effectiveness|summary`
+- [x] Revisionstracking für Delta-Polling
+- [x] Contract-Tests (13 Tests grün)
+- [x] App-Integration in `copilot_core/app.py`
+
+### Acceptance criteria
+- Dashboard-/UI-Poller können Automation-Executions mit Delta-Cursor inkrementell abfragen
+- Rule-spezifische Patterns zeigen Success-Rates, Failure-Rates und Trigger-Verteilung pro Automation
+- Effectiveness-Metriken quantifizieren Reliability-Score, Success-/Failure-Rates und Duration-by-Trigger-Type
+- Alle Surfaces lesen dieselbe kanonische Automation-Wahrheit ohne Schattenlogik
+
+**Commit:** `feat(automation): deliver slice 54 automation analytics surface`
+**Tag:** v15.3.67
+**Tests:** `pytest -q tests/test_automation_analytics_contract.py` → `13 passed`
+
+**Next Exact Task:** Slice 55 als System-Health-Analytics-Surface ableiten: Health-Check-Historie, Component-spezifische Patterns und System-Effectiveness-Metriken aus derselben Health-Wahrheit materialisieren.

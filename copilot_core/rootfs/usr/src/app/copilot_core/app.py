@@ -307,6 +307,14 @@ def create_app() -> Flask:
     except Exception:
         logging.getLogger(__name__).exception("Failed to register Music/Media Analytics API blueprint")
 
+    # Health Analytics API endpoints (/api/v1/health/analytics/*)
+    try:
+        from copilot_core.api.v1.health_analytics import create_blueprint as create_health_analytics_bp
+        app.register_blueprint(create_health_analytics_bp())
+        logging.getLogger(__name__).info("Health Analytics API registered")
+    except Exception:
+        logging.getLogger(__name__).exception("Failed to register Health Analytics API blueprint")
+
     # Initialize Tags API v2 (FIX: Flask Blueprint rewrite)
     from copilot_core.tags.api import init_tags_api
     from copilot_core.tags import TagRegistry

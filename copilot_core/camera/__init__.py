@@ -11,6 +11,15 @@ from .analytics import (
     CameraSource,
 )
 from .analytics_store import CameraAnalyticsStore, get_camera_analytics_store
+from .security_engine import (
+    CameraSecurityEngine,
+    SecurityLevel,
+    AlertType,
+    AlertSeverity,
+    SecurityAlert,
+    SecuritySnapshot,
+    create_camera_security_engine,
+)
 
 __all__ = [
     "CameraUsageEntryV1",
@@ -23,4 +32,11 @@ __all__ = [
     "CameraSource",
     "CameraAnalyticsStore",
     "get_camera_analytics_store",
+    "CameraSecurityEngine",
+    "SecurityLevel",
+    "AlertType",
+    "AlertSeverity",
+    "SecurityAlert",
+    "SecuritySnapshot",
+    "create_camera_security_engine",
 ]
