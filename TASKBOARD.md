@@ -1669,3 +1669,61 @@ Automation-Execution-Historie, Rule-spezifische Patterns und Automation-Effectiv
 **Tests:** `pytest -q tests/test_automation_analytics_contract.py` → `13 passed`
 
 **Next Exact Task:** Slice 55 als System-Health-Analytics-Surface ableiten: Health-Check-Historie, Component-spezifische Patterns und System-Effectiveness-Metriken aus derselben Health-Wahrheit materialisieren.
+
+### ✅ Slice 55 — System Health Analytics Surface
+**Status:** ✅ DONE (v15.3.69)
+
+**Goal**
+Health-Check-Historie, Component-spezifische Patterns und System-Effectiveness-Metriken aus derselben Health-Wahrheit materialisieren.
+
+### Deliverables
+- [x] `HealthCheckExecutionEntryV1` / `HealthCheckExecutionHistoryV1` als Read-Models
+- [x] `HealthComponentPatternEntryV1` / `HealthComponentPatternsV1` als Read-Models
+- [x] `HealthEffectivenessMetricsV1` mit Success-/Failure-Rates, Duration-by-Component, Reliability-Score
+- [x] `HealthStatus` / `HealthComponentType` Enums für Typisierung
+- [x] `HealthAnalyticsStore` mit `add_execution_entry()`, `build_execution_history()`, `build_component_patterns()`, `get_effectiveness_metrics()`, `build_summary()`
+- [x] SQLite-Speicher für Execution-History, Component-Patterns, Effectiveness-Metrics
+- [x] API-Endpoints: `/api/v1/health/analytics/executions|components|effectiveness|summary`
+- [x] Revisionstracking für Delta-Polling
+- [x] Contract-Tests (13 Tests grün)
+- [x] App-Integration in `copilot_core/app.py`
+
+### Acceptance criteria
+- Dashboard-/UI-Poller können Health-Checks mit Delta-Cursor inkrementell abfragen
+- Component-spezifische Patterns zeigen Success-Rates, Failure-Rates und Duration-Statistiken pro Component
+- Effectiveness-Metriken quantifizieren Reliability-Score, Success-/Failure-Rates und System-Health
+- Alle Surfaces lesen dieselbe kanonische Health-Wahrheit ohne Schattenlogik
+
+**Commit:** `feat(core): deliver slice 55 system health analytics surface`
+**Tag:** v15.3.69
+**Tests:** `pytest -q tests/test_health_analytics_contract.py` → `13 passed`
+
+### ✅ Slice 56 — Module Analytics Surface
+**Status:** ✅ DONE (v15.3.70)
+
+**Goal**
+Module-Execution-Historie, Module-spezifische Patterns und Module-Effectiveness-Metriken aus derselben Module-Wahrheit materialisieren.
+
+### Deliverables
+- [x] `ModuleExecutionEntryV1` / `ModuleExecutionHistoryV1` als Read-Models
+- [x] `ModulePatternEntryV1` / `ModulePatternsV1` als Read-Models
+- [x] `ModuleEffectivenessMetricsV1` mit Success-/Failure-Rates, Duration-by-Module, MTBF/MTTR
+- [x] `ModuleExecutionStatus` / `ModuleTriggerType` Enums für Typisierung
+- [x] `ModuleAnalyticsStore` mit `add_execution_entry()`, `build_history()`, `build_module_patterns()`, `get_effectiveness_metrics()`, `build_summary()`
+- [x] SQLite-Speicher für Execution-History, Module-Patterns, Effectiveness-Metrics
+- [x] API-Endpoints: `/api/v1/module/analytics/executions|patterns|effectiveness|summary`
+- [x] Revisionstracking für Delta-Polling
+- [x] Contract-Tests (37 Tests grün)
+- [x] App-Integration in `copilot_core/app.py`
+
+### Acceptance criteria
+- Dashboard-/UI-Poller können Module-Executions mit Delta-Cursor inkrementell abfragen
+- Module-spezifische Patterns zeigen Success-Rates, Failure-Rates und Duration-Statistiken pro Modul
+- Effectiveness-Metriken quantifizieren MTBF, MTTR, Success-/Failure-Rates und Zone-Coverage
+- Alle Surfaces lesen dieselbe kanonische Module-Wahrheit ohne Schattenlogik
+
+**Commit:** `feat(core): deliver slice 56 module analytics surface`
+**Tag:** v15.3.70
+**Tests:** `pytest -q tests/test_module_analytics_contract.py tests/test_module_analytics_api_contract.py` → `37 passed`
+
+**Next Exact Task:** Slice 57 als Voice-Analytics-Surface ableiten: Voice-Command-Historie, Intent-spezifische Patterns und Voice-Effectiveness-Metriken aus derselben Voice-Wahrheit materialisieren.

@@ -130,6 +130,8 @@ class ModuleAnalyticsSummaryV1:
 class ModuleAnalyticsStore:
     """SQLite-Speicher für Module-Analytics-Daten."""
 
+    _instance: "ModuleAnalyticsStore | None" = None
+
     def __init__(self, db_path: Path | None = None):
         if db_path is None:
             try:
@@ -639,3 +641,18 @@ class ModuleAnalyticsStore:
             revision=patterns.revision,
             generated_at=datetime.now(timezone.utc).isoformat(),
         )
+
+
+# =============================================================================
+# Global Store Instance
+# =============================================================================
+
+_store: ModuleAnalyticsStore | None = None
+
+
+def get_module_analytics_store(db_path: Path | None = None) -> ModuleAnalyticsStore:
+    """Globalen ModuleAnalyticsStore holen oder erstellen."""
+    global _store
+    if _store is None:
+        _store = ModuleAnalyticsStore(db_path=db_path)
+    return _store
