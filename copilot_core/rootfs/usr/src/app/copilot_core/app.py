@@ -392,6 +392,16 @@ def create_app() -> Flask:
     except Exception:
         logging.getLogger(__name__).exception("Failed to register Chat/RAG Analytics API blueprint")
 
+    # Unified Analytics Dashboard API endpoints (/api/v1/analytics/dashboard/*)
+    try:
+        from copilot_core.api.v1.unified_analytics import blueprint as unified_analytics_bp
+
+        unified_analytics_bp.init_blueprint(cfg.data_dir)
+        app.register_blueprint(unified_analytics_bp)
+        logging.getLogger(__name__).info("Unified Analytics Dashboard API registered")
+    except Exception:
+        logging.getLogger(__name__).exception("Failed to register Unified Analytics Dashboard API blueprint")
+
     # Initialize Tags API v2 (FIX: Flask Blueprint rewrite)
     from copilot_core.tags.api import init_tags_api
     from copilot_core.tags import TagRegistry
