@@ -1463,4 +1463,61 @@ Energy-Usage-Historie, Zone-spezifische Energy-Patterns und Energy-Effectiveness
 **Tag:** v15.3.60
 **Tests:** `pytest -q tests/test_energy_analytics_contract.py` → `17 passed`
 
-**Next Exact Task:** Slice 48 als Predictive-Analytics-Surface ableiten: Predictive-Usage-Historie, Zone-spezifische Predictive-Patterns und Predictive-Effectiveness-Metriken aus derselben Predictive-/Proposal-Wahrheit materialisieren.
+### ✅ Slice 48 — Predictive Analytics Surface
+**Status:** ✅ DONE (v15.3.61)
+
+**Goal**
+Predictive-Usage-Historie, Zone-spezifische Predictive-Patterns und Predictive-Effectiveness-Metriken aus derselben Predictive-/Proposal-Wahrheit materialisieren.
+
+### Deliverables
+- [x] `PredictiveUsageEntryV1` / `PredictiveUsageHistoryV1` als Read-Models
+- [x] `PredictiveZonePatternEntryV1` / `PredictiveZonePatternsV1` als Read-Models
+- [x] `PredictiveEffectivenessMetricsV1` mit Confidence-Accuracy, Acceptance-Rate, Time-to-Accept/Reject
+- [x] `PredictiveTrendEntryV1` / `PredictiveTrendsV1` für Zeitreihen-Analyse
+- [x] `PredictiveAnalyticsStore` mit `add_usage_entry()`, `build_usage_history()`, `build_zone_patterns()`, `get_effectiveness_metrics()`, `build_trends()`
+- [x] SQLite-Speicher für Usage-History, Zone-Patterns, Effectiveness-Metrics und Trends
+- [x] Revisionstracking für Delta-Polling
+- [x] Contract-Tests (17 Tests grün)
+
+### Acceptance criteria
+- Dashboard-/UI-Poller können Predictive-Usage mit Delta-Cursor inkrementell abfragen
+- Zone-spezifische Patterns zeigen Predictive-Häufigkeit, Acceptance-Rate und Confidence pro Zone
+- Effectiveness-Metriken quantifizieren Confidence-Accuracy, Acceptance-Rate und Time-to-Accept/Reject
+- Trends zeigen Zeitreihen für Proposals, Acceptances und Rejections
+- Alle Surfaces lesen dieselbe kanonische Predictive-Wahrheit ohne Schattenlogik
+
+**Commit:** `feat(core): deliver slice 48 predictive analytics surface`
+**Tag:** v15.3.61
+**Tests:** `pytest -q tests/test_predictive_analytics_contract.py` → `17 passed`
+
+**Next Exact Task:** Slice 49 als Music-/Media-Analytics-Surface ableiten: Music-Usage-Historie, Zone-spezifische Music-Patterns und Music-Effectiveness-Metriken aus derselben Music-/Media-Wahrheit materialisieren.
+
+### ✅ Slice 49 — Music/Media Analytics Surface
+**Status:** ✅ DONE (v15.3.62)
+
+**Goal**
+Music-Usage-Historie, Zone-spezifische Music-Patterns und Music-Effectiveness-Metriken aus derselben Music-/Media-Wahrheit materialisieren.
+
+### Deliverables
+- [x] `MusicUsageEntryV1` / `MusicUsageHistoryV1` als Read-Models
+- [x] `MusicZonePatternEntryV1` / `MusicZonePatternsV1` als Read-Models
+- [x] `MusicEffectivenessMetricsV1` mit Engagement-Score, Diversity-Score, Auto-Presence-Acceptance-Rate
+- [x] `MusicMediaType` / `MusicSource` Enums für Typisierung
+- [x] `MusicAnalyticsStore` mit `add_usage_entry()`, `build_usage_history()`, `build_zone_patterns()`, `get_effectiveness_metrics()`, `build_summary()`
+- [x] SQLite-Speicher für Usage-History, Zone-Patterns, Effectiveness-Metrics
+- [x] API-Endpoints: `/api/v1/media/analytics/usage|patterns|effectiveness|summary`
+- [x] Revisionstracking für Delta-Polling
+- [x] Contract-Tests (13 Tests grün)
+- [x] App-Integration in `copilot_core/app.py`
+
+### Acceptance criteria
+- Dashboard-/UI-Poller können Music-Usage mit Delta-Cursor inkrementell abfragen
+- Zone-spezifische Patterns zeigen Session-Häufigkeit, Duration, Volume und Favorite-Media pro Zone
+- Effectiveness-Metriken quantifizieren Engagement, Favorite-Diversity und Auto-Presence-Acceptance
+- Alle Surfaces lesen dieselbe kanonische Music-Wahrheit ohne Schattenlogik
+
+**Commit:** `feat(media): deliver slice 49 music analytics surface`
+**Tag:** v15.3.62
+**Tests:** `pytest -q tests/test_music_analytics_contract.py` → `13 passed`
+
+**Next Exact Task:** Slice 50 als Camera-Analytics-Surface ableiten: Camera-Usage-Historie, Zone-spezifische Camera-Patterns und Camera-Effectiveness-Metriken aus derselben Camera-Wahrheit materialisieren.

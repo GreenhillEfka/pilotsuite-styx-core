@@ -299,6 +299,14 @@ def create_app() -> Flask:
     except Exception:
         logging.getLogger(__name__).exception("Failed to register Zone Presence Hold Analytics API blueprint")
 
+    # Music/Media Analytics API endpoints (/api/v1/media/analytics/*)
+    try:
+        from copilot_core.api.v1.music_analytics import music_analytics_bp
+        app.register_blueprint(music_analytics_bp)
+        logging.getLogger(__name__).info("Music/Media Analytics API registered")
+    except Exception:
+        logging.getLogger(__name__).exception("Failed to register Music/Media Analytics API blueprint")
+
     # Initialize Tags API v2 (FIX: Flask Blueprint rewrite)
     from copilot_core.tags.api import init_tags_api
     from copilot_core.tags import TagRegistry
