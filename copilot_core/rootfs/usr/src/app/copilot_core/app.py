@@ -368,6 +368,18 @@ def create_app() -> Flask:
     except Exception:
         logging.getLogger(__name__).exception("Failed to register Action Closure Analytics API blueprint")
 
+    # Brain/Neuron Analytics API endpoints (/api/v1/brain/analytics/*)
+    try:
+        from copilot_core.api.v1.brain_analytics import blueprint as brain_analytics_bp
+        from copilot_core.analytics.brain_analytics import BrainAnalyticsStore
+
+        analytics_store = BrainAnalyticsStore(Path(cfg.data_dir) / "brain_analytics.db")
+        brain_analytics_bp.init_blueprint(analytics_store)
+        app.register_blueprint(brain_analytics_bp)
+        logging.getLogger(__name__).info("Brain/Neuron Analytics API registered")
+    except Exception:
+        logging.getLogger(__name__).exception("Failed to register Brain/Neuron Analytics API blueprint")
+
     # Initialize Tags API v2 (FIX: Flask Blueprint rewrite)
     from copilot_core.tags.api import init_tags_api
     from copilot_core.tags import TagRegistry
