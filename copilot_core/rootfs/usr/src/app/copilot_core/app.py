@@ -402,6 +402,14 @@ def create_app() -> Flask:
     except Exception:
         logging.getLogger(__name__).exception("Failed to register Unified Analytics Dashboard API blueprint")
 
+    # Styx Unified Dashboard API endpoints (/api/v1/styx/dashboard/*)
+    try:
+        from copilot_core.api.v1.styx_dashboard import styx_dashboard_bp
+        app.register_blueprint(styx_dashboard_bp)
+        logging.getLogger(__name__).info("Styx Unified Dashboard API registered")
+    except Exception:
+        logging.getLogger(__name__).exception("Failed to register Styx Unified Dashboard API blueprint")
+
     # Initialize Tags API v2 (FIX: Flask Blueprint rewrite)
     from copilot_core.tags.api import init_tags_api
     from copilot_core.tags import TagRegistry
