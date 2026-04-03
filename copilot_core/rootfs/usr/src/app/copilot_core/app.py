@@ -402,6 +402,18 @@ def create_app() -> Flask:
     except Exception:
         logging.getLogger(__name__).exception("Failed to register Unified Analytics Dashboard API blueprint")
 
+    # Query Metrics API endpoints (/api/v1/metrics/queries/*) — Slice 65
+    try:
+        from copilot_core.api.v1.query_metrics import create_blueprint as create_query_metrics_bp
+        from copilot_core.performance.query_optimizer import get_query_optimizer
+
+        optimizer = get_query_optimizer(Path(cfg.data_dir) / "analytics" / "query_metrics.db")
+        query_metrics_bp = create_query_metrics_bp()
+        app.register_blueprint(query_metrics_bp)
+        logging.getLogger(__name__).info("Query Metrics API registered")
+    except Exception:
+        logging.getLogger(__name__).exception("Failed to register Query Metrics API blueprint")
+
     # Styx Unified Dashboard API endpoints (/api/v1/styx/dashboard/*)
     try:
         from copilot_core.api.v1.styx_dashboard import styx_dashboard_bp
