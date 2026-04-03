@@ -503,6 +503,38 @@ Voice-Hinweise um kalenderbewusste Vorschläge erweitern: anstehende Termine, Ka
 
 **Next Exact Task:** Slice 72 als Multilingual Voice Surface ableiten: erweiterte DE/EN-Unterstützung mit Sprachumschaltung, Übersetzungsqualitätstests und Voice-Intent-Parsing für beide Sprachen.
 
+### ✅ Slice 72 — Multilingual Voice Surface
+**Status:** ✅ DONE (v15.3.83)
+
+**Goal**
+Erweiterte DE/EN-Unterstützung für Voice mit automatischer Spracherkennung, Sprachumschaltung und Locale-aware Formatting.
+
+### Deliverables
+- [x] `MultilingualVoiceHandler`-Klasse mit erweiterter DE/EN-Unterstützung
+- [x] Automatische Spracherkennung mit Confidence-Scores
+- [x] `switch_language()` für Sprachumschaltung zur Laufzeit
+- [x] `generate_bilingual_response()` für zweisprachige Antworten
+- [x] `TranslationQualityMetrics` für Qualitäts-Tracking
+- [x] `MultilingualResponseGenerator` mit Locale-aware Formatting
+- [x] `LanguagePreference` und `MultilingualVoiceConfig` Dataclasses
+- [x] DE/EN Intent-Patterns mit gemeinsamen Indikatoren (light, on, off, etc.)
+- [x] Contract-Tests für Multilingual-Voice-Surface (31 Tests grün)
+
+### Acceptance criteria
+- DE/EN Spracherkennung mit Confidence >= 0.5 für klare Texte
+- Sprachumschaltung validiert unterstützte Sprachen (de/en)
+- Bilingual-Mode erzeugt Antworten in beiden Sprachen
+- Zeitformatierung: DE (24h), EN (12h mit AM/PM)
+- Temperaturformatierung: DE (°C), EN (°F)
+- Translation-Metrics tracken total_translations und avg_confidence
+- Contract-Tests grün (31/31)
+
+**Commit:** `feat(voice): deliver slice 72 multilingual voice surface`
+**Tag:** v15.3.83
+**Tests:** `pytest -q tests/test_voice_multilingual_contract.py` → `31 passed`
+
+**Next Exact Task:** Slice 73 als Voice-Intent-Contract-Härtung ableiten: robustere Intent-Erkennung mit Edge-Case-Tests, mehrsprachigen Entity-Aliases und Confidence-Threshold-Tuning für production use.
+
 ---
 
 ## Slice 68 — Notification Delivery Engine
