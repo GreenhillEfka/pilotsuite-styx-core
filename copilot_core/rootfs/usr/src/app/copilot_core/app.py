@@ -344,6 +344,18 @@ def create_app() -> Flask:
     except Exception:
         logging.getLogger(__name__).exception("Failed to register Zone Truth Analytics API blueprint")
 
+    # Proposal Lifecycle Analytics API endpoints (/api/v1/proposal-lifecycle/analytics/*)
+    try:
+        from copilot_core.api.v1.proposal_lifecycle_analytics import blueprint as proposal_lifecycle_analytics_bp
+        from copilot_core.analytics.proposal_lifecycle_analytics import ProposalAnalyticsStore
+
+        analytics_store = ProposalAnalyticsStore(Path(cfg.data_dir) / "proposal_lifecycle_analytics.db")
+        proposal_lifecycle_analytics_bp.init_blueprint(analytics_store)
+        app.register_blueprint(proposal_lifecycle_analytics_bp)
+        logging.getLogger(__name__).info("Proposal Lifecycle Analytics API registered")
+    except Exception:
+        logging.getLogger(__name__).exception("Failed to register Proposal Lifecycle Analytics API blueprint")
+
     # Initialize Tags API v2 (FIX: Flask Blueprint rewrite)
     from copilot_core.tags.api import init_tags_api
     from copilot_core.tags import TagRegistry
