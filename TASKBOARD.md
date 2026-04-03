@@ -354,29 +354,40 @@ SQLite query performance optimieren durch indexing, query caching und batch oper
 
 ---
 
-## Slice 66 — Connection Pool Performance Tuning
-**Priority:** P0  
-**Status:** ready
+### ✅ Slice 66 — Insights Engine
+**Status:** ✅ DONE (v15.3.77)
 
 **Goal**
-Make one event ingest path authoritative in both code and runtime.
+Canonical Insights Engine for actionable findings from analytics data.
 
 ### Deliverables
-- [ ] choose the authoritative `POST /api/v1/events` implementation
-- [ ] retire `api/v1/events.py` as public ingress or reduce it to explicit compatibility adapter behavior
-- [ ] standardize on one canonical store (`ingest/event_store.py`) and one post-ingest flow (`EventProcessor`)
-- [ ] align `app.py` test/runtime semantics with production `core_setup.py` behavior
-- [ ] add route-level tests for the real registered app, not just nested blueprint assumptions
+- [x] InsightV1/InsightSummaryV1/InsightDeltaV1 contracts
+- [x] InsightCategory/InsightSeverity/InsightStatus/InsightSource enums (16 sources)
+- [x] SQLite-backed InsightStore with revision tracking for delta polling
+- [x] 8 Insight Generators (Performance, Anomaly, Trend, Optimization, Health, Usage, Prediction, Efficiency)
+- [x] API endpoints: GET /api/v1/insights, /summary, /delta, /categories, /severities, /statuses, /sources
+- [x] API endpoints: GET /api/v1/insights/<id>, PUT /api/v1/insights/<id>/status, POST /api/v1/insights/generate
+- [x] Contract tests (30 tests green)
+- [x] App integration in copilot_core/app.py
 
 ### Acceptance criteria
-- one authoritative ingest route,
-- one authoritative event store implementation,
-- one authoritative path into Brain Graph / mining / module routing,
-- no silent divergence between test app and production wiring.
+- [x] Insights derived from analytics data with clear category/severity/source
+- [x] Revision tracking enables efficient delta polling
+- [x] Filterable by category, severity, status, source, zone_id
+- [x] Contract tests cover Store, Generators, and API surfaces
+
+**Commit:** `feat(core): deliver slice 66 insights engine`
+**Tag:** v15.3.77
+**Tests:** `pytest -q tests/test_insights_contract.py` → `30 passed`
 
 ---
 
-## Slice 2 — Zone truth layer + canonical topology sync
+## Slice 67 — Notification Preferences / User Profile Surface
+**Priority:** P0
+**Status:** ready
+
+**Goal**
+User notification preferences and profile management surface for personalized delivery.
 **Priority:** P0  
 **Status:** ready
 
