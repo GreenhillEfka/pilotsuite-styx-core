@@ -473,7 +473,35 @@ Smart Scheduling als kanonische Core-Surface für kontextbewusste Terminplanung 
 **Tag:** v15.3.81
 **Tests:** `pytest -q tests/test_calendar_*.py` → `58 passed`
 
-**Next Exact Task:** Slice 71 als Voice-Integration-Surface ableiten: tiefere Anbindung an HA Voice Assistant mit kontextbewussten Antworten, proaktiven Sprachhinweisen aus Calendar/Proposal/Closure-Wahrheit und Mehrsprachigkeit (DE/EN).
+### ✅ Slice 71 — Voice Calendar Integration Surface
+**Status:** ✅ DONE (v15.3.82)
+
+**Goal**
+Voice-Hinweise um kalenderbewusste Vorschläge erweitern: anstehende Termine, Kalenderdichte, Wecker-Empfehlungen und Meeting-Vorbereitung.
+
+### Deliverables
+- [x] `CalendarVoiceIntegration`-Klasse für kalenderbewusste Voice-Hinweise
+- [x] `CalendarEventContext` und `CalendarDaySummary` Dataclasses
+- [x] `ProactiveVoiceHints._check_calendar_events()`-Methode
+- [x] `VoiceContext` v1.1 mit `calendar_context`-Feld
+- [x] `get_calendar_integration_engine()`-Lazy-Initializer
+- [x] DE/EN zweisprachige Hint-Nachrichten für anstehende Termine, Dichte, Wecker
+- [x] Integration mit `CalendarIntegrationEngine` aus Calendar-Modul
+- [x] Contract-Tests für Calendar-Voice-Integration (16 Tests grün)
+
+### Acceptance criteria
+- Voice-Hinweise enthalten anstehende Terminerinnerungen (urgent/soon/today-Priorität)
+- Kalenderdichte-Hinweise für beschäftigte/mittlere/entspannte Tage
+- Wecker-Anpassungsvorschläge basierend auf erstem Termin morgen
+- Meeting-Vorbereitungshinweise mit Reisezeitbewusstsein
+- Alle Hinweise folgen demselben ProactiveHint-Contract wie andere Voice-Hinweise
+- Contract-Tests grün (16/16)
+
+**Commit:** `feat(voice): deliver slice 71 calendar integration for voice hints`
+**Tag:** v15.3.82
+**Tests:** `pytest -q tests/test_voice_calendar_integration_contract.py` → `16 passed`
+
+**Next Exact Task:** Slice 72 als Multilingual Voice Surface ableiten: erweiterte DE/EN-Unterstützung mit Sprachumschaltung, Übersetzungsqualitätstests und Voice-Intent-Parsing für beide Sprachen.
 
 ---
 
