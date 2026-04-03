@@ -1727,3 +1727,33 @@ Module-Execution-Historie, Module-spezifische Patterns und Module-Effectiveness-
 **Tests:** `pytest -q tests/test_module_analytics_contract.py tests/test_module_analytics_api_contract.py` → `37 passed`
 
 **Next Exact Task:** Slice 57 als Voice-Analytics-Surface ableiten: Voice-Command-Historie, Intent-spezifische Patterns und Voice-Effectiveness-Metriken aus derselben Voice-Wahrheit materialisieren.
+
+### ✅ Slice 57 — Voice Analytics Surface
+**Status:** ✅ DONE (v15.3.71)
+
+**Goal**
+Voice-Command-Historie, Intent-spezifische Patterns und Voice-Effectiveness-Metriken aus derselben Voice-Wahrheit materialisieren.
+
+### Deliverables
+- [x] `VoiceCommandEntryV1` / `VoiceCommandHistoryV1` als Read-Models
+- [x] `VoiceIntentPatternEntryV1` / `VoiceIntentPatternsV1` als Read-Models
+- [x] `VoiceEffectivenessMetricsV1` mit Success-/Failure-Rates, Confidence-Score, Processing-Time
+- [x] `VoiceCommandStatus` / `VoiceIntentType` Enums für Typisierung
+- [x] `VoiceAnalyticsStore` mit `add_command_entry()`, `build_history()`, `build_intent_patterns()`, `get_effectiveness_metrics()`, `build_summary()`
+- [x] SQLite-Speicher für Command-History, Intent-Patterns, Effectiveness-Metrics
+- [x] API-Endpoints: `/api/v1/voice/analytics/commands|intents|effectiveness|summary`
+- [x] Revisionstracking für Delta-Polling
+- [x] Contract-Tests (17 Tests grün)
+- [x] App-Integration in `copilot_core/app.py`
+
+### Acceptance criteria
+- Dashboard-/UI-Poller können Voice-Commands mit Delta-Cursor inkrementell abfragen
+- Intent-spezifische Patterns zeigen Success-Rates, Confidence-Scores und Processing-Time-Statistiken pro Intent-Typ
+- Effectiveness-Metriken quantifizieren Overall-Success-Rate, Rejection-Rate, Timeout-Rate und Zone-Coverage
+- Alle Surfaces lesen dieselbe kanonische Voice-Wahrheit ohne Schattenlogik
+
+**Commit:** `feat(core): deliver slice 57 voice analytics surface`
+**Tag:** v15.3.71
+**Tests:** `pytest -q tests/test_voice_analytics_contract.py` → `17 passed`
+
+**Next Exact Task:** Kein weiterer Analytics-Slice definiert; nächster Schritt ist Roadmap-Review oder neue Feature-Slices aus Vision ableiten.

@@ -323,6 +323,14 @@ def create_app() -> Flask:
     except Exception:
         logging.getLogger(__name__).exception("Failed to register Module Analytics API blueprint")
 
+    # Voice Analytics API endpoints (/api/v1/voice/analytics/*)
+    try:
+        from copilot_core.api.v1.voice_analytics import voice_analytics_bp
+        app.register_blueprint(voice_analytics_bp)
+        logging.getLogger(__name__).info("Voice Analytics API registered")
+    except Exception:
+        logging.getLogger(__name__).exception("Failed to register Voice Analytics API blueprint")
+
     # Initialize Tags API v2 (FIX: Flask Blueprint rewrite)
     from copilot_core.tags.api import init_tags_api
     from copilot_core.tags import TagRegistry
