@@ -444,33 +444,36 @@ User notification preferences and profile management surface for personalized de
 
 ---
 
-### ✅ Slice 69 — Audit Log / Behavioral Trail Surface
-**Status:** ✅ DONE (v15.3.80)
+### ✅ Slice 70 — Calendar Smart Scheduling Surface
+**Status:** ✅ DONE (v15.3.81)
 
 **Goal**
-Konsistente Verhaltensprotokolle für alle Action-Intents, Proposals und Executions als kanonische Audit-Oberfläche materialisieren.
+Smart Scheduling als kanonische Core-Surface für kontextbewusste Terminplanung mit Mood-, Zone- und Präferenzintegration.
 
 ### Deliverables
-- [x] `AuditLogEntryV1` / `AuditLogSummaryV1` / `AuditLogDeltaV1` Contracts
-- [x] `AuditEventType` / `AuditOutcome` / `AuditSeverity` Enums (35+ event types)
-- [x] SQLite-backed `AuditLogStore` mit Revisionstracking und Delta-Polling
-- [x] API-Endpoints: `GET /api/v1/audit/logs`, `/logs/<id>`, `/delta`, `/summary`, `/revision`, `POST /export`, `/ingest`
-- [x] Filter support: zone_id, module_id, event_type, outcome, severity, user_id, proposal_id, action_closure_id, correlation_id, time ranges
-- [x] Export formats: JSON, CSV, NDJSON
-- [x] Correlation tracking for end-to-end tracing (proposal→action→closure→notification)
-- [x] Contract-Tests (21 Tests grün)
-- [x] App-Integration in `copilot_core/app.py`
+- [x] `SmartScheduler` mit `recommend_slot()`, `get_day_summary()`, `suggest_alarm_adjustment()`
+- [x] `MoodAwareScheduler` für stimmungsbewusste Anpassungen
+- [x] `ScheduleSuggester` mit `ScheduleSuggestion`-Contract (nicht nur `Suggestion`)
+- [x] `CalendarIntegrationEngine` (nicht `CalendarIntegration`) für HA-Kalender-Sync
+- [x] API-Endpoints unter `/api/v1/calendar/*`: `/smart/recommend`, `/smart/day-summary`, `/smart/alarm-suggestion`, `/mood/*`, `/suggestions/*`
+- [x] Calendar Analytics unter `/api/v1/calendar/analytics/*` (Slice 69-Analytics-Pattern)
+- [x] Calendar Notifications unter `/api/v1/notifications/calendar/*`
+- [x] Import-Korrekturen: `CalendarIntegrationEngine`, `ScheduleSuggestion` statt veralteter Namen
+- [x] Contract-Tests: `test_calendar_analytics_contract.py` (18 Tests), `test_calendar_integration.py` (20 Tests), `test_calendar_notifications_contract.py` (20 Tests)
 
 ### Acceptance criteria
-- Alle Proposal/Action/Closure/Notification/Module/Hold-Events werden als revisionsscharfe Audit-Logs materialisiert
-- Delta-Polling mit `since_revision` für effiziente UI-Poller
-- Correlation-IDs ermöglichen End-to-End-Tracing über Systemgrenzen
-- Export-Funktion für Compliance/Analyse (JSON/CSV/NDJSON)
-- Alle Surfaces lesen dieselbe kanonische Audit-Wahrheit ohne Schattenlogik
+- Smart Scheduler empfiehlt kontextbewusste Zeitfenster basierend auf Kalenderdichte, Mood und Zone
+- Mood-Aware-Passung passt Events an Stimmungslage an (Licht, Timing, Puffer)
+- ScheduleSuggestions folgen demselben Proposal-Lifecycle wie andere Core-Vorschläge
+- Calendar Analytics trackt Usage, Patterns und Effectiveness mit Revision-Delta
+- Calendar Notifications integrieren sich in die kanonische Notification-Delivery-Engine
+- Alle Imports verwenden korrekte Engine-/Suggestion-Klassen (`CalendarIntegrationEngine`, `ScheduleSuggestion`)
 
-**Commit:** `feat(core): deliver slice 69 audit log behavioral trail surface`
-**Tag:** v15.3.80
-**Tests:** `pytest -q tests/test_audit_log_contract.py` → `21 passed`
+**Commit:** `feat(calendar): deliver slice 70 smart scheduling surface`
+**Tag:** v15.3.81
+**Tests:** `pytest -q tests/test_calendar_*.py` → `58 passed`
+
+**Next Exact Task:** Slice 71 als Voice-Integration-Surface ableiten: tiefere Anbindung an HA Voice Assistant mit kontextbewussten Antworten, proaktiven Sprachhinweisen aus Calendar/Proposal/Closure-Wahrheit und Mehrsprachigkeit (DE/EN).
 
 ---
 
