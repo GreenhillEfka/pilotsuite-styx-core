@@ -356,6 +356,18 @@ def create_app() -> Flask:
     except Exception:
         logging.getLogger(__name__).exception("Failed to register Proposal Lifecycle Analytics API blueprint")
 
+    # Action Closure Analytics API endpoints (/api/v1/action-closure/analytics/*)
+    try:
+        from copilot_core.api.v1.action_closure_analytics import blueprint as action_closure_analytics_bp
+        from copilot_core.analytics.action_closure_analytics import ClosureAnalyticsStore
+
+        analytics_store = ClosureAnalyticsStore(Path(cfg.data_dir) / "action_closure_analytics.db")
+        action_closure_analytics_bp.init_blueprint(analytics_store)
+        app.register_blueprint(action_closure_analytics_bp)
+        logging.getLogger(__name__).info("Action Closure Analytics API registered")
+    except Exception:
+        logging.getLogger(__name__).exception("Failed to register Action Closure Analytics API blueprint")
+
     # Initialize Tags API v2 (FIX: Flask Blueprint rewrite)
     from copilot_core.tags.api import init_tags_api
     from copilot_core.tags import TagRegistry
