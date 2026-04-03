@@ -27,7 +27,10 @@ if _repo_bridge_dir.is_dir() and _repo_bridge_path not in __path__:
 # ---------------------------------------------------------------------------
 
 # Maximum number of connections in the pool (per target: HA, Ollama)
-POOL_MAX_CONNECTIONS = int(os.environ.get("POOL_MAX_CONNECTIONS", "10"))
+POOL_MAX_CONNECTIONS = int(os.environ.get("POOL_MAX_CONNECTIONS", "25"))
+
+# Maximum connections per host (prevents connection starvation)
+POOL_MAX_CONNECTIONS_PER_HOST = int(os.environ.get("POOL_MAX_CONNECTIONS_PER_HOST", "5"))
 
 # Connection timeout in seconds
 POOL_TIMEOUT = int(os.environ.get("POOL_TIMEOUT", "30"))
@@ -36,7 +39,13 @@ POOL_TIMEOUT = int(os.environ.get("POOL_TIMEOUT", "30"))
 POOL_HEALTH_CHECK_INTERVAL = int(os.environ.get("POOL_HEALTH_CHECK_INTERVAL", "60"))
 
 # TCP connector TTL (connection recycling)
-POOL_CONNECTOR_TTL = int(os.environ.get("POOL_CONNECTOR_TTL", "300"))
+POOL_CONNECTOR_TTL = int(os.environ.get("POOL_CONNECTOR_TTL", "180"))
+
+# DNS cache TTL (faster DNS resolution)
+POOL_DNS_CACHE_TTL = int(os.environ.get("POOL_DNS_CACHE_TTL", "60"))
+
+# TCP keepalive timeout (connection health)
+POOL_TCP_KEEPALIVE = int(os.environ.get("POOL_TCP_KEEPALIVE", "60"))
 
 # ---------------------------------------------------------------------------
 # HA-Supervisor Configuration
@@ -96,14 +105,33 @@ CIRCUIT_BREAKER_RECOVERY_TIMEOUT = int(
 )
 
 # ---------------------------------------------------------------------------
+# Cache Configuration (Tiered TTL)
+# ---------------------------------------------------------------------------
+
+# Local LRU cache size for hot data
+CACHE_LOCAL_SIZE = int(os.environ.get("CACHE_LOCAL_SIZE", "1000"))
+
+# Default TTL for cache entries (fallback)
+CACHE_DEFAULT_TTL = int(os.environ.get("CACHE_DEFAULT_TTL", "300"))
+
+# Tiered TTL by data type
+CACHE_TTL_SENSOR = int(os.environ.get("CACHE_TTL_SENSOR", "60"))      # High-frequency sensor data
+CACHE_TTL_RAG = int(os.environ.get("CACHE_TTL_RAG", "600"))          # RAG search results
+CACHE_TTL_API = int(os.environ.get("CACHE_TTL_API", "300"))          # API responses
+CACHE_TTL_CONFIG = int(os.environ.get("CACHE_TTL_CONFIG", "3600"))   # Config/metadata
+
+# ---------------------------------------------------------------------------
 # Pool Configuration Dictionary (for easy passing)
 # ---------------------------------------------------------------------------
 
 POOL_CONFIG = {
     "max_connections": POOL_MAX_CONNECTIONS,
+    "max_connections_per_host": POOL_MAX_CONNECTIONS_PER_HOST,
     "timeout": POOL_TIMEOUT,
     "health_check_interval": POOL_HEALTH_CHECK_INTERVAL,
     "connector_ttl": POOL_CONNECTOR_TTL,
+    "dns_cache_ttl": POOL_DNS_CACHE_TTL,
+    "tcp_keepalive": POOL_TCP_KEEPALIVE,
 }
 
 HA_CONFIG = {
@@ -122,6 +150,15 @@ CLOUD_CONFIG = {
     "url": CLOUD_API_URL,
     "key": CLOUD_API_KEY,
     "model": CLOUD_MODEL,
+}
+
+CACHE_CONFIG = {
+    "local_size": CACHE_LOCAL_SIZE,
+    "default_ttl": CACHE_DEFAULT_TTL,
+    "ttl_sensor": CACHE_TTL_SENSOR,
+    "ttl_rag": CACHE_TTL_RAG,
+    "ttl_api": CACHE_TTL_API,
+    "ttl_config": CACHE_TTL_CONFIG,
 }
 
 
@@ -143,3 +180,8 @@ def get_ollama_config() -> dict:
 def get_cloud_config() -> dict:
     """Return cloud fallback configuration."""
     return CLOUD_CONFIG.copy()
+
+
+def get_cache_config() -> dict:
+    """Return cache configuration with tiered TTL."""
+    return CACHE_CONFIG.copy()

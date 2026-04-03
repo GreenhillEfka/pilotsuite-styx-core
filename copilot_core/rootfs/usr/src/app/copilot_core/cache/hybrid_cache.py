@@ -83,13 +83,18 @@ class HybridCacheConfig:
     default_ttl: int = 300  # 5 minutes
     max_size: int = 1000
     cleanup_interval: int = 60  # seconds
+    # Tiered TTL by data type
+    ttl_sensor: int = 60       # High-frequency sensor data
+    ttl_rag: int = 600         # RAG search results
+    ttl_api: int = 300         # API responses
+    ttl_config: int = 3600     # Config/metadata
     # Hybrid cache settings
     redis_enabled: bool = True
     redis_host: str = "localhost"
     redis_port: int = 6379
     redis_password: Optional[str] = None
     redis_db: int = 0
-    local_cache_size: int = 500  # Local LRU cache size
+    local_cache_size: int = 1000  # Local LRU cache size (increased for hot data)
     write_through: bool = True  # Write to both Redis and local cache
     read_through_local_first: bool = True  # Check local cache before Redis
 
@@ -130,12 +135,16 @@ class HybridCacheManager:
         default_ttl: int = 300,
         max_size: int = 1000,
         cleanup_interval: int = 60,
+        ttl_sensor: int = 60,
+        ttl_rag: int = 600,
+        ttl_api: int = 300,
+        ttl_config: int = 3600,
         redis_enabled: bool = True,
         redis_host: str = "localhost",
         redis_port: int = 6379,
         redis_password: Optional[str] = None,
         redis_db: int = 0,
-        local_cache_size: int = 500,
+        local_cache_size: int = 1000,
         write_through: bool = True,
         read_through_local_first: bool = True,
     ):
@@ -144,6 +153,10 @@ class HybridCacheManager:
             default_ttl=default_ttl,
             max_size=max_size,
             cleanup_interval=cleanup_interval,
+            ttl_sensor=ttl_sensor,
+            ttl_rag=ttl_rag,
+            ttl_api=ttl_api,
+            ttl_config=ttl_config,
             redis_enabled=redis_enabled,
             redis_host=redis_host,
             redis_port=redis_port,
@@ -176,8 +189,8 @@ class HybridCacheManager:
         self._redis_prefix = "pilotsuite:hybrid:"
         
         _LOGGER.info(
-            "HybridCacheManager initialized: local_size=%d, redis=%s:%d, ttl=%ds",
-            local_cache_size, redis_host, redis_port, default_ttl
+            "HybridCacheManager initialized: local_size=%d, redis=%s:%d, ttl=%ds (sensor=%ds, rag=%ds, api=%ds, config=%ds)",
+            local_cache_size, redis_host, redis_port, default_ttl, ttl_sensor, ttl_rag, ttl_api, ttl_config
         )
     
     async def _init_redis(self) -> bool:
@@ -418,14 +431,43 @@ class HybridCacheManager:
         self._hybrid_metrics.total_requests += 1
         return default
     
+    def _get_tier_ttl(self, tier: str) -> int:
+        """Get TTL for a specific tier.
+        
+        Args:
+            tier: Cache tier (sensor, rag, api, config)
+            
+        Returns:
+            TTL in seconds for the tier
+        """
+        tier_map = {
+            "sensor": self._config.ttl_sensor,
+            "rag": self._config.ttl_rag,
+            "api": self._config.ttl_api,
+            "config": self._config.ttl_config,
+        }
+        return tier_map.get(tier.lower(), self._config.default_ttl)
+    
     async def _set_local(
         self,
         key: str,
         value: Any,
         ttl: Optional[int] = None,
+        tier: Optional[str] = None,
     ) -> None:
-        """Set value in local cache only."""
+        """Set value in local cache only.
+        
+        Args:
+            key: Cache key
+            value: Value to cache
+            ttl: Explicit TTL (overrides tier)
+            tier: Cache tier for tiered TTL (sensor, rag, api, config)
+        """
         now = time.time()
+        
+        # Determine effective TTL: explicit > tier > default
+        if ttl is None and tier is not None:
+            ttl = self._get_tier_ttl(tier)
         effective_ttl = ttl if ttl is not None else self._config.default_ttl
         expires_at = now + effective_ttl
         
@@ -451,19 +493,21 @@ class HybridCacheManager:
         key: str,
         value: Any,
         ttl: Optional[int] = None,
+        tier: Optional[str] = None,
     ) -> None:
         """Set value in hybrid cache.
         
         Args:
             key: Cache key
             value: Value to cache
-            ttl: Time-to-live in seconds (overrides default_ttl)
+            ttl: Time-to-live in seconds (overrides tier/default)
+            tier: Cache tier for tiered TTL (sensor, rag, api, config)
         """
         if not self._config.cache_enabled:
             return
         
         # Write to local cache (always)
-        await self._set_local(key, value, ttl)
+        await self._set_local(key, value, ttl, tier)
         
         # Write to Redis (if enabled and write_through)
         if self._config.write_through and self._redis_connected:

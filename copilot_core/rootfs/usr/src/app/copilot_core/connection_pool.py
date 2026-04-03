@@ -41,14 +41,17 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 # Pool configuration from environment
-DEFAULT_MAX_CONNECTIONS = int(os.environ.get("POOL_MAX_CONNECTIONS", "10"))
+DEFAULT_MAX_CONNECTIONS = int(os.environ.get("POOL_MAX_CONNECTIONS", "25"))
+DEFAULT_MAX_CONNECTIONS_PER_HOST = int(os.environ.get("POOL_MAX_CONNECTIONS_PER_HOST", "5"))
 DEFAULT_CONNECTION_TIMEOUT = int(os.environ.get("POOL_TIMEOUT", "30"))
 DEFAULT_HEALTH_CHECK_INTERVAL = int(os.environ.get("POOL_HEALTH_CHECK_INTERVAL", "60"))
 
 # Connector limits
 CONNECTOR_LIMIT = DEFAULT_MAX_CONNECTIONS
-CONNECTOR_LIMIT_PER_HOST = DEFAULT_MAX_CONNECTIONS
-CONNECTOR_TTL = 300  # seconds before connection recycling
+CONNECTOR_LIMIT_PER_HOST = DEFAULT_MAX_CONNECTIONS_PER_HOST
+CONNECTOR_TTL = int(os.environ.get("POOL_CONNECTOR_TTL", "180"))  # seconds before connection recycling
+CONNECTOR_DNS_CACHE_TTL = int(os.environ.get("POOL_DNS_CACHE_TTL", "60"))
+CONNECTOR_TCP_KEEPALIVE = int(os.environ.get("POOL_TCP_KEEPALIVE", "60"))
 
 
 class ConnectionPoolManager:
@@ -88,9 +91,10 @@ class ConnectionPoolManager:
         return aiohttp.TCPConnector(
             limit=CONNECTOR_LIMIT,
             limit_per_host=CONNECTOR_LIMIT_PER_HOST,
-            ttl_dns_cache=CONNECTOR_TTL,
+            ttl_dns_cache=CONNECTOR_DNS_CACHE_TTL,
             use_dns_cache=True,
             enable_cleanup_closed=True,
+            keepalive_timeout=CONNECTOR_TCP_KEEPALIVE,
         )
 
     async def _create_session(
