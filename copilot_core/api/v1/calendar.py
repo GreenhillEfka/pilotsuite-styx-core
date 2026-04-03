@@ -20,8 +20,8 @@ import requests as http_requests
 from copilot_core.api.security import require_token
 from copilot_core.calendar.smart_scheduler import SmartScheduler, SmartSchedulerConfig
 from copilot_core.calendar.mood_aware import MoodAwareScheduler, MoodCalendarConfig
-from copilot_core.calendar.suggestions import ScheduleSuggester, SuggestionConfig, Suggestion
-from copilot_core.calendar.integration_engine import CalendarIntegration
+from copilot_core.calendar.suggestions import ScheduleSuggester, SuggestionConfig, ScheduleSuggestion
+from copilot_core.calendar.integration_engine import CalendarIntegrationEngine
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +31,7 @@ calendar_bp = Blueprint("calendar", __name__, url_prefix="/api/v1/calendar")
 _scheduler: Optional[SmartScheduler] = None
 _mood_scheduler: Optional[MoodAwareScheduler] = None
 _suggester: Optional[ScheduleSuggester] = None
-_integration: Optional[CalendarIntegration] = None
+_integration: Optional[CalendarIntegrationEngine] = None
 
 
 def _get_scheduler() -> SmartScheduler:
@@ -55,10 +55,10 @@ def _get_suggester() -> ScheduleSuggester:
     return _suggester
 
 
-def _get_integration() -> CalendarIntegration:
+def _get_integration() -> CalendarIntegrationEngine:
     global _integration
     if _integration is None:
-        _integration = CalendarIntegration()
+        _integration = CalendarIntegrationEngine()
     return _integration
 
 
