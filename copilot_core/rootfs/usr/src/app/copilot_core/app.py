@@ -414,6 +414,18 @@ def create_app() -> Flask:
     except Exception:
         logging.getLogger(__name__).exception("Failed to register Query Metrics API blueprint")
 
+    # Insights API endpoints (/api/v1/insights/*) — Slice 66
+    try:
+        from copilot_core.api.v1.insights import create_insights_blueprint
+        from copilot_core.insights.store import InsightStore
+
+        insight_store = InsightStore(Path(cfg.data_dir) / "insights.db")
+        insights_bp = create_insights_blueprint(insight_store)
+        app.register_blueprint(insights_bp)
+        logging.getLogger(__name__).info("Insights API registered")
+    except Exception:
+        logging.getLogger(__name__).exception("Failed to register Insights API blueprint")
+
     # Styx Unified Dashboard API endpoints (/api/v1/styx/dashboard/*)
     try:
         from copilot_core.api.v1.styx_dashboard import styx_dashboard_bp
