@@ -426,6 +426,18 @@ def create_app() -> Flask:
     except Exception:
         logging.getLogger(__name__).exception("Failed to register Insights API blueprint")
 
+    # User Profile and Preferences API endpoints (/api/v1/users/*) — Slice 67
+    try:
+        from copilot_core.api.v1.users import create_users_blueprint
+        from copilot_core.users.store import UserStore
+
+        user_store = UserStore(Path(cfg.data_dir) / "users.db")
+        users_bp = create_users_blueprint(user_store)
+        app.register_blueprint(users_bp)
+        logging.getLogger(__name__).info("User Profile and Preferences API registered")
+    except Exception:
+        logging.getLogger(__name__).exception("Failed to register User Profile API blueprint")
+
     # Styx Unified Dashboard API endpoints (/api/v1/styx/dashboard/*)
     try:
         from copilot_core.api.v1.styx_dashboard import styx_dashboard_bp
