@@ -38,6 +38,7 @@ class VoiceIntentType(Enum):
     COVER_CLOSE = "cover_close"
     COVER_POSITION = "cover_position"
     UNKNOWN = "unknown"
+    NEGATED = "negated"  # Explicit negation handling
 
 
 class Language(Enum):
@@ -108,14 +109,20 @@ class VoiceControlEngine:
         self._command_history: List[VoiceCommand] = []
         self._responses: Dict[str, VoiceResponse] = {}
         
-        # Intent patterns (German)
+        # Intent patterns (German) - expanded with typos and variations
         self._de_patterns = {
             VoiceIntentType.TURN_ON: [
                 r"mach.*an",
                 r"schalt.*ein",
                 r"licht.*an",
                 r"anmachen",
+                r"anmachn",  # Common typo
                 r"einschalten",
+                r"eischalten",  # Common typo
+                r"anschalten",
+                r"lampe.*an",
+                r"beleuchtung.*an",
+                r"leuchte.*an",
             ],
             VoiceIntentType.TURN_OFF: [
                 r"mach.*aus",
@@ -123,55 +130,77 @@ class VoiceControlEngine:
                 r"licht.*aus",
                 r"ausmachen",
                 r"ausschalten",
+                r"auschalten",  # Common typo
+                r"lampe.*aus",
+                r"beleuchtung.*aus",
             ],
             VoiceIntentType.DIM: [
                 r"dimmer",
                 r"dunkler",
                 r"weniger licht",
+                r"leiser",
+                r"runter",
             ],
             VoiceIntentType.BRIGHTEN: [
                 r"heller",
                 r"mehr licht",
+                r"rauf",
+                r"höher",
             ],
             VoiceIntentType.STATUS_QUERY: [
                 r"ist.*an",
                 r"zustand",
                 r"status",
                 r"wie ist.*",
+                r"status.*abfrage",
             ],
             VoiceIntentType.CLIMATE_SET: [
                 r"heizung.*\d{1,2}\s*grad",
                 r"temperatur.*\d{1,2}\s*grad",
                 r"auf\s*\d{1,2}\s*grad",
+                r"heiz.*\d{1,2}\s*grad",
+                r"wärme.*\d{1,2}\s*grad",
             ],
             VoiceIntentType.SET_TEMPERATURE: [
                 r"stelle.*\d{1,2}\s*grad",
                 r"setze.*\d{1,2}\s*grad",
+                r"stell.*\d{1,2}\s*grad",  # Common typo
+            ],
+            VoiceIntentType.NEGATED: [
+                r"nicht.*an",
+                r"nicht.*aus",
+                r"bitte nicht",
+                r"nicht.*machen",
             ],
         }
         
-        # Intent patterns (English)
+        # Intent patterns (English) - expanded with variations
         self._en_patterns = {
             VoiceIntentType.TURN_ON: [
                 r"turn.*on",
                 r"switch.*on",
                 r"light.*on",
                 r"power.*on",
+                r"lamp.*on",
+                r"lights.*on",
             ],
             VoiceIntentType.TURN_OFF: [
                 r"turn.*off",
                 r"switch.*off",
                 r"light.*off",
                 r"power.*off",
+                r"lamp.*off",
             ],
             VoiceIntentType.DIM: [
                 r"dim",
                 r"darker",
                 r"less light",
+                r"down",
             ],
             VoiceIntentType.BRIGHTEN: [
                 r"brighter",
                 r"more light",
+                r"up",
             ],
             VoiceIntentType.STATUS_QUERY: [
                 r"is.*on",
@@ -187,34 +216,64 @@ class VoiceControlEngine:
             VoiceIntentType.SET_TEMPERATURE: [
                 r"set.*\d{1,2}\s*(?:degree|°)",
             ],
+            VoiceIntentType.NEGATED: [
+                r"don't.*turn",
+                r"do not.*turn",
+                r"not.*on",
+                r"not.*off",
+            ],
         }
         
-        # Zone/entity recognition patterns
+        # Zone/entity recognition patterns - expanded aliases
         self._zone_patterns = {
-            "zone_living_room": [r"wohnzimmer", r"wohn.*raum", r"living.*room"],
-            "zone_kitchen": [r"küche", r"koch", r"kitchen"],
-            "zone_bedroom": [r"schlafzimmer", r"schlaf.*raum", r"bedroom"],
-            "zone_bathroom": [r"badezimmer", r"bad", r"bathroom"],
-            "zone_hallway": [r"flur", r"diele", r"hallway"],
-            "zone_office": [r"büro", r"office", r"work"],
+            "zone_living_room": [r"wohnzimmer", r"wohn.*raum", r"wohnbereich", r"living.*room", r"lounge"],
+            "zone_kitchen": [r"küche", r"koch", r"kitchen", r"cooking"],
+            "zone_bedroom": [r"schlafzimmer", r"schlaf.*raum", r"bedroom", r"sleeping"],
+            "zone_bathroom": [r"badezimmer", r"bad", r"bathroom", r"bath"],
+            "zone_hallway": [r"flur", r"diele", r"hallway", r"corridor", r"entry"],
+            "zone_office": [r"büro", r"office", r"work", r"workspace", r"arbeitszimmer"],
         }
     
     def process_voice_command(self, text: str, language: Optional[Language] = None) -> VoiceCommand:
-        """Process a voice command and return parsed intent."""
+        """Process a voice command and return parsed intent.
+        
+        Handles edge cases:
+        - Empty commands
+        - Very long commands (truncated for parsing)
+        - Special characters and Unicode
+        - Noise/filler words
+        """
         if language is None:
             language = self._default_language
         
         self._command_counter += 1
-        text_lower = text.lower()
+        
+        # Handle empty command
+        if not text or not text.strip():
+            command = VoiceCommand(
+                command_id=f"voice_{self._command_counter}",
+                intent_type=VoiceIntentType.UNKNOWN,
+                language=language,
+                raw_text=text,
+                confidence=0.3,  # Low confidence for empty
+            )
+            self._command_history.append(command)
+            return command
+        
+        # Normalize text: strip, lowercase, handle special chars
+        text_clean = text.strip().lower()
+        
+        # Truncate very long commands for parsing (keep full text in raw_text)
+        text_parse = text_clean[:500] if len(text_clean) > 500 else text_clean
         
         # Detect intent
-        intent_type = self._detect_intent(text_lower, language)
+        intent_type = self._detect_intent(text_parse, language)
         
         # Detect zone
-        zone_id = self._detect_zone(text_lower)
+        zone_id = self._detect_zone(text_parse)
         
         # Detect parameters (brightness, color, temperature, etc.)
-        parameters = self._detect_parameters(text_lower, intent_type)
+        parameters = self._detect_parameters(text_parse, intent_type)
         
         command = VoiceCommand(
             command_id=f"voice_{self._command_counter}",
@@ -223,7 +282,7 @@ class VoiceControlEngine:
             raw_text=text,
             zone_id=zone_id,
             parameters=parameters,
-            confidence=self._calculate_confidence(intent_type, zone_id),
+            confidence=self._calculate_confidence(intent_type, zone_id, text_parse),
         )
         
         self._command_history.append(command)
@@ -235,12 +294,33 @@ class VoiceControlEngine:
         return command
     
     def _detect_intent(self, text: str, language: Language) -> VoiceIntentType:
-        """Detect intent from text."""
+        """Detect intent from text with noise word handling.
+        
+        Strips common filler/noise words before pattern matching.
+        """
+        # Remove common noise/filler words for better matching
+        noise_words_de = ["äh", "ähm", "also", "bitte", "vielleicht", "eigentlich", "mal", "kurz", "hey", "ja", "nein"]
+        noise_words_en = ["um", "uh", "so", "please", "maybe", "actually", "like", "just", "hey", "yeah", "nope"]
+        
+        noise_words = noise_words_de if language == Language.DE else noise_words_en
+        text_clean = text
+        for noise in noise_words:
+            text_clean = re.sub(r'\b' + noise + r'\b', '', text_clean, flags=re.IGNORECASE)
+        text_clean = re.sub(r'\s+', ' ', text_clean).strip()
+        
         patterns = self._de_patterns if language == Language.DE else self._en_patterns
         
+        # Check for negation first
+        negation_patterns = patterns.get(VoiceIntentType.NEGATED, [])
+        for pattern in negation_patterns:
+            if re.search(pattern, text):
+                return VoiceIntentType.NEGATED
+        
         for intent_type, pattern_list in patterns.items():
+            if intent_type == VoiceIntentType.NEGATED:
+                continue
             for pattern in pattern_list:
-                if re.search(pattern, text):
+                if re.search(pattern, text_clean):
                     return intent_type
         
         return VoiceIntentType.UNKNOWN
@@ -279,8 +359,15 @@ class VoiceControlEngine:
         
         return params
     
-    def _calculate_confidence(self, intent_type: VoiceIntentType, zone_id: Optional[str]) -> float:
-        """Calculate confidence score for command."""
+    def _calculate_confidence(self, intent_type: VoiceIntentType, zone_id: Optional[str], text: str) -> float:
+        """Calculate confidence score for command.
+        
+        Factors:
+        - Known intent vs unknown
+        - Zone detection
+        - Text length (very short = lower confidence)
+        - Presence of action verbs
+        """
         confidence = 0.5  # Base confidence
         
         # Higher confidence if intent is known
@@ -289,9 +376,17 @@ class VoiceControlEngine:
         
         # Higher confidence if zone is detected
         if zone_id:
-            confidence += 0.2
+            confidence += 0.15
         
-        return min(confidence, 1.0)
+        # Lower confidence for very short text
+        if len(text.split()) <= 1:
+            confidence -= 0.2
+        
+        # Higher confidence for longer, more specific commands
+        if len(text.split()) >= 4:
+            confidence += 0.05
+        
+        return min(max(confidence, 0.0), 1.0)
     
     def generate_response(self, command: VoiceCommand) -> VoiceResponse:
         """Generate voice response for a command."""
