@@ -331,6 +331,19 @@ def create_app() -> Flask:
     except Exception:
         logging.getLogger(__name__).exception("Failed to register Voice Analytics API blueprint")
 
+    # Zone Truth Analytics API endpoints (/api/v1/zone-truth/analytics/*)
+    try:
+        from copilot_core.api.v1.zone_truth_analytics import blueprint as zone_truth_analytics_bp
+        from copilot_core.analytics.zone_truth_analytics import ZoneAnalyticsStore
+
+        analytics_store = ZoneAnalyticsStore(Path(cfg.data_dir) / "zone_truth_analytics.db")
+        # ZoneTruthStore may not exist yet - pass None for now
+        zone_truth_analytics_bp.init_blueprint(analytics_store, None)
+        app.register_blueprint(zone_truth_analytics_bp)
+        logging.getLogger(__name__).info("Zone Truth Analytics API registered")
+    except Exception:
+        logging.getLogger(__name__).exception("Failed to register Zone Truth Analytics API blueprint")
+
     # Initialize Tags API v2 (FIX: Flask Blueprint rewrite)
     from copilot_core.tags.api import init_tags_api
     from copilot_core.tags import TagRegistry
