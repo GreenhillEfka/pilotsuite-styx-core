@@ -139,13 +139,17 @@ class VoiceContext:
     # User context
     user_preferences: Dict[str, Any] = field(default_factory=dict)
     language_preference: str = "de"
+    language: str = "de"  # Alias for language_preference
     
     # Habitus patterns
     relevant_patterns: List[Dict[str, Any]] = field(default_factory=list)
     
+    # Calendar context (optional)
+    calendar_context: Optional[Dict[str, Any]] = None
+    
     # Metadata
     timestamp: str = ""
-    context_version: str = "1.0"
+    context_version: str = "1.1"  # Bumped for calendar context
     
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -293,9 +297,10 @@ class VoiceContextBuilder:
             recent_actions=self._get_recent_actions(),
             user_preferences=user_preferences or {},
             language_preference=language,
+            language=language,  # Alias
             relevant_patterns=relevant_patterns,
             timestamp=now.isoformat(),
-            context_version="1.0",
+            context_version="1.1",
         )
         
         # Cache context

@@ -370,6 +370,7 @@ class ProactiveVoiceHints:
         hints.extend(self._check_habitus_patterns(context))
         hints.extend(self._check_proposal_lifecycle(context))
         hints.extend(self._check_action_followups(context))
+        hints.extend(self._check_calendar_events(context))
         hints.extend(self._check_environment_hints(context))
         
         # Filter by priority and cooldown
@@ -862,6 +863,27 @@ class ProactiveVoiceHints:
         if action_id:
             return action_id
         return "dem letzten Vorgang"
+
+    def _check_calendar_events(self, context: VoiceContext) -> List[ProactiveHint]:
+        """Check calendar for upcoming events and generate hints."""
+        try:
+            from .calendar_integration import CalendarVoiceIntegration, get_calendar_integration_engine
+
+            calendar_engine = get_calendar_integration_engine()
+            if calendar_engine is None:
+                return []
+
+            calendar_voice = CalendarVoiceIntegration(
+                calendar_engine=calendar_engine,
+                mood_engine=self.mood_engine,
+            )
+            return calendar_voice.generate_calendar_hints(context, language=context.language or "de")
+        except ImportError:
+            _LOGGER.debug("Calendar integration not available for voice hints")
+            return []
+        except Exception as exc:
+            _LOGGER.debug("Failed to generate calendar voice hints: %s", exc)
+            return []
 
     def _check_environment_hints(self, context: VoiceContext) -> List[ProactiveHint]:
         """Check for environment-based hints (weather, energy, comfort)."""
