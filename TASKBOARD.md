@@ -382,33 +382,42 @@ Canonical Insights Engine for actionable findings from analytics data.
 
 ---
 
-## Slice 67 — Notification Preferences / User Profile Surface
+### ✅ Slice 67 — User Profile and Preferences Surface
+**Status:** ✅ DONE (v15.3.78)
+
+**Goal**
+User notification preferences and profile management surface for personalized delivery.
+
+### Deliverables
+- [x] UserProfileV1/NotificationPreferencesV1/ChannelPreferencesV1/UserSettingsV1 contracts
+- [x] NotificationChannel/NotificationCategory/NotificationPriority/DeliveryMode enums
+- [x] SQLite-backed UserStore for profiles and preferences
+- [x] API endpoints: GET/PUT /api/v1/users/profile, /preferences, /settings
+- [x] API endpoints: PUT /api/v1/users/preferences/dnd, /preferences/channel/<channel>
+- [x] API endpoints: DELETE /api/v1/users, GET /channels, /categories, /priorities, /delivery-modes
+- [x] Contract tests (25 tests green)
+- [x] App integration in copilot_core/app.py
+
+### Acceptance criteria
+- [x] User profiles with timezone, language, metadata support
+- [x] Notification preferences with global and channel-specific settings
+- [x] Do-not-disturb with optional expiry
+- [x] Channel preferences: enabled, delivery_mode, min_priority, quiet_hours, rate limits
+- [x] Revision tracking for delta polling
+- [x] Contract tests cover Store and API surfaces
+
+**Commit:** `feat(core): deliver slice 67 user profile and preferences`
+**Tag:** v15.3.78
+**Tests:** `pytest -q tests/test_users_contract.py` → `25 passed`
+
+---
+
+## Slice 68 — Notification Delivery Engine
 **Priority:** P0
 **Status:** ready
 
 **Goal**
-User notification preferences and profile management surface for personalized delivery.
-**Priority:** P0  
-**Status:** ready
-
-**Goal**
-Create one durable Core-owned topology/truth store for zone instances.
-
-### Deliverables
-- [ ] typed `ZoneDefinitionSyncV1` model and storage
-- [ ] choose one canonical topology sync endpoint/path
-- [ ] store provenance, revision, and freshness metadata
-- [ ] separate zone archetype from zone instance explicitly
-- [ ] replace ad hoc truth like `cfg._ha_entities` as the actual source of truth
-
-### Acceptance criteria
-- synced zone definitions are queryable from one store,
-- dashboard, habitus, autonomy, modules, and chat context can all read the same zone truth,
-- sync docs and sync runtime path no longer disagree.
-
----
-
-## Slice 3 — First-class module model + end-to-end wiring
+Unified notification delivery engine with channel routing, rate limiting, and delivery tracking.
 **Priority:** P0  
 **Status:** ready
 
