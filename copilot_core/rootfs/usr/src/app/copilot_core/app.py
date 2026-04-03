@@ -196,6 +196,14 @@ def create_app() -> Flask:
     except Exception:
         logging.getLogger(__name__).exception("Failed to register Predictive Automation API blueprint")
 
+    # Predictive Analytics API endpoints (/api/v1/predictive/analytics/*)
+    try:
+        from copilot_core.api.v1.predictive_analytics import analytics_bp
+        app.register_blueprint(analytics_bp)
+        logging.getLogger(__name__).info("Predictive Analytics API registered")
+    except Exception:
+        logging.getLogger(__name__).exception("Failed to register Predictive Analytics API blueprint")
+
     # Multi-Zone Coordination API endpoints (/api/v1/multizone/*)
     try:
         from copilot_core.api.v1.multizone import multizone_bp
