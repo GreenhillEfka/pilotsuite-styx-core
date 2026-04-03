@@ -326,6 +326,38 @@ Vollständige OpenAPI 3.0.3 Spezifikation für alle Core-APIs generieren.
 
 ---
 
+### ✅ Slice 68 — Notification Delivery Engine
+**Status:** ✅ DONE (v15.3.79)
+
+**Goal**
+Unified notification delivery engine with channel routing, rate limiting, and delivery tracking.
+
+### Deliverables
+- [x] NotificationV1/NotificationDeliveryV1/DeliveryAttemptV1 contracts
+- [x] DeliveryEngine with channel handlers (Telegram, WhatsApp, Email, Push, HA)
+- [x] Rate limiting per user/channel (configurable limits per channel)
+- [x] Quiet hours enforcement with priority override (CRITICAL bypasses)
+- [x] Channel enable/disable checks via user preferences
+- [x] NotificationDeliveryStore with SQLite backend and revision tracking
+- [x] REST API: POST /api/v1/notifications/send, GET /deliveries, /summary
+- [x] Delivery status lifecycle: pending→sent→delivered→read→acknowledged
+- [x] Contract tests (26 tests green)
+
+### Acceptance criteria
+- [x] Multi-channel delivery with unified contract
+- [x] Rate limiting prevents notification floods
+- [x] Quiet hours respected with critical priority override
+- [x] Delivery tracking with retry logic and latency metrics
+- [x] Revision-based delta polling for efficient UI updates
+- [x] Integration with Slice 67 user preferences
+- [x] Integration with Slice 52 analytics store
+
+**Commit:** `feat(core): deliver slice 68 notification delivery engine`
+**Tag:** v15.3.79
+**Tests:** `pytest -q tests/test_notification_delivery_contract.py` → `26 passed`
+
+---
+
 ## Next execution slices
 
 ### ✅ Slice 65 — Database Query Optimization
@@ -409,6 +441,36 @@ User notification preferences and profile management surface for personalized de
 **Commit:** `feat(core): deliver slice 67 user profile and preferences`
 **Tag:** v15.3.78
 **Tests:** `pytest -q tests/test_users_contract.py` → `25 passed`
+
+---
+
+### ✅ Slice 69 — Audit Log / Behavioral Trail Surface
+**Status:** ✅ DONE (v15.3.80)
+
+**Goal**
+Konsistente Verhaltensprotokolle für alle Action-Intents, Proposals und Executions als kanonische Audit-Oberfläche materialisieren.
+
+### Deliverables
+- [x] `AuditLogEntryV1` / `AuditLogSummaryV1` / `AuditLogDeltaV1` Contracts
+- [x] `AuditEventType` / `AuditOutcome` / `AuditSeverity` Enums (35+ event types)
+- [x] SQLite-backed `AuditLogStore` mit Revisionstracking und Delta-Polling
+- [x] API-Endpoints: `GET /api/v1/audit/logs`, `/logs/<id>`, `/delta`, `/summary`, `/revision`, `POST /export`, `/ingest`
+- [x] Filter support: zone_id, module_id, event_type, outcome, severity, user_id, proposal_id, action_closure_id, correlation_id, time ranges
+- [x] Export formats: JSON, CSV, NDJSON
+- [x] Correlation tracking for end-to-end tracing (proposal→action→closure→notification)
+- [x] Contract-Tests (21 Tests grün)
+- [x] App-Integration in `copilot_core/app.py`
+
+### Acceptance criteria
+- Alle Proposal/Action/Closure/Notification/Module/Hold-Events werden als revisionsscharfe Audit-Logs materialisiert
+- Delta-Polling mit `since_revision` für effiziente UI-Poller
+- Correlation-IDs ermöglichen End-to-End-Tracing über Systemgrenzen
+- Export-Funktion für Compliance/Analyse (JSON/CSV/NDJSON)
+- Alle Surfaces lesen dieselbe kanonische Audit-Wahrheit ohne Schattenlogik
+
+**Commit:** `feat(core): deliver slice 69 audit log behavioral trail surface`
+**Tag:** v15.3.80
+**Tests:** `pytest -q tests/test_audit_log_contract.py` → `21 passed`
 
 ---
 

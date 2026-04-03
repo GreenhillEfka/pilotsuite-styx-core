@@ -220,6 +220,17 @@ def create_app() -> Flask:
     except Exception:
         logging.getLogger(__name__).exception("Failed to register Action Closure API blueprint")
 
+    # Audit Log API endpoints (/api/v1/audit/*)
+    try:
+        from copilot_core.api.v1.audit_log import audit_bp, init_audit_api
+        from copilot_core.audit.store import AuditLogStore
+        audit_store = AuditLogStore(os.path.join(cfg.data_dir, "audit_log.db"))
+        init_audit_api(audit_store)
+        app.register_blueprint(audit_bp)
+        logging.getLogger(__name__).info("Audit Log API registered")
+    except Exception:
+        logging.getLogger(__name__).exception("Failed to register Audit Log API blueprint")
+
     # Rate Limit Configuration API is registered via api_v1 blueprint
 
     # MCP REST API endpoints (/api/v1/mcp/*)
@@ -445,6 +456,34 @@ def create_app() -> Flask:
         logging.getLogger(__name__).info("Styx Unified Dashboard API registered")
     except Exception:
         logging.getLogger(__name__).exception("Failed to register Styx Unified Dashboard API blueprint")
+
+    # Calendar API endpoints (/api/v1/calendar/*) — Slice 69
+    try:
+        from copilot_core.api.v1.calendar import calendar_bp
+        app.register_blueprint(calendar_bp)
+        logging.getLogger(__name__).info("Calendar API registered")
+    except Exception:
+        logging.getLogger(__name__).exception("Failed to register Calendar API blueprint")
+
+    # Calendar Analytics API endpoints (/api/v1/calendar/analytics/*) — Slice 69
+    try:
+        from copilot_core.api.v1.calendar_analytics import calendar_analytics_bp
+        app.register_blueprint(calendar_analytics_bp)
+        logging.getLogger(__name__).info("Calendar Analytics API registered")
+    except Exception:
+        logging.getLogger(__name__).exception("Failed to register Calendar Analytics API blueprint")
+
+    # Calendar Notifications API endpoints (/api/v1/notifications/calendar/*) — Slice 69
+    try:
+        from copilot_core.api.v1.calendar_notifications import create_calendar_notifications_blueprint
+        from copilot_core.notifications.calendar_notifications import CalendarNotificationStore
+
+        calendar_notification_store = CalendarNotificationStore(Path(cfg.data_dir) / "calendar_notifications.db")
+        calendar_notifications_bp = create_calendar_notifications_blueprint(calendar_notification_store)
+        app.register_blueprint(calendar_notifications_bp)
+        logging.getLogger(__name__).info("Calendar Notifications API registered")
+    except Exception:
+        logging.getLogger(__name__).exception("Failed to register Calendar Notifications API blueprint")
 
     # Initialize Tags API v2 (FIX: Flask Blueprint rewrite)
     from copilot_core.tags.api import init_tags_api
