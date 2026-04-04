@@ -21,6 +21,48 @@ from enum import Enum
 logger = logging.getLogger(__name__)
 
 
+_DE_FOLLOW_UP_RESUME_PATTERNS = [
+    r"\b(weiter|mach weiter|bitte weiter|weiter damit|mach damit weiter|noch offen|wie steht(?: es|['’]?s)(?: damit)?|was ist damit)\b",
+]
+
+_EN_FOLLOW_UP_RESUME_PATTERNS = [
+    r"\b(continue|continue with|follow up|check on it|what about that|still open|go on|how(?: is|['’]?s) (?:that|it) going)\b",
+]
+
+
+def looks_like_follow_up_resume_request(text: str, language: "Language | str | None") -> bool:
+    """Detect explicit proposal/closure follow-up resume phrasing.
+
+    API and engine must share the same matcher so bilingual resume behavior
+    cannot drift between `/voice/control/continue` validation and the actual
+    dialog engine execution path.
+    """
+    text_clean = str(text or "").strip().lower()
+    if not text_clean:
+        return False
+
+    normalized_language = language.value if isinstance(language, Language) else str(language or "").strip().lower()
+    primary_patterns = (
+        _DE_FOLLOW_UP_RESUME_PATTERNS
+        if normalized_language == Language.DE.value
+        else _EN_FOLLOW_UP_RESUME_PATTERNS
+        if normalized_language == Language.EN.value
+        else []
+    )
+    fallback_patterns = [
+        pattern
+        for pattern in _DE_FOLLOW_UP_RESUME_PATTERNS + _EN_FOLLOW_UP_RESUME_PATTERNS
+        if pattern not in primary_patterns
+    ]
+    return any(re.search(pattern, text_clean) for pattern in primary_patterns + fallback_patterns)
+
+
+def _normalize_follow_up_status(value: Any) -> str:
+    """Normalize follow-up status values into a stable dialog contract token."""
+    normalized = re.sub(r"[^a-z0-9]+", "_", str(value or "open").strip().lower()).strip("_")
+    return normalized or "open"
+
+
 class VoiceIntentType(Enum):
     """Type of voice intent."""
     TURN_ON = "turn_on"
@@ -99,6 +141,70 @@ class VoiceResponse:
         }
 
 
+class VoiceDialogStatus(Enum):
+    """State of a multi-turn voice dialog."""
+
+    ACTIVE = "active"
+    AWAITING_CLARIFICATION = "awaiting_clarification"
+    RESOLVED = "resolved"
+
+
+@dataclass
+class VoiceDialogFollowUpTarget:
+    """Canonical follow-up target attached to a dialog session."""
+
+    target_kind: str
+    target_id: str
+    zone_id: Optional[str] = None
+    module_id: Optional[str] = None
+    summary: Optional[str] = None
+    status: str = "open"
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "target_kind": self.target_kind,
+            "target_id": self.target_id,
+            "zone_id": self.zone_id,
+            "module_id": self.module_id,
+            "summary": self.summary,
+            "status": self.status,
+        }
+
+
+@dataclass
+class VoiceDialogSession:
+    """Persistent multi-turn dialog state for voice interactions."""
+
+    session_id: str
+    language: Language
+    status: VoiceDialogStatus = VoiceDialogStatus.ACTIVE
+    current_zone_id: Optional[str] = None
+    pending_command: Optional[VoiceCommand] = None
+    last_command: Optional[VoiceCommand] = None
+    last_response: Optional[VoiceResponse] = None
+    active_follow_up: Optional[VoiceDialogFollowUpTarget] = None
+    clarification_prompt: Optional[str] = None
+    turn_count: int = 0
+    history: List[Dict[str, Any]] = field(default_factory=list)
+    updated_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "session_id": self.session_id,
+            "language": self.language.value,
+            "status": self.status.value,
+            "current_zone_id": self.current_zone_id,
+            "pending_command": self.pending_command.to_dict() if self.pending_command else None,
+            "last_command": self.last_command.to_dict() if self.last_command else None,
+            "last_response": self.last_response.to_dict() if self.last_response else None,
+            "active_follow_up": self.active_follow_up.to_dict() if self.active_follow_up else None,
+            "clarification_prompt": self.clarification_prompt,
+            "turn_count": self.turn_count,
+            "history": list(self.history),
+            "updated_at": self.updated_at,
+        }
+
+
 class VoiceControlEngine:
     """Voice command processing engine."""
     
@@ -108,6 +214,7 @@ class VoiceControlEngine:
         self._response_counter = 0
         self._command_history: List[VoiceCommand] = []
         self._responses: Dict[str, VoiceResponse] = {}
+        self._dialog_sessions: Dict[str, VoiceDialogSession] = {}
         
         # Intent patterns (German) - expanded with typos and variations
         self._de_patterns = {
@@ -233,6 +340,255 @@ class VoiceControlEngine:
             "zone_hallway": [r"flur", r"diele", r"hallway", r"corridor", r"entry"],
             "zone_office": [r"büro", r"office", r"work", r"workspace", r"arbeitszimmer"],
         }
+
+    def _normalize_follow_up_target(self, follow_up_target: Dict[str, Any]) -> Optional[VoiceDialogFollowUpTarget]:
+        """Normalize proposal/action-closure follow-up payloads."""
+        if not isinstance(follow_up_target, dict):
+            return None
+
+        target_kind = str(
+            follow_up_target.get("target_kind")
+            or follow_up_target.get("kind")
+            or ""
+        ).strip().lower()
+        if target_kind not in {"proposal", "action_closure"}:
+            return None
+
+        target_id = str(
+            follow_up_target.get("target_id")
+            or follow_up_target.get("proposal_id")
+            or follow_up_target.get("closure_id")
+            or follow_up_target.get("id")
+            or ""
+        ).strip()
+        if not target_id:
+            return None
+
+        return VoiceDialogFollowUpTarget(
+            target_kind=target_kind,
+            target_id=target_id,
+            zone_id=str(follow_up_target.get("zone_id") or "").strip() or None,
+            module_id=str(follow_up_target.get("module_id") or "").strip() or None,
+            summary=str(follow_up_target.get("summary") or "").strip() or None,
+            status=_normalize_follow_up_status(follow_up_target.get("status")),
+        )
+
+    def _get_or_create_dialog_session(
+        self,
+        session_id: str,
+        language: Optional[Language],
+    ) -> VoiceDialogSession:
+        """Get or create a dialog session."""
+        normalized_id = str(session_id or "default").strip() or "default"
+        session = self._dialog_sessions.get(normalized_id)
+        if session is None:
+            session = VoiceDialogSession(
+                session_id=normalized_id,
+                language=language or self._default_language,
+            )
+            self._dialog_sessions[normalized_id] = session
+        elif language is not None:
+            session.language = language
+        return session
+
+    def _is_low_confidence_command(self, command: VoiceCommand) -> bool:
+        """Decide whether a command needs clarification."""
+        return command.intent_type == VoiceIntentType.UNKNOWN or command.confidence < 0.7
+
+    def _merge_dialog_turn_text(self, base_text: str, clarification_text: str) -> str:
+        """Merge ambiguous prior text with a clarification turn."""
+        base = str(base_text or "").strip()
+        clarification = str(clarification_text or "").strip()
+        if not base:
+            return clarification
+        if not clarification:
+            return base
+        return f"{base} {clarification}".strip()
+
+    def _looks_like_follow_up_request(self, text: str, language: Language) -> bool:
+        """Detect generic follow-up phrasing that targets a proposal/closure."""
+        return looks_like_follow_up_resume_request(text, language)
+
+    def _build_clarification_response(
+        self,
+        command: VoiceCommand,
+        session: VoiceDialogSession,
+    ) -> VoiceResponse:
+        """Build explicit clarification response for low-confidence turns."""
+        self._response_counter += 1
+        zone_hint = session.current_zone_id or command.zone_id
+        zone_suffix_de = f" in {zone_hint}" if zone_hint else ""
+        zone_suffix_en = f" in {zone_hint}" if zone_hint else ""
+
+        follow_up = session.active_follow_up
+        if follow_up:
+            if follow_up.target_kind == "proposal":
+                text_de = (
+                    f"Ich bin noch nicht sicher. Meinst du den Vorschlag {follow_up.target_id}"
+                    f"{zone_suffix_de} oder etwas anderes?"
+                )
+                text_en = (
+                    f"I'm not certain yet. Do you mean proposal {follow_up.target_id}"
+                    f"{zone_suffix_en} or something else?"
+                )
+            else:
+                text_de = (
+                    f"Ich bin noch nicht sicher. Soll ich den Abschluss {follow_up.target_id}"
+                    f"{zone_suffix_de} prüfen?"
+                )
+                text_en = (
+                    f"I'm not certain yet. Should I review closure {follow_up.target_id}"
+                    f"{zone_suffix_en}?"
+                )
+        else:
+            text_de = (
+                "Ich bin noch nicht sicher. Bitte präzisiere Aktion oder Zone"
+                f"{zone_suffix_de}."
+            )
+            text_en = (
+                "I'm not certain yet. Please clarify the action or zone"
+                f"{zone_suffix_en}."
+            )
+
+        return VoiceResponse(
+            response_id=f"resp_{self._response_counter}",
+            command_id=command.command_id,
+            text_de=text_de,
+            text_en=text_en,
+            action_taken={
+                "intent": "clarification_required",
+                "zone": zone_hint,
+                "follow_up_target": follow_up.to_dict() if follow_up else None,
+            },
+            requires_confirmation=True,
+        )
+
+    def _build_follow_up_response(
+        self,
+        session: VoiceDialogSession,
+        command: VoiceCommand,
+    ) -> VoiceResponse:
+        """Build explicit proposal/action-closure follow-up response."""
+        self._response_counter += 1
+        target = session.active_follow_up
+        assert target is not None
+
+        if target.target_kind == "proposal":
+            text_de = f"OK, ich mache mit Vorschlag {target.target_id} weiter."
+            text_en = f"OK, I'll continue with proposal {target.target_id}."
+        else:
+            text_de = f"OK, ich prüfe Abschluss {target.target_id} weiter."
+            text_en = f"OK, I'll continue reviewing closure {target.target_id}."
+
+        if target.summary:
+            text_de = f"{text_de} {target.summary}".strip()
+            text_en = f"{text_en} {target.summary}".strip()
+
+        return VoiceResponse(
+            response_id=f"resp_{self._response_counter}",
+            command_id=command.command_id,
+            text_de=text_de,
+            text_en=text_en,
+            action_taken={
+                "intent": "dialog_follow_up",
+                "target_kind": target.target_kind,
+                "target_id": target.target_id,
+                "status": target.status,
+                "zone": target.zone_id or session.current_zone_id,
+            },
+            requires_confirmation=False,
+        )
+
+    def process_dialog_turn(
+        self,
+        text: str,
+        session_id: str = "default",
+        language: Optional[Language] = None,
+        follow_up_target: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Process a multi-turn voice dialog with clarification + follow-up state.
+
+        Keeps zone context across turns, merges clarification text into ambiguous
+        prior commands, and allows proposal/action-closure follow-up targets to be
+        attached to the same dialog session.
+        """
+        session = self._get_or_create_dialog_session(session_id, language)
+        normalized_target = self._normalize_follow_up_target(follow_up_target or {})
+        if normalized_target is not None:
+            session.active_follow_up = normalized_target
+            if normalized_target.zone_id:
+                session.current_zone_id = normalized_target.zone_id
+
+        command = self._parse_voice_command(text, language=language or session.language)
+
+        if (
+            session.status == VoiceDialogStatus.AWAITING_CLARIFICATION
+            and session.pending_command is not None
+        ):
+            merged_text = self._merge_dialog_turn_text(session.pending_command.raw_text, text)
+            merged_command = self._parse_voice_command(merged_text, language=language or session.language)
+            if (
+                merged_command.intent_type != VoiceIntentType.UNKNOWN
+                or merged_command.confidence > command.confidence
+            ):
+                command = merged_command
+
+        if command.zone_id is None and session.current_zone_id and command.intent_type != VoiceIntentType.UNKNOWN:
+            command.zone_id = session.current_zone_id
+            command.confidence = min(command.confidence + 0.1, 1.0)
+
+        if (
+            session.active_follow_up is not None
+            and self._looks_like_follow_up_request(text, language or session.language)
+        ):
+            response = self._build_follow_up_response(session, command)
+            session.status = VoiceDialogStatus.RESOLVED
+            session.pending_command = None
+            session.clarification_prompt = None
+        elif self._is_low_confidence_command(command):
+            response = self._build_clarification_response(command, session)
+            session.status = VoiceDialogStatus.AWAITING_CLARIFICATION
+            session.pending_command = command
+            session.clarification_prompt = response.text_de
+        else:
+            response = self.generate_response(command)
+            session.status = VoiceDialogStatus.ACTIVE
+            session.pending_command = None
+            session.clarification_prompt = None
+
+        if command.zone_id:
+            session.current_zone_id = command.zone_id
+
+        self._record_command(command)
+
+        session.turn_count += 1
+        session.last_command = command
+        session.last_response = response
+        session.updated_at = datetime.now(timezone.utc).isoformat()
+        session.history.append(
+            {
+                "turn": session.turn_count,
+                "raw_text": text,
+                "command": command.to_dict(),
+                "response": response.to_dict(),
+                "status": session.status.value,
+            }
+        )
+
+        return {
+            "command": command.to_dict(),
+            "response": response.to_dict(),
+            "dialog": session.to_dict(),
+        }
+
+    def get_dialog_session(self, session_id: str = "default") -> Optional[Dict[str, Any]]:
+        """Return serialized dialog session state."""
+        session = self._dialog_sessions.get(str(session_id or "default").strip() or "default")
+        return session.to_dict() if session is not None else None
+
+    def clear_dialog_session(self, session_id: str = "default") -> None:
+        """Reset a dialog session."""
+        self._dialog_sessions.pop(str(session_id or "default").strip() or "default", None)
     
     def process_voice_command(self, text: str, language: Optional[Language] = None) -> VoiceCommand:
         """Process a voice command and return parsed intent.
@@ -243,39 +599,43 @@ class VoiceControlEngine:
         - Special characters and Unicode
         - Noise/filler words
         """
+        command = self._parse_voice_command(text, language=language)
+        self._record_command(command)
+        return command
+
+    def _parse_voice_command(self, text: str, language: Optional[Language] = None) -> VoiceCommand:
+        """Parse a voice command without mutating command history."""
         if language is None:
             language = self._default_language
-        
+
         self._command_counter += 1
-        
+
         # Handle empty command
         if not text or not text.strip():
-            command = VoiceCommand(
+            return VoiceCommand(
                 command_id=f"voice_{self._command_counter}",
                 intent_type=VoiceIntentType.UNKNOWN,
                 language=language,
                 raw_text=text,
                 confidence=0.3,  # Low confidence for empty
             )
-            self._command_history.append(command)
-            return command
-        
+
         # Normalize text: strip, lowercase, handle special chars
         text_clean = text.strip().lower()
-        
+
         # Truncate very long commands for parsing (keep full text in raw_text)
         text_parse = text_clean[:500] if len(text_clean) > 500 else text_clean
-        
+
         # Detect intent
         intent_type = self._detect_intent(text_parse, language)
-        
+
         # Detect zone
         zone_id = self._detect_zone(text_parse)
-        
+
         # Detect parameters (brightness, color, temperature, etc.)
         parameters = self._detect_parameters(text_parse, intent_type)
-        
-        command = VoiceCommand(
+
+        return VoiceCommand(
             command_id=f"voice_{self._command_counter}",
             intent_type=intent_type,
             language=language,
@@ -284,14 +644,12 @@ class VoiceControlEngine:
             parameters=parameters,
             confidence=self._calculate_confidence(intent_type, zone_id, text_parse),
         )
-        
+
+    def _record_command(self, command: VoiceCommand) -> None:
+        """Persist parsed command in bounded history."""
         self._command_history.append(command)
-        
-        # Keep last 100 commands
         if len(self._command_history) > 100:
             self._command_history = self._command_history[-100:]
-        
-        return command
     
     def _detect_intent(self, text: str, language: Language) -> VoiceIntentType:
         """Detect intent from text with noise word handling.

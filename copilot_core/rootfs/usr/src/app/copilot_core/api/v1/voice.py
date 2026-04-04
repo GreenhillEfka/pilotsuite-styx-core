@@ -5,6 +5,7 @@ Provides REST API for voice intent handling, context building, and proactive hin
 Endpoints:
 - POST /api/v1/voice/intent - Process voice intent
 - POST /api/v1/voice/control/parse - Parse voice control into canonical proposal surface
+- POST /api/v1/voice/control/continue - Continue an existing voice dialog session explicitly
 - POST /api/v1/voice/control/confirm - Materialize voice proposal into policy-gated action handoff
 - GET  /api/v1/voice/context - Get current voice context
 - GET  /api/v1/voice/hints - Get proactive voice hints
@@ -40,6 +41,7 @@ from copilot_core.voice.control_engine import (
     VoiceCommand as ControlVoiceCommand,
     VoiceIntentType,
     create_voice_control_engine,
+    looks_like_follow_up_resume_request,
 )
 from copilot_core.voice.voice_handler import VoiceIntentHandler, VoiceIntent, IntentType, VoiceResponse
 from copilot_core.voice.context_builder import VoiceContextBuilder, VoiceContext
@@ -334,6 +336,134 @@ def _build_voice_explanation(command: ControlVoiceCommand, action: dict[str, Any
     return f"Voice command '{command.raw_text}' resolved to {action_type}{scope}."
 
 
+
+def _command_from_dict(payload: dict[str, Any]) -> ControlVoiceCommand:
+    """Rehydrate a serialized voice command from dialog responses."""
+    return ControlVoiceCommand(
+        command_id=str(payload.get("command_id") or "").strip(),
+        intent_type=VoiceIntentType(str(payload.get("intent_type") or VoiceIntentType.UNKNOWN.value)),
+        language=ControlLanguage(str(payload.get("language") or ControlLanguage.DE.value)),
+        raw_text=str(payload.get("raw_text") or ""),
+        zone_id=str(payload.get("zone_id") or "").strip() or None,
+        module_id=str(payload.get("module_id") or "").strip() or None,
+        entity_id=str(payload.get("entity_id") or "").strip() or None,
+        parameters=dict(payload.get("parameters") or {}),
+        confidence=float(payload.get("confidence") or 0.0),
+        timestamp=str(payload.get("timestamp") or _utcnow()),
+    )
+
+
+def _normalize_follow_up_status(value: Any) -> str:
+    return re.sub(r"[^a-z0-9]+", "_", str(value or "open").strip().lower()).strip("_") or "open"
+
+
+def _normalize_resume_follow_up_target(payload: dict[str, Any] | None) -> Optional[dict[str, Any]]:
+    if not isinstance(payload, dict):
+        return None
+
+    target_kind = str(payload.get("target_kind") or payload.get("kind") or "").strip().lower()
+    if target_kind not in {"proposal", "action_closure"}:
+        return None
+
+    target_id = str(
+        payload.get("target_id")
+        or payload.get("proposal_id")
+        or payload.get("closure_id")
+        or payload.get("id")
+        or ""
+    ).strip()
+    if not target_id:
+        return None
+
+    return {
+        "target_kind": target_kind,
+        "target_id": target_id,
+        "zone_id": str(payload.get("zone_id") or "").strip() or None,
+        "module_id": str(payload.get("module_id") or "").strip() or None,
+        "summary": str(payload.get("summary") or "").strip() or None,
+        "status": _normalize_follow_up_status(payload.get("status")),
+    }
+
+
+def _is_follow_up_terminal_status(status: Any) -> bool:
+    return _normalize_follow_up_status(status) in {
+        "closed",
+        "completed",
+        "done",
+        "executed",
+        "resolved",
+        "settled",
+    }
+
+
+def _looks_like_follow_up_resume_request(text: str, language: str | None) -> bool:
+    return looks_like_follow_up_resume_request(text, language)
+
+
+def _dialog_session_with_follow_up_override(
+    dialog_session: dict[str, Any],
+    follow_up_target: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Return a response-safe dialog payload with an effective follow-up target."""
+    session_payload = dict(dialog_session)
+    if follow_up_target is None:
+        return session_payload
+
+    session_payload["active_follow_up"] = dict(follow_up_target)
+    if follow_up_target.get("zone_id"):
+        session_payload["current_zone_id"] = follow_up_target["zone_id"]
+    return session_payload
+
+
+def _validate_voice_continue_contract(
+    session_id: str,
+    dialog_session: dict[str, Any],
+    request_text: str,
+    request_follow_up_target: dict[str, Any] | None,
+) -> Optional[tuple[dict[str, Any], int]]:
+    """Reject non-resumable continue calls before mutating dialog state."""
+    resumable_target = _normalize_resume_follow_up_target(request_follow_up_target)
+    if resumable_target is None:
+        resumable_target = _normalize_resume_follow_up_target(
+            dialog_session.get("active_follow_up") if isinstance(dialog_session.get("active_follow_up"), dict) else None
+        )
+
+    effective_dialog_session = _dialog_session_with_follow_up_override(dialog_session, resumable_target)
+
+    if resumable_target is not None and _is_follow_up_terminal_status(resumable_target.get("status")):
+        return {
+            "status": "error",
+            "dialog_phase": "resume_conflict",
+            "message": f"Voice control follow-up target already closed: {resumable_target['target_id']}",
+            "dialog_session": effective_dialog_session,
+            "follow_up_target": resumable_target,
+        }, 409
+
+    dialog_status = str(dialog_session.get("status") or "").strip().lower()
+    if dialog_status == "resolved" and resumable_target is None:
+        return {
+            "status": "error",
+            "dialog_phase": "resume_conflict",
+            "message": f"Voice control session already resolved: {session_id}",
+            "dialog_session": dialog_session,
+        }, 409
+
+    if dialog_status == "resolved" and resumable_target is not None:
+        if not _looks_like_follow_up_resume_request(request_text, dialog_session.get("language")):
+            return {
+                "status": "error",
+                "dialog_phase": "resume_conflict",
+                "message": (
+                    "Voice control follow-up resume requires explicit follow-up phrasing "
+                    f"for target {resumable_target['target_id']}"
+                ),
+                "dialog_session": effective_dialog_session,
+                "follow_up_target": resumable_target,
+            }, 409
+
+    return None
+
+
 def _store_voice_proposal(proposal: dict[str, Any]) -> None:
     _get_voice_control_proposals()[str(proposal.get("proposal_id") or "").strip()] = dict(proposal)
 
@@ -461,85 +591,173 @@ def _materialize_voice_confirmation_response(proposal: dict[str, Any], payload: 
     }
 
 
+def _handle_voice_control_parse_request(
+    data: dict[str, Any],
+    *,
+    require_existing_session: bool = False,
+) -> tuple[dict[str, Any], int]:
+    """Materialize the voice control parse/continue contract.
+
+    `/control/parse` can start or continue a session implicitly, while
+    `/control/continue` requires an existing `session_id` and makes the
+    clarification/continuation hop explicit on the API surface.
+    """
+    text = str(data.get("text") or "").strip()
+    if not text:
+        return {"status": "error", "message": "Missing 'text' in request body"}, 400
+
+    try:
+        language = _normalize_voice_language(data.get("language"))
+    except ValueError as exc:
+        return {"status": "error", "message": str(exc)}, 400
+
+    try:
+        zone_type = _normalize_zone_type(data.get("zone_type"))
+    except ValueError as exc:
+        return {"status": "error", "message": str(exc)}, 400
+
+    raw_session_id = str(data.get("session_id") or "").strip()
+    if require_existing_session and not raw_session_id:
+        return {"status": "error", "message": "Missing 'session_id' in request body"}, 400
+
+    session_id = raw_session_id or "default"
+    engine = _get_voice_control_engine()
+    dialog_session = engine.get_dialog_session(session_id)
+    if require_existing_session and dialog_session is None:
+        return {
+            "status": "error",
+            "message": f"Unknown voice control session: {session_id}",
+        }, 404
+    if require_existing_session and dialog_session is not None:
+        continue_error = _validate_voice_continue_contract(
+            session_id,
+            dialog_session,
+            text,
+            data.get("follow_up_target") if isinstance(data.get("follow_up_target"), dict) else None,
+        )
+        if continue_error is not None:
+            return continue_error
+
+    dialog_result = engine.process_dialog_turn(
+        text,
+        session_id=session_id,
+        language=language,
+        follow_up_target=data.get("follow_up_target") if isinstance(data.get("follow_up_target"), dict) else None,
+    )
+    command_payload = dict(dialog_result["command"])
+    response_payload = dict(dialog_result["response"])
+    dialog_payload = dict(dialog_result["dialog"])
+    response_action = response_payload.get("action_taken") if isinstance(response_payload.get("action_taken"), dict) else {}
+
+    if dialog_payload.get("status") == "awaiting_clarification":
+        return {
+            "status": "ok",
+            "dialog_phase": "clarification_needed",
+            "proposal": None,
+            "voice_command": command_payload,
+            "voice_response": response_payload,
+            "dialog": dialog_payload,
+            "dialog_session": dialog_payload,
+            "policy_preview": None,
+        }, 200
+
+    if response_action.get("intent") == "dialog_follow_up":
+        return {
+            "status": "ok",
+            "dialog_phase": "follow_up",
+            "proposal": None,
+            "voice_command": command_payload,
+            "voice_response": response_payload,
+            "dialog": dialog_payload,
+            "dialog_session": dialog_payload,
+            "policy_preview": None,
+        }, 200
+
+    command = _command_from_dict(command_payload)
+
+    try:
+        action, zone_id, module_id = _build_voice_action(command, data)
+    except ValueError as exc:
+        return {
+            "status": "error",
+            "message": str(exc),
+            "voice_command": command_payload,
+            "voice_response": response_payload,
+            "dialog": dialog_payload,
+            "dialog_session": dialog_payload,
+        }, 422
+
+    module_overrides = data.get("module_overrides") if isinstance(data.get("module_overrides"), dict) else None
+    module_override = (
+        data.get("module_override")
+        if isinstance(data.get("module_override"), dict)
+        else resolve_module_override_for_action(zone_type, module_id, module_overrides)
+    )
+    policy_preview = evaluate_action_policy(module_id, module_override, explicit_styx_instruction=False)
+
+    proposal_seed = f"{command.command_id}|{command.raw_text}|{zone_id or 'unassigned'}|{module_id or 'unknown'}"
+    proposal_id = f"voice-proposal:{hashlib.sha1(proposal_seed.encode('utf-8')).hexdigest()[:12]}"
+    explanation = _build_voice_explanation(command, action)
+    proposal = {
+        "contract": "VoiceControlProposalV1",
+        "proposal_id": proposal_id,
+        "source": "voice.control",
+        "raw_text": command.raw_text,
+        "language": command.language.value,
+        "zone_id": zone_id,
+        "zone_type": zone_type.value if zone_type is not None else None,
+        "module_id": module_id,
+        "voice_command": command_payload,
+        "voice_response": response_payload,
+        "dialog": dialog_payload,
+        "action": action,
+        "action_preview": _build_service_call_preview(action),
+        "confidence": command.confidence,
+        "requires_confirmation": bool(response_payload.get("requires_confirmation") or policy_preview["needs_explicit_styx_instruction"]),
+        "policy_gate_required": True,
+        "explanation": explanation,
+        "generated_at": _utcnow(),
+    }
+    if module_overrides:
+        proposal["module_overrides"] = module_overrides
+    if isinstance(module_override, dict):
+        proposal["module_override"] = dict(module_override)
+
+    _store_voice_proposal(proposal)
+
+    return {
+        "status": "ok",
+        "dialog_phase": "proposal_ready",
+        "proposal": proposal,
+        "voice_command": command_payload,
+        "voice_response": response_payload,
+        "dialog": dialog_payload,
+        "dialog_session": dialog_payload,
+        "policy_preview": policy_preview,
+    }, 200
+
+
 @bp.route("/control/parse", methods=["POST"])
 def parse_voice_control():
     """Parse a voice command into the canonical proposal surface."""
     try:
         data = request.get_json(silent=True) or {}
-        text = str(data.get("text") or "").strip()
-        if not text:
-            return jsonify({"status": "error", "message": "Missing 'text' in request body"}), 400
-
-        try:
-            language = _normalize_voice_language(data.get("language"))
-        except ValueError as exc:
-            return jsonify({"status": "error", "message": str(exc)}), 400
-
-        try:
-            zone_type = _normalize_zone_type(data.get("zone_type"))
-        except ValueError as exc:
-            return jsonify({"status": "error", "message": str(exc)}), 400
-
-        engine = _get_voice_control_engine()
-        command = engine.process_voice_command(text, language=language)
-        response = engine.generate_response(command)
-
-        try:
-            action, zone_id, module_id = _build_voice_action(command, data)
-        except ValueError as exc:
-            return jsonify({
-                "status": "error",
-                "message": str(exc),
-                "voice_command": command.to_dict(),
-                "voice_response": response.to_dict(),
-            }), 422
-
-        module_overrides = data.get("module_overrides") if isinstance(data.get("module_overrides"), dict) else None
-        module_override = (
-            data.get("module_override")
-            if isinstance(data.get("module_override"), dict)
-            else resolve_module_override_for_action(zone_type, module_id, module_overrides)
-        )
-        policy_preview = evaluate_action_policy(module_id, module_override, explicit_styx_instruction=False)
-
-        proposal_seed = f"{command.command_id}|{text}|{zone_id or 'unassigned'}|{module_id or 'unknown'}"
-        proposal_id = f"voice-proposal:{hashlib.sha1(proposal_seed.encode('utf-8')).hexdigest()[:12]}"
-        explanation = _build_voice_explanation(command, action)
-        proposal = {
-            "contract": "VoiceControlProposalV1",
-            "proposal_id": proposal_id,
-            "source": "voice.control",
-            "raw_text": command.raw_text,
-            "language": command.language.value,
-            "zone_id": zone_id,
-            "zone_type": zone_type.value if zone_type is not None else None,
-            "module_id": module_id,
-            "voice_command": command.to_dict(),
-            "voice_response": response.to_dict(),
-            "action": action,
-            "action_preview": _build_service_call_preview(action),
-            "confidence": command.confidence,
-            "requires_confirmation": bool(response.requires_confirmation or policy_preview["needs_explicit_styx_instruction"]),
-            "policy_gate_required": True,
-            "explanation": explanation,
-            "generated_at": _utcnow(),
-        }
-        if module_overrides:
-            proposal["module_overrides"] = module_overrides
-        if isinstance(module_override, dict):
-            proposal["module_override"] = dict(module_override)
-
-        _store_voice_proposal(proposal)
-
-        return jsonify({
-            "status": "ok",
-            "proposal": proposal,
-            "voice_command": command.to_dict(),
-            "voice_response": response.to_dict(),
-            "policy_preview": policy_preview,
-        })
+        body, status_code = _handle_voice_control_parse_request(data)
+        return jsonify(body), status_code
     except Exception as e:
         _LOGGER.exception("Voice control parse failed")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@bp.route("/control/continue", methods=["POST"])
+def continue_voice_control():
+    """Continue an existing voice control dialog session explicitly."""
+    try:
+        data = request.get_json(silent=True) or {}
+        body, status_code = _handle_voice_control_parse_request(data, require_existing_session=True)
+        return jsonify(body), status_code
+    except Exception as e:
+        _LOGGER.exception("Voice control continuation failed")
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
@@ -560,6 +778,26 @@ def confirm_voice_control():
         return jsonify(body)
     except Exception as e:
         _LOGGER.exception("Voice control confirmation failed")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@bp.route("/control/session/<session_id>", methods=["GET"])
+def get_voice_control_session(session_id: str):
+    """Return the current dialog session state for a voice control conversation."""
+    try:
+        session = _get_voice_control_engine().get_dialog_session(session_id)
+        if session is None:
+            return jsonify({
+                "status": "error",
+                "message": f"Unknown voice control session: {session_id}",
+            }), 404
+
+        return jsonify({
+            "status": "ok",
+            "session": session,
+        })
+    except Exception as e:
+        _LOGGER.exception("Voice control session lookup failed")
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
