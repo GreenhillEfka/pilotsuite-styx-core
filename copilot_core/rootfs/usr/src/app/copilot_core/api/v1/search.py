@@ -668,3 +668,217 @@ def update_search_index():
 
 
 __all__ = ["bp", "get_search_engine", "QuickSearchEngine"]
+
+
+# ── SLICE 158: Search API Expansion ─────────────────────────────────
+
+@bp.get("/advanced")
+def search_advanced():
+    """Advanced search with filters and facets.
+    
+    Query params:
+    - q: Search query
+    - types: Comma-separated entity types (optional)
+    - zones: Comma-separated zone IDs (optional)
+    - sort: relevance|name|date (default: relevance)
+    - order: asc|desc (default: desc)
+    - limit: Max results (default 20)
+    - offset: Pagination offset (default 0)
+    """
+    from copilot_core.search.engine import get_search_engine
+    
+    query = request.args.get("q")
+    if not query:
+        return jsonify({
+            "ok": False,
+            "error": "Missing required parameter: q"
+        }), 400
+    
+    types = request.args.get("types")
+    type_list = [t.strip() for t in types.split(",")] if types else None
+    
+    zones = request.args.get("zones")
+    zone_list = [z.strip() for z in zones.split(",")] if zones else None
+    
+    sort = request.args.get("sort", "relevance")
+    order = request.args.get("order", "desc")
+    
+    try:
+        limit = int(request.args.get("limit", "20"))
+    except (ValueError, TypeError):
+        limit = 20
+    
+    try:
+        offset = int(request.args.get("offset", "0"))
+    except (ValueError, TypeError):
+        offset = 0
+    
+    limit = max(1, min(limit, 100))
+    offset = max(0, offset)
+    
+    try:
+        engine = get_search_engine()
+        results = engine.advanced_search(
+            query=query,
+            types=type_list,
+            zones=zone_list,
+            sort=sort,
+            order=order,
+            limit=limit,
+            offset=offset
+        )
+    except Exception as e:
+        _LOGGER.warning("Advanced search failed: %s", e)
+        results = {"hits": [], "total": 0, "facets": {}}
+    
+    return jsonify({
+        "ok": True,
+        "query": query,
+        "results": results,
+        "count": len(results.get("hits", [])),
+        "total": results.get("total", 0),
+        "facets": results.get("facets", {}),
+        "limit": limit,
+        "offset": offset
+    })
+
+
+@bp.get("/history")
+def search_history():
+    """Get user search history.
+    
+    Query params:
+    - limit: Max entries (default 20)
+    - days: Days to look back (default 7)
+    """
+    from copilot_core.search.engine import get_search_engine
+    
+    try:
+        limit = int(request.args.get("limit", "20"))
+    except (ValueError, TypeError):
+        limit = 20
+    
+    try:
+        days = int(request.args.get("days", "7"))
+    except (ValueError, TypeError):
+        days = 7
+    
+    limit = max(1, min(limit, 100))
+    days = max(1, min(days, 90))
+    
+    try:
+        engine = get_search_engine()
+        history = engine.get_history(limit=limit, days=days)
+    except Exception as e:
+        _LOGGER.warning("Failed to get search history: %s", e)
+        history = []
+    
+    return jsonify({
+        "ok": True,
+        "history": history,
+        "count": len(history),
+        "limit": limit,
+        "days": days
+    })
+
+
+@bp.get("/analytics")
+def search_analytics():
+    """Get search analytics.
+    
+    Query params:
+    - days: Days to analyze (default 30)
+    """
+    from copilot_core.search.engine import get_search_engine
+    
+    try:
+        days = int(request.args.get("days", "30"))
+    except (ValueError, TypeError):
+        days = 30
+    
+    days = max(1, min(days, 365))
+    
+    try:
+        engine = get_search_engine()
+        analytics = engine.get_analytics(days=days)
+    except Exception as e:
+        _LOGGER.warning("Failed to get search analytics: %s", e)
+        analytics = {
+            "total_searches": 0,
+            "unique_queries": 0,
+            "avg_results_per_query": 0.0,
+            "no_result_queries": 0,
+            "popular_queries": []
+        }
+    
+    return jsonify({
+        "ok": True,
+        "analytics": analytics,
+        "days": days,
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    })
+
+
+@bp.get("/saved")
+def search_saved():
+    """Get saved searches.
+    
+    Query params:
+    - user_id: User ID (optional, defaults to current user)
+    """
+    from copilot_core.search.engine import get_search_engine
+    
+    user_id = request.args.get("user_id")
+    
+    try:
+        engine = get_search_engine()
+        saved = engine.get_saved_searches(user_id=user_id)
+    except Exception as e:
+        _LOGGER.warning("Failed to get saved searches: %s", e)
+        saved = []
+    
+    return jsonify({
+        "ok": True,
+        "saved": saved,
+        "count": len(saved),
+        "user_id": user_id or "current"
+    })
+
+
+@bp.post("/saved")
+def search_save():
+    """Save a search query.
+    
+    Body:
+    - name: Name for the saved search
+    - query: Search query to save
+    - filters: Optional filter settings
+    """
+    data = request.get_json() or {}
+    name = data.get("name")
+    query = data.get("query")
+    filters = data.get("filters", {})
+    
+    if not name or not query:
+        return jsonify({
+            "ok": False,
+            "error": "Missing name or query"
+        }), 400
+    
+    from copilot_core.search.engine import get_search_engine
+    
+    try:
+        engine = get_search_engine()
+        saved_id = engine.save_search(name=name, query=query, filters=filters)
+        success = True
+    except Exception as e:
+        _LOGGER.warning("Failed to save search: %s", e)
+        success = False
+        saved_id = None
+    
+    return jsonify({
+        "ok": success,
+        "saved_id": saved_id,
+        "name": name,
+        "query": query
+    })
