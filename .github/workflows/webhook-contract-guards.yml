@@ -30,11 +30,11 @@ jobs:
 
       - name: Run Webhook Contract Guard Suite (Exit-Code 2 = Drift)
         run: |
-          python pilotsuite_ops/scripts/webhook_contract_guard_suite.py \\
-            --core-openapi docs/openapi.yaml \\
-            --ha-openapi ha/docs/openapi.yaml \\
-            --ha-runtime ha/custom_components/copilot_ha/webhook.py \\
-            --schema pilotsuite_ops/schemas/webhook_response.schema.json \\
+          python pilotsuite_ops/scripts/webhook_contract_guard_suite.py \
+            --core-openapi docs/openapi.yaml \
+            --ha-openapi ha/docs/openapi.yaml \
+            --ha-runtime ha/custom_components/copilot_ha/webhook.py \
+            --schema pilotsuite_ops/schemas/webhook_response.schema.json \
             --out-md pilotsuite_ops/reports/CI_PS-DAI-055_WEBHOOK_CONTRACT_GUARD_SUITE.md
 
       - name: Upload guard reports (Markdown)
