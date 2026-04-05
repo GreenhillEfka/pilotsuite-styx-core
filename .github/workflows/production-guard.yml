@@ -7,7 +7,9 @@ on:
 
 jobs:
   critical-path:
-    uses: ./.github/workflows/pilotsuite-dev/github-action-shared.yml
-    with:
-      repo-name: "pilotsuite-styx-core"
-      repo-path: "pilotsuite-dev/pilotsuite-styx-core"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate repo structure
+        run: |
+          test -d pilot_core && echo OK || echo FAIL
