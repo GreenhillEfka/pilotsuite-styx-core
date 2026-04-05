@@ -81,7 +81,7 @@ class PerformanceTracker:
         self._initialized = True
         
         import threading
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
     
     def start_startup_timer(self) -> None:
         """Start the startup timer."""
@@ -230,12 +230,71 @@ class PerformanceTracker:
 _tracker: Optional[PerformanceTracker] = None
 
 
+def _error_response(message: str, status_code: int = 400):
+    return jsonify({
+        "success": False,
+        "error": message,
+    }), status_code
+
+
+def _parse_bool_arg(name: str, default: bool = False) -> bool:
+    raw = request.args.get(name)
+    if raw is None:
+        return default
+
+    normalized = raw.strip().lower()
+    if normalized == "true":
+        return True
+    if normalized == "false":
+        return False
+    raise ValueError(f"{name} must be 'true' or 'false'")
+
+
+def _get_json_object(*, allow_empty: bool = True) -> Dict[str, Any]:
+    data = request.get_json(silent=True)
+
+    if data is None:
+        raw_body = request.get_data(cache=True) or b""
+        if allow_empty and not raw_body.strip():
+            return {}
+        raise ValueError("JSON body must be an object")
+
+    if not isinstance(data, dict):
+        raise ValueError("JSON body must be an object")
+
+    return data
+
+
+def _require_positive_int(value: Any, field_name: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        raise ValueError(f"{field_name} must be a positive integer")
+    return value
+
+
+def _require_bool(value: Any, field_name: str) -> bool:
+    if not isinstance(value, bool):
+        raise ValueError(f"{field_name} must be a boolean")
+    return value
+
+
 def get_performance_tracker() -> PerformanceTracker:
     """Get the global performance tracker instance."""
     global _tracker
     if _tracker is None:
         _tracker = PerformanceTracker()
     return _tracker
+
+
+def init_performance_api(tracker: Optional[Any] = None) -> Any:
+    """Reset or inject the tracker used by the performance API."""
+    global _tracker
+
+    if tracker is None:
+        PerformanceTracker._instance = None
+        tracker = PerformanceTracker()
+
+    _tracker = tracker
+    return tracker
 
 
 @performance_bp.route("/performance/startup", methods=["GET"])
@@ -275,20 +334,23 @@ def get_module_performance():
         JSON array of module metrics
     """
     try:
-        lazy_only = request.args.get("lazy_only", "false").lower() == "true"
-        
+        lazy_only = _parse_bool_arg("lazy_only", default=False)
+
         tracker = get_performance_tracker()
         modules = tracker.get_module_metrics()
-        
+
         if lazy_only:
             modules = [m for m in modules if m.is_lazy_loaded]
-        
+
         return jsonify({
             "success": True,
             "count": len(modules),
             "modules": [m.to_dict() for m in modules],
         }), 200
-        
+
+    except ValueError as exc:
+        return _error_response(str(exc), 400)
+
     except Exception as e:
         logger.error(f"Failed to get module metrics: {e}")
         return jsonify({
@@ -373,10 +435,10 @@ def run_benchmark():
         JSON with benchmark results
     """
     try:
-        data = request.get_json(silent=True) or {}
-        iterations = data.get("iterations", 10)
-        include_modules = data.get("include_modules", True)
-        
+        data = _get_json_object(allow_empty=True)
+        iterations = _require_positive_int(data.get("iterations", 10), "iterations")
+        include_modules = _require_bool(data.get("include_modules", True), "include_modules")
+
         results = {
             "iterations": iterations,
             "startup_times_ms": [],
@@ -438,7 +500,10 @@ def run_benchmark():
         }
         
         return jsonify(benchmark_result), 200
-        
+
+    except ValueError as exc:
+        return _error_response(str(exc), 400)
+
     except Exception as e:
         logger.error(f"Benchmark failed: {e}")
         return jsonify({

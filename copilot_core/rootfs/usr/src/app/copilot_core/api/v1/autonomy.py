@@ -25,6 +25,34 @@ def init_autonomy_api(executor=None, module_registry=None) -> None:
     _module_registry = module_registry
 
 
+def _error(message: str, status_code: int):
+    return jsonify({"ok": False, "error": message}), status_code
+
+
+def _json_body(*, allow_empty: bool = False):
+    body = request.get_json(silent=True)
+    if body is None:
+        return None, _error("No JSON body provided", 400)
+    if not isinstance(body, dict):
+        return None, _error("JSON body must be an object", 400)
+    if not allow_empty and not body:
+        return None, _error("Request body required", 400)
+    return body, None
+
+
+def _parse_positive_int_arg(name: str, *, default: int):
+    raw = request.args.get(name)
+    if raw is None:
+        return default, None
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return None, _error(f"Invalid '{name}' parameter. Must be a positive integer.", 400)
+    if value <= 0:
+        return None, _error(f"Invalid '{name}' parameter. Must be a positive integer.", 400)
+    return value, None
+
+
 # ── Dashboard ───────────────────────────────────────────────────────────
 
 @autonomy_bp.route("/dashboard", methods=["GET"])
@@ -32,8 +60,12 @@ def init_autonomy_api(executor=None, module_registry=None) -> None:
 def get_dashboard():
     """GET /api/v1/autonomy/dashboard — Status aller Zonen + Module + Stats."""
     if not _executor:
-        return jsonify({"ok": False, "error": "AutonomyExecutor not available"}), 503
-    dashboard = _executor.get_dashboard()
+        return _error("AutonomyExecutor not available", 503)
+    try:
+        dashboard = _executor.get_dashboard()
+    except Exception as exc:  # pragma: no cover - contract-tested via harness
+        _LOGGER.exception("Failed to build autonomy dashboard")
+        return _error(str(exc), 500)
     return jsonify({"ok": True, **dashboard})
 
 
@@ -44,10 +76,14 @@ def get_dashboard():
 def get_zone_status(zone_id: str):
     """GET /api/v1/autonomy/zones/<zone_id> — Zone mode + per-module states."""
     result = {"ok": True, "zone_id": zone_id}
-    if _executor and _executor._zone_automation:
-        result["automation_mode"] = _executor._zone_automation.get_automation_mode(zone_id)
-    if _module_registry:
-        result["module_states"] = _module_registry.get_zone_states(zone_id)
+    try:
+        if _executor and _executor._zone_automation:
+            result["automation_mode"] = _executor._zone_automation.get_automation_mode(zone_id)
+        if _module_registry:
+            result["module_states"] = _module_registry.get_zone_states(zone_id)
+    except Exception as exc:  # pragma: no cover - contract-tested via harness
+        _LOGGER.exception("Failed to build autonomy zone status for %s", zone_id)
+        return _error(str(exc), 500)
     return jsonify(result)
 
 
@@ -59,18 +95,31 @@ def set_zone_module_state(zone_id: str):
     Body: {"module_id": "licht", "state": "active"}
     """
     if not _module_registry:
-        return jsonify({"error": "ModuleRegistry not available"}), 503
+        return _error("ModuleRegistry not available", 503)
 
-    body = request.get_json(silent=True) or {}
-    module_id = body.get("module_id", "")
-    state = body.get("state", "")
+    body, error_response = _json_body()
+    if error_response:
+        return error_response
 
-    if not module_id or not state:
-        return jsonify({"error": "module_id and state required"}), 400
+    module_id = body.get("module_id")
+    state = body.get("state")
 
-    ok = _module_registry.set_zone_state(zone_id, module_id, state)
+    if not isinstance(module_id, str) or not module_id.strip():
+        return _error("module_id must be a non-empty string", 400)
+    if not isinstance(state, str) or not state.strip():
+        return _error("state must be a non-empty string", 400)
+
+    module_id = module_id.strip()
+    state = state.strip()
+
+    try:
+        ok = _module_registry.set_zone_state(zone_id, module_id, state)
+    except Exception as exc:  # pragma: no cover - contract-tested via harness
+        _LOGGER.exception("Failed to set autonomy module state for zone %s", zone_id)
+        return _error(str(exc), 500)
+
     if not ok:
-        return jsonify({"error": f"Invalid state: {state}"}), 400
+        return _error(f"Invalid state: {state}", 400)
 
     return jsonify({
         "zone_id": zone_id,
@@ -87,10 +136,17 @@ def set_zone_module_state(zone_id: str):
 def get_zone_history(zone_id: str):
     """GET /api/v1/autonomy/zones/<zone_id>/history — Behavioral log for zone."""
     if not _executor or not _executor._behavioral_log:
-        return jsonify({"ok": False, "error": "BehavioralLog not available"}), 503
+        return _error("BehavioralLog not available", 503)
 
-    top_k = request.args.get("limit", 20, type=int)
-    history = _executor._behavioral_log.get_zone_history(zone_id, top_k=top_k)
+    top_k, error_response = _parse_positive_int_arg("limit", default=20)
+    if error_response:
+        return error_response
+
+    try:
+        history = _executor._behavioral_log.get_zone_history(zone_id, top_k=top_k)
+    except Exception as exc:  # pragma: no cover - contract-tested via harness
+        _LOGGER.exception("Failed to fetch autonomy history for zone %s", zone_id)
+        return _error(str(exc), 500)
     return jsonify({"ok": True, "zone_id": zone_id, "history": history})
 
 
@@ -101,10 +157,15 @@ def get_zone_history(zone_id: str):
 def get_mood_actions():
     """GET /api/v1/autonomy/mood-actions — Aktuelle Mood-Action-Tabelle."""
     if not _executor:
-        return jsonify({"ok": False, "error": "AutonomyExecutor not available"}), 503
+        return _error("AutonomyExecutor not available", 503)
 
-    mapper = _executor._get_mood_mapper()
-    return jsonify({"ok": True, "actions": mapper.get_all_actions()})
+    try:
+        mapper = _executor._get_mood_mapper()
+        actions = mapper.get_all_actions()
+    except Exception as exc:  # pragma: no cover - contract-tested via harness
+        _LOGGER.exception("Failed to fetch autonomy mood actions")
+        return _error(str(exc), 500)
+    return jsonify({"ok": True, "actions": actions})
 
 
 @autonomy_bp.route("/mood-actions/<mood>/override", methods=["POST"])
@@ -112,14 +173,18 @@ def get_mood_actions():
 def set_mood_override(mood: str):
     """POST /api/v1/autonomy/mood-actions/<mood>/override — Override mood actions."""
     if not _executor:
-        return jsonify({"error": "AutonomyExecutor not available"}), 503
+        return _error("AutonomyExecutor not available", 503)
 
-    body = request.get_json(silent=True) or {}
-    if not body:
-        return jsonify({"error": "Request body required"}), 400
+    body, error_response = _json_body()
+    if error_response:
+        return error_response
 
-    mapper = _executor._get_mood_mapper()
-    result = mapper.set_override(mood, body)
+    try:
+        mapper = _executor._get_mood_mapper()
+        result = mapper.set_override(mood, body)
+    except Exception as exc:  # pragma: no cover - contract-tested via harness
+        _LOGGER.exception("Failed to set autonomy mood override for %s", mood)
+        return _error(str(exc), 500)
     return jsonify(result.to_dict())
 
 
@@ -130,9 +195,13 @@ def set_mood_override(mood: str):
 def get_stats():
     """GET /api/v1/autonomy/stats — Execution statistics."""
     if not _executor:
-        return jsonify({"ok": False, "error": "AutonomyExecutor not available"}), 503
+        return _error("AutonomyExecutor not available", 503)
 
-    stats = dict(_executor._stats)
-    if _executor._behavioral_log:
-        stats["log"] = _executor._behavioral_log.get_stats()
+    try:
+        stats = dict(_executor._stats)
+        if _executor._behavioral_log:
+            stats["log"] = _executor._behavioral_log.get_stats()
+    except Exception as exc:  # pragma: no cover - contract-tested via harness
+        _LOGGER.exception("Failed to build autonomy stats")
+        return _error(str(exc), 500)
     return jsonify({"ok": True, **stats})

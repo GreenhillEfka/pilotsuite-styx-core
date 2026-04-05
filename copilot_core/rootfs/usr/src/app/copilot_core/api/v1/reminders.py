@@ -14,7 +14,10 @@ Endpoints:
 from __future__ import annotations
 
 import logging
-from flask import Blueprint, request, jsonify
+from collections.abc import Callable
+from typing import Any
+
+from flask import Blueprint, jsonify, request
 
 from copilot_core.api.security import require_token
 
@@ -39,6 +42,37 @@ def init_reminders_api(waste_service=None, birthday_service=None):
     )
 
 
+def _service_unavailable(service_name: str):
+    return jsonify({"ok": False, "error": f"{service_name} not available"}), 503
+
+
+def _bad_request(message: str):
+    return jsonify({"ok": False, "error": message}), 400
+
+
+def _json_error(message: str, status_code: int = 500):
+    return jsonify({"ok": False, "error": message}), status_code
+
+
+def _read_json_object(*, allow_empty: bool) -> tuple[dict[str, Any] | None, tuple[Any, int] | None]:
+    data = request.get_json(silent=True)
+    if data is None:
+        if allow_empty:
+            return {}, None
+        return None, _bad_request("No JSON body provided")
+    if not isinstance(data, dict):
+        return None, _bad_request("JSON body must be an object")
+    return data, None
+
+
+def _run_service_call(label: str, fn: Callable[[], Any]):
+    try:
+        return jsonify(fn())
+    except Exception as exc:  # pragma: no cover - exercised via contract tests
+        _LOGGER.exception("%s failed", label)
+        return _json_error(str(exc))
+
+
 # ------------------------------------------------------------------
 # Waste Collection Endpoints
 # ------------------------------------------------------------------
@@ -48,10 +82,11 @@ def init_reminders_api(waste_service=None, birthday_service=None):
 def waste_event():
     """Receive a waste event from the HACS integration."""
     if not _waste_service:
-        return jsonify({"ok": False, "error": "WasteCollectionService not available"}), 503
-    data = request.get_json(silent=True) or {}
-    result = _waste_service.update_from_ha(data)
-    return jsonify(result)
+        return _service_unavailable("WasteCollectionService")
+    data, error = _read_json_object(allow_empty=False)
+    if error:
+        return error
+    return _run_service_call("waste_event", lambda: _waste_service.update_from_ha(data))
 
 
 @reminders_bp.route("/waste/collections", methods=["POST"])
@@ -59,11 +94,14 @@ def waste_event():
 def waste_collections_update():
     """Update full waste collection schedule."""
     if not _waste_service:
-        return jsonify({"ok": False, "error": "WasteCollectionService not available"}), 503
-    data = request.get_json(silent=True) or {}
+        return _service_unavailable("WasteCollectionService")
+    data, error = _read_json_object(allow_empty=False)
+    if error:
+        return error
     collections = data.get("collections", [])
-    result = _waste_service.update_collections(collections)
-    return jsonify(result)
+    if not isinstance(collections, list):
+        return _bad_request("collections must be a list")
+    return _run_service_call("waste_collections_update", lambda: _waste_service.update_collections(collections))
 
 
 @reminders_bp.route("/waste/status", methods=["GET"])
@@ -71,8 +109,8 @@ def waste_collections_update():
 def waste_status():
     """Get current waste collection status."""
     if not _waste_service:
-        return jsonify({"ok": False, "error": "WasteCollectionService not available"}), 503
-    return jsonify(_waste_service.get_status())
+        return _service_unavailable("WasteCollectionService")
+    return _run_service_call("waste_status", _waste_service.get_status)
 
 
 @reminders_bp.route("/waste/remind", methods=["POST"])
@@ -80,12 +118,22 @@ def waste_status():
 def waste_remind():
     """Trigger an immediate waste reminder."""
     if not _waste_service:
-        return jsonify({"ok": False, "error": "WasteCollectionService not available"}), 503
-    data = request.get_json(silent=True) or {}
+        return _service_unavailable("WasteCollectionService")
+    data, error = _read_json_object(allow_empty=True)
+    if error:
+        return error
     message = data.get("message", "")
     tts_entity = data.get("tts_entity", "")
+    if not isinstance(message, str):
+        return _bad_request("message must be a string")
+    if not isinstance(tts_entity, str):
+        return _bad_request("tts_entity must be a string")
     if not message:
-        status = _waste_service.get_status()
+        try:
+            status = _waste_service.get_status()
+        except Exception as exc:  # pragma: no cover - exercised via contract tests
+            _LOGGER.exception("waste_remind status lookup failed")
+            return _json_error(str(exc))
         today = status.get("today", [])
         tomorrow = status.get("tomorrow", [])
         if today:
@@ -94,8 +142,7 @@ def waste_remind():
             message = f"Morgen wird abgeholt: {', '.join(tomorrow)}. Bitte Tonnen rausstellen!"
         else:
             return jsonify({"ok": True, "message": "Keine Abfuhr in Sicht."})
-    result = _waste_service.deliver_reminder(message, tts_entity)
-    return jsonify(result)
+    return _run_service_call("waste_remind", lambda: _waste_service.deliver_reminder(message, tts_entity))
 
 
 # ------------------------------------------------------------------
@@ -107,11 +154,14 @@ def waste_remind():
 def birthday_update():
     """Update birthday list from HACS integration."""
     if not _birthday_service:
-        return jsonify({"ok": False, "error": "BirthdayService not available"}), 503
-    data = request.get_json(silent=True) or {}
+        return _service_unavailable("BirthdayService")
+    data, error = _read_json_object(allow_empty=False)
+    if error:
+        return error
     birthdays = data.get("birthdays", [])
-    result = _birthday_service.update_birthdays(birthdays)
-    return jsonify(result)
+    if not isinstance(birthdays, list):
+        return _bad_request("birthdays must be a list")
+    return _run_service_call("birthday_update", lambda: _birthday_service.update_birthdays(birthdays))
 
 
 @reminders_bp.route("/birthday/status", methods=["GET"])
@@ -119,8 +169,8 @@ def birthday_update():
 def birthday_status():
     """Get current birthday status."""
     if not _birthday_service:
-        return jsonify({"ok": False, "error": "BirthdayService not available"}), 503
-    return jsonify(_birthday_service.get_status())
+        return _service_unavailable("BirthdayService")
+    return _run_service_call("birthday_status", _birthday_service.get_status)
 
 
 @reminders_bp.route("/birthday/remind", methods=["POST"])
@@ -128,17 +178,26 @@ def birthday_status():
 def birthday_remind():
     """Trigger an immediate birthday reminder."""
     if not _birthday_service:
-        return jsonify({"ok": False, "error": "BirthdayService not available"}), 503
-    data = request.get_json(silent=True) or {}
+        return _service_unavailable("BirthdayService")
+    data, error = _read_json_object(allow_empty=True)
+    if error:
+        return error
     message = data.get("message", "")
     tts_entity = data.get("tts_entity", "")
+    if not isinstance(message, str):
+        return _bad_request("message must be a string")
+    if not isinstance(tts_entity, str):
+        return _bad_request("tts_entity must be a string")
     if not message:
-        status = _birthday_service.get_status()
+        try:
+            status = _birthday_service.get_status()
+        except Exception as exc:  # pragma: no cover - exercised via contract tests
+            _LOGGER.exception("birthday_remind status lookup failed")
+            return _json_error(str(exc))
         today = status.get("today", [])
         if today:
             names = [b.get("name", "?") for b in today]
             message = f"Heute hat Geburtstag: {', '.join(names)}. Herzlichen Glückwunsch!"
         else:
             return jsonify({"ok": True, "message": "Keine Geburtstage heute."})
-    result = _birthday_service.deliver_reminder(message, tts_entity)
-    return jsonify(result)
+    return _run_service_call("birthday_remind", lambda: _birthday_service.deliver_reminder(message, tts_entity))

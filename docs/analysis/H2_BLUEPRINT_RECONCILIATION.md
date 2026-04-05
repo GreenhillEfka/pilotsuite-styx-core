@@ -1,10 +1,10 @@
 # H2 Blueprint / OpenAPI / Runtime Reconciliation
 
 ## Summary
-- Total config entries checked: **101**
-- Import/attr OK: **101**
+- Total config entries checked: **102**
+- Import/attr OK: **102**
 - Drift entries: **0**
-- Status breakdown: `{'ok': 101}`
+- Status breakdown: `{'ok': 102}`
 - Error breakdown: `{}`
 
 ## Top Priority Drift Cases

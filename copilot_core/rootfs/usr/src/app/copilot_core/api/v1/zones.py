@@ -5,10 +5,14 @@ Endpoints für Habituszone-Zuordnung, Matching und Review.
 """
 
 from fastapi import APIRouter, HTTPException, Query, Body
+from fastapi.responses import JSONResponse
+from flask import Blueprint, jsonify, request
 from pydantic import BaseModel, Field
-from typing import List, Dict, Optional
+from typing import Any, List, Dict, Optional
 import logging
 
+from copilot_core.api.error_models import ErrorResponse, error_response_payload
+from copilot_core.api.security import validate_token
 from copilot_core.homeassistant.habitus_zones import (
     HABITUS_ZONES, ZoneType, HabitusZone, get_all_zones
 )
@@ -19,6 +23,7 @@ from copilot_core.homeassistant.zone_matcher import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/zones", tags=["zones"])
+zones_bp = Blueprint("zones", __name__, url_prefix="/api/v1/zones")
 
 
 # === Request/Response Models ===
@@ -62,6 +67,23 @@ class ReviewQueueResponse(BaseModel):
     """Response für Review-Queue."""
     total_count: int = Field(..., description="Anzahl Räume in Review")
     rooms: List[MatchedRoomResponse] = Field(..., description="Räume die Review benötigen")
+
+
+_VALID_ZONE_TYPES = [zt.value for zt in ZoneType]
+
+
+def _zones_error_response(
+    status_code: int,
+    *,
+    code: str,
+    message: str,
+    field: Optional[str] = None,
+    context: Optional[Dict[str, Any]] = None,
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=status_code,
+        content=error_response_payload(code=code, message=message, field=field, context=context),
+    )
 
 
 # === Endpoints ===
@@ -119,7 +141,51 @@ async def get_matched_rooms(
     ]
 
 
-@router.post("/assign", response_model=MatchedRoomResponse)
+@router.post(
+    "/assign",
+    response_model=MatchedRoomResponse,
+    responses={
+        400: {
+            "model": ErrorResponse,
+            "description": "Invalid zone assignment request",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "invalid_zone_type": {
+                            "summary": "Unknown zone type",
+                            "value": {
+                                "code": "INVALID_ZONE_TYPE",
+                                "message": "Ungültiger Zone-Typ: spa.",
+                                "field": "zone_type",
+                                "context": {
+                                    "allowed_values": ["living", "bath", "kitchen"]
+                                },
+                            },
+                        }
+                    }
+                }
+            },
+        },
+        404: {
+            "model": ErrorResponse,
+            "description": "Zone not found",
+            "content": {
+                "application/json": {
+                    "examples": {
+                        "zone_not_found": {
+                            "summary": "Zone missing",
+                            "value": {
+                                "code": "ZONE_NOT_FOUND",
+                                "message": "Zone nicht gefunden: living",
+                                "field": "zone_type",
+                            },
+                        }
+                    }
+                }
+            },
+        },
+    },
+)
 async def assign_room_to_zone(request: AssignRequest):
     """
     Raum manuell einer Zone zuordnen.
@@ -131,15 +197,22 @@ async def assign_room_to_zone(request: AssignRequest):
     try:
         zone_type = ZoneType(request.zone_type)
     except ValueError:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Ungültiger Zone-Typ: {request.zone_type}. "
-                   f"Gültige Werte: {[zt.value for zt in ZoneType]}"
+        return _zones_error_response(
+            400,
+            code="INVALID_ZONE_TYPE",
+            message=f"Ungültiger Zone-Typ: {request.zone_type}.",
+            field="zone_type",
+            context={"allowed_values": _VALID_ZONE_TYPES},
         )
-    
+
     zone = HABITUS_ZONES.get(zone_type)
     if not zone:
-        raise HTTPException(status_code=404, detail=f"Zone nicht gefunden: {zone_type}")
+        return _zones_error_response(
+            404,
+            code="ZONE_NOT_FOUND",
+            message=f"Zone nicht gefunden: {zone_type.value}",
+            field="zone_type",
+        )
     
     # Erstelle MatchResult mit hoher Confidence (manuelle Zuordnung)
     result = MatchResult(
@@ -304,3 +377,32 @@ async def match_batch_rooms(
         )
         for r in results
     ]
+
+
+@zones_bp.before_request
+def _require_auth():
+    if not validate_token(request):
+        return jsonify({"ok": False, "error": "unauthorized"}), 401
+
+
+@zones_bp.get("")
+def list_zones_blueprint():
+    zones = get_all_zones()
+    return jsonify(
+        {
+            "ok": True,
+            "zones": [
+                {
+                    "zone_type": zone.zone_type.value,
+                    "name_de": zone.name_de,
+                    "name_en": zone.name_en,
+                    "description": zone.description,
+                    "keywords_de": zone.keywords_de,
+                    "keywords_en": zone.keywords_en,
+                    "priority": zone.priority,
+                }
+                for zone in zones
+            ],
+            "count": len(zones),
+        }
+    )

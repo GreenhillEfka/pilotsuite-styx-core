@@ -533,7 +533,1045 @@ Erweiterte DE/EN-Unterstützung für Voice mit automatischer Spracherkennung, Sp
 **Tag:** v15.3.83
 **Tests:** `pytest -q tests/test_voice_multilingual_contract.py` → `31 passed`
 
-**Next Exact Task:** Slice 73 als Voice-Intent-Contract-Härtung ableiten: robustere Intent-Erkennung mit Edge-Case-Tests, mehrsprachigen Entity-Aliases und Confidence-Threshold-Tuning für production use.
+### ✅ Slice 73 — Voice Intent Contract Hardening
+**Status:** ✅ DONE (v15.3.84)
+
+**Goal**
+Robustere Intent-Erkennung mit Edge-Case-Tests, mehrsprachigen Entity-Aliases und Confidence-Threshold-Tuning für production use.
+
+### Deliverables
+- [x] Noise-Word-Filtering für bessere Intent-Erkennung
+- [x] Typo-tolerante Pattern-Matching (häufige DE/EN-Tipps)
+- [x] Erweiterte Zone-/Device-Aliases (DE/EN)
+- [x] Confidence-Threshold-Tuning mit Textlänge-Faktoren
+- [x] Edge-Case-Handling: empty, long, special chars, Unicode
+- [x] Negation-Detection als expliziter Intent-Typ
+- [x] Contract-Tests für Voice-Intent-Härtung (26 Tests grün)
+
+### Acceptance criteria
+- Intent-Erkennung funktioniert auch mit Füllwörtern und Tippfehlern
+- Zone-/Device-Namen werden in DE/EN-Varianten erkannt
+- Confidence-Scores reflektieren Intent-Klarheit und Textspezifität
+- Edge-Cases (leer, sehr lang, Sonderzeichen) werden stabil behandelt
+- Contract-Tests grün (26/26)
+
+**Commit:** `feat(voice): deliver slice 73 voice intent contract hardening`
+**Tag:** v15.3.84
+**Tests:** `pytest -q tests/test_voice_intent_contract.py` → `26 passed`
+
+### ✅ Slice 74 — Voice Multi-Turn Dialog Surface
+**Status:** ✅ DONE (worktree; kein Live-/Install-Schritt)
+
+**Goal**
+Konversationsfähige Voice-Interaktionen mit Kontext-Tracking über mehrere Turns, Rückfrage-Logik bei niedriger Confidence und Closure-/Proposal-Integration auf derselben kanonischen Core-Wahrheit liefern.
+
+### Grounded progress
+- [x] `VoiceDialogStatus`, `VoiceDialogSession` und `VoiceDialogFollowUpTarget` als Multi-Turn-State im `VoiceControlEngine`
+- [x] `process_dialog_turn()` mit Session-Fortsetzung, Turn-Merge und Zone-Kontext-Vererbung
+- [x] explizite Clarification-Responses für low-confidence / unknown Turns statt stiller Fehlpfade
+- [x] Proposal-/Action-Closure-Follow-up-Ziele als Dialogkontext anschließbar
+- [x] fokussierte Contract-Tests für Zone-Carryover, Clarification-Merge und Follow-up-Targets
+- [x] expliziter API-Continue-Pfad unter `/api/v1/voice/control/continue` ergänzt, der nur bestehende Dialog-Sessions fortsetzt
+- [x] fokussierte API-Contracts für explizites Continue sowie Missing-/Unknown-Session-Fehlpfade ergänzt
+- [x] Resume-Conflict-Payloads spiegeln terminale Proposal-/Action-Closure-Follow-up-Status im `dialog_session` konsistent zurück
+- [x] erfolgreiche Resume-Pfade übernehmen explizit übergebene Proposal-/Action-Closure-Follow-up-Status end-to-end bis in `dialog_session`, `voice_response` und Session-Readback
+- [x] fokussierter Core-Dialog-Contract zieht expliziten `action_closure`-Resume mit normalisiertem Follow-up-Status auf Proposal-Parität nach
+- [x] Session-Readback-/History-Contract deckt jetzt den vollständigen API-Pfad Clarify → Continue → Follow-up ab und prüft `last_response` + `history` gegen GET `/api/v1/voice/control/session/<session_id>`
+- [x] Resume-Conflict-Readback-/History-Contracts decken jetzt auch den vollständigen API-Pfad Clarify → Continue → Follow-up → Resume-Conflict ab, ohne `last_response` oder `history` im Session-Readback zu verändern
+- [x] explizite EN-Follow-up-Resume-Contracts prüfen `continue`, `follow up`, `what about that` und `still open` auf `/api/v1/voice/control/continue` für Proposal- und Action-Closure-Targets
+- [x] EN-Resume-Conflict-/Readback-Parität ergänzt: Nicht-Resume-Texte und terminale Follow-up-Status halten denselben stabilen `/api/v1/voice/control/continue`-Kontrakt, ohne persistiertes Session-Readback zu mutieren
+
+### Verification
+- `pytest -q tests/test_voice_policy_contract.py tests/test_voice_dialog_contract.py tests/test_voice_control.py tests/test_voice_intent_contract.py` → `106 passed`
+
+### ✅ Slice 75 — Voice Follow-Up Resume Bilingual Parity
+**Status:** ✅ DONE (worktree; kein Live-/Install-Schritt)
+
+**Goal**
+Explizite Follow-up-Resumes auf `/api/v1/voice/control/continue` für DE↔EN-Sessions kontraktfest machen, damit Slice-72-Mehrsprachigkeit auch im Slice-74-Dialogpfad bei offenen Proposal-/Closure-Follow-ups nicht an der Session-Sprache hängen bleibt.
+
+### Grounded progress
+- [x] Resume-Erkennung in `api/v1/voice.py` priorisiert Session-Sprache, akzeptiert aber danach auch die zweite freigegebene DE/EN-Resume-Phrase-Familie als kanonischen Fallback
+- [x] `VoiceControlEngine._looks_like_follow_up_request()` spiegelt dieselbe bilinguale Resume-Logik, sodass `/continue` nicht mehr in einen künstlichen Clarification-Pfad kippt, nur weil Phrase und Session-Sprache gemischt sind
+- [x] neue API-Contracts decken DE-Session + EN-Resume (`continue`) sowie EN-Session + DE-Resume (`mach weiter`) auf derselben offenen Proposal-Follow-up-Surface ab
+- [x] Session-Readback bleibt dabei sprachstabil: Session-Language bleibt unverändert, `last_command.raw_text` spiegelt die echte gemischte Resume-Phrase zurück
+
+### Verification
+- `pytest -q tests/test_voice_policy_contract.py -k 'cross_language_follow_up_resume_phrases or explicit_english_follow_up_resume_phrases'` → `10 passed`
+- `pytest -q tests/test_voice_policy_contract.py tests/test_voice_dialog_contract.py tests/test_voice_control.py tests/test_voice_intent_contract.py` → `108 passed`
+
+### ✅ Slice 76 — Voice Resume Matcher Single-Source Hardening
+**Status:** ✅ DONE (worktree; kein Live-/Install-Schritt)
+
+**Goal**
+Die Slice-75-Resume-Logik gegen Drift härten, indem API-Continue-Validierung und Engine-Follow-up-Erkennung denselben kanonischen Matcher benutzen und die Phrase-Familie minimal erweitert wird.
+
+### Grounded progress
+- [x] kanonische Helper-Funktion `looks_like_follow_up_resume_request()` in `voice/control_engine.py` eingeführt
+- [x] API-Wrapper in `api/v1/voice.py` auf denselben Matcher umgehängt; keine doppelte Resume-Regex-Pflege mehr zwischen `/continue` und Engine-Follow-up-Pfad
+- [x] freigegebene Resume-Phrasen minimal erweitert: DE `weiter damit`, EN `go on`
+- [x] Engine-Contracts decken die neuen Phrasen direkt ab; API-Contracts ziehen `go on` auf `/api/v1/voice/control/continue` mit stabilem Session-Readback nach
+
+### Verification
+- `pytest -q tests/test_voice_dialog_contract.py tests/test_voice_policy_contract.py` → `56 passed`
+- `pytest -q tests/test_voice_policy_contract.py tests/test_voice_dialog_contract.py tests/test_voice_control.py tests/test_voice_intent_contract.py` → `112 passed`
+
+### ✅ Slice 77 — Voice German Resume Variant Hardening
+**Status:** ✅ DONE (worktree; kein Live-/Install-Schritt)
+
+**Goal**
+Die kanonische Slice-76-Resume-Erkennung um eine echte zusätzliche DE-Variante härten, damit `/api/v1/voice/control/continue` und der Engine-Follow-up-Pfad auch natürlich formuliertes `mach damit weiter` stabil auf dieselbe Proposal-/Closure-Follow-up-Wahrheit mappen.
+
+### Grounded progress
+- [x] kanonische DE-Resume-Phrase in `looks_like_follow_up_resume_request()` minimal erweitert: `mach damit weiter`
+- [x] Engine-Contracts decken die neue Variante direkt gegen denselben Single-Source-Matcher ab
+- [x] explizite API-Contracts prüfen `mach weiter`, `weiter damit` und `mach damit weiter` auf `/api/v1/voice/control/continue` mit stabilem Session-Readback
+- [x] keine neue Schattenlogik; API und Engine laufen weiter über denselben Matcher aus Slice 76
+
+### Verification
+- `pytest -q tests/test_voice_dialog_contract.py tests/test_voice_policy_contract.py -k 'extended_follow_up_resume_phrases or explicit_german_follow_up_resume_phrases or explicit_english_follow_up_resume_phrases or cross_language_follow_up_resume_phrases'` → `18 passed`
+- `pytest -q tests/test_voice_policy_contract.py tests/test_voice_dialog_contract.py tests/test_voice_control.py tests/test_voice_intent_contract.py` → `116 passed`
+
+### ✅ Slice 78 — Voice German Contracted Resume Phrase Hardening
+**Status:** ✅ DONE (worktree; kein Live-/Install-Schritt)
+
+**Goal**
+Die kanonische Resume-Erkennung um die gesprochene/ASR-nahe DE-Variante `wie stehts damit` (inkl. Apostroph-Form) härten und konfliktseitige Readback-Parität dafür auf `/api/v1/voice/control/continue` festziehen.
+
+### Grounded progress
+- [x] kanonischer DE-Resume-Matcher akzeptiert jetzt `wie stehts damit` sowie `wie steht's damit`, ohne neue API-/Engine-Schattenlogik einzuführen
+- [x] Engine-Contracts decken die kontrahierte DE-Resume-Variante direkt gegen denselben Single-Source-Matcher ab
+- [x] explizite API-Contracts prüfen `wie stehts damit` auf `/api/v1/voice/control/continue` als erfolgreichen Resume mit stabilem Session-Readback
+- [x] neue DE-Resume-Conflict-Contracts verifizieren terminale Follow-up-Konflikte für Proposal- und Action-Closure-Targets, während persistiertes Session-Readback unverändert offen bleibt
+
+### Verification
+- `pytest -q tests/test_voice_dialog_contract.py tests/test_voice_policy_contract.py -k 'explicit_german_follow_up_resume_phrases or contracted_resume_phrase or extended_follow_up_resume_phrases'` → `10 passed`
+- `pytest -q tests/test_voice_policy_contract.py tests/test_voice_dialog_contract.py tests/test_voice_control.py tests/test_voice_intent_contract.py` → `120 passed`
+
+### ✅ Slice 79 — Voice German Natural-Language Resume Readback Parity
+**Status:** ✅ DONE (worktree; kein Live-/Install-Schritt)
+
+**Goal**
+Die bereits im kanonischen Resume-Matcher enthaltenen DE-Natursprach-Phrasen `was ist damit` und `noch offen` jetzt auch kontraktfest auf Engine- und `/api/v1/voice/control/continue`-Readback ziehen, inklusive konfliktseitiger Session-Stabilität.
+
+### Grounded progress
+- [x] Engine-Contracts decken `was ist damit` und `noch offen` direkt gegen denselben Single-Source-Resume-Matcher ab
+- [x] explizite API-Contracts prüfen beide DE-Phrasen auf `/api/v1/voice/control/continue` als erfolgreiche Follow-up-Resumes mit stabilem Session-Readback
+- [x] neue konfliktseitige Readback-Contracts verifizieren beide Phrasen gegen terminale Proposal- und Action-Closure-Follow-up-Ziele, ohne persistiertes `last_response`, `history` oder `active_follow_up` zu mutieren
+- [x] keine neue Schattenlogik; Engine und API bleiben an demselben kanonischen Resume-Matcher aus Slice 76/77/78 gekoppelt
+
+### Verification
+- `pytest -q tests/test_voice_dialog_contract.py tests/test_voice_policy_contract.py -k 'explicit_german_follow_up_resume_phrases or natural_resume_phrases or extended_follow_up_resume_phrases'` → `18 passed`
+- `pytest -q tests/test_voice_policy_contract.py tests/test_voice_dialog_contract.py tests/test_voice_control.py tests/test_voice_intent_contract.py` → `128 passed`
+
+### ✅ Slice 80 — Voice English Natural-Language Resume Contraction Parity
+**Status:** ✅ DONE (worktree; kein Live-/Install-Schritt)
+
+**Goal**
+Die EN-Natursprach-Resume-Variante `how's that going` inklusive ASR-naher Apostroph-Loss-Form `hows that going` auf denselben kanonischen Resume-Matcher ziehen und konfliktseitige Readback-Parität auf `/api/v1/voice/control/continue` festzurren.
+
+### Grounded progress
+- [x] kanonischer EN-Resume-Matcher akzeptiert jetzt `how's that going` sowie `hows that going`, ohne neue API-/Engine-Schattenlogik einzuführen
+- [x] Engine-Contracts decken die neue EN-Natursprach-Resume-Variante direkt gegen denselben Single-Source-Matcher ab
+- [x] explizite API-Contracts prüfen beide EN-Phrasen auf `/api/v1/voice/control/continue` als erfolgreiche Follow-up-Resumes mit stabilem Session-Readback
+- [x] terminale Follow-up-Conflict-Readback-Contracts verifizieren beide Phrasen gegen Proposal- und Action-Closure-Ziele, ohne persistiertes `last_response`, `history` oder `active_follow_up` zu mutieren
+- [x] keine neue Schattenlogik; Engine und API bleiben an demselben kanonischen Resume-Matcher aus Slice 76/75 gekoppelt
+
+### Verification
+- `pytest -q tests/test_voice_dialog_contract.py tests/test_voice_policy_contract.py -k 'extended_follow_up_resume_phrases or explicit_english_follow_up_resume_phrases or surfaces_english_terminal_follow_up_status_without_mutating_session_readback'` → `27 passed, 54 deselected`
+- `pytest -q tests/test_voice_policy_contract.py tests/test_voice_dialog_contract.py tests/test_voice_control.py tests/test_voice_intent_contract.py` → `137 passed`
+
+### ✅ Slice 81 — Voice English Natural-Language Resume Pronoun Parity
+**Status:** ✅ DONE (worktree; kein Live-/Install-Schritt)
+
+**Goal**
+Die EN-Natursprach-Resume-Variante `how's it going` inklusive ASR-naher Apostroph-Loss-Form `hows it going` auf denselben kanonischen Resume-Matcher ziehen und konfliktseitige Readback-Parität auf `/api/v1/voice/control/continue` festzurren.
+
+### Grounded progress
+- [x] kanonischer EN-Resume-Matcher akzeptiert jetzt neben `how's that going` / `hows that going` auch `how's it going` sowie `hows it going`, ohne neue API-/Engine-Schattenlogik einzuführen
+- [x] Engine-Contracts decken die neue EN-Pronoun-Variante direkt gegen denselben Single-Source-Resume-Matcher ab
+- [x] explizite API-Contracts prüfen beide neuen EN-Phrasen auf `/api/v1/voice/control/continue` als erfolgreiche Follow-up-Resumes mit stabilem Session-Readback
+- [x] terminale Follow-up-Conflict-Readback-Contracts verifizieren beide neuen Phrasen gegen Proposal- und Action-Closure-Ziele, ohne persistiertes `last_response`, `history` oder `active_follow_up` zu mutieren
+- [x] keine neue Schattenlogik; Engine und API bleiben an demselben kanonischen Resume-Matcher aus Slice 76/80 gekoppelt
+
+### Verification
+- `pytest -q tests/test_voice_dialog_contract.py tests/test_voice_policy_contract.py -k 'extended_follow_up_resume_phrases or explicit_english_follow_up_resume_phrases or surfaces_english_terminal_follow_up_status_without_mutating_session_readback'` → `37 passed, 54 deselected`
+- `pytest -q tests/test_voice_dialog_contract.py tests/test_voice_policy_contract.py tests/test_voice_control.py tests/test_voice_intent_contract.py` → `147 passed`
+
+### ✅ Slice 82 — Voice English Natural-Language Resume Check-In Parity
+**Status:** ✅ DONE (worktree; kein Live-/Install-Schritt)
+
+**Goal**
+Die bereits im kanonischen EN-Resume-Matcher vorhandene Check-in-Formulierung `check on it` explizit auf Engine- und `/api/v1/voice/control/continue`-Contracts ziehen und konfliktseitige Readback-Parität dafür festzurren.
+
+### Grounded progress
+- [x] Engine-Contracts decken `check on it` jetzt direkt gegen denselben Single-Source-Resume-Matcher wie die bisherigen EN-Follow-up-Phrasen ab
+- [x] explizite API-Contracts prüfen `check on it` auf `/api/v1/voice/control/continue` als erfolgreichen Follow-up-Resume mit stabilem Session-Readback
+- [x] terminale Follow-up-Conflict-Readback-Contracts verifizieren `check on it` gegen Proposal- und Action-Closure-Ziele, ohne persistiertes `last_response`, `history` oder `active_follow_up` zu mutieren
+- [x] keine neue Schattenlogik; Slice 82 härtet die bereits kanonische Matcher-Wahrheit kontraktseitig statt neue API-/Engine-Sonderpfade einzuführen
+
+### Verification
+- `pytest -q tests/test_voice_dialog_contract.py tests/test_voice_policy_contract.py -k 'extended_follow_up_resume_phrases or explicit_english_follow_up_resume_phrases or surfaces_english_terminal_follow_up_status_without_mutating_session_readback'` → `42 passed, 54 deselected`
+- `pytest -q tests/test_voice_dialog_contract.py tests/test_voice_policy_contract.py tests/test_voice_control.py tests/test_voice_intent_contract.py` → `152 passed`
+
+### ✅ Slice 83 — Voice English Resume Phrase `continue with` Contract Parity
+**Status:** ✅ DONE (worktree; kein Live-/Install-Schritt)
+
+**Goal**
+Die bereits im kanonischen EN-Resume-Matcher vorhandene Resume-Variante `continue with` explizit auf Engine- und `/api/v1/voice/control/continue`-Contracts ziehen und konfliktseitige Readback-Parität dafür festzurren.
+
+### Grounded progress
+- [x] Engine-Contracts decken `continue with` jetzt direkt gegen denselben Single-Source-Resume-Matcher wie die übrigen EN-Follow-up-Phrasen ab
+- [x] explizite API-Contracts prüfen `continue with` auf `/api/v1/voice/control/continue` als erfolgreichen Follow-up-Resume mit stabilem Session-Readback
+- [x] terminale Follow-up-Conflict-Readback-Contracts verifizieren `continue with` gegen Proposal- und Action-Closure-Ziele, ohne persistiertes `last_response`, `history` oder `active_follow_up` zu mutieren
+- [x] keine neue Schattenlogik; Slice 83 härtet die bereits kanonische Matcher-Wahrheit kontraktseitig statt neue API-/Engine-Sonderpfade einzuführen
+
+### Verification
+- `pytest -q tests/test_voice_dialog_contract.py tests/test_voice_policy_contract.py -k 'extended_follow_up_resume_phrases or explicit_english_follow_up_resume_phrases or surfaces_english_terminal_follow_up_status_without_mutating_session_readback'` → `47 passed, 54 deselected`
+- `pytest -q tests/test_voice_dialog_contract.py tests/test_voice_policy_contract.py tests/test_voice_control.py tests/test_voice_intent_contract.py` → `157 passed`
+
+### ✅ Slice 84 — Voice English Resume Phrase `what about that` Contract Parity
+**Status:** ✅ DONE (worktree; kein Live-/Install-Schritt)
+
+**Goal**
+Die bereits im kanonischen EN-Resume-Matcher vorhandene Resume-Variante `what about that` explizit auf Engine- und `/api/v1/voice/control/continue`-Contracts ziehen und konfliktseitige Readback-Parität dafür festzurren.
+
+### Grounded progress
+- [x] Engine-Contracts decken `what about that` jetzt direkt gegen denselben Single-Source-Resume-Matcher wie die übrigen EN-Follow-up-Phrasen ab
+- [x] explizite API-Contracts prüfen `what about that` auf `/api/v1/voice/control/continue` als erfolgreichen Follow-up-Resume mit stabilem Session-Readback
+- [x] terminale Follow-up-Conflict-Readback-Contracts verifizieren `what about that` gegen Proposal- und Action-Closure-Ziele, ohne persistiertes `last_response`, `history` oder `active_follow_up` zu mutieren
+- [x] keine neue Schattenlogik; Slice 84 härtet die bereits kanonische Matcher-Wahrheit kontraktseitig statt neue API-/Engine-Sonderpfade einzuführen
+
+### Verification
+- `pytest -q tests/test_voice_dialog_contract.py tests/test_voice_policy_contract.py -k 'extended_follow_up_resume_phrases or explicit_english_follow_up_resume_phrases or surfaces_english_terminal_follow_up_status_without_mutating_session_readback'` → `50 passed, 54 deselected`
+- `pytest -q tests/test_voice_dialog_contract.py tests/test_voice_policy_contract.py tests/test_voice_control.py tests/test_voice_intent_contract.py` → `160 passed`
+
+### ✅ Slice 85 — Voice English Resume Conflict Coverage for `continue` and `go on`
+**Status:** ✅ DONE (worktree; kein Live-/Install-Schritt)
+
+**Goal**
+Die bereits im kanonischen EN-Resume-Matcher vorhandenen Basis-/Kurzvarianten `continue` und `go on` konfliktseitig explizit auf `/api/v1/voice/control/continue`-Readback-Parität ziehen, ohne neue Matcher- oder API-Sonderpfade einzuführen.
+
+### Grounded progress
+- [x] die bereits vorhandene Engine-/Matcher-Wahrheit für `continue` und `go on` bleibt unverändert kanonische Basis; Slice 85 ergänzt nur die fehlende konfliktseitige API-Contract-Abdeckung
+- [x] terminale Follow-up-Conflict-Readback-Contracts prüfen jetzt zusätzlich `continue` und `go on` auf `/api/v1/voice/control/continue`
+- [x] persistiertes Session-Readback bleibt dabei unverändert offen; `last_response`, `history` und `active_follow_up` werden im Konfliktpfad nicht mutiert
+- [x] keine neue Schattenlogik; Slice 85 härtet rein kontraktseitig die bereits vorhandene Matcher-Wahrheit
+
+### Verification
+- `pytest -q tests/test_voice_dialog_contract.py tests/test_voice_policy_contract.py -k 'extended_follow_up_resume_phrases or explicit_english_follow_up_resume_phrases or surfaces_english_terminal_follow_up_status_without_mutating_session_readback'` → `58 passed, 54 deselected`
+- `pytest -q tests/test_voice_dialog_contract.py tests/test_voice_policy_contract.py tests/test_voice_control.py tests/test_voice_intent_contract.py` → `168 passed`
+
+### ✅ Slice 86 — Runtime / Contract Inventory Baseline
+**Status:** ✅ DONE (worktree; kein Live-/Install-Schritt)
+
+**Goal**
+Das im aktiven Core-Worktree angekündigte, aber fehlende Runtime-/Contract-Inventar aus echter Registry-/Runtime-/Test-Wahrheit nachziehen und daraus genau einen nächsten Repair-Slice ableiten, statt weitere isolierte Voice-Phrase-Parität vorzuziehen.
+
+### Grounded progress
+- [x] neues Standardlib-Skript `scripts/ps_core_runtime_contract_inventory.py` erzeugt das fehlende Inventar direkt aus `copilot_core/blueprints_config.py`, realen Modulpfaden und vorhandenen Testdateien
+- [x] neues Artefakt `docs/analysis/PS_CORE_RUNTIME_CONTRACT_INVENTORY_2026-04-04.md` dokumentiert verifizierte route-starke Surfaces und deren direkte Contract-Test-Abdeckung
+- [x] machine-readable Snapshot `docs/analysis/ps_core_runtime_contract_inventory_2026-04-04.json` ergänzt die Markdown-Sicht für spätere Wiederaufnahme/Härtung
+- [x] fokussierter Test `tests/test_ps_core_runtime_contract_inventory.py` fixiert, dass das Inventar aus der aktiven Worktree-Wahrheit baut und `zone_editor` aktuell als schärfsten nächsten Gap markiert
+- [x] Voice-Phrase-Parität wird damit bewusst gestoppt; nächster Slice ist wieder aus Runtime-/Contract-Relevanz statt aus zufälliger Phrase-Nähe abgeleitet
+
+### Verification
+- `python3 scripts/ps_core_runtime_contract_inventory.py --repo /config/clawd/team/worktrees/pilotsuite-styx-core-current --md-out /config/clawd/team/worktrees/pilotsuite-styx-core-current/docs/analysis/PS_CORE_RUNTIME_CONTRACT_INVENTORY_2026-04-04.md --json-out /config/clawd/team/worktrees/pilotsuite-styx-core-current/docs/analysis/ps_core_runtime_contract_inventory_2026-04-04.json`
+- `pytest -q tests/test_ps_core_runtime_contract_inventory.py` → `2 passed`
+
+**Next Exact Task:** Slice 87 — `zone_editor` als vom Inventar priorisierte route-starke Runtime-Surface mit fokussierten Request-/Response-/Fehlerpfad-Contracts für neue und Legacy-Endpunkte kontraktfest ziehen; weiterhin **kein** Live-/Install-/Restart-Schritt.
+
+### ✅ Slice 87 — Zone Editor Runtime Contract Baseline
+**Status:** ✅ DONE (worktree; kein Live-/Install-Schritt)
+
+**Goal**
+Die route-starke `zone_editor`-Surface für neue und Legacy-Endpunkte direkt kontraktabdecken, konsistente Fehlerpfade bei fehlender Engine nachziehen und das Runtime-/Contract-Inventar danach wieder auf echte Worktree-Wahrheit schneiden.
+
+### Grounded progress
+- [x] neues Direct-Contract-Harness `tests/test_zone_editor_contract.py` ergänzt eine stdlib-/stub-basierte Baseline für neue und Legacy-`zone_editor`-Surfaces ohne Live-/Install-Schritt
+- [x] `copilot_core/rootfs/usr/src/app/copilot_core/api/v1/zone_editor.py` liefert für fehlende Engine jetzt konsistente 503-Responses statt unkontrollierter Runtime-Fehlerpfade auf mehreren Read-/Mutation-Endpunkten
+- [x] `tests/test_ps_core_runtime_contract_inventory.py` zieht die Inventar-Wahrheit nach: `zone_editor` ist direkt kontraktabgedeckt und nicht mehr Top-Gap
+- [x] `scripts/ps_core_runtime_contract_inventory.py` rendert die nächste Empfehlung jetzt dynamisch aus echter Inventar-Wahrheit statt hartcodiertem `zone_editor`-Text
+- [x] regenerierte Artefakte `docs/analysis/PS_CORE_RUNTIME_CONTRACT_INVENTORY_2026-04-04.md` und `docs/analysis/ps_core_runtime_contract_inventory_2026-04-04.json` zeigen `copilot_core.api.v1.media_zones` als nächsten route-starken Gap
+
+### Verification
+- `pytest -q tests/test_zone_editor_contract.py tests/test_ps_core_runtime_contract_inventory.py` → `8 passed`
+- `python3 scripts/ps_core_runtime_contract_inventory.py --repo . --json-out docs/analysis/ps_core_runtime_contract_inventory_2026-04-04.json --md-out docs/analysis/PS_CORE_RUNTIME_CONTRACT_INVENTORY_2026-04-04.md`
+
+**Next Exact Task:** Slice 88 — `media_zones` als jetzt vom Inventar priorisierte route-starke Runtime-Surface mit fokussierten Request-/Response-/Fehlerpfad-Contracts kontraktfest ziehen; weiterhin **kein** Live-/Install-/Restart-Schritt.
+
+### ✅ Slice 88 — Media Zones Runtime Contract Baseline
+**Status:** ✅ DONE (worktree; kein Live-/Install-Schritt)
+
+**Goal**
+Die route-starke `media_zones`-Surface direkt kontraktabdecken, ungehärtete Favorites-/Source-Fehlerpfade sauber schließen und das Runtime-/Contract-Inventar danach wieder auf echte Worktree-Wahrheit schneiden.
+
+### Grounded progress
+- [x] neues Direct-Contract-Harness `tests/test_media_zones_contract.py` deckt `media_zones` jetzt fokussiert auf Lookup-/Assignment-/Volume-/Play-Media-/Musikwolke-/Proactive-/Favorites-/Source-Surfaces ab
+- [x] `copilot_core/rootfs/usr/src/app/copilot_core/api/v1/media_zones.py` validiert `zone_id` jetzt auch auf Favorites-/Source-Surfaces und liefert dort konsistente JSON-500-Pfade statt unkontrollierter Runtime-Fehler
+- [x] `tests/test_ps_core_runtime_contract_inventory.py` zieht die Inventar-Wahrheit nach: `media_zones` ist direkt kontraktabgedeckt und nicht mehr Top-Gap
+- [x] regenerierte Artefakte `docs/analysis/PS_CORE_RUNTIME_CONTRACT_INVENTORY_2026-04-04.md` und `docs/analysis/ps_core_runtime_contract_inventory_2026-04-04.json` reduzieren die route-starken Surfaces ohne direkte Contract-Tests von **22** auf **21** und zeigen `copilot_core.api.v1.sonos` als nächsten route-starken Gap
+
+### Verification
+- `pytest -q tests/test_media_zones_contract.py tests/test_ps_core_runtime_contract_inventory.py` → `10 passed`
+- `python3 scripts/ps_core_runtime_contract_inventory.py --repo . --json-out docs/analysis/ps_core_runtime_contract_inventory_2026-04-04.json --md-out docs/analysis/PS_CORE_RUNTIME_CONTRACT_INVENTORY_2026-04-04.md`
+
+**Next Exact Task:** Slice 89 — `sonos` als jetzt vom Inventar priorisierte route-starke Runtime-Surface mit fokussierten Request-/Response-/Fehlerpfad-Contracts kontraktfest ziehen; weiterhin **kein** Live-/Install-/Restart-Schritt.
+
+### ✅ Slice 89 — Sonos Runtime Contract Baseline
+**Status:** ✅ DONE (worktree; kein Live-/Install-Schritt)
+
+**Goal**
+Die route-starke `sonos`-Surface direkt kontraktabdecken, ungehärtete Client-Exception-Pfade auf konsistente JSON-500-Responses ziehen und das Runtime-/Contract-Inventar danach wieder auf echte Worktree-Wahrheit schneiden.
+
+### Grounded progress
+- [x] neues Direct-Contract-Harness `tests/test_sonos_contract.py` deckt `sonos` jetzt fokussiert auf Discovery-/Status-/Playback-/Volume-/Favorites-/Playlist-/TTS-/Grouping-Surfaces ab
+- [x] `copilot_core/rootfs/usr/src/app/copilot_core/api/v1/sonos.py` kapselt Sonos-Client-Calls jetzt über einen gemeinsamen Fehlerpfad und liefert bei Runtime-Fehlern konsistente JSON-500-Responses statt unkontrollierter Flask-500-Seiten
+- [x] `tests/test_ps_core_runtime_contract_inventory.py` zieht die Inventar-Wahrheit nach: `sonos` ist direkt kontraktabgedeckt und nicht mehr Top-Gap
+- [x] regenerierte Artefakte `docs/analysis/PS_CORE_RUNTIME_CONTRACT_INVENTORY_2026-04-04.md` und `docs/analysis/ps_core_runtime_contract_inventory_2026-04-04.json` reduzieren die route-starken Surfaces ohne direkte Contract-Tests von **21** auf **20** und zeigen `copilot_core.api.v1.neurons` als nächsten route-starken Gap
+
+### Verification
+- `pytest -q tests/test_sonos_contract.py tests/test_ps_core_runtime_contract_inventory.py` → `11 passed`
+- `python3 scripts/ps_core_runtime_contract_inventory.py --repo . --json-out docs/analysis/ps_core_runtime_contract_inventory_2026-04-04.json --md-out docs/analysis/PS_CORE_RUNTIME_CONTRACT_INVENTORY_2026-04-04.md`
+
+**Next Exact Task:** Slice 90 — `neurons` als jetzt vom Inventar priorisierte route-starke Runtime-Surface mit fokussierten Request-/Response-/Fehlerpfad-Contracts kontraktfest ziehen; weiterhin **kein** Live-/Install-/Restart-Schritt.
+
+### ✅ Slice 90 — Neurons Runtime Contract Baseline
+**Status:** ✅ DONE (worktree; kein Live-/Install-Schritt)
+
+**Goal**
+Die route-starke `neurons`-Surface direkt kontraktabdecken, unkoordinierte Mutationspfade admin-seitig härten und das Runtime-/Contract-Inventar danach wieder auf echte Worktree-Wahrheit schneiden.
+
+### Grounded progress
+- [x] neues Direct-Contract-Harness `tests/test_neurons_contract.py` deckt `neurons` jetzt fokussiert auf Summary-/Lookup-/Mood-/Suggestion-/Graph-/Stats-/Connections-/Paths-Surfaces sowie Mutations-/Admin-/Fehlerpfade ab
+- [x] `copilot_core/rootfs/usr/src/app/copilot_core/api/v1/neurons.py` verlangt für `configure`, `/<neuron_id>/config`, `/<neuron_id>/enable`, `/<neuron_id>/disable` und `batch-configure` jetzt explizite Admin-Autorisierung statt stiller offener Mutationspfade
+- [x] Batch-Konfigurationspfade validieren Patches jetzt vor dem Schreiben, sodass invalide Einzel-Patches keine partiellen Config-Mutationen mehr hinterlassen
+- [x] `tests/test_ps_core_runtime_contract_inventory.py` zieht die Inventar-Wahrheit nach: `neurons` ist direkt kontraktabgedeckt und nicht mehr Top-Gap
+- [x] regenerierte Artefakte `docs/analysis/PS_CORE_RUNTIME_CONTRACT_INVENTORY_2026-04-04.md` und `docs/analysis/ps_core_runtime_contract_inventory_2026-04-04.json` reduzieren die route-starken Surfaces ohne direkte Contract-Tests von **20** auf **19** und zeigen `copilot_core.api.v1.backend_ui` als nächsten route-starken Gap
+
+### Verification
+- `pytest -q tests/test_neurons_contract.py tests/test_ps_core_runtime_contract_inventory.py` → `11 passed`
+- `python3 scripts/ps_core_runtime_contract_inventory.py --repo . --json-out docs/analysis/ps_core_runtime_contract_inventory_2026-04-04.json --md-out docs/analysis/PS_CORE_RUNTIME_CONTRACT_INVENTORY_2026-04-04.md`
+
+### ✅ Slice 91 — Backend UI Runtime Contract Baseline
+**Status:** ✅ DONE (worktree; kein Live-/Install-Schritt)
+
+**Goal**
+Die route-starke `backend_ui`-Surface direkt kontraktabdecken, Mutationspfade auf konsistente JSON-Validierung ziehen und das Runtime-/Contract-Inventar danach wieder auf echte Worktree-Wahrheit schneiden.
+
+### Grounded progress
+- [x] neues Direct-Contract-Harness `tests/test_backend_ui_contract.py` deckt `backend_ui` jetzt fokussiert auf Dashboard-/Zone-/Module-/Brain-/Mood-/Automation-/RAG-/Media-/Hardware-/System-Surfaces sowie Mutations-/503-/Validierungsfehlerpfade ab
+- [x] `copilot_core/api/v1/backend_ui.py` nutzt für Mutationspfade jetzt eine gemeinsame JSON-Body-Validierung statt unkontrollierter `NoneType`-Fehler bei fehlendem Request-Body
+- [x] `update_zone_module` validiert `module_id` explizit und spiegelt HA-Sync jetzt als echtes `ha_synced`-Resultat statt immer `True` zurück
+- [x] `update_module` und `update_model` liefern jetzt konsistente 400-Responses für fehlende/ungültige Payloads und bestätigen erfolgreiche Updates mit klaren Feldern
+- [x] `tests/test_ps_core_runtime_contract_inventory.py` zieht die Inventar-Wahrheit nach: `backend_ui` ist direkt kontraktabgedeckt und nicht mehr Top-Gap
+- [x] regenerierte Artefakte `docs/analysis/PS_CORE_RUNTIME_CONTRACT_INVENTORY_2026-04-04.md` und `docs/analysis/ps_core_runtime_contract_inventory_2026-04-04.json` reduzieren die route-starken Surfaces ohne direkte Contract-Tests von **19** auf **18** und zeigen `copilot_core.api.v1.alarm` als nächsten route-starken Gap
+
+### Verification
+- `pytest -q tests/test_backend_ui_contract.py tests/test_ps_core_runtime_contract_inventory.py` → `12 passed`
+- `python3 scripts/ps_core_runtime_contract_inventory.py --repo . --json-out docs/analysis/ps_core_runtime_contract_inventory_2026-04-04.json --md-out docs/analysis/PS_CORE_RUNTIME_CONTRACT_INVENTORY_2026-04-04.md`
+
+### ✅ Slice 92 — Alarm Runtime Contract Baseline
+**Status:** ✅ DONE (worktree; kein Live-/Install-Schritt)
+
+**Goal**
+Die route-starke `alarm`-Surface direkt kontraktabdecken, Mutationspfade auf konsistente JSON-Validierung ziehen, Runtime-Fehler auf stabile JSON-500-Pfade härten und das Runtime-/Contract-Inventar danach wieder auf echte Worktree-Wahrheit schneiden.
+
+### Grounded progress
+- [x] neues Direct-Contract-Harness `tests/test_alarm_contract.py` deckt `alarm` jetzt fokussiert auf Dashboard-/CRUD-/Trigger-/Snooze-/Cancel-/Zone-/Preset-/Curves-Surfaces sowie 404-/503-/500-Fehlerpfade ab
+- [x] `copilot_core/rootfs/usr/src/app/copilot_core/api/v1/alarm.py` nutzt für Mutationspfade jetzt eine gemeinsame JSON-Body-Validierung; fehlende Bodies oder Nicht-Objekt-Payloads liefern konsistente JSON-400-Responses statt impliziter Default-Mutationen
+- [x] Engine-Calls in `alarm.py` laufen jetzt über einen gemeinsamen Fehlerpfad und liefern bei Runtime-Fehlern konsistente JSON-500-Responses statt unkontrollierter Flask-500-Seiten
+- [x] `tests/test_ps_core_runtime_contract_inventory.py` zieht die Inventar-Wahrheit nach: `alarm` ist direkt kontraktabgedeckt und nicht mehr Top-Gap
+- [x] regenerierte Artefakte `docs/analysis/PS_CORE_RUNTIME_CONTRACT_INVENTORY_2026-04-04.md` und `docs/analysis/ps_core_runtime_contract_inventory_2026-04-04.json` reduzieren die route-starken Surfaces ohne direkte Contract-Tests von **18** auf **17** und zeigen `copilot_core.api.v1.entity_adoption` als nächsten route-starken Gap
+
+### Verification
+- `pytest -q tests/test_alarm_contract.py tests/test_ps_core_runtime_contract_inventory.py` → `12 passed`
+- `python3.14 scripts/ps_core_runtime_contract_inventory.py --repo . --json-out docs/analysis/ps_core_runtime_contract_inventory_2026-04-04.json --md-out docs/analysis/PS_CORE_RUNTIME_CONTRACT_INVENTORY_2026-04-04.md`
+
+**Next Exact Task:** Slice 93 — `entity_adoption` als jetzt vom Inventar priorisierte route-starke Runtime-Surface mit fokussierten Request-/Response-/Fehlerpfad-Contracts kontraktfest ziehen; weiterhin **kein** Live-/Install-/Restart-Schritt.
+
+### ✅ Slice 93 — Entity Adoption Runtime Contract Baseline
+**Status:** ✅ DONE (worktree; kein Live-/Install-/Restart-Schritt)
+
+**Goal**
+Die route-starke `entity_adoption`-Surface direkt kontraktabdecken, Mutationspfade auf konsistente JSON-Validierung ziehen, Service-Fehler auf stabile JSON-500-Pfade härten und das Runtime-/Contract-Inventar danach wieder auf echte Worktree-Wahrheit schneiden.
+
+### Grounded progress
+- [x] neues Direct-Contract-Harness `tests/test_entity_adoption_contract.py` deckt `entity_adoption` jetzt fokussiert auf Zone-/Assignment-/Stats-/Refresh-/Mapping-/Lookup-Surfaces sowie 400-/401-/404-/500-Fehlerpfade ab
+- [x] `copilot_core/rootfs/usr/src/app/copilot_core/api/v1/entity_adoption.py` nutzt für Mutationspfade jetzt eine gemeinsame JSON-Body-Validierung; fehlende Bodies, Nicht-Objekt-Payloads und ungültige `metadata`-Payloads liefern konsistente JSON-400-Responses statt unkontrollierter Parser-/Runtime-Pfade
+- [x] Service- und Async-Calls in `entity_adoption.py` laufen jetzt über gemeinsame Fehlerpfade und liefern bei Runtime-Fehlern konsistente JSON-500-Responses statt unkontrollierter Flask-500-Seiten
+- [x] `tests/test_ps_core_runtime_contract_inventory.py` zieht die Inventar-Wahrheit nach: `entity_adoption` ist direkt kontraktabgedeckt und nicht mehr Top-Gap
+- [x] regenerierte Artefakte `docs/analysis/PS_CORE_RUNTIME_CONTRACT_INVENTORY_2026-04-04.md` und `docs/analysis/ps_core_runtime_contract_inventory_2026-04-04.json` reduzieren die route-starken Surfaces ohne direkte Contract-Tests von **17** auf **16** und zeigen `copilot_core.api.v1.ha_module` als nächsten route-starken Gap
+
+### Verification
+- `pytest -q tests/test_entity_adoption_contract.py tests/test_ps_core_runtime_contract_inventory.py` → `13 passed`
+- `python3 scripts/ps_core_runtime_contract_inventory.py --repo . --json-out docs/analysis/ps_core_runtime_contract_inventory_2026-04-04.json --md-out docs/analysis/PS_CORE_RUNTIME_CONTRACT_INVENTORY_2026-04-04.md`
+
+**Next Exact Task:** Slice 94 — `ha_module` als jetzt vom Inventar priorisierte route-starke Runtime-Surface mit fokussierten Request-/Response-/Fehlerpfad-Contracts kontraktfest ziehen; weiterhin **kein** Live-/Install-/Restart-Schritt.
+
+### ✅ Slice 94 — Home Assistant Module Runtime Contract Baseline
+**Status:** ✅ DONE (worktree; kein Live-/Install-/Restart-Schritt)
+
+**Goal**
+Die route-starke `ha_module`-Surface direkt kontraktabdecken, Mutationspfade auf konsistente JSON-Validierung ziehen, Refresh-/Webhook-/Diagnostik-Pfade auf stabile JSON-Fehlerantworten härten und das Runtime-/Contract-Inventar danach wieder auf echte Worktree-Wahrheit schneiden.
+
+### Grounded progress
+- [x] neues Direct-Contract-Harness `tests/test_ha_module_contract.py` deckt `ha_module` jetzt fokussiert auf Status-/Connection-/Events-/Config-/Diagnostics-/Health-/Webhook-/Refresh-Surfaces sowie 400-/401-/503-/500-Fehlerpfade ab
+- [x] `copilot_core/rootfs/usr/src/app/copilot_core/api/v1/ha_module.py` nutzt für Mutationspfade jetzt gemeinsame JSON-Objekt-Validierung; Nicht-Objekt-Payloads und fehlende Config-Bodies liefern konsistente JSON-400-Responses statt unkontrollierter Runtime-Pfade
+- [x] `ha_module.py` behält Lazy-Init/Router-Integration bei, härtet aber `events/config`, `config` und `webhook-received` auf stabile Fehlerpfade; fehlender `module_router` bleibt kontrolliert bei JSON-503
+- [x] `tests/test_ps_core_runtime_contract_inventory.py` zieht die Inventar-Wahrheit nach: `ha_module` ist direkt kontraktabgedeckt und nicht mehr Top-Gap
+- [x] regenerierte Artefakte `docs/analysis/PS_CORE_RUNTIME_CONTRACT_INVENTORY_2026-04-04.md` und `docs/analysis/ps_core_runtime_contract_inventory_2026-04-04.json` reduzieren die route-starken Surfaces ohne direkte Contract-Tests von **16** auf **15** und zeigen `copilot_core.api.v1.shopping` als nächsten route-starken Gap
+
+### Verification
+- `pytest -q tests/test_ha_module_contract.py tests/test_ps_core_runtime_contract_inventory.py` → `13 passed`
+- `python3 scripts/ps_core_runtime_contract_inventory.py --repo . --json-out docs/analysis/ps_core_runtime_contract_inventory_2026-04-04.json --md-out docs/analysis/PS_CORE_RUNTIME_CONTRACT_INVENTORY_2026-04-04.md`
+
+**Next Exact Task:** Slice 95 — `shopping` als jetzt vom Inventar priorisierte route-starke Runtime-Surface mit fokussierten Request-/Response-/Fehlerpfad-Contracts kontraktfest ziehen; weiterhin **kein** Live-/Install-/Restart-Schritt.
+
+### ✅ Slice 95 — Shopping Runtime Contract Baseline
+**Status:** ✅ DONE (worktree; kein Live-/Install-/Restart-Schritt)
+
+**Goal**
+Die route-starke `shopping`-Surface direkt kontraktabdecken, Query-/Mutationspfade auf konsistente JSON-/Query-Validierung ziehen, Storage-Fehlerpfade auf stabile JSON-Fehlerantworten härten und das Runtime-/Contract-Inventar danach wieder auf echte Worktree-Wahrheit schneiden.
+
+### Grounded progress
+- [x] neues Direct-Contract-Harness `tests/test_shopping_contract.py` deckt `shopping` jetzt fokussiert auf Shopping-/Reminder-List-/Mutation-/Snooze-Surfaces sowie 400-/401-/404-/500-Fehlerpfade ab
+- [x] `copilot_core/rootfs/usr/src/app/copilot_core/api/v1/shopping.py` nutzt für Query- und Mutationspfade jetzt gemeinsame JSON-/Query-Validierung; fehlende Bodies, Nicht-Objekt-Payloads, ungültige Query-Flags und Integer-/`due_at`-Fehlformate liefern konsistente JSON-400-Responses statt unkontrollierter Parser-/Runtime-Pfade
+- [x] `shopping.py` behält das SQLite-basierte Persistenzmodell bei, härtet aber alle DB-Pfade auf kontrollierte JSON-500-Responses; Not-found-Pfade bleiben explizit als JSON-404 sichtbar
+- [x] `tests/test_ps_core_runtime_contract_inventory.py` zieht die Inventar-Wahrheit nach: `shopping` ist direkt kontraktabgedeckt und nicht mehr Top-Gap
+- [x] regenerierte Artefakte `docs/analysis/PS_CORE_RUNTIME_CONTRACT_INVENTORY_2026-04-04.md` und `docs/analysis/ps_core_runtime_contract_inventory_2026-04-04.json` reduzieren die route-starken Surfaces ohne direkte Contract-Tests von **15** auf **14** und zeigen `copilot_core.api.v1.musikwolke` als nächsten route-starken Gap
+
+### Verification
+- `pytest -q tests/test_shopping_contract.py tests/test_ps_core_runtime_contract_inventory.py` → `15 passed`
+- `python3 scripts/ps_core_runtime_contract_inventory.py --repo . --json-out docs/analysis/ps_core_runtime_contract_inventory_2026-04-04.json --md-out docs/analysis/PS_CORE_RUNTIME_CONTRACT_INVENTORY_2026-04-04.md`
+
+**Next Exact Task:** Slice 96 — `musikwolke` als jetzt vom Inventar priorisierte route-starke Runtime-Surface mit fokussierten Request-/Response-/Fehlerpfad-Contracts kontraktfest ziehen; weiterhin **kein** Live-/Install-/Restart-Schritt.
+
+### ✅ Slice 96 — Musikwolke Runtime Contract Baseline
+**Status:** ✅ DONE (worktree; kein Live-/Install-/Restart-Schritt)
+
+**Goal**
+Die route-starke `musikwolke`-Surface direkt kontraktabdecken, JSON-Body-/Volume-/Zone-List-Validierung härten, Bridge-/Runtime-Fehlerpfade auf stabile JSON-Fehlerantworten ziehen und das Runtime-/Contract-Inventar danach wieder auf echte Worktree-Wahrheit schneiden.
+
+### Grounded progress
+- [x] neues Direct-Contract-Harness `tests/test_musikwolke_contract.py` deckt `musikwolke` jetzt fokussiert auf Status-/Zone-Map-/Play-/Pause-/Volume-/Create-/Dissolve-Surfaces sowie 400-/500-/503-Fehlerpfade ab
+- [x] `copilot_core/rootfs/usr/src/app/copilot_core/api/v1/musikwolke.py` nutzt für Mutationspfade jetzt gemeinsame JSON-Objekt-, Volume- und Zone-List-Validierung; fehlende Bodies, Nicht-Objekt-Payloads, ungültige `volume_pct`-Werte und invalide `zone_ids` liefern konsistente JSON-400-Responses statt unkontrollierter Parser-/Runtime-Pfade
+- [x] `musikwolke.py` kapselt Bridge-/Runtime-Fehler auf Status-/Zone-Map-/Mutation-/Lifecycle-Pfaden jetzt über kontrollierte JSON-500-Responses; fehlende Bridge bleibt explizit auf JSON-503 sichtbar
+- [x] `tests/test_ps_core_runtime_contract_inventory.py` zieht die Inventar-Wahrheit nach: `musikwolke` ist direkt kontraktabgedeckt und nicht mehr Top-Gap
+- [x] regenerierte Artefakte `docs/analysis/PS_CORE_RUNTIME_CONTRACT_INVENTORY_2026-04-04.md` und `docs/analysis/ps_core_runtime_contract_inventory_2026-04-04.json` reduzieren die route-starken Surfaces ohne direkte Contract-Tests von **14** auf **13** und zeigen `copilot_core.api.v1.rag_ui` als nächsten route-starken Gap
+
+### Verification
+- `pytest -q tests/test_musikwolke_contract.py tests/test_ps_core_runtime_contract_inventory.py` → `17 passed`
+- `python3 scripts/ps_core_runtime_contract_inventory.py --repo . --json-out docs/analysis/ps_core_runtime_contract_inventory_2026-04-04.json --md-out docs/analysis/PS_CORE_RUNTIME_CONTRACT_INVENTORY_2026-04-04.md --stdout-json`
+
+**Next Exact Task:** Slice 97 — `rag_ui` als jetzt vom Inventar priorisierte route-starke Runtime-Surface mit fokussierten Request-/Response-/Fehlerpfad-Contracts kontraktfest ziehen; weiterhin **kein** Live-/Install-/Restart-Schritt.
+
+### ✅ Slice 97 — RAG UI Runtime Contract Baseline
+**Status:** ✅ DONE (worktree; kein Live-/Install-/Restart-Schritt)
+
+**Goal**
+Die route-starke `rag_ui`-Surface direkt kontraktabdecken, Query-/JSON-/Payload-Validierung härten, Runtime-Fehlerpfade auf stabile JSON-500-Responses ziehen und das Runtime-/Contract-Inventar danach wieder auf echte Worktree-Wahrheit schneiden.
+
+### Grounded progress
+- [x] neues Direct-Contract-Harness `tests/test_rag_ui_contract.py` deckt `rag_ui` jetzt fokussiert auf Overview-/Vectors-/Embeddings-/Search-/SearXNG-/Voice-Surfaces sowie 400-/500-Fehlerpfade ab
+- [x] `copilot_core/api/v1/rag_ui.py` nutzt für Query- und Mutationspfade jetzt gemeinsame Integer-/JSON-/Payload-Validierung; fehlende Bodies, Nicht-Objekt-Payloads, leere Queries, invalide `categories` und ungültige Voice-Inputs liefern konsistente JSON-400-Responses statt unkontrollierter Parser-/Runtime-Pfade
+- [x] `rag_ui.py` kapselt Runtime-Fehler auf Overview-/Search-/SearXNG-/Voice-Pfaden jetzt über kontrollierte JSON-500-Responses statt unkontrollierter Flask-500-Seiten
+- [x] `tests/test_ps_core_runtime_contract_inventory.py` zieht die Inventar-Wahrheit nach: `rag_ui` ist direkt kontraktabgedeckt und nicht mehr Top-Gap
+- [x] regenerierte Artefakte `docs/analysis/PS_CORE_RUNTIME_CONTRACT_INVENTORY_2026-04-04.md` und `docs/analysis/ps_core_runtime_contract_inventory_2026-04-04.json` reduzieren die route-starken Surfaces ohne direkte Contract-Tests von **13** auf **12** und zeigen `dashboard.api.v1.widget_positions` als nächsten route-starken Gap
+
+### Verification
+- `pytest -q tests/test_rag_ui_contract.py tests/test_ps_core_runtime_contract_inventory.py` → `16 passed`
+- `python3 scripts/ps_core_runtime_contract_inventory.py --repo . --json-out docs/analysis/ps_core_runtime_contract_inventory_2026-04-04.json --md-out docs/analysis/PS_CORE_RUNTIME_CONTRACT_INVENTORY_2026-04-04.md --stdout-json`
+
+**Next Exact Task:** Slice 98 — `dashboard.api.v1.widget_positions` als jetzt vom Inventar priorisierte route-starke Runtime-Surface mit fokussierten Request-/Response-/Fehlerpfad-Contracts kontraktfest ziehen; weiterhin **kein** Live-/Install-/Restart-Schritt.
+
+### ✅ Slice 98 — Widget Positions Runtime Contract Baseline
+**Status:** ✅ DONE (worktree; kein Live-/Install-/Restart-Schritt)
+
+**Goal**
+`dashboard.api.v1.widget_positions` als route-starke Dashboard-Surface mit direkter Contract-Baseline, konsistenten JSON-Validierungs-/Fehlerpfaden und Inventar-Parität absichern.
+
+### Grounded progress
+- [x] direkter Contract-Harness `tests/test_widget_positions_contract.py` deckt CRUD-, Bulk-, History-, Undo/Redo- und Reset-Surfaces gegen die aktive Blueprint-Wahrheit ab
+- [x] JSON-/Validierungspfad in `dashboard/api/v1/widget_positions.py` gehärtet: konsistente Objekt-Prüfung, wiederverwendbare Positions-Validierung, bessere Bulk-Fehlerpfade
+- [x] Landing-Härtung nachgezogen: leere `widget_id`-Werte und nicht-listige `history`-Payloads werden jetzt bereits auf der Basissurface konsistent als JSON-400 geblockt statt erst implizit in späteren History-/Undo-Pfaden zu kippen
+- [x] WebSocket-Emission zentralisiert; Slice bleibt lane-scharf ohne Live-/Release-Kollision
+- [x] kleine Qualitäts-Härtung mitgezogen: `datetime.utcnow()` durch zentralen UTC-Helper ersetzt
+- [x] Inventar-Artefakte regeneriert; route-starke Surfaces ohne direkte Contract-Tests reduziert von **12** auf **11**
+- [x] `dashboard.api.v1.widget_positions` ist nicht mehr Top-Gap und nicht mehr empfohlener nächster Slice
+
+### Verification
+- `pytest -q tests/test_widget_positions_contract.py tests/test_ps_core_runtime_contract_inventory.py -k 'widget_positions or runtime_contract_inventory'` → `16 passed`
+- `python3 scripts/ps_core_runtime_contract_inventory.py --repo . --json-out docs/analysis/ps_core_runtime_contract_inventory_2026-04-04.json --md-out docs/analysis/PS_CORE_RUNTIME_CONTRACT_INVENTORY_2026-04-04.md --stdout-json` → `route_heavy_without_direct_contract_tests: 11`, `recommended_next_slice: copilot_core.api.v1.reminders`
+
+**Next Exact Task:** Slice 99 — `copilot_core.api.v1.reminders` als jetzt vom Inventar priorisierte route-starke Runtime-Surface mit direkter Contract-Baseline ziehen; weiterhin **kein** Live-/Install-/Restart-Schritt.
+
+### ✅ Slice 99 — Reminders Runtime Contract Baseline
+**Status:** ✅ DONE (worktree; kein Live-/Install-/Restart-Schritt)
+
+**Goal**
+`copilot_core.api.v1.reminders` als route-starke Waste-/Birthday-Reminder-Surface mit direkter Contract-Baseline, konsistenten JSON-/Validierungs-/Service-Fehlerpfaden und Inventar-Parität absichern.
+
+### Grounded progress
+- [x] direkter Contract-Harness `tests/test_reminders_contract.py` deckt Waste- und Birthday-Surfaces gegen die aktive Blueprint-Wahrheit ab
+- [x] erfolgreiche Flüsse abgesichert: Event-/Schedule-Update, Status, manuelle Reminder, automatisch abgeleitete Waste-/Birthday-Messages
+- [x] Validierungs-/Unavailability-/Runtime-Fehlerpfade abgesichert: JSON body required, JSON object required, list validation, string validation, Service unavailable, runtime exceptions
+- [x] Auth-Pfad explizit kontraktgesichert
+- [x] Inventar-Artefakte regeneriert; `copilot_core.api.v1.reminders` ist nicht mehr Top-Gap und nicht mehr empfohlener nächster Slice
+- [x] Design-Lane-Input geprüft: `reminders` berührt keine `proposal_*` / `action_closure_*`-Stateableitung direkt und bleibt damit lane-scharf als Reminder-/Delivery-Surface
+
+### Verification
+- `pytest -q tests/test_reminders_contract.py tests/test_ps_core_runtime_contract_inventory.py -k 'reminders or runtime_contract_inventory'` → `18 passed`
+- `python3 scripts/ps_core_runtime_contract_inventory.py --repo . --json-out docs/analysis/ps_core_runtime_contract_inventory_2026-04-04.json --md-out docs/analysis/PS_CORE_RUNTIME_CONTRACT_INVENTORY_2026-04-04.md --stdout-json` → `route_heavy_without_direct_contract_tests: 10`, `recommended_next_slice: copilot_core.api.v1.module_control`
+
+**Next Exact Task:** Slice 100 — `copilot_core.api.v1.module_control` als jetzt vom Inventar priorisierte route-starke Runtime-Surface mit direkter Contract-Baseline ziehen; weiterhin **kein** Live-/Install-/Restart-Schritt.
+
+### ✅ Slice 99 — Reminders Runtime Contract Baseline
+**Status:** ✅ DONE (worktree; kein Live-/Install-/Restart-Schritt)
+
+**Goal**
+`copilot_core.api.v1.reminders` als route-starke Waste-/Birthday-Surface mit direkter Contract-Baseline, konsistenten JSON-Validierungs-/Fehlerpfaden und Inventar-Parität absichern.
+
+### Grounded progress
+- [x] direkter Contract-Harness `tests/test_reminders_contract.py` deckt alle sieben Waste-/Birthday-Routes inkl. Auth-, Request-, Response- und Fehlerpfaden gegen die aktive Blueprint-Wahrheit ab
+- [x] JSON-/Payload-Härtung in `copilot_core/rootfs/usr/src/app/copilot_core/api/v1/reminders.py` ergänzt: objektförmige Bodies, listenförmige `collections`/`birthdays`, stringförmige `message`/`tts_entity`
+- [x] Runtime-Fehlerpfade zentralisiert: Service-Ausnahmen liefern jetzt kontrollierte JSON-500-Responses statt impliziter HTML-500-Abbrüche
+- [x] optionale Reminder-Bodies bleiben für Auto-Messages erhalten, sind aber nun bei nicht-objektigen Payloads sauber als JSON-400 gehärtet
+- [x] Inventar-Artefakte regeneriert; route-starke Surfaces ohne direkte Contract-Tests reduziert von **11** auf **10**
+- [x] `copilot_core.api.v1.reminders` ist nicht mehr Top-Gap und nicht mehr empfohlener nächster Slice
+
+### Verification
+- `pytest -q tests/test_reminders_contract.py tests/test_ps_core_runtime_contract_inventory.py` → `18 passed`
+- `python3 scripts/ps_core_runtime_contract_inventory.py --repo . --json-out docs/analysis/ps_core_runtime_contract_inventory_2026-04-04.json --md-out docs/analysis/PS_CORE_RUNTIME_CONTRACT_INVENTORY_2026-04-04.md --stdout-json` → `route_heavy_without_direct_contract_tests: 10`, `recommended_next_slice: copilot_core.api.v1.module_control`
+
+**Next Exact Task:** Slice 100 — `copilot_core.api.v1.module_control` als jetzt vom Inventar priorisierte route-starke Runtime-Surface mit direkter Contract-Baseline ziehen; weiterhin **kein** Live-/Install-/Restart-Schritt.
+
+### ✅ Slice 100 — Module Control Runtime Contract Baseline
+**Status:** ✅ DONE (worktree; kein Live-/Install-/Restart-Schritt)
+
+**Goal**
+`copilot_core.api.v1.module_control` als route-starke Modulsteuerungs-Surface mit direkter Contract-Baseline, konsistenten JSON-Validierungs-/Fehlerpfaden und Inventar-Parität absichern.
+
+### Grounded progress
+- [x] direkter Contract-Harness `tests/test_module_control_contract.py` deckt List-/Lookup-/Create-/Configure-/Update-/Delete-Surfaces gegen die aktive Blueprint-Wahrheit ab
+- [x] JSON-Härtung in `copilot_core/rootfs/usr/src/app/copilot_core/api/v1/module_control.py` ergänzt: fehlende oder nicht-objektige Bodies liefern jetzt kontrollierte JSON-400-Responses statt impliziter Parser-/Attributfehler
+- [x] Payload-Validierung nachgezogen: `module_id` und `state` werden string-scharf geprüft; invalide States liefern weiter kontrollierte JSON-422-Responses
+- [x] Runtime-Fehlerpfade zentralisiert: List-/Read-/Write-/Delete-Ausnahmen liefern jetzt kontrollierte JSON-500-Responses statt HTML-500-Abbrüchen
+- [x] explizite Registry-Löschung in `copilot_core/rootfs/usr/src/app/copilot_core/module_registry.py` gekapselt: neues `delete_state()` entfernt den API-seitigen Direktzugriff auf Registry-Interna
+- [x] Inventar-Artefakte regeneriert; route-starke Surfaces ohne direkte Contract-Tests reduziert von **10** auf **9** und `copilot_core.api.v1.module_control` ist nicht mehr Top-Gap
+
+### Verification
+- `pytest -q tests/test_module_control_contract.py tests/test_ps_core_runtime_contract_inventory.py -k 'module_control or runtime_contract_inventory'` → `19 passed`
+- `python3 scripts/ps_core_runtime_contract_inventory.py --repo . --json-out docs/analysis/ps_core_runtime_contract_inventory_2026-04-04.json --md-out docs/analysis/PS_CORE_RUNTIME_CONTRACT_INVENTORY_2026-04-04.md --stdout-json` → `route_heavy_without_direct_contract_tests: 9`, `recommended_next_slice: copilot_core.api.v1.ha_events`
+
+**Next Exact Task:** Slice 101 — `copilot_core.api.v1.ha_events` als jetzt vom Inventar priorisierte route-starke Runtime-Surface mit direkter Contract-Baseline ziehen; weiterhin **kein** Live-/Install-/Restart-Schritt.
+
+### ✅ Slice 101 — Home Assistant Events Runtime Contract Baseline
+**Status:** ✅ DONE (worktree; kein Live-/Install-/Restart-Schritt)
+
+**Goal**
+`copilot_core.api.v1.ha_events` als route-starke Home-Assistant-Event-Surface mit direkter Contract-Baseline, kontrollierten JSON-/Dependency-/Async-Fehlerpfaden und Inventar-Parität absichern.
+
+### Grounded progress
+- [x] direkter Contract-Harness `tests/test_ha_events_contract.py` deckt WebSocket-Info-, Subscribe-, Unsubscribe-, History-, Clear-, Status-, Connect- und Disconnect-Surfaces gegen die aktive Blueprint-Wahrheit ab
+- [x] `copilot_core/api/v1/ha_events.py` härtet JSON-Pfade jetzt konsistent: fehlende Bodies, nicht-objektige Payloads, falsche Typen für `event_types`, `access_token`, `base_url`, `throttle_ms` und `auto_subscribe` liefern kontrollierte JSON-400-Responses
+- [x] WebSocket-Dependency-Pfad gehärtet: fehlendes `flask-sock` kippt nicht mehr vor dem Fallback-Response in einen Importfehler, sondern liefert sauber JSON-503
+- [x] Route-Ausführung repariert: die `ha_events`-Surface läuft jetzt unter dem bestehenden Token-Decorator synchron stabil, statt coroutine-Objekte in Flask-Werkzeugpfaden zurückzugeben
+- [x] Inventar-Artefakte regeneriert; route-starke Surfaces ohne direkte Contract-Tests reduziert von **9** auf **8** und `copilot_core.api.v1.ha_events` ist nicht mehr Top-Gap
+
+### Verification
+- `pytest -q tests/test_ha_events_contract.py tests/test_ps_core_runtime_contract_inventory.py -k 'ha_events or runtime_contract_inventory'` → `20 passed`
+- `python3.14 scripts/ps_core_runtime_contract_inventory.py --repo . --json-out docs/analysis/ps_core_runtime_contract_inventory_2026-04-04.json --md-out docs/analysis/PS_CORE_RUNTIME_CONTRACT_INVENTORY_2026-04-04.md --stdout-json` → `route_heavy_without_direct_contract_tests: 8`, `recommended_next_slice: copilot_core.api.v1.neurons_ui`
+
+**Next Exact Task:** Slice 102 — `copilot_core.api.v1.neurons_ui` als jetzt vom Inventar priorisierte route-starke Runtime-Surface mit direkter Contract-Baseline ziehen; weiterhin **kein** Live-/Install-/Restart-Schritt.
+
+### ✅ Slice 102 — Neurons UI Runtime Contract Baseline
+**Status:** ✅ DONE (worktree; kein Live-/Install-/Restart-Schritt)
+
+**Goal**
+`copilot_core.api.v1.neurons_ui` als route-starke UI-/Neuronen-Surface mit direkter Contract-Baseline, kontrollierten JSON-/Query-/Runtime-Fehlerpfaden und Inventar-Parität absichern.
+
+### Grounded progress
+- [x] direkter Contract-Harness `tests/test_neurons_ui_contract.py` deckt Overview-, Layer-, Pipeline-, Evaluate-, History- und Graph-Surfaces gegen die aktive Blueprint-Wahrheit ab
+- [x] `copilot_core/api/v1/neurons_ui.py` auf kleine, testbare Builder-Helper gezogen; Serialisierung und Mock-History laufen jetzt über explizite Helper statt verstreute Inline-Payloads
+- [x] Evaluate-Pfad gehärtet: invalide JSON-Bodies, nicht-objektige Payloads und nicht-boolesches `force` liefern jetzt kontrollierte JSON-400-Responses
+- [x] History-Query gehärtet: invalide oder nicht-positive `hours`-Werte liefern jetzt kontrollierte JSON-400-Responses; große Werte werden auf `168` gekappt statt unkontrolliert durchzulaufen
+- [x] Runtime-Fehlerpfade zentralisiert: Builder-/History-Fehler landen jetzt als konsistente JSON-500-Responses statt impliziter HTML-500-Abbrüche
+- [x] Inventar-Artefakte regeneriert; route-starke Surfaces ohne direkte Contract-Tests reduziert von **8** auf **7** und `copilot_core.api.v1.neurons_ui` ist nicht mehr Top-Gap
+
+### Verification
+- `pytest -q tests/test_neurons_ui_contract.py tests/test_ps_core_runtime_contract_inventory.py -k 'neurons_ui or runtime_contract_inventory'` → `21 passed`
+- `python3 scripts/ps_core_runtime_contract_inventory.py --repo . --json-out docs/analysis/ps_core_runtime_contract_inventory_2026-04-04.json --md-out docs/analysis/PS_CORE_RUNTIME_CONTRACT_INVENTORY_2026-04-04.md --stdout-json` → `route_heavy_without_direct_contract_tests: 7`, `recommended_next_slice: copilot_core.api.v1.autonomy`
+
+**Next Exact Task:** Slice 103 — `copilot_core.api.v1.autonomy` als jetzt vom Inventar priorisierte route-starke Runtime-Surface mit direkter Contract-Baseline ziehen; weiterhin **kein** Live-/Install-/Restart-Schritt.
+
+### ✅ Slice 103 — Autonomy Runtime Contract Baseline
+**Status:** ✅ DONE (worktree; kein Live-/Install-/Restart-Schritt)
+
+**Goal**
+`copilot_core.api.v1.autonomy` als route-starke Autonomie-/Zone-Control-Surface mit direkter Contract-Baseline, kontrollierten JSON-/Query-/Runtime-Fehlerpfaden und Inventar-Parität absichern.
+
+### Grounded progress
+- [x] direkter Contract-Harness `tests/test_autonomy_contract.py` deckt Dashboard-, Zone-Status-, Zone-Module-, History-, Mood-Action- und Stats-Surfaces gegen die aktive Blueprint-Wahrheit ab
+- [x] `copilot_core/rootfs/usr/src/app/copilot_core/api/v1/autonomy.py` auf kleine Validierungs-/Fehler-Helper gehärtet: mutierende Routes verlangen jetzt objektförmige JSON-Bodies; `module_id` und `state` müssen nicht-leere Strings sein
+- [x] History-Query gehärtet: invalide oder nicht-positive `limit`-Werte liefern jetzt kontrollierte JSON-400-Responses statt stiller Typ-/Default-Drift
+- [x] Runtime-Fehlerpfade für Dashboard, Zone-Status, Zone-Module, History, Mood-Actions und Stats zentralisiert; Ausnahmen kippen jetzt konsistent auf JSON-500/503 statt impliziter HTML-Abbrüche
+- [x] Inventar-Artefakte regeneriert; route-starke Surfaces ohne direkte Contract-Tests reduziert von **7** auf **6** und `copilot_core.api.v1.autonomy` ist nicht mehr Top-Gap
+
+### Verification
+- `pytest -q tests/test_autonomy_contract.py copilot_core/rootfs/usr/src/app/tests/test_autonomy_api.py tests/test_ps_core_runtime_contract_inventory.py -k 'autonomy or runtime_contract_inventory'` → `33 passed`
+- `python3 scripts/ps_core_runtime_contract_inventory.py --repo . --json-out docs/analysis/ps_core_runtime_contract_inventory_2026-04-04.json --md-out docs/analysis/PS_CORE_RUNTIME_CONTRACT_INVENTORY_2026-04-04.md --stdout-json` → `route_heavy_without_direct_contract_tests: 6`, `recommended_next_slice: copilot_core.api.v1.user_hints`
+
+**Next Exact Task:** Slice 104 — `copilot_core.api.v1.user_hints` als jetzt vom Inventar priorisierte route-starke Runtime-Surface mit direkter Contract-Baseline ziehen; weiterhin **kein** Live-/Install-/Restart-Schritt.
+
+### ✅ Slice 104 — User Hints Runtime Contract Baseline
+**Status:** ✅ DONE (worktree; kein Live-/Install-/Restart-Schritt)
+
+**Goal**
+`copilot_core.api.v1.user_hints` als route-starke Hint-/Suggestion-Surface mit direkter Contract-Baseline, kontrollierten Auth-/JSON-/Enum-/Runtime-Fehlerpfaden und Inventar-Parität absichern.
+
+### Grounded progress
+- [x] direkter Contract-Harness `tests/test_user_hints_contract.py` deckt Listen-, Create-, Read-, Accept-, Reject-, Suggestions- und Types-Surfaces gegen die aktive Blueprint-Wahrheit ab
+- [x] `copilot_core/rootfs/usr/src/app/copilot_core/api/v1/user_hints.py` auf kleine Auth-/JSON-/Enum-/String-Helper gehärtet; mutierende Routes behandeln fehlende oder nicht-objektige Bodies jetzt kontrolliert als JSON-400
+- [x] Input-Härtung ergänzt: `status`, `type` und `reason` werden typ- und enum-scharf validiert; leere oder nicht-stringige `text`-Payloads kippen kontrolliert auf JSON-400 statt in implizite Service-Drift
+- [x] Read-/Mutation-Pfade laufen jetzt über die Service-API statt direkten `_hints`-Internazugriff; fehlende Hints liefern konsistente JSON-404-Responses für Read/Accept/Reject
+- [x] Runtime-Fehlerpfade für Listen, Create, Read, Accept, Reject und Suggestions zentralisiert; Service-Ausnahmen kippen jetzt konsistent auf JSON-500 statt impliziter HTML-Abbrüche
+- [x] Inventar-Artefakte regeneriert; route-starke Surfaces ohne direkte Contract-Tests reduziert von **6** auf **5** und `copilot_core.api.v1.user_hints` ist nicht mehr Top-Gap
+
+### Verification
+- `pytest -q tests/test_user_hints_contract.py tests/test_ps_core_runtime_contract_inventory.py -k 'user_hints or runtime_contract_inventory'` → `23 passed`
+- `python3 scripts/ps_core_runtime_contract_inventory.py --repo . --json-out docs/analysis/ps_core_runtime_contract_inventory_2026-04-04.json --md-out docs/analysis/PS_CORE_RUNTIME_CONTRACT_INVENTORY_2026-04-04.md --stdout-json` → `route_heavy_without_direct_contract_tests: 5`, `recommended_next_slice: copilot_core.api.v1.rag`
+
+**Next Exact Task:** Slice 105 — `copilot_core.api.v1.rag` als jetzt vom Inventar priorisierte route-starke Runtime-Surface mit direkter Contract-Baseline ziehen; weiterhin **kein** Live-/Install-/Restart-Schritt.
+
+### ✅ Slice 105 — RAG Runtime Contract Baseline
+**Status:** ✅ DONE (worktree; kein Live-/Install-/Restart-Schritt)
+
+**Goal**
+`copilot_core.api.v1.rag` als route-starke RAG-/Search-Surface mit direkter Contract-Baseline, kontrollierten JSON-/Type-/Runtime-Fehlerpfaden und Inventar-Parität absichern.
+
+### Grounded progress
+- [x] direkter Contract-Harness `tests/test_rag_contract.py` deckt Hybrid-, BM25-, Semantic-, Rerank-, Stats-, Index-, Cache-Clear- und Enhanced-Search-Surfaces gegen die aktive Blueprint-Wahrheit ab
+- [x] `copilot_core/rootfs/usr/src/app/copilot_core/api/v1/rag.py` auf kleine JSON-/Type-/Namespace-Helper gehärtet; mutierende Routes behandeln fehlende oder nicht-objektige Bodies jetzt kontrolliert als JSON-400
+- [x] Input-Härtung ergänzt: `query`, `namespace`, `include_text`, `include_metadata`, `use_web`, `documents`, `lexical_hits`, `semantic_hits` und `searxng_categories` werden jetzt typscharf validiert statt implizit zu stringifizieren oder in späte Laufzeitfehler zu kippen
+- [x] Runtime-Fehlerpfade für Search, BM25, Semantic, Stats, Index, Cache-Clear und Enhanced Search zentralisiert; Ausnahmen liefern jetzt konsistente JSON-500-Responses statt generischer oder impliziter Flask-Abbrüche
+- [x] Cache-/Test-Härtung ergänzt: namespace-scharfes Cache-Clear nutzt jetzt das reale Key-Schema `rag:*:{namespace}:*`; `init_rag_api()` setzt auch Cache- und SearXNG-Singletons zurück
+- [x] Inventar-Artefakte regeneriert; route-starke Surfaces ohne direkte Contract-Tests reduziert von **5** auf **4** und `copilot_core.api.v1.rag` ist nicht mehr Top-Gap
+
+### Verification
+- `pytest -q tests/test_rag_contract.py tests/test_ps_core_runtime_contract_inventory.py -k 'rag or runtime_contract_inventory'` → `24 passed`
+- `python3 scripts/ps_core_runtime_contract_inventory.py --repo . --json-out docs/analysis/ps_core_runtime_contract_inventory_2026-04-04.json --md-out docs/analysis/PS_CORE_RUNTIME_CONTRACT_INVENTORY_2026-04-04.md --stdout-json` → `route_heavy_without_direct_contract_tests: 4`, `recommended_next_slice: copilot_core.api.v1.neuron_layers`
+
+**Next Exact Task:** Slice 106 — `copilot_core.api.v1.neuron_layers` als jetzt vom Inventar priorisierte route-starke Runtime-Surface mit direkter Contract-Baseline ziehen; weiterhin **kein** Live-/Install-/Restart-Schritt.
+
+### ✅ Slice 106 — Neuron Layers Runtime Contract Baseline
+**Status:** ✅ DONE (worktree; kein Live-/Install-/Restart-Schritt)
+
+**Goal**
+`copilot_core.api.v1.neuron_layers` als route-starke Visualisierungs-/Synapsen-Surface mit direkter Contract-Baseline, kontrollierten JSON-/SVG-/Type-/Runtime-Fehlerpfaden und Inventar-Parität absichern.
+
+### Grounded progress
+- [x] direkter Contract-Harness `tests/test_neuron_layers_contract.py` deckt Visualization-, Snapshot-, Heatmap-, Synapse-List-, Update- und Reset-Surfaces gegen die aktive Blueprint-Wahrheit ab
+- [x] `copilot_core/rootfs/usr/src/app/copilot_core/api/v1/neuron_layers.py` auf kleine Request-/String-/Error-Helper gehärtet; Synapse-Mutations behandeln fehlende oder nicht-objektige Bodies jetzt kontrolliert als JSON-400
+- [x] Input-Härtung ergänzt: `from`, `to`, `weight` und `all` werden jetzt typscharf validiert statt implizit zu stringifizieren oder in Attribut-/Bool-Leaks zu kippen
+- [x] Runtime-Fehlerpfade zentralisiert: Visualization und Heatmap liefern bei Manager-/Bus-Fehlern konsistente JSON-500-Responses; Snapshot kippt kontrolliert auf ein SVG-Placeholder-500 statt implizitem Flask-Abbruch
+- [x] bestehende Runtime-Tests mitgezogen: vorhandene `neuron_layers`-/`synapse`-Tests unter `copilot_core/rootfs/usr/src/app/tests/` bleiben grün
+- [x] Inventar-Artefakte regeneriert; route-starke Surfaces ohne direkte Contract-Tests reduziert von **4** auf **3** und `copilot_core.api.v1.neuron_layers` ist nicht mehr Top-Gap
+
+### Verification
+- `pytest -q tests/test_neuron_layers_contract.py tests/test_ps_core_runtime_contract_inventory.py copilot_core/rootfs/usr/src/app/tests/test_neuron_layers_api.py copilot_core/rootfs/usr/src/app/tests/test_neuron_config_api.py -k 'neuron_layers or runtime_contract_inventory or synapse'` → `46 passed, 15 deselected`
+- `python3 scripts/ps_core_runtime_contract_inventory.py --repo . --json-out docs/analysis/ps_core_runtime_contract_inventory_2026-04-04.json --md-out docs/analysis/PS_CORE_RUNTIME_CONTRACT_INVENTORY_2026-04-04.md --stdout-json` → `route_heavy_without_direct_contract_tests: 3`, `recommended_next_slice: copilot_core.api.v1.performance`
+
+**Next Exact Task:** Slice 107 — `copilot_core.api.v1.performance` als jetzt vom Inventar priorisierte route-starke Runtime-Surface mit direkter Contract-Baseline ziehen; weiterhin **kein** Live-/Install-/Restart-Schritt.
+
+### ✅ Slice 107 — Performance Runtime Contract Baseline
+**Status:** ✅ DONE (worktree; kein Live-/Install-/Restart-Schritt)
+
+**Goal**
+`copilot_core.api.v1.performance` als route-starke Performance-/Lazy-Load-/Benchmark-Surface mit direkter Contract-Baseline, kontrollierten Query-/JSON-/Runtime-Fehlerpfaden und Inventar-Parität absichern.
+
+### Grounded progress
+- [x] direkter Contract-Harness `tests/test_performance_contract.py` deckt Startup-, Module-, Summary-, Lazy-Load-Status-, Benchmark- und Health-Surfaces gegen die aktive Blueprint-Wahrheit ab
+- [x] `copilot_core/rootfs/usr/src/app/copilot_core/api/v1/performance.py` um kleine Query-/JSON-/Type-Helper ergänzt; invalide `lazy_only`-, `iterations`- und `include_modules`-Inputs kippen jetzt kontrolliert auf JSON-400 statt in implizite 500er
+- [x] Test-Isolation gehärtet: `init_performance_api()` erlaubt sauberen Tracker-Reset/-Inject pro Contract-Harness ohne Singleton-Drift zwischen Requests oder Tests
+- [x] echter Runtime-Fix gelandet: `PerformanceTracker` nutzt jetzt einen `threading.RLock`, sodass `GET /api/v1/performance/summary` beim verschachtelten Improvement-Read nicht mehr in einem Self-Lock deadlockt
+- [x] Inventar-Artefakte regeneriert; route-starke Surfaces ohne direkte Contract-Tests reduziert von **3** auf **2** und `copilot_core.api.v1.performance` ist nicht mehr Top-Gap
+
+### Verification
+- `pytest -q tests/test_performance_contract.py tests/test_ps_core_runtime_contract_inventory.py -k 'performance or runtime_contract_inventory'` → `25 passed`
+- `python3.14 scripts/ps_core_runtime_contract_inventory.py --repo . --json-out docs/analysis/ps_core_runtime_contract_inventory_2026-04-04.json --md-out docs/analysis/PS_CORE_RUNTIME_CONTRACT_INVENTORY_2026-04-04.md --stdout-json` → `route_heavy_without_direct_contract_tests: 2`, `recommended_next_slice: copilot_core.api.v1.learning_viz`
+
+**Next Exact Task:** Slice 108 — `copilot_core.api.v1.learning_viz` als jetzt vom Inventar priorisierte route-starke Runtime-Surface mit direkter Contract-Baseline ziehen; weiterhin **kein** Live-/Install-/Restart-Schritt.
+
+### ✅ Slice 108 — Learning Viz Runtime Contract Baseline
+**Status:** ✅ DONE (worktree; kein Live-/Install-/Restart-Schritt)
+
+**Goal**
+`copilot_core.api.v1.learning_viz` als route-starke Lern-/Transparenz-Surface mit direkter Contract-Baseline, kontrollierten Query-/JSON-/Runtime-Fehlerpfaden und Inventar-Parität absichern.
+
+### Grounded progress
+- [x] direkter Contract-Harness `tests/test_learning_viz_contract.py` deckt Overview-, Patterns-, Progress-, Feedback- und Correct-Surfaces gegen die aktive Blueprint-Wahrheit ab
+- [x] `copilot_core/api/v1/learning_viz.py` gehärtet: fehlender `request`-Import geschlossen sowie kleine Query-/JSON-/Field-Helper ergänzt; invalide `state`-, `limit`-, `pattern_id`-, `correction`- und `comment`-Inputs liefern jetzt kontrollierte JSON-400-Responses statt impliziter NameError-/ValueError-/Type-Fehler
+- [x] Runtime-Fehlerpfade für Overview-, Pattern-, Progress-, Feedback- und Correct-Surfaces zentralisiert; Storage-/Feedback-Ausnahmen kippen jetzt kontrolliert auf JSON-500 statt impliziter Flask-Abbrüche
+- [x] Progress-Payload leicht normalisiert: Modul-/Zonen-Fortschritt wird jetzt aus einem gemeinsamen Pattern-Snapshot berechnet statt aus unnötig wiederholten Storage-Reads
+- [x] Inventar-Artefakte regeneriert; route-starke Surfaces ohne direkte Contract-Tests reduziert von **2** auf **1** und `copilot_core.api.v1.learning_viz` ist nicht mehr Top-Gap
+
+### Verification
+- `pytest -q tests/test_learning_viz_contract.py tests/test_ps_core_runtime_contract_inventory.py -k 'learning_viz or runtime_contract_inventory'` → `26 passed in 23.38s`
+- `python3 scripts/ps_core_runtime_contract_inventory.py --repo . --json-out docs/analysis/ps_core_runtime_contract_inventory_2026-04-04.json --md-out docs/analysis/PS_CORE_RUNTIME_CONTRACT_INVENTORY_2026-04-04.md --stdout-json` → `route_heavy_without_direct_contract_tests: 1`, `recommended_next_slice: copilot_core.api.v1.suggestions`
+
+**Next Exact Task:** Slice 109 — `copilot_core.api.v1.suggestions` als jetzt einzig verbleibende route-starke Inventar-Lücke mit direkter Contract-Baseline ziehen; weiterhin **kein** Live-/Install-/Restart-Schritt.
+
+### ✅ Slice 109 — Suggestions Runtime Contract Baseline
+**Status:** ✅ DONE (worktree; kein Live-/Install-/Restart-Schritt)
+
+**Goal**
+`copilot_core.api.v1.suggestions` als verbleibende route-starke Suggestions-/Proposal-Entry-Surface mit direkter Contract-Baseline, kontrollierten JSON-/Mutation-/Runtime-Fehlerpfaden und Inventar-Parität absichern.
+
+### Grounded progress
+- [x] direkter Contract-Harness `tests/test_suggestions_contract.py` deckt List-, Repairs-, Accept-, Reject- und Snooze-Surfaces gegen die aktive Blueprint-Wahrheit ab
+- [x] `copilot_core/rootfs/usr/src/app/copilot_core/api/v1/suggestions.py` auf kleine JSON-/Field-Helper gehärtet; mutierende Routes behandeln fehlende oder nicht-objektige Bodies jetzt kontrolliert als JSON-400
+- [x] Input-Härtung ergänzt: `id` muss jetzt nicht-leerer String sein; `minutes` wird für Snooze typscharf als positive Ganzzahl validiert statt implizit durchzureichen
+- [x] Runtime-Fehlerpfade für Listen, Accept, Reject und Snooze zentralisiert; Engine-Ausnahmen kippen jetzt konsistent auf JSON-500 statt impliziter HTML-500-Abbrüche
+- [x] Test-Isolation gehärtet: `init_suggestions_api()` setzt Fallback-State restart-/harness-sicher zurück, sodass Fallback-Aktionen nicht zwischen Läufen driften
+- [x] Inventar-Artefakte regeneriert; route-starke Surfaces ohne direkte Contract-Tests reduziert von **1** auf **0** und `copilot_core.api.v1.suggestions` ist nicht mehr Top-Gap
+
+### Verification
+- `pytest -q tests/test_suggestions_contract.py tests/test_ps_core_runtime_contract_inventory.py tests/test_proposal_lifecycle_api.py -k 'suggestions or runtime_contract_inventory or proposal_lifecycle_api'` → `31 passed in 17.45s`
+- `python3 scripts/ps_core_runtime_contract_inventory.py --repo . --json-out docs/analysis/ps_core_runtime_contract_inventory_2026-04-04.json --md-out docs/analysis/PS_CORE_RUNTIME_CONTRACT_INVENTORY_2026-04-04.md --stdout-json` → `route_heavy_without_direct_contract_tests: 0`, `recommended_next_slice: copilot_core.api.v1.brain_growth`
+
+**Next Exact Task:** Slice 110 — `copilot_core.api.v1.brain_growth` als nächstes direkt ungetestetes Inventar-Gap unterhalb der bisherigen Route-Heavy-Schwelle mit fokussierter Contract-Baseline ziehen; weiterhin **kein** Live-/Install-/Restart-Schritt.
+
+### ✅ Slice 110 — Brain Growth Runtime Contract Baseline
+**Status:** ✅ DONE (worktree; kein Live-/Install-/Restart-Schritt)
+
+**Goal**
+`copilot_core.api.v1.brain_growth` als direktes Inventar-Gap unterhalb der bisherigen Route-Heavy-Schwelle mit fokussierter Contract-Baseline, kontrollierten Query-/Runtime-/Unavailability-Pfaden und Inventar-Parität absichern.
+
+### Grounded progress
+- [x] direkter Contract-Harness `tests/test_brain_growth_contract.py` deckt Summary-, Trace-, Zone-Links- und Activity-Surfaces gegen die aktive Blueprint-Wahrheit ab
+- [x] `copilot_core/rootfs/usr/src/app/copilot_core/api/v1/brain_growth.py` gehärtet: fehlender `request`-Import geschlossen, gemeinsame Init-Prüfung ergänzt und `limit` auf `/activity` jetzt kontrolliert als positive Ganzzahl validiert
+- [x] Activity-Surface liefert jetzt echte Read-Model-Activity statt leerem Platzhalter; `BrainGrowthReadModel.get_recent_activity()` exponiert die jüngsten Semantic-Transfer-Traces in stabiler Reihenfolge
+- [x] Runtime-Fehlerpfade für Summary, Trace, Zone-Links und Activity zentralisiert; nicht initialisierte Surface bleibt explizit auf JSON-503, fehlende Traces auf JSON-404
+- [x] Inventar-Tests und Artefakte nachgezogen; `copilot_core.api.v1.brain_growth` ist nicht mehr empfohlener nächster Slice, neuer Inventar-Kandidat ist `copilot_core.api.v1.character`
+
+### Verification
+- `pytest -q tests/test_brain_growth_contract.py tests/test_ps_core_runtime_contract_inventory.py -k 'brain_growth or runtime_contract_inventory'` → `29 passed in 18.02s`
+- `python3 scripts/ps_core_runtime_contract_inventory.py --repo . --json-out docs/analysis/ps_core_runtime_contract_inventory_2026-04-04.json --md-out docs/analysis/PS_CORE_RUNTIME_CONTRACT_INVENTORY_2026-04-04.md --stdout-json` → `route_heavy_without_direct_contract_tests: 0`, `recommended_next_slice: copilot_core.api.v1.character`
+
+**Next Exact Task:** Slice 111 — `copilot_core.api.v1.character` als nächstes direkt ungetestetes Inventar-Gap unterhalb der bisherigen Route-Heavy-Schwelle mit fokussierter Contract-Baseline ziehen; weiterhin **kein** Live-/Install-/Restart-Schritt.
+
+### ✅ Slice 111 — Character Runtime Contract Baseline
+**Status:** ✅ DONE (worktree; kein Live-/Install-/Restart-Schritt)
+
+**Goal**
+`copilot_core.api.v1.character` als direktes Inventar-Gap unterhalb der bisherigen Route-Heavy-Schwelle mit fokussierter Contract-Baseline, JSON-/Payload-Härtung und kontrollierten Runtime-Fehlerpfaden absichern.
+
+### Grounded progress
+- [x] direkter Contract-Harness `tests/test_character_contract.py` deckt Current-, Modes-, Mode- und Mood-Surfaces gegen die aktive Blueprint-Wahrheit ab
+- [x] `copilot_core/rootfs/usr/src/app/copilot_core/api/v1/character.py` gehärtet: fehlende oder nicht-objektige JSON-Bodies liefern jetzt kontrollierte JSON-400-Responses statt impliziter Attributfehler
+- [x] Input-Validierung für `mode` und `mood` nachgezogen: `mode` muss nicht-leerer String sein, `mood` muss nicht-leeres Dict mit numerischen Werten sein
+- [x] Runtime-Fehlerpfade für Current, Modes, Mode und Mood zentralisiert; Service-Ausnahmen kippen nicht mehr implizit in HTML-500-Abbrüche, sondern sauber auf JSON-500
+- [x] Inventar-Tests und Artefakte nachgezogen; `copilot_core.api.v1.character` ist nicht mehr empfohlener nächster Slice, neuer Inventar-Kandidat ist `copilot_core.api.v1.action_attribution`
+
+### Verification
+- `pytest -q tests/test_character_contract.py tests/test_ps_core_runtime_contract_inventory.py -k 'character or runtime_contract_inventory'` → `30 passed in 18.61s`
+- `python3 scripts/ps_core_runtime_contract_inventory.py --repo . --json-out docs/analysis/ps_core_runtime_contract_inventory_2026-04-04.json --md-out docs/analysis/PS_CORE_RUNTIME_CONTRACT_INVENTORY_2026-04-04.md --stdout-json` → `route_heavy_without_direct_contract_tests: 0`, `recommended_next_slice: copilot_core.api.v1.action_attribution`
+
+**Next Exact Task:** Slice 112 — `copilot_core.api.v1.action_attribution` als nächstes direkt ungetestetes Inventar-Gap unterhalb der Route-Heavy-Schwelle mit fokussierter Contract-Baseline ziehen; weiterhin **kein** Live-/Install-/Restart-Schritt.
+
+### ✅ Slice 112 — Action Attribution Runtime Contract Baseline
+**Status:** ✅ DONE (worktree; kein Live-/Install-/Restart-Schritt)
+
+**Goal**
+`copilot_core.api.v1.action_attribution` als direktes Inventar-Gap unterhalb der Route-Heavy-Schwelle mit fokussierter Contract-Baseline, JSON-/Signal-/Query-Härtung und kontrollierten Runtime-Fehlerpfaden absichern.
+
+### Grounded progress
+- [x] direkter Contract-Harness `tests/test_action_attribution_contract.py` deckt Attribute-, History- und User-Surfaces gegen die aktive Blueprint-Wahrheit ab
+- [x] `copilot_core/rootfs/usr/src/app/copilot_core/api/v1/action_attribution.py` auf kleine Service-/JSON-/Signal-/Query-Helper gehärtet; fehlende oder nicht-objektige Bodies, invalide `signals`-Payloads und ungültige `limit`-Werte liefern jetzt kontrollierte JSON-400-Responses
+- [x] Attributions-Signale werden jetzt typscharf validiert (`user_id`, `source_name`, `confidence`, `metadata`) statt implizit in Attribut-/Type-Fehler zu kippen; Signale ohne `user_id` bleiben kompatibel weiter ignorable
+- [x] Response-Härtung ergänzt: Attributions- und History-Timestamps werden stabil ISO-formatiert; `no attribution possible` bleibt als expliziter strukturierter JSON-Pfad sichtbar
+- [x] Runtime-Fehlerpfade für Attribute-, History- und User-Surfaces zentralisiert; Service-Ausnahmen kippen nicht mehr implizit in HTML-500-Abbrüche, sondern sauber auf JSON-500
+- [x] Inventar-Tests und Artefakte nachgezogen; `copilot_core.api.v1.action_attribution` ist nicht mehr empfohlener nächster Slice, neuer Inventar-Kandidat ist `copilot_core.api.v1.cache_control`
+
+### Verification
+- `pytest -q tests/test_action_attribution_contract.py tests/test_ps_core_runtime_contract_inventory.py -k 'action_attribution or runtime_contract_inventory'` → `31 passed in 19.64s`
+- `python3 scripts/ps_core_runtime_contract_inventory.py --repo . --json-out docs/analysis/ps_core_runtime_contract_inventory_2026-04-04.json --md-out docs/analysis/PS_CORE_RUNTIME_CONTRACT_INVENTORY_2026-04-04.md --stdout-json` → `route_heavy_without_direct_contract_tests: 0`, `recommended_next_slice: copilot_core.api.v1.cache_control`
+
+**Next Exact Task:** Slice 113 — `copilot_core.api.v1.cache_control` als nächstes direkt ungetestetes Inventar-Gap unterhalb der Route-Heavy-Schwelle mit fokussierter Contract-Baseline ziehen; weiterhin **kein** Live-/Install-/Restart-Schritt.
+
+### ✅ Slice 113 — Cache Control Runtime Contract Baseline
+**Status:** ✅ DONE (worktree; kein Live-/Install-/Restart-Schritt)
+
+**Goal**
+`copilot_core.api.v1.cache_control` als direktes Inventar-Gap unterhalb der Route-Heavy-Schwelle mit fokussierter Contract-Baseline, optionaler JSON-Härtung und kontrollierten Runtime-Fehlerpfaden absichern.
+
+### Grounded progress
+- [x] direkter Contract-Harness `tests/test_cache_control_contract.py` deckt Status-, Invalidate- und Stats-Surfaces gegen die aktive Runtime-Wahrheit ab, inkl. `all`-, `key`-, `pattern`- und default-Invalidate-Pfaden
+- [x] `copilot_core/rootfs/usr/src/app/copilot_core/api/v1/cache_control.py` auf kleine Request-/Init-Helper gehärtet; nicht-objektige JSON-Payloads sowie invalide `all`-, `key`- und `pattern`-Werte liefern jetzt kontrollierte JSON-400-Responses statt impliziter Typ-/Attributfehler
+- [x] Initialisierungsverhalten explizit gemacht: fehlender Redis-Client und fehlender API-Cache kippen nicht mehr implizit in Attributfehler, sondern sauber auf JSON-503
+- [x] Runtime-Fehlerpfade für Status-, Invalidate- und Stats-Surfaces zentralisiert; Cache-/Redis-Ausnahmen bleiben kontrolliert auf JSON-500
+- [x] Inventar-Tests und Artefakte nachgezogen; `copilot_core.api.v1.cache_control` ist nicht mehr empfohlener nächster Slice, neuer Inventar-Kandidat ist `copilot_core.api.v1.conflict_resolution`
+
+### Verification
+- `pytest -q tests/test_cache_control_contract.py tests/test_ps_core_runtime_contract_inventory.py -k 'cache_control or runtime_contract_inventory'` → `32 passed in 19.91s`
+- `python3 scripts/ps_core_runtime_contract_inventory.py --repo . --json-out docs/analysis/ps_core_runtime_contract_inventory_2026-04-04.json --md-out docs/analysis/PS_CORE_RUNTIME_CONTRACT_INVENTORY_2026-04-04.md --stdout-json` → `route_heavy_without_direct_contract_tests: 0`, `recommended_next_slice: copilot_core.api.v1.conflict_resolution`
+
+### ✅ Slice 114 — Conflict Resolution Runtime Contract Baseline
+**Status:** ✅ DONE (worktree; kein Live-/Install-/Restart-Schritt)
+
+**Goal**
+`copilot_core.api.v1.conflict_resolution` als direktes Inventar-Gap unterhalb der Route-Heavy-Schwelle mit fokussierter Contract-Baseline, JSON-/Input-Härtung und kontrollierten Runtime-Fehlerpfaden absichern.
+
+### Grounded progress
+- [x] direkter Contract-Harness `tests/test_conflict_resolution_contract.py` deckt State-, Evaluate- und Strategy-Surfaces gegen die aktive Runtime-Wahrheit ab, inkl. expliziter Mood/Priority-Evaluate-, Store-Evaluate- und Override-Strategy-Pfade
+- [x] `copilot_core/rootfs/usr/src/app/copilot_core/api/v1/conflict_resolution.py` auf kleine Request-/Validation-Helper gehärtet; nicht-objektige JSON-Payloads, halbvollständige Explicit-Evaluate-Payloads sowie invalide `user_moods`-, `user_priorities`-, `active_user_ids`-, `strategy`- und `override_user`-Werte liefern jetzt kontrollierte JSON-400-Responses
+- [x] Runtime-Fehlerpfade für State-, Evaluate- und Strategy-Surfaces zentralisiert; Resolver-/State-Ausnahmen bleiben kontrolliert auf JSON-500 statt implizit in HTML-500-Abbrüche zu kippen
+- [x] Inventar-Tests und Artefakte nachgezogen; `copilot_core.api.v1.conflict_resolution` ist nicht mehr empfohlener nächster Slice, neuer Inventar-Kandidat ist `copilot_core.api.v1.error_digest`
+
+### Verification
+- `pytest -q tests/test_conflict_resolution_contract.py tests/test_ps_core_runtime_contract_inventory.py copilot_core/rootfs/usr/src/app/tests/test_conflict_resolution.py -k 'conflict_resolution or runtime_contract_inventory'` → `65 passed in 22.36s`
+- `python3 scripts/ps_core_runtime_contract_inventory.py --repo . --json-out docs/analysis/ps_core_runtime_contract_inventory_2026-04-04.json --md-out docs/analysis/PS_CORE_RUNTIME_CONTRACT_INVENTORY_2026-04-04.md --stdout-json` → `route_heavy_without_direct_contract_tests: 0`, `recommended_next_slice: copilot_core.api.v1.error_digest`
+
+### ✅ Slice 115 — Error Digest Runtime Contract Baseline
+**Status:** ✅ DONE (worktree; kein Live-/Install-/Restart-Schritt)
+
+**Goal**
+`copilot_core.api.v1.error_digest` als direktes Inventar-Gap unterhalb der Route-Heavy-Schwelle mit fokussierter Contract-Baseline, JSON-/Query-Härtung und kontrollierten Runtime-Fehlerpfaden absichern.
+
+### Grounded progress
+- [x] direkter Contract-Harness `tests/test_error_digest_contract.py` deckt Digest-, Categories- und Repair-Suggestions-Surfaces gegen die aktive Runtime-Wahrheit ab, inkl. LLM-Fallback-, Validierungs-, Runtime- und Auth-Pfaden
+- [x] `copilot_core/rootfs/usr/src/app/copilot_core/api/v1/error_digest.py` auf kleine JSON-/Query-/Timestamp-Helper gehärtet; invalide `hours`-/`severity`-Inputs, nicht-objektige Bodies sowie leere oder typfalsche `message`-/`context`-Werte liefern jetzt kontrollierte JSON-400-Responses
+- [x] Runtime-Fehlerpfade für Digest- und Repair-Suggestions-Surfaces zentralisiert; Log-/Pattern-Ausnahmen kippen jetzt kontrolliert auf JSON-500 statt impliziter HTML-500-Abbrüche
+- [x] Inventar-Wahrheit nachgezogen: `tests/test_ps_core_runtime_contract_inventory.py` bestätigt `error_digest` als direkt kontraktabgedeckt und zieht den echten nächsten Slice auf `copilot_core.api.v1.events_ingest`
+- [x] `scripts/ps_core_runtime_contract_inventory.py` rendert die Empfehlung jetzt auch unterhalb der Route-Heavy-Schwelle wahrheitsgetreu; regenerierte Inventar-Artefakte zeigen `events_ingest` als nächsten exakten Slice
+
+### Verification
+- `pytest -q tests/test_error_digest_contract.py tests/test_ps_core_runtime_contract_inventory.py copilot_core/rootfs/usr/src/app/tests/test_error_digest.py -k 'error_digest or runtime_contract_inventory'` → `64 passed in 27.50s`
+- `python3 scripts/ps_core_runtime_contract_inventory.py --repo . --json-out docs/analysis/ps_core_runtime_contract_inventory_2026-04-04.json --md-out docs/analysis/PS_CORE_RUNTIME_CONTRACT_INVENTORY_2026-04-04.md --stdout-json` → `route_heavy_without_direct_contract_tests: 0`, `recommended_next_slice: copilot_core.api.v1.events_ingest`
+
+### ✅ Slice 116 — Events Ingest Runtime Contract Baseline
+**Status:** ✅ DONE (worktree; kein Live-/Install-/Restart-Schritt)
+
+**Goal**
+`copilot_core.api.v1.events_ingest` als direktes Inventar-Gap unterhalb der Route-Heavy-Schwelle mit fokussierter Contract-Baseline, Ingest-/Query-Härtung und kontrollierten Runtime-Fehlerpfaden absichern.
+
+### Grounded progress
+- [x] direkter Contract-Harness `tests/test_events_ingest_contract.py` deckt POST-/GET-/Stats-Surfaces gegen die aktive Runtime-Wahrheit ab, inkl. Normalisierung, Post-Ingest-Callback, Limit-Validierung, Runtime- und Auth-Pfaden
+- [x] `copilot_core/rootfs/usr/src/app/copilot_core/api/v1/events_ingest.py` härtet jetzt auch den POST-Ingest-Pfad kontrolliert auf JSON-500; `ingest_batch()`-Ausnahmen kippen nicht mehr implizit in HTML-500-Abbrüche
+- [x] Inventar-Wahrheit nachgezogen: `tests/test_ps_core_runtime_contract_inventory.py` bestätigt `events_ingest` als direkt kontraktabgedeckt; neuer nächster Slice unterhalb der Route-Heavy-Schwelle ist jetzt `copilot_core.api.v1.haushalt`
+- [x] Inventar-Artefakte regeneriert: `docs/analysis/PS_CORE_RUNTIME_CONTRACT_INVENTORY_2026-04-04.md` und `docs/analysis/ps_core_runtime_contract_inventory_2026-04-04.json` zeigen `haushalt` als nächsten exakten Slice
+- [x] breiterer Legacy-Lauf `copilot_core/rootfs/usr/src/app/tests/test_events_endpoint.py` bleibt außerhalb dieses Minimal-Slices rot (`15 failed`) wegen separater App-Bootstrap-/Blueprint-Registrierungsprobleme; nicht von diesem `events_ingest`-Diff verursacht und deshalb nicht in Slice 116 aufgeweitet
+
+### Verification
+- `pytest -q tests/test_events_ingest_contract.py tests/test_ps_core_runtime_contract_inventory.py -k 'events_ingest or runtime_contract_inventory'` → `36 passed in 20.73s`
+- `python3 scripts/ps_core_runtime_contract_inventory.py --repo . --json-out docs/analysis/ps_core_runtime_contract_inventory_2026-04-04.json --md-out docs/analysis/PS_CORE_RUNTIME_CONTRACT_INVENTORY_2026-04-04.md --stdout-json` → `route_heavy_without_direct_contract_tests: 0`, `recommended_next_slice: copilot_core.api.v1.haushalt`
+
+### ✅ Slice 117 — Haushalt Runtime Contract Baseline
+**Status:** ✅ DONE (worktree; kein Live-/Install-/Restart-Schritt)
+
+**Goal**
+`copilot_core.api.v1.haushalt` als direktes Inventar-Gap unterhalb der Route-Heavy-Schwelle mit fokussierter Contract-Baseline, Overview-/Reminder-Härtung und kontrollierten Runtime-Fehlerpfaden absichern.
+
+### Grounded progress
+- [x] direkter Contract-Harness `tests/test_haushalt_contract.py` deckt alle drei `haushalt`-Surfaces gegen die aktive Runtime-Wahrheit ab, inkl. Overview-, Waste-Reminder-, Birthday-Reminder-, Unavailable-, Runtime- und Auth-Pfaden
+- [x] `copilot_core/rootfs/usr/src/app/copilot_core/api/v1/haushalt.py` auf kleine Service-/Status-Helper gehärtet; invalide Status-Objekte und Service-Ausnahmen kippen jetzt kontrolliert auf JSON-500 statt impliziter HTML-500-Abbrüche
+- [x] Reminder-Pfade defensiv stabilisiert: Waste-/Birthday-Listen werden kontrolliert gelesen, Reminder-Strings robust zusammengesetzt und Overview-Alerts nur aus gültigen Statuslisten abgeleitet
+- [x] Inventar-Wahrheit nachgezogen: `tests/test_ps_core_runtime_contract_inventory.py` bestätigt `haushalt` als direkt kontraktabgedeckt; neuer nächster Slice unterhalb der Route-Heavy-Schwelle ist jetzt `copilot_core.api.v1.module_health`
+- [x] Inventar-Artefakte regeneriert: `docs/analysis/PS_CORE_RUNTIME_CONTRACT_INVENTORY_2026-04-04.md` und `docs/analysis/ps_core_runtime_contract_inventory_2026-04-04.json` zeigen `module_health` als nächsten exakten Slice
+
+### Verification
+- `pytest -q tests/test_haushalt_contract.py tests/test_ps_core_runtime_contract_inventory.py -k 'haushalt or runtime_contract_inventory'` → `37 passed in 23.91s`
+- `python3 scripts/ps_core_runtime_contract_inventory.py --repo . --json-out docs/analysis/ps_core_runtime_contract_inventory_2026-04-04.json --md-out docs/analysis/PS_CORE_RUNTIME_CONTRACT_INVENTORY_2026-04-04.md --stdout-json` → `route_heavy_without_direct_contract_tests: 0`, `recommended_next_slice: copilot_core.api.v1.module_health`
+
+### ✅ Slice 118 — Module Health Runtime Contract Baseline
+**Status:** ✅ DONE (worktree; kein Live-/Install-/Restart-Schritt)
+
+**Goal**
+`copilot_core.api.v1.module_health` als direktes Inventar-Gap unterhalb der Route-Heavy-Schwelle mit fokussierter Contract-Baseline, Dashboard-/Learning-/Pattern-Härtung und kontrollierten Runtime-Fehlerpfaden absichern.
+
+### Grounded progress
+- [x] direkter Contract-Harness `tests/test_module_health_contract.py` deckt alle drei `module_health`-Surfaces gegen die aktive Runtime-Wahrheit ab, inkl. Dashboard-, Learning-, Pattern-, Uninitialized-, Typfehler- und Runtime-Pfaden
+- [x] `copilot_core/rootfs/usr/src/app/copilot_core/api/v1/module_health.py` auf kleine Timestamp-/Error-/Type-Helper gehärtet; invalide Stats-/Pattern-/Proposal-Payloads liefern jetzt kontrollierte JSON-500-Responses statt impliziter Typfehler oder HTML-500-Abbrüche
+- [x] Dashboard-Verhalten bleibt stabil: fehlende Services liefern weiter definierte Fallbacks (`modules={}`, `bus/learning/cross_module/feedback=None`), während echte Registry-/Bus-/Learning-/Analyzer-Fehler sauber als JSON-500 sichtbar werden
+- [x] Inventar-Wahrheit nachgezogen: `tests/test_ps_core_runtime_contract_inventory.py` bestätigt `module_health` als direkt kontraktabgedeckt; neuer nächster Slice unterhalb der Route-Heavy-Schwelle ist jetzt `copilot_core.api.v1.neurons_visualization`
+- [x] Inventar-Artefakte regeneriert: `docs/analysis/PS_CORE_RUNTIME_CONTRACT_INVENTORY_2026-04-04.md` und `docs/analysis/ps_core_runtime_contract_inventory_2026-04-04.json` zeigen `neurons_visualization` als nächsten exakten Slice
+
+### Verification
+- `pytest -q tests/test_module_health_contract.py tests/test_ps_core_runtime_contract_inventory.py copilot_core/rootfs/usr/src/app/tests/test_cross_module.py -k 'module_health or runtime_contract_inventory or ModuleHealthAPI'` → `40 passed, 9 deselected in 26.07s`
+- `python3 scripts/ps_core_runtime_contract_inventory.py --repo . --json-out docs/analysis/ps_core_runtime_contract_inventory_2026-04-04.json --md-out docs/analysis/PS_CORE_RUNTIME_CONTRACT_INVENTORY_2026-04-04.md --stdout-json` → `route_heavy_without_direct_contract_tests: 0`, `recommended_next_slice: copilot_core.api.v1.neurons_visualization`
+
+### ✅ Slice 119 — Neurons Visualization Runtime Contract Baseline
+**Status:** ✅ DONE (worktree; kein Live-/Install-/Restart-Schritt)
+
+**Goal**
+`copilot_core.api.v1.neurons_visualization` als direktes Inventar-Gap unterhalb der Route-Heavy-Schwelle mit fokussierter Contract-Baseline, State-/Fire-/Pipeline-Härtung und kontrollierten Runtime-Fehlerpfaden absichern.
+
+### Grounded progress
+- [x] direkter Contract-Harness `tests/test_neurons_visualization_contract.py` deckt alle drei `neurons_visualization`-Surfaces gegen die aktive Runtime-Wahrheit ab, inkl. State-, Fire-, Pipeline-, Auth-, Uninitialized-, Validierungs- und Runtime-Pfaden
+- [x] `copilot_core/rootfs/usr/src/app/copilot_core/api/v1/neurons_visualization.py` auf kleine Manager-/Store-/Payload-Helper gehärtet; fehlender `NeuronManager` liefert jetzt kontrollierte JSON-503-Responses statt impliziter Attributfehler
+- [x] Response-Härtung ergänzt: Neuron-/Summary-/State-/Config-/Pipeline-Payloads werden als Objekte erzwungen, numerische Live-Metrics werden typscharf validiert und invalide Suggestion-/HA-State-Caches kippen kontrolliert auf JSON-500 statt HTML-500-Abbrüchen
+- [x] Inventar-Wahrheit nachgezogen: `tests/test_ps_core_runtime_contract_inventory.py` bestätigt `neurons_visualization` als direkt kontraktabgedeckt; neuer nächster Slice unterhalb der Route-Heavy-Schwelle ist jetzt `copilot_core.api.v1.search`
+- [x] Inventar-Artefakte regeneriert: `docs/analysis/PS_CORE_RUNTIME_CONTRACT_INVENTORY_2026-04-04.md` und `docs/analysis/ps_core_runtime_contract_inventory_2026-04-04.json` zeigen `search` als nächsten exakten Slice; `python3.14 scripts/contract_inventory_fast_check.py --repo .` bleibt grün
+
+### Verification
+- `python3.14 -m pytest -q tests/test_neurons_visualization_contract.py tests/test_ps_core_runtime_contract_inventory.py -k 'neurons_visualization or runtime_contract_inventory'` → `38 passed in 24.39s`
+- `python3.14 scripts/ps_core_runtime_contract_inventory.py --repo . --json-out docs/analysis/ps_core_runtime_contract_inventory_2026-04-04.json --md-out docs/analysis/PS_CORE_RUNTIME_CONTRACT_INVENTORY_2026-04-04.md --stdout-json` → `route_heavy_without_direct_contract_tests: 0`, `recommended_next_slice: copilot_core.api.v1.search`
+- `python3.14 scripts/contract_inventory_fast_check.py --repo .` → `PASS`, `Next uncovered slice: copilot_core.api.v1.search`
+
+### ✅ Slice 120 — Search Runtime Contract Baseline
+**Status:** ✅ DONE (worktree; kein Live-/Install-/Restart-Schritt)
+
+**Goal**
+`copilot_core.api.v1.search` als direktes Inventar-Gap unterhalb der Route-Heavy-Schwelle mit fokussierter Contract-Baseline, Search-/Entity-Filter-/Index-/Stats-Härtung und kontrollierten Runtime-Fehlerpfaden absichern.
+
+### Grounded progress
+- [x] direkter Contract-Harness `tests/test_search_contract.py` deckt alle vier `search`-Surfaces gegen die aktive Runtime-Wahrheit ab, inkl. Index-, Full-Search-, Entity-Filter-, Stats-, Auth-, Validierungs- und Runtime-Pfaden
+- [x] `copilot_core/rootfs/usr/src/app/copilot_core/api/v1/search.py` auf kleine Parse-/Body-/Error-Helper gehärtet; invalide `limit`-/`types`-Querys und ungültige JSON-Bodies liefern jetzt kontrollierte JSON-400-Responses statt impliziter HTML-500-/Werkzeug-Abbrüche
+- [x] Runtime-Fehler vereinheitlicht: Search-, Filter-, Stats- und Index-Exceptions kippen kontrolliert auf JSON-500 mit stabilen Fehlermeldungen; Index-Collections (`entities|automations|scripts|scenes|services`) werden als Objekte erzwungen
+- [x] Inventar-Wahrheit nachgezogen: `tests/test_ps_core_runtime_contract_inventory.py` bestätigt `search` als direkt kontraktabgedeckt; neuer nächster Slice unterhalb der Route-Heavy-Schwelle ist jetzt `copilot_core.api.v1.debug`
+- [x] Inventar-Artefakte regeneriert: `docs/analysis/PS_CORE_RUNTIME_CONTRACT_INVENTORY_2026-04-04.md` und `docs/analysis/ps_core_runtime_contract_inventory_2026-04-04.json` zeigen `debug` als nächsten exakten Slice; `python3.14 scripts/contract_inventory_fast_check.py --repo .` bleibt grün
+
+### Verification
+- `python3.14 -m pytest -q tests/test_search_contract.py tests/test_ps_core_runtime_contract_inventory.py -k 'search or runtime_contract_inventory'` → `39 passed in 25.91s`
+- `python3.14 scripts/ps_core_runtime_contract_inventory.py --repo . --json-out docs/analysis/ps_core_runtime_contract_inventory_2026-04-04.json --md-out docs/analysis/PS_CORE_RUNTIME_CONTRACT_INVENTORY_2026-04-04.md --stdout-json` → `route_heavy_without_direct_contract_tests: 0`, `recommended_next_slice: copilot_core.api.v1.debug`
+- `python3.14 scripts/contract_inventory_fast_check.py --repo .` → `PASS`, `Next uncovered slice: copilot_core.api.v1.debug`
+
+### ✅ Slice 121 — Debug Runtime Contract Baseline
+**Status:** ✅ DONE (worktree; kein Live-/Install-/Restart-Schritt)
+
+**Goal**
+`copilot_core.api.v1.debug` als direktes Inventar-Gap unterhalb der Route-Heavy-Schwelle mit fokussierter Contract-Baseline, JSON-/Auth-Härtung und kontrollierten Runtime-Fehlerpfaden absichern.
+
+### Grounded progress
+- [x] direkter Contract-Harness `tests/test_debug_contract.py` deckt beide `debug`-Surfaces gegen die aktive Runtime-Wahrheit ab, inkl. Status-, Toggle-, Auth-, Validierungs- und Runtime-Pfaden
+- [x] `copilot_core/rootfs/usr/src/app/copilot_core/api/v1/debug.py` auf kleine Error-/Body-Helper gehärtet; nicht-objektige Bodies liefern jetzt kontrollierte JSON-400-Responses statt impliziter Parser-/Request-Abbrüche
+- [x] Runtime-Fehlerpfade ergänzt: `get_debug()`- und `set_debug()`-Ausnahmen kippen kontrolliert auf JSON-500 statt impliziter HTML-500-Abbrüche; Erfolgs-Payloads bleiben stabil
+- [x] Inventar-Wahrheit nachgezogen: `tests/test_ps_core_runtime_contract_inventory.py` bestätigt `debug` als direkt kontraktabgedeckt; neuer nächster Slice unterhalb der Route-Heavy-Schwelle ist jetzt `copilot_core.api.v1.explain`
+- [x] Inventar-Artefakte regeneriert: `docs/analysis/PS_CORE_RUNTIME_CONTRACT_INVENTORY_2026-04-04.md` und `docs/analysis/ps_core_runtime_contract_inventory_2026-04-04.json` zeigen `explain` als nächsten exakten Slice; `python3.14 scripts/contract_inventory_fast_check.py --repo .` bleibt grün
+
+### Verification
+- `pytest -q tests/test_debug_contract.py tests/test_ps_core_runtime_contract_inventory.py` → `40 passed in 26.24s`
+- `python3.14 scripts/ps_core_runtime_contract_inventory.py --repo . --json-out docs/analysis/ps_core_runtime_contract_inventory_2026-04-04.json --md-out docs/analysis/PS_CORE_RUNTIME_CONTRACT_INVENTORY_2026-04-04.md --stdout-json` → `route_heavy_without_direct_contract_tests: 0`, `recommended_next_slice: copilot_core.api.v1.explain`
+- `python3.14 scripts/contract_inventory_fast_check.py --repo .` → `PASS`, `Next uncovered slice: copilot_core.api.v1.explain`
+
+### ✅ Slice 122 — Explain Runtime Contract Baseline
+**Status:** ✅ DONE (worktree; kein Live-/Install-/Restart-Schritt)
+
+**Goal**
+`copilot_core.api.v1.explain` als letztes aktives Inventar-/Contract-Gap unterhalb der Route-Heavy-Schwelle mit fokussierter Contract-Baseline, kontrollierten Error-Pfaden und stabiler Pattern-Projektion schließen.
+
+### Grounded progress
+- [x] direkter Contract-Harness `tests/test_explain_contract.py` deckt beide `explain`-Surfaces gegen die aktive Runtime-Wahrheit ab, inkl. Suggestion-, Pattern-, Auth-, Uninitialized-, Invalid-Result- und Runtime-Pfaden
+- [x] `copilot_core/rootfs/usr/src/app/copilot_core/api/v1/explain.py` auf kleine Request-/Result-/Error-Helper gehärtet; invalide Engine-Resultate liefern jetzt kontrollierte JSON-500-Responses statt impliziter Merge-/Type-Crashes
+- [x] Pattern-Surface bleibt kanonisch auf derselben Explain-Engine, erzwingt den Pattern-Typ aber jetzt kontrolliert in der Response statt auf blindem Inline-Mutate-Pfad
+- [x] Inventar-Wahrheit nachgezogen: `tests/test_ps_core_runtime_contract_inventory.py` bestätigt die geschlossene Inventar-Linie; `recommended_next_slice` ist jetzt bewusst `null`
+- [x] Inventar-Artefakte regeneriert: `docs/analysis/PS_CORE_RUNTIME_CONTRACT_INVENTORY_2026-04-04.md` und `docs/analysis/ps_core_runtime_contract_inventory_2026-04-04.json` zeigen keinen aktiven nächsten Inventar-Slice mehr; `python3.14 scripts/contract_inventory_fast_check.py --repo .` bleibt grün
+
+### Verification
+- `pytest -q tests/test_explain_contract.py tests/test_ps_core_runtime_contract_inventory.py` → `40 passed in 25.25s`
+- `python3.14 scripts/ps_core_runtime_contract_inventory.py --repo . --json-out docs/analysis/ps_core_runtime_contract_inventory_2026-04-04.json --md-out docs/analysis/PS_CORE_RUNTIME_CONTRACT_INVENTORY_2026-04-04.md --stdout-json` → `route_heavy_without_direct_contract_tests: 0`, `recommended_next_slice: null`
+- `python3.14 scripts/contract_inventory_fast_check.py --repo .` → `PASS`, kein aktiver nächster Inventar-Slice mehr
+
+**Next Exact Task:** Genau einen kleinsten nicht-Contract-Core/API-Forward-Slice ziehen und builder-scharf landen — weiterhin **kein** Live-/Install-/Restart-Schritt.
+
+### ✅ Slice 127 — Backend UI Module Write Model Alignment
+**Status:** ✅ DONE (worktree; kein Live-/Install-/Restart-Schritt)
+
+**Goal**
+`PUT /api/v1/backend/modules/<module_id>` auf dieselbe kanonische `ModuleRegistry`-Wahrheit ziehen wie die bereits gelandete Backend-UI-Modul-Read-Side, damit globale Modulmutationen nicht länger nur geloggt, sondern restart-sicher persistiert werden.
+
+### Grounded progress
+- [x] `copilot_core/rootfs/usr/src/app/copilot_core/api/v1/backend_ui.py` persistiert `state` im Backend-UI-Globalmodul-Write-Pfad jetzt kanonisch über `ModuleRegistry.set_state(...)` statt Log-only-Verhalten
+- [x] der Write-Pfad normalisiert `module_id` bewusst vor der Mutation und liefert Persistenzfehler kontrolliert als JSON-500 statt stiller Erfolgs-Acks ohne echte Zustandsänderung
+- [x] bestehende `config`-Validierung bleibt in diesem Minimal-Slice unverändert; gezogen wurde bewusst nur die globale Modul-State-Write-Side
+- [x] fokussierte Verifikation gelandet: `tests/test_backend_ui_contract.py` deckt jetzt Erfolgsfall, Registry-Write-Fehler und Read-after-write über `GET /api/v1/backend/modules` auf derselben Registry-Wahrheit direkt ab; `copilot_core/rootfs/usr/src/app/tests/test_module_registry_zones.py` bleibt für die zugrunde liegende Modul-/Override-Wahrheit grün
+- [x] Artefakt-Landung ergänzt: `docs/analysis/PS_CORE_SLICE_127_BACKEND_UI_MODULE_WRITE_MODEL_2026-04-05.md` dokumentiert Ziel, Diff, Verifikation und den nächsten exakten Folgeslice
+
+### Verification
+- `pytest -q tests/test_backend_ui_contract.py copilot_core/rootfs/usr/src/app/tests/test_module_registry_zones.py` → `24 passed in 1.06s`
+- `python3.14 scripts/contract_inventory_fast_check.py --repo .` → `PASS`
+
+**Next Exact Task:** Slice 128 — `GET /api/v1/backend/dashboard` auf dieselbe Modul-/Zonen-Wahrheit ziehen, damit Dashboard-Zählwerte und Übersichtsmetriken nicht länger neben den nun kanonischen Backend-UI-Modul- und Zonen-Surfaces driften.
+
+### ✅ Slice 126 — Backend UI Module Read Model Alignment
+**Status:** ✅ DONE (worktree; kein Live-/Install-/Restart-Schritt)
+
+**Goal**
+`GET /api/v1/backend/modules` auf dieselbe kanonische `ModuleRegistry`-Wahrheit ziehen wie die übrigen Modul-Surfaces, damit globale Modulzustände im Backend UI nicht länger als statische Platzhalter neben der bereits truth-backed Zonen-Read-Side stehen.
+
+### Grounded progress
+- [x] `copilot_core/rootfs/usr/src/app/copilot_core/api/v1/backend_ui.py` ergänzt kleine Modulkarten-Helper, die bekannte Backend-UI-Karten kompatibel halten und zusätzliche in `ModuleRegistry` bzw. Zone-Overrides sichtbare Module deterministisch projizieren
+- [x] `GET /api/v1/backend/modules` liest `state` jetzt direkt aus `ModuleRegistry` statt aus fest verdrahteten Platzhalterwerten
+- [x] die Modulkarten tragen jetzt zusätzlich `global_state`, `zones_enabled`, `zone_overrides` und `has_zone_overrides`, damit globale Governance und zonenscharfe Override-Sicht in derselben Surface gekoppelt bleiben
+- [x] effektive Zonen-Zählung wird aus derselben Zonen-Read-Side wie Slice 125 abgeleitet, damit Backend-UI-Globalmodule und zonenscharfe Modulantworten nicht gegeneinander driften
+- [x] fokussierte Verifikation gelandet: `tests/test_backend_ui_contract.py` deckt die truth-backed Modulkarten inklusive generischer Zusatzmodule und Override-/Zone-Count-Projektion direkt ab; `copilot_core/rootfs/usr/src/app/tests/test_module_registry_zones.py` hält die zugrunde liegende Override-Wahrheit weiter grün
+- [x] Artefakt-Landung ergänzt: `docs/analysis/PS_CORE_SLICE_126_BACKEND_UI_MODULE_READ_MODEL_2026-04-05.md` dokumentiert Ziel, Diff, Verifikation und den nächsten exakten Folgeslice
+
+### Verification
+- `pytest -q tests/test_backend_ui_contract.py copilot_core/rootfs/usr/src/app/tests/test_module_registry_zones.py` → `23 passed in 0.97s`
+- `python3.14 scripts/contract_inventory_fast_check.py --repo .` → `PASS`
+
+**Next Exact Task:** Slice 127 — `PUT /api/v1/backend/modules/<module_id>` auf dieselbe `ModuleRegistry`-Wahrheit ziehen, damit Backend-UI-Globalmodule nicht nur truth-backed gelesen, sondern auch kanonisch geschrieben werden statt `state` weiter nur zu loggen.
+
+### ✅ Slice 125 — Backend UI Zone-Module Read Model Alignment
+**Status:** ✅ DONE (worktree; kein Live-/Install-/Restart-Schritt)
+
+**Goal**
+`backend_ui`-Read-Side für Zonenmodule auf dieselbe kanonische Zone-Override-Wahrheit ziehen, damit Zonen-/Zonendetail-Karten `state`, `global_state`, `override_state` und `has_override` direkt lesen statt aus Template-/`enabled_modules`-Heuristik abzuleiten.
+
+### Grounded progress
+- [x] `copilot_core/rootfs/usr/src/app/copilot_core/api/v1/backend_ui.py` ergänzt kleine Read-Model-Helper, die Modul-Kandidaten aus Template-Defaults, `enabled_modules`, Zonendetaildaten und expliziten Zone-Overrides vereinen
+- [x] `GET /api/v1/backend/zones` liefert pro Zone jetzt restart-sicher `modules` mit `state`, `global_state`, `override_state`, `has_override` plus daraus abgeleitete `enabled_modules`
+- [x] `GET /api/v1/backend/zones/<zone_id>/entities` trägt dieselbe Zonenmodul-Read-Side direkt mit, damit Entity-/Zonendetail-Caller keine Parallelheuristik mehr nachbauen müssen
+- [x] `overview.zones` im Backend-Zonenpayload spiegelt dieselbe angereicherte Zonenliste wie das Top-Level-Feld, damit keine zweite schwächere Read-Side im selben Response bestehen bleibt
+- [x] fokussierte Verifikation gelandet: `tests/test_backend_ui_contract.py` deckt die neue Zone-Read-Side inkl. Override-/Projektionsfälle direkt ab; `copilot_core/rootfs/usr/src/app/tests/test_module_registry_zones.py` hält den zugrunde liegenden Override-Fallback grün
+- [x] Artefakt-Landung ergänzt: `docs/analysis/PS_CORE_SLICE_125_BACKEND_UI_ZONE_READ_MODEL_2026-04-05.md` dokumentiert Ziel, Diff, Verifikation und den nächsten exakten Folgeslice
+
+### Verification
+- `pytest -q tests/test_backend_ui_contract.py copilot_core/rootfs/usr/src/app/tests/test_module_registry_zones.py` → `23 passed in 0.97s`
+- `python3.14 scripts/contract_inventory_fast_check.py --repo .` → `PASS`
+
+**Next Exact Task:** Slice 126 — `backend_ui`-Modulkarten (`GET /api/v1/backend/modules`) auf `ModuleRegistry`-Wahrheit ziehen, damit globale Modulzustände nicht länger als statische Platzhalter neben der jetzt kanonischen Zonen-Read-Side stehen.
+
+### ✅ Slice 124 — Backend UI Zone-Override Alignment
+**Status:** ✅ DONE (worktree; kein Live-/Install-/Restart-Schritt)
+
+**Goal**
+`backend_ui` auf dieselbe kanonische Zone-Override-Wahrheit wie `module_control` ziehen, damit `/api/v1/backend/zones/<zone_id>/modules` nicht länger parallel auf `enabled_modules` + TODO-Semantik schreibt.
+
+### Grounded progress
+- [x] `copilot_core/rootfs/usr/src/app/copilot_core/api/v1/backend_ui.py` nutzt für Zonenmodul-Mutationen jetzt `ModuleRegistry` als kanonische Write-Wahrheit statt direkter Schatten-Schreiberei auf `enabled_modules`
+- [x] derselbe Request bestimmt jetzt bewusst Effektivzustand vs. expliziten Override: State == Global-State löscht vorhandene Zone-Overrides, abweichender State persistiert eine echte Override-Zeile
+- [x] `backend_ui`-Response zeigt jetzt restart-sicher denselben lesbaren Zustand wie Slice 123: `state`, `global_state`, `override_state`, `has_override`
+- [x] `enabled_modules` bleibt nur noch kompatible Read-Side-Projektion des effektiven Zustands, nicht mehr die schreibende Wahrheit für `active/learning/off`
+- [x] fokussierte Contract-/Follow-up-Verifikation gelandet: `tests/test_backend_ui_contract.py` deckt Delete-vs-Set-, Trim-, Validierungs- und Sync-Reporting-Pfade ab; `copilot_core/rootfs/usr/src/app/tests/test_module_registry_zones.py` bleibt für den zugrunde liegenden Override-Fallback grün
+- [x] Artefakt-Landung ergänzt: `docs/analysis/PS_CORE_SLICE_124_BACKEND_UI_ZONE_OVERRIDE_ALIGNMENT_2026-04-05.md` dokumentiert Ziel, Diff, Verifikation und den nächsten exakten Read-Side-Schritt
+
+### Verification
+- `pytest -q tests/test_backend_ui_contract.py` → `5 passed in 0.42s`
+- `pytest -q tests/test_backend_ui_contract.py copilot_core/rootfs/usr/src/app/tests/test_module_registry_zones.py` → `23 passed in 0.86s`
+
+**Next Exact Task:** Slice 125 — `backend_ui`-Read-Side für Zonenmodule auf dieselbe kanonische Override-Wahrheit ziehen, damit Zonen-/Modulkarten `state`, `global_state`, `override_state` und `has_override` direkt lesen statt aus Template-/`enabled_modules`-Heuristik abzuleiten.
+
+### ✅ Slice 123 — Module Control Zone-Override Surface
+**Status:** ✅ DONE (worktree; kein Live-/Install-/Restart-Schritt)
+
+**Goal**
+Die bereits im `ModuleRegistry` vorhandene zonenspezifische Modul-Governance als kanonische `module_control`-Core/API-Surface freischalten, damit Zone-Overrides nicht länger nur implizit im Storage existieren.
+
+### Grounded progress
+- [x] `copilot_core/rootfs/usr/src/app/copilot_core/api/v1/module_control.py` erweitert um kanonische Zone-Override-Surfaces: `GET /api/v1/modules/zones/<zone_id>`, `GET /api/v1/modules/zones/<zone_id>/<module_id>`, `PUT /api/v1/modules/zones/<zone_id>/<module_id>` und `DELETE /api/v1/modules/zones/<zone_id>/<module_id>`
+- [x] Zone-Detail-Responses sind jetzt lesbar und restart-sicher: effektiver `state` plus `global_state`, `override_state` und `has_override` kommen direkt aus derselben Core-Wahrheit statt aus Callerseiten-Heuristik
+- [x] `copilot_core/rootfs/usr/src/app/copilot_core/module_registry.py` ergänzt um `delete_zone_state(zone_id, module_id)`, damit explizite Zone-Overrides sauber gelöscht und auf den globalen Modulzustand zurückgeführt werden können
+- [x] fokussierte Härtung und Verifikation gelandet: `tests/test_module_control_contract.py` deckt neue Zone-Override-Read-/Write-/Delete-/Auth-/Validierungs-/Runtime-Pfade ab; `copilot_core/rootfs/usr/src/app/tests/test_module_registry_zones.py` zieht Delete-/Fallback-Verhalten direkt auf Storage-Ebene fest
+- [x] Artefakt-Landung ergänzt: `docs/analysis/PS_CORE_SLICE_123_MODULE_ZONE_OVERRIDES_2026-04-05.md` dokumentiert Ziel, Diff, Verifikation und den nächsten exakten Forward-Schritt
+
+### Verification
+- `pytest -q tests/test_module_control_contract.py copilot_core/rootfs/usr/src/app/tests/test_module_registry_zones.py tests/test_ps_core_runtime_contract_inventory.py` → `59 passed in 27.13s`
+- `python3.14 scripts/contract_inventory_fast_check.py --repo .` → `PASS`, Inventar-Linie bleibt geschlossen
+
+**Next Exact Task:** Slice 124 — `backend_ui` auf dieselbe kanonische Zone-Override-Wahrheit umstellen, damit `/api/v1/backend/zones/<zone_id>/modules` nicht länger parallel auf `enabled_modules` + TODO-Semantik schreibt.
 
 ---
 

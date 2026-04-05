@@ -92,6 +92,13 @@ def _require_proactive_engine():
     return _proactive_engine, None
 
 
+def _invalid_zone_id_response(field_name: str = "zone_id"):
+    return jsonify({
+        "ok": False,
+        "error": f"Invalid {field_name} format. Must be alphanumeric, max 50 chars.",
+    }), 400
+
+
 # ===================================================================
 # Zone Assignment
 # ===================================================================
@@ -1001,11 +1008,19 @@ def get_zone_favorites(zone_id: str):
             "players": [{"entity_id": "...", "source_list": [...], "current_source": "..."}]
         }
     """
+    if not validate_zone_id(zone_id):
+        return _invalid_zone_id_response()
+
     mgr, err = _require_media_mgr()
     if err:
         return err
 
-    result = mgr.get_zone_favorites(zone_id)
+    try:
+        result = mgr.get_zone_favorites(zone_id)
+    except Exception as exc:
+        _LOGGER.exception("Failed to get favorites for zone %s", zone_id)
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
     return jsonify({"ok": True, **result})
 
 
@@ -1022,6 +1037,9 @@ def select_zone_source(zone_id: str):
 
         {"ok": true, "zone_id": "living", "source": "Spotify"}
     """
+    if not validate_zone_id(zone_id):
+        return _invalid_zone_id_response()
+
     mgr, err = _require_media_mgr()
     if err:
         return err
@@ -1031,5 +1049,10 @@ def select_zone_source(zone_id: str):
     if not source:
         return jsonify({"ok": False, "error": "Missing required field 'source'"}), 400
 
-    result = mgr.select_source(zone_id, source)
+    try:
+        result = mgr.select_source(zone_id, source)
+    except Exception as exc:
+        _LOGGER.exception("Failed to select source %s for zone %s", source, zone_id)
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
     return jsonify(result)

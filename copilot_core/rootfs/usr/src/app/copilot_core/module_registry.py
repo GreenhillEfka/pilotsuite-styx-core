@@ -196,6 +196,30 @@ class ModuleRegistry:
             finally:
                 conn.close()
 
+    def delete_state(self, module_id: str) -> bool:
+        """Delete the explicit state for *module_id*.
+
+        Returns ``True`` when an explicit row was removed and ``False`` when no
+        row existed or the deletion failed.
+        """
+        with self._lock:
+            conn = self._get_connection()
+            try:
+                cursor = conn.execute(
+                    "DELETE FROM module_states WHERE module_id = ?",
+                    (module_id,),
+                )
+                conn.commit()
+                deleted = cursor.rowcount > 0
+                if deleted:
+                    _LOGGER.info("Module %s explicit state deleted", module_id)
+                return deleted
+            except sqlite3.Error:
+                _LOGGER.exception("Failed to delete state for %s", module_id)
+                return False
+            finally:
+                conn.close()
+
     def get_all_states(self) -> Dict[str, str]:
         """Return a mapping of every explicitly-configured module to its state.
 
@@ -365,6 +389,32 @@ class ModuleRegistry:
                     (zone_id,),
                 ).fetchall()
                 return {module_id: state for module_id, state in rows}
+            finally:
+                conn.close()
+
+    def delete_zone_state(self, zone_id: str, module_id: str) -> bool:
+        """Delete a per-zone module state override.
+
+        Returns ``True`` when an explicit zone override was removed and
+        ``False`` when no row existed or the deletion failed.
+        """
+        with self._lock:
+            conn = self._get_connection()
+            try:
+                cursor = conn.execute(
+                    "DELETE FROM zone_module_states WHERE zone_id = ? AND module_id = ?",
+                    (zone_id, module_id),
+                )
+                conn.commit()
+                deleted = cursor.rowcount > 0
+                if deleted:
+                    _LOGGER.info("Zone %s module %s explicit state deleted", zone_id, module_id)
+                return deleted
+            except sqlite3.Error:
+                _LOGGER.exception(
+                    "Failed to delete zone state for %s/%s", zone_id, module_id,
+                )
+                return False
             finally:
                 conn.close()
 

@@ -20,6 +20,21 @@ def _require_auth():
         return jsonify({"error": "unauthorized", "message": "Valid X-Auth-Token or Bearer token required"}), 401
 
 
+def _json_error(message: str, status_code: int = 400):
+    return jsonify({"status": "error", "message": message}), status_code
+
+
+def _require_json_object(*, allow_missing: bool = False) -> tuple[dict, tuple | None]:
+    data = request.get_json(silent=True)
+    if data is None:
+        if allow_missing:
+            return {}, None
+        return {}, _json_error("Request body required")
+    if not isinstance(data, dict):
+        return {}, _json_error("JSON body must be an object")
+    return data, None
+
+
 def _get_engine() -> HomeAssistantModuleEngine:
     """Lazy-init oder bestehende Engine aus COPILOT_SERVICES holen."""
     services = current_app.config.get("COPILOT_SERVICES", {})
@@ -101,7 +116,14 @@ def configure_events():
     """
     try:
         data = request.get_json(silent=True)
-        if not data or not isinstance(data.get("domains"), list):
+        if data is None:
+            return jsonify({
+                "status": "error",
+                "message": "Missing or invalid 'domains' list in request body",
+            }), 400
+        if not isinstance(data, dict):
+            return _json_error("JSON body must be an object")
+        if not isinstance(data.get("domains"), list):
             return jsonify({
                 "status": "error",
                 "message": "Missing or invalid 'domains' list in request body",
@@ -150,7 +172,10 @@ def update_config():
     Body: {"forwarded_domains": [...], "webhook_retry_count": 3, ...}
     """
     try:
-        data = request.get_json(silent=True) or {}
+        data, error = _require_json_object()
+        if error:
+            return error
+
         engine = _get_engine()
         updated = engine.update_config(data)
 
@@ -219,7 +244,10 @@ def webhook_received():
     Optionale Felder: {"event_type": "...", "count": 5}
     """
     try:
-        data = request.get_json(silent=True) or {}
+        data, error = _require_json_object(allow_missing=True)
+        if error:
+            return error
+
         event_type = data.get("event_type", "unknown")
         if not isinstance(event_type, str) or not event_type.strip():
             event_type = "unknown"

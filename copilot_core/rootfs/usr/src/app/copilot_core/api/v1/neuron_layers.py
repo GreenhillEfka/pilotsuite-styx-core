@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import logging
 import time
-from flask import Blueprint, jsonify, Response
+from flask import Blueprint, Response, jsonify, request
 from typing import Any, Dict, List, Optional
 
 _LOGGER = logging.getLogger(__name__)
@@ -72,95 +72,128 @@ def init_neuron_layers_api(neuron_manager, integration_bus=None) -> None:
     _integration_bus = integration_bus
 
 
+def _error(message: str, status_code: int) -> tuple[Response, int]:
+    return jsonify({"ok": False, "error": message}), status_code
+
+
+def _svg_response(message: str, status_code: int = 200) -> Response:
+    return Response(_render_placeholder_svg(message), mimetype="image/svg+xml", status=status_code)
+
+
+def _json_object_from_request() -> tuple[dict[str, Any] | None, tuple[Response, int] | None]:
+    data = request.get_json(silent=True)
+    if data is None:
+        return None, _error("No JSON body provided", 400)
+    if not isinstance(data, dict):
+        return None, _error("JSON body must be an object", 400)
+    return data, None
+
+
+def _required_non_empty_string(data: dict[str, Any], field: str) -> tuple[str | None, tuple[Response, int] | None]:
+    value = data.get(field)
+    if not isinstance(value, str) or not value.strip():
+        return None, _error(f"'{field}' must be a non-empty string", 400)
+    return value.strip(), None
+
+
 @neuron_layers_bp.route("/visualization", methods=["GET"])
 def get_layer_visualization():
     """Return full neuron layer data with values and connections."""
     if _neuron_manager is None:
-        return jsonify({"error": "NeuronManager not initialized"}), 503
+        return _error("NeuronManager not initialized", 503)
 
-    all_neurons = _neuron_manager.get_all_neurons()
-    result = _neuron_manager._last_result
+    try:
+        all_neurons = _neuron_manager.get_all_neurons()
+        result = _neuron_manager._last_result
 
-    # Build layer structure
-    layers = [
-        _build_layer(0, "Context", "context", all_neurons, result),
-        _build_layer(1, "State", "state", all_neurons, result),
-        _build_layer(2, "Mood", "mood", all_neurons, result),
-    ]
+        # Build layer structure
+        layers = [
+            _build_layer(0, "Context", "context", all_neurons, result),
+            _build_layer(1, "State", "state", all_neurons, result),
+            _build_layer(2, "Mood", "mood", all_neurons, result),
+        ]
 
-    # Build connections with signal strength
-    connections = _build_connections(all_neurons, result)
+        # Build connections with signal strength
+        connections = _build_connections(all_neurons, result)
 
-    # Pipeline status
-    pipeline_status = {
-        "last_evaluation": result.timestamp if result else None,
-        "dominant_mood": result.dominant_mood if result else None,
-        "mood_confidence": result.mood_confidence if result else 0.0,
-    }
+        # Pipeline status
+        pipeline_status = {
+            "last_evaluation": result.timestamp if result else None,
+            "dominant_mood": result.dominant_mood if result else None,
+            "mood_confidence": result.mood_confidence if result else 0.0,
+        }
 
-    # Bus stats if available
-    bus_stats = None
-    if _integration_bus:
-        bus_stats = _integration_bus.get_stats()
+        # Bus stats if available
+        bus_stats = None
+        if _integration_bus:
+            bus_stats = _integration_bus.get_stats()
 
-    return jsonify({
-        "layers": layers,
-        "connections": connections,
-        "pipeline_status": pipeline_status,
-        "bus_stats": bus_stats,
-        "timestamp_ms": int(time.time() * 1000),
-    })
+        return jsonify({
+            "layers": layers,
+            "connections": connections,
+            "pipeline_status": pipeline_status,
+            "bus_stats": bus_stats,
+            "timestamp_ms": int(time.time() * 1000),
+        })
+    except Exception as exc:  # pragma: no cover - contract-tested via API harness
+        _LOGGER.exception("Failed to build neuron layer visualization")
+        return _error(str(exc), 500)
 
 
 @neuron_layers_bp.route("/snapshot.svg", methods=["GET"])
 def get_layer_svg():
     """Return SVG visualization of the neuron layers."""
     if _neuron_manager is None:
-        return Response(
-            _render_placeholder_svg("NeuronManager not initialized"),
-            mimetype="image/svg+xml",
-        )
+        return _svg_response("NeuronManager not initialized")
 
-    all_neurons = _neuron_manager.get_all_neurons()
-    result = _neuron_manager._last_result
-    svg = render_neuron_layer_svg(all_neurons, result)
-    return Response(svg, mimetype="image/svg+xml")
+    try:
+        all_neurons = _neuron_manager.get_all_neurons()
+        result = _neuron_manager._last_result
+        svg = render_neuron_layer_svg(all_neurons, result)
+        return Response(svg, mimetype="image/svg+xml")
+    except Exception as exc:  # pragma: no cover - contract-tested via API harness
+        _LOGGER.exception("Failed to render neuron layer snapshot")
+        return _svg_response(str(exc), 500)
 
 
 @neuron_layers_bp.route("/heatmap", methods=["GET"])
 def get_connection_heatmap():
     """Return connection weight matrix as a heatmap data structure."""
     if _neuron_manager is None:
-        return jsonify({"error": "NeuronManager not initialized"}), 503
+        return _error("NeuronManager not initialized", 503)
 
-    all_neurons = _neuron_manager.get_all_neurons()
-    labels = sorted(all_neurons.keys())
-    n = len(labels)
-    label_index = {name: i for i, name in enumerate(labels)}
+    try:
+        all_neurons = _neuron_manager.get_all_neurons()
+        labels = sorted(all_neurons.keys())
+        n = len(labels)
+        label_index = {name: i for i, name in enumerate(labels)}
 
-    # Build matrix (n×n, default 0)
-    matrix = [[0.0] * n for _ in range(n)]
-    for from_n, to_n, weight in SYNAPSE_TOPOLOGY:
-        i = label_index.get(from_n)
-        j = label_index.get(to_n)
-        if i is not None and j is not None:
-            matrix[i][j] = weight
+        # Build matrix (n×n, default 0)
+        matrix = [[0.0] * n for _ in range(n)]
+        for from_n, to_n, weight in SYNAPSE_TOPOLOGY:
+            i = label_index.get(from_n)
+            j = label_index.get(to_n)
+            if i is not None and j is not None:
+                matrix[i][j] = weight
 
-    # Layer boundaries
-    context_count = sum(1 for k in labels if k.startswith("context."))
-    state_count = sum(1 for k in labels if k.startswith("state."))
-    layer_boundaries = [
-        context_count,
-        context_count + state_count,
-        n,
-    ]
+        # Layer boundaries
+        context_count = sum(1 for k in labels if k.startswith("context."))
+        state_count = sum(1 for k in labels if k.startswith("state."))
+        layer_boundaries = [
+            context_count,
+            context_count + state_count,
+            n,
+        ]
 
-    return jsonify({
-        "matrix": matrix,
-        "labels": labels,
-        "layer_boundaries": layer_boundaries,
-        "timestamp_ms": int(time.time() * 1000),
-    })
+        return jsonify({
+            "matrix": matrix,
+            "labels": labels,
+            "layer_boundaries": layer_boundaries,
+            "timestamp_ms": int(time.time() * 1000),
+        })
+    except Exception as exc:  # pragma: no cover - contract-tested via API harness
+        _LOGGER.exception("Failed to build neuron connection heatmap")
+        return _error(str(exc), 500)
 
 
 # ---------------------------------------------------------------------------
@@ -444,27 +477,36 @@ def update_synapse_weight():
     JSON body:
         {"from": "context.presence", "to": "mood.active", "weight": 0.5}
     """
-    from flask import request as req
-    body = req.get_json(silent=True) or {}
-    from_id = str(body.get("from", "")).strip()
-    to_id = str(body.get("to", "")).strip()
-    weight = body.get("weight")
+    body, error = _json_object_from_request()
+    if error:
+        return error
 
-    if not from_id or not to_id or weight is None:
-        return jsonify({"success": False, "error": "Missing from, to, or weight"}), 400
+    from_id, error = _required_non_empty_string(body, "from")
+    if error:
+        return error
+
+    to_id, error = _required_non_empty_string(body, "to")
+    if error:
+        return error
+
+    weight = body.get("weight")
+    if weight is None:
+        return _error("Missing 'weight' in request body", 400)
+    if isinstance(weight, bool):
+        return _error("weight must be a number", 400)
 
     try:
         weight = float(weight)
     except (ValueError, TypeError):
-        return jsonify({"success": False, "error": "weight must be a number"}), 400
+        return _error("weight must be a number", 400)
 
     if not -1.0 <= weight <= 1.0:
-        return jsonify({"success": False, "error": "weight must be between -1.0 and 1.0"}), 400
+        return _error("weight must be between -1.0 and 1.0", 400)
 
     # Verify synapse exists in topology
     found = any(frm == from_id and to == to_id for frm, to, _ in SYNAPSE_TOPOLOGY)
     if not found:
-        return jsonify({"success": False, "error": f"Synapse {from_id} -> {to_id} not found"}), 404
+        return _error(f"Synapse {from_id} -> {to_id} not found", 404)
 
     key = f"{from_id}->{to_id}"
     _synapse_overrides[key] = weight
@@ -492,19 +534,27 @@ def reset_synapse_weight():
     Or reset all:
         {"all": true}
     """
-    from flask import request as req
-    body = req.get_json(silent=True) or {}
+    body, error = _json_object_from_request()
+    if error:
+        return error
 
-    if body.get("all"):
-        count = len(_synapse_overrides)
-        _synapse_overrides.clear()
-        _save_synapse_overrides()
-        return jsonify({"success": True, "data": {"reset_count": count}})
+    reset_all = body.get("all")
+    if reset_all is not None:
+        if not isinstance(reset_all, bool):
+            return _error("'all' must be a boolean", 400)
+        if reset_all:
+            count = len(_synapse_overrides)
+            _synapse_overrides.clear()
+            _save_synapse_overrides()
+            return jsonify({"success": True, "data": {"reset_count": count}})
 
-    from_id = str(body.get("from", "")).strip()
-    to_id = str(body.get("to", "")).strip()
-    if not from_id or not to_id:
-        return jsonify({"success": False, "error": "Missing from or to"}), 400
+    from_id, error = _required_non_empty_string(body, "from")
+    if error:
+        return error
+
+    to_id, error = _required_non_empty_string(body, "to")
+    if error:
+        return error
 
     key = f"{from_id}->{to_id}"
     if key in _synapse_overrides:

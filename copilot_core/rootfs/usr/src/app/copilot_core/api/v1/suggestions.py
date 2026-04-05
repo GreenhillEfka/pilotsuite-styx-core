@@ -39,7 +39,36 @@ def init_suggestions_api(suggestion_engine=None) -> None:
     """Wire the suggestion engine into the blueprint."""
     global _suggestion_engine
     _suggestion_engine = suggestion_engine
+    with _states_lock:
+        _suggestion_states.clear()
     _LOGGER.info("Suggestions API initialized")
+
+
+def _json_error(message: str, status: int) -> tuple[Any, int]:
+    return jsonify({"ok": False, "error": message}), status
+
+
+def _require_json_object() -> dict[str, Any] | tuple[Any, int]:
+    data = request.get_json(silent=True)
+    if data is None:
+        return _json_error("No JSON body provided", 400)
+    if not isinstance(data, dict):
+        return _json_error("JSON body must be an object", 400)
+    return data
+
+
+def _require_suggestion_id(data: dict[str, Any]) -> str | tuple[Any, int]:
+    suggestion_id = data.get("id")
+    if not isinstance(suggestion_id, str) or not suggestion_id.strip():
+        return _json_error("'id' must be a non-empty string", 400)
+    return suggestion_id.strip()
+
+
+def _parse_snooze_minutes(data: dict[str, Any]) -> int | tuple[Any, int]:
+    minutes = data.get("minutes", 15)
+    if isinstance(minutes, bool) or not isinstance(minutes, int) or minutes <= 0:
+        return _json_error("minutes must be a positive integer", 400)
+    return minutes
 
 
 def _accept_with_engine(suggestion_id: str) -> tuple[dict[str, Any], int] | None:
@@ -87,13 +116,10 @@ def _reject_with_engine(suggestion_id: str) -> tuple[dict[str, Any], int] | None
     return {"ok": True, "id": suggestion_id, "status": "rejected"}, 200
 
 
-def _snooze_with_engine(suggestion_id: str) -> tuple[dict[str, Any], int] | None:
+def _snooze_with_engine(suggestion_id: str, minutes: int) -> tuple[dict[str, Any], int] | None:
     engine = _suggestion_engine
     if not engine:
         return None
-
-    data = request.get_json(silent=True) or {}
-    minutes = data.get("minutes", 15)
 
     if hasattr(engine, "snooze_suggestion"):
         snoozed = engine.snooze_suggestion(suggestion_id, minutes=minutes)
@@ -102,29 +128,39 @@ def _snooze_with_engine(suggestion_id: str) -> tuple[dict[str, Any], int] | None
 
     if snoozed is None:
         return {"ok": False, "error": "Suggestion not found"}, 404
-    return {"ok": True, "id": suggestion_id, "status": "snoozed", "minutes": int(minutes or 15)}, 200
+    return {"ok": True, "id": suggestion_id, "status": "snoozed", "minutes": minutes}, 200
 
 
 def _list_with_engine() -> List[Dict[str, Any]]:
     if _suggestion_engine is None:
         return []
 
+    pending_error: Exception | None = None
+
     # Primary path: explicit pending helper used by older clients
     if hasattr(_suggestion_engine, "get_pending"):
         try:
             return list(_suggestion_engine.get_pending(limit=20))
-        except Exception:
-            pass
+        except Exception as exc:
+            pending_error = exc
 
     # Backward compatibility: filter suggestions manually from get_suggestions
-    try:
-        suggestions = _suggestion_engine.get_suggestions(
-            include_dismissed=False,
-            include_accepted=False,
-        )
-        return suggestions
-    except Exception:
-        return []
+    if hasattr(_suggestion_engine, "get_suggestions"):
+        try:
+            suggestions = _suggestion_engine.get_suggestions(
+                include_dismissed=False,
+                include_accepted=False,
+            )
+            return suggestions
+        except Exception:
+            if pending_error is not None:
+                raise pending_error
+            raise
+
+    if pending_error is not None:
+        raise pending_error
+
+    return []
 
 
 @suggestions_bp.route("", methods=["GET"])
@@ -158,16 +194,22 @@ def list_suggestions():
 @require_token
 def accept_suggestion():
     """Accept a suggestion and create the corresponding proposal."""
-    data = request.get_json(silent=True) or {}
-    suggestion_id = str(data.get("id", "")).strip()
+    data = _require_json_object()
+    if not isinstance(data, dict):
+        return data
 
-    if not suggestion_id:
-        return jsonify({"ok": False, "error": "Missing 'id'"}), 400
+    suggestion_id = _require_suggestion_id(data)
+    if not isinstance(suggestion_id, str):
+        return suggestion_id
 
     if _suggestion_engine:
-        result = _accept_with_engine(suggestion_id)
+        try:
+            result = _accept_with_engine(suggestion_id)
+        except Exception as exc:
+            _LOGGER.exception("Failed to accept suggestion")
+            return _json_error(str(exc), 500)
         if result is None:
-            return jsonify({"ok": False, "error": "Engine has no accept path"}), 500
+            return _json_error("Engine has no accept path", 500)
         payload, status = result
         return jsonify(payload), status
 
@@ -180,16 +222,22 @@ def accept_suggestion():
 @require_token
 def reject_suggestion():
     """Reject a suggestion permanently."""
-    data = request.get_json(silent=True) or {}
-    suggestion_id = str(data.get("id", "")).strip()
+    data = _require_json_object()
+    if not isinstance(data, dict):
+        return data
 
-    if not suggestion_id:
-        return jsonify({"ok": False, "error": "Missing 'id'"}), 400
+    suggestion_id = _require_suggestion_id(data)
+    if not isinstance(suggestion_id, str):
+        return suggestion_id
 
     if _suggestion_engine:
-        result = _reject_with_engine(suggestion_id)
+        try:
+            result = _reject_with_engine(suggestion_id)
+        except Exception as exc:
+            _LOGGER.exception("Failed to reject suggestion")
+            return _json_error(str(exc), 500)
         if result is None:
-            return jsonify({"ok": False, "error": "Engine has no reject path"}), 500
+            return _json_error("Engine has no reject path", 500)
         payload, status = result
         return jsonify(payload), status
 
@@ -202,22 +250,32 @@ def reject_suggestion():
 @require_token
 def snooze_suggestion():
     """Snooze a suggestion (show again later)."""
-    data = request.get_json(silent=True) or {}
-    suggestion_id = str(data.get("id", "")).strip()
+    data = _require_json_object()
+    if not isinstance(data, dict):
+        return data
 
-    if not suggestion_id:
-        return jsonify({"ok": False, "error": "Missing 'id'"}), 400
+    suggestion_id = _require_suggestion_id(data)
+    if not isinstance(suggestion_id, str):
+        return suggestion_id
+
+    minutes = _parse_snooze_minutes(data)
+    if not isinstance(minutes, int):
+        return minutes
 
     if _suggestion_engine:
-        result = _snooze_with_engine(suggestion_id)
+        try:
+            result = _snooze_with_engine(suggestion_id, minutes)
+        except Exception as exc:
+            _LOGGER.exception("Failed to snooze suggestion")
+            return _json_error(str(exc), 500)
         if result is None:
-            return jsonify({"ok": False, "error": "Engine has no snooze path"}), 500
+            return _json_error("Engine has no snooze path", 500)
         payload, status = result
         return jsonify(payload), status
 
     with _states_lock:
         _suggestion_states[suggestion_id] = "snoozed"
-    return jsonify({"ok": True, "id": suggestion_id, "status": "snoozed"})
+    return jsonify({"ok": True, "id": suggestion_id, "status": "snoozed", "minutes": minutes})
 
 
 # --- Automation Repair & Improvement Suggestions ---

@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import logging
 import re
+from typing import Any
 
 from flask import Blueprint, jsonify, request
 
@@ -20,9 +21,64 @@ _bridge = None
 _ZONE_ID_RE = re.compile(r"^[a-zA-Z0-9_-]{1,50}$")
 
 
+def _json_error(message: str, status_code: int):
+    return jsonify({"ok": False, "error": message}), status_code
+
+
+def _bridge_unavailable():
+    return _json_error("musikwolke_not_available", 503)
+
+
+def _handle_bridge_exception(action: str, exc: Exception):
+    _LOGGER.exception("Musikwolke API action failed: %s", action)
+    return _json_error(str(exc), 500)
+
+
 def _validate_zone_id(zone_id: str) -> bool:
     """Validate zone_id is alphanumeric, max 50 chars."""
     return bool(_ZONE_ID_RE.match(zone_id))
+
+
+def _require_json_object(*, required: bool = True):
+    data = request.get_json(silent=True)
+    if data is None:
+        if required:
+            return None, _json_error("Request body required", 400)
+        return {}, None
+    if not isinstance(data, dict):
+        return None, _json_error("JSON body must be an object", 400)
+    return data, None
+
+
+def _parse_volume_pct(value: Any, *, required: bool = False):
+    if value is None:
+        if required:
+            return None, _json_error("volume_pct required", 400)
+        return None, None
+    try:
+        volume = int(value)
+    except (TypeError, ValueError):
+        return None, _json_error("volume_pct must be an integer", 400)
+    if not 0 <= volume <= 100:
+        return None, _json_error("volume_pct must be between 0 and 100", 400)
+    return volume, None
+
+
+def _normalize_zone_ids(value: Any, *, min_length: int):
+    if not isinstance(value, list):
+        return None, _json_error("zone_ids must be a list", 400)
+    if len(value) < min_length:
+        return None, _json_error(f"need at least {min_length} zones", 400)
+
+    zone_ids: list[str] = []
+    for raw_zone_id in value:
+        if not isinstance(raw_zone_id, str):
+            return None, _json_error("zone_ids must contain strings", 400)
+        zone_id = raw_zone_id.strip()
+        if not _validate_zone_id(zone_id):
+            return None, _json_error("Invalid zone_id in list", 400)
+        zone_ids.append(zone_id)
+    return zone_ids, None
 
 
 def init_musikwolke_api(bridge) -> None:
@@ -36,12 +92,11 @@ def init_musikwolke_api(bridge) -> None:
 def get_status():
     """Get Musikwolke status (Sonos speakers, active zones, media follow)."""
     if not _bridge:
-        return jsonify({"ok": False, "error": "musikwolke_not_available"}), 503
+        return _bridge_unavailable()
     try:
         return jsonify({"ok": True, **_bridge.get_status()})
     except Exception as exc:
-        _LOGGER.exception("Failed to get Musikwolke status")
-        return jsonify({"ok": False, "error": str(exc)}), 500
+        return _handle_bridge_exception("status", exc)
 
 
 @musikwolke_bp.route("/zone-map", methods=["GET"])
@@ -49,8 +104,11 @@ def get_status():
 def get_zone_map():
     """Get zone-to-speaker mapping."""
     if not _bridge:
-        return jsonify({"ok": False, "error": "musikwolke_not_available"}), 503
-    return jsonify({"ok": True, "zone_speaker_map": _bridge.get_zone_speaker_map()})
+        return _bridge_unavailable()
+    try:
+        return jsonify({"ok": True, "zone_speaker_map": _bridge.get_zone_speaker_map()})
+    except Exception as exc:
+        return _handle_bridge_exception("zone_map.get", exc)
 
 
 @musikwolke_bp.route("/zone-map", methods=["POST"])
@@ -61,20 +119,26 @@ def set_zone_speaker():
     Body: {"zone_id": "...", "sonos_room": "..."}
     """
     if not _bridge:
-        return jsonify({"ok": False, "error": "musikwolke_not_available"}), 503
+        return _bridge_unavailable()
 
-    data = request.get_json(silent=True) or {}
-    zone_id = data.get("zone_id", "")
-    sonos_room = data.get("sonos_room", "")
+    data, err = _require_json_object()
+    if err:
+        return err
+
+    zone_id = str(data.get("zone_id", "")).strip()
+    sonos_room = str(data.get("sonos_room", "")).strip()
 
     if not zone_id or not sonos_room:
-        return jsonify({"ok": False, "error": "zone_id and sonos_room required"}), 400
+        return _json_error("zone_id and sonos_room required", 400)
 
     if not _validate_zone_id(zone_id):
-        return jsonify({"ok": False, "error": "Invalid zone_id format"}), 400
+        return _json_error("Invalid zone_id format", 400)
 
-    _bridge.set_zone_speaker(zone_id, sonos_room)
-    return jsonify({"ok": True, "zone_id": zone_id, "sonos_room": sonos_room})
+    try:
+        _bridge.set_zone_speaker(zone_id, sonos_room)
+        return jsonify({"ok": True, "zone_id": zone_id, "sonos_room": sonos_room})
+    except Exception as exc:
+        return _handle_bridge_exception("zone_map.set", exc)
 
 
 @musikwolke_bp.route("/auto-discover", methods=["POST"])
@@ -82,7 +146,7 @@ def set_zone_speaker():
 def auto_discover():
     """Auto-discover Sonos speakers and map them to zones."""
     if not _bridge:
-        return jsonify({"ok": False, "error": "musikwolke_not_available"}), 503
+        return _bridge_unavailable()
 
     try:
         mapped = _bridge.auto_discover_mappings()
@@ -92,8 +156,7 @@ def auto_discover():
             "zone_speaker_map": _bridge.get_zone_speaker_map(),
         })
     except Exception as exc:
-        _LOGGER.exception("Auto-discover failed")
-        return jsonify({"ok": False, "error": str(exc)}), 500
+        return _handle_bridge_exception("auto_discover", exc)
 
 
 @musikwolke_bp.route("/play/<zone_id>", methods=["POST"])
@@ -101,19 +164,24 @@ def auto_discover():
 def play_zone(zone_id: str):
     """Play music in a zone."""
     if not _bridge:
-        return jsonify({"ok": False, "error": "musikwolke_not_available"}), 503
+        return _bridge_unavailable()
 
     if not _validate_zone_id(zone_id):
-        return jsonify({"ok": False, "error": "Invalid zone_id format"}), 400
+        return _json_error("Invalid zone_id format", 400)
 
-    data = request.get_json(silent=True) or {}
-    volume = data.get("volume_pct")
+    data, err = _require_json_object(required=False)
+    if err:
+        return err
+
+    volume, volume_err = _parse_volume_pct(data.get("volume_pct"), required=False)
+    if volume_err:
+        return volume_err
+
     try:
         success = _bridge.play_in_zone(zone_id, volume)
         return jsonify({"ok": success, "zone_id": zone_id, "action": "play"})
     except Exception as exc:
-        _LOGGER.exception("Failed to play in zone %s", zone_id)
-        return jsonify({"ok": False, "error": str(exc)}), 500
+        return _handle_bridge_exception("play", exc)
 
 
 @musikwolke_bp.route("/pause/<zone_id>", methods=["POST"])
@@ -121,17 +189,16 @@ def play_zone(zone_id: str):
 def pause_zone(zone_id: str):
     """Pause music in a zone."""
     if not _bridge:
-        return jsonify({"ok": False, "error": "musikwolke_not_available"}), 503
+        return _bridge_unavailable()
 
     if not _validate_zone_id(zone_id):
-        return jsonify({"ok": False, "error": "Invalid zone_id format"}), 400
+        return _json_error("Invalid zone_id format", 400)
 
     try:
         success = _bridge.pause_in_zone(zone_id)
         return jsonify({"ok": success, "zone_id": zone_id, "action": "pause"})
     except Exception as exc:
-        _LOGGER.exception("Failed to pause in zone %s", zone_id)
-        return jsonify({"ok": False, "error": str(exc)}), 500
+        return _handle_bridge_exception("pause", exc)
 
 
 @musikwolke_bp.route("/volume/<zone_id>", methods=["POST"])
@@ -139,26 +206,24 @@ def pause_zone(zone_id: str):
 def set_volume(zone_id: str):
     """Set volume for a zone. Body: {"volume_pct": 30}"""
     if not _bridge:
-        return jsonify({"ok": False, "error": "musikwolke_not_available"}), 503
+        return _bridge_unavailable()
 
     if not _validate_zone_id(zone_id):
-        return jsonify({"ok": False, "error": "Invalid zone_id format"}), 400
+        return _json_error("Invalid zone_id format", 400)
 
-    data = request.get_json(silent=True) or {}
-    raw_volume = data.get("volume_pct", 30)
-    try:
-        volume = int(raw_volume)
-    except (TypeError, ValueError):
-        return jsonify({"ok": False, "error": "volume_pct must be an integer"}), 400
-    if not 0 <= volume <= 100:
-        return jsonify({"ok": False, "error": "volume_pct must be between 0 and 100"}), 400
+    data, err = _require_json_object(required=False)
+    if err:
+        return err
+
+    volume, volume_err = _parse_volume_pct(data.get("volume_pct", 30), required=True)
+    if volume_err:
+        return volume_err
 
     try:
         success = _bridge.set_zone_volume(zone_id, volume)
         return jsonify({"ok": success, "zone_id": zone_id, "volume_pct": volume})
     except Exception as exc:
-        _LOGGER.exception("Failed to set volume in zone %s", zone_id)
-        return jsonify({"ok": False, "error": str(exc)}), 500
+        return _handle_bridge_exception("volume", exc)
 
 
 @musikwolke_bp.route("/create", methods=["POST"])
@@ -166,21 +231,21 @@ def set_volume(zone_id: str):
 def create_musikwolke():
     """Create a Musikwolke across zones. Body: {"zone_ids": ["z1", "z2", ...]}"""
     if not _bridge:
-        return jsonify({"ok": False, "error": "musikwolke_not_available"}), 503
+        return _bridge_unavailable()
 
-    data = request.get_json(silent=True) or {}
-    zone_ids = data.get("zone_ids", [])
-    if not isinstance(zone_ids, list) or len(zone_ids) < 2:
-        return jsonify({"ok": False, "error": "need at least 2 zones"}), 400
-    if not all(_validate_zone_id(z) for z in zone_ids):
-        return jsonify({"ok": False, "error": "Invalid zone_id in list"}), 400
+    data, err = _require_json_object()
+    if err:
+        return err
+
+    zone_ids, zone_err = _normalize_zone_ids(data.get("zone_ids"), min_length=2)
+    if zone_err:
+        return zone_err
 
     try:
         success = _bridge.create_musikwolke(zone_ids)
         return jsonify({"ok": success, "zone_ids": zone_ids})
     except Exception as exc:
-        _LOGGER.exception("Failed to create Musikwolke")
-        return jsonify({"ok": False, "error": str(exc)}), 500
+        return _handle_bridge_exception("create", exc)
 
 
 @musikwolke_bp.route("/dissolve", methods=["POST"])
@@ -188,14 +253,18 @@ def create_musikwolke():
 def dissolve_musikwolke():
     """Dissolve a Musikwolke. Body: {"zone_ids": ["z1", "z2", ...]}"""
     if not _bridge:
-        return jsonify({"ok": False, "error": "musikwolke_not_available"}), 503
+        return _bridge_unavailable()
 
-    data = request.get_json(silent=True) or {}
-    zone_ids = data.get("zone_ids", [])
+    data, err = _require_json_object()
+    if err:
+        return err
+
+    zone_ids, zone_err = _normalize_zone_ids(data.get("zone_ids"), min_length=1)
+    if zone_err:
+        return zone_err
 
     try:
         success = _bridge.dissolve_musikwolke(zone_ids)
         return jsonify({"ok": success, "zone_ids": zone_ids})
     except Exception as exc:
-        _LOGGER.exception("Failed to dissolve Musikwolke")
-        return jsonify({"ok": False, "error": str(exc)}), 500
+        return _handle_bridge_exception("dissolve", exc)

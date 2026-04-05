@@ -22,6 +22,24 @@ logger = logging.getLogger(__name__)
 
 bp = Blueprint("events_ingest", __name__)
 
+
+def _error(message: str, status_code: int):
+    return jsonify({"ok": False, "error": message}), status_code
+
+
+def _parse_positive_int_limit(raw, *, default: int, maximum: int):
+    if raw is None:
+        return default, None
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return None, _error("limit must be a positive integer", 400)
+    if value <= 0:
+        return None, _error("limit must be a positive integer", 400)
+    if value > maximum:
+        return None, _error(f"limit must be <= {maximum}", 400)
+    return value, None
+
 # Singleton store – initialized on first request or by main.py
 _store: EventStore | None = None
 
@@ -69,7 +87,11 @@ def ingest_events(body: BatchEventPayload):
 
     store = get_store()
     items = [item.model_dump(exclude_none=True) for item in body.items]
-    result = store.ingest_batch(items)
+    try:
+        result = store.ingest_batch(items)
+    except Exception as exc:  # pragma: no cover - contract-tested via harness
+        logger.exception("Failed to ingest forwarded events")
+        return _error(str(exc), 500)
 
     # Fire post-ingest callback (e.g. EventProcessor → Brain Graph)
     accepted_events = result.pop("accepted_events", [])
@@ -99,18 +121,24 @@ def query_events():
         limit     – max results (default 100, max 1000)
     """
     store = get_store()
-    try:
-        limit = int(request.args.get("limit", 100))
-    except (ValueError, TypeError):
-        limit = 100
-    events = store.query(
-        domain=request.args.get("domain"),
-        entity_id=request.args.get("entity_id"),
-        kind=request.args.get("kind"),
-        zone_id=request.args.get("zone_id"),
-        since=request.args.get("since"),
-        limit=limit,
+    limit, error_response = _parse_positive_int_limit(
+        request.args.get("limit"), default=100, maximum=1000
     )
+    if error_response:
+        return error_response
+
+    try:
+        events = store.query(
+            domain=request.args.get("domain"),
+            entity_id=request.args.get("entity_id"),
+            kind=request.args.get("kind"),
+            zone_id=request.args.get("zone_id"),
+            since=request.args.get("since"),
+            limit=limit,
+        )
+    except Exception as exc:  # pragma: no cover - contract-tested via harness
+        logger.exception("Failed to query ingested events")
+        return _error(str(exc), 500)
 
     return jsonify({"events": events, "count": len(events)}), 200
 
@@ -122,4 +150,9 @@ def query_events():
 def events_stats():
     """Return event store statistics for operator diagnostics."""
     store = get_store()
-    return jsonify(store.stats()), 200
+    try:
+        payload = store.stats()
+    except Exception as exc:  # pragma: no cover - contract-tested via harness
+        logger.exception("Failed to build events ingest stats")
+        return _error(str(exc), 500)
+    return jsonify(payload), 200

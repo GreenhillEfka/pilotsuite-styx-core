@@ -226,6 +226,12 @@ class BrainGrowthReadModel:
         # Trim log if too large
         if len(self._transfer_trace_log) > self._max_trace_log_size:
             self._transfer_trace_log = self._transfer_trace_log[-self._max_trace_log_size:]
+
+    def get_recent_activity(self, limit: int = 50) -> List[SemanticTransferTrace]:
+        """Return the most recent semantic transfer traces first."""
+        if limit <= 0:
+            return []
+        return list(reversed(self._transfer_trace_log[-limit:]))
     
     def _build_trace_from_event(self, input_id: str, event_data: Dict[str, Any]) -> SemanticTransferTrace:
         """Build a semantic transfer trace from event data."""

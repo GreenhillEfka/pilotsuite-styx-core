@@ -1127,7 +1127,9 @@ def test_continue_voice_control_rejects_english_non_follow_up_resume_text_and_ke
 @pytest.mark.parametrize(
     "resume_phrase",
     [
+        "continue",
         "follow up",
+        "go on",
         "continue with",
         "what about that",
         "still open",

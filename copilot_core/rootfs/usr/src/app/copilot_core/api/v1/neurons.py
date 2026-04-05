@@ -41,6 +41,66 @@ NEURON_ID_MAX_LENGTH = 100
 MOOD_HISTORY_MAX_LIMIT = 100
 
 
+def _require_admin_mutation(action: str, error_message: str):
+    """Require admin authentication for state/config mutations."""
+    _LOGGER.info("%s attempted from %s", action, request.remote_addr)
+    if require_admin_token(request):
+        return None
+
+    _LOGGER.warning("Unauthorized %s attempt from %s", action, request.remote_addr)
+    return jsonify({
+        "success": False,
+        "error": error_message,
+    }), 403
+
+
+def _resolve_neuron(manager: NeuronManager, neuron_id: str):
+    """Resolve a neuron by full ID or short name fallback."""
+    return manager.get_neuron(neuron_id) or manager.get_neuron(
+        neuron_id.split(".")[-1] if "." in neuron_id else neuron_id
+    )
+
+
+def _normalize_neuron_config_patch(patch: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
+    """Validate and normalize a neuron config patch before mutating state."""
+    normalized: dict[str, Any] = {}
+    changed: list[str] = []
+
+    for key in ("threshold", "decay_rate", "smoothing_factor"):
+        if key in patch:
+            val = float(patch[key])
+            if not 0.0 <= val <= 1.0:
+                raise ValueError(f"{key} must be between 0.0 and 1.0")
+            normalized[key] = val
+            changed.append(key)
+
+    if "weights" in patch:
+        weights = patch["weights"]
+        if not isinstance(weights, dict):
+            raise ValueError("weights must be an object")
+        normalized["weights"] = {str(k): float(v) for k, v in weights.items()}
+        changed.append("weights")
+
+    if "enabled" in patch:
+        normalized["enabled"] = bool(patch["enabled"])
+        changed.append("enabled")
+
+    return normalized, changed
+
+
+def _apply_neuron_config_patch(config: Any, patch: dict[str, Any]) -> list[str]:
+    """Apply a validated neuron config patch."""
+    normalized, changed = _normalize_neuron_config_patch(patch)
+
+    for key, value in normalized.items():
+        if key == "weights":
+            config.weights.update(value)
+        else:
+            setattr(config, key, value)
+
+    return changed
+
+
 def validate_neuron_id(neuron_id: str) -> bool:
     """Validate neuron ID format.
     
@@ -241,16 +301,14 @@ def update_neuron_states():
         {"success": true, "data": {"updated": int}}
     """
     try:
-        # Require admin-level authentication for state manipulation
-        _LOGGER.info("Neuron state update attempted from %s", request.remote_addr)
-        if not require_admin_token(request):
-            _LOGGER.warning("Unauthorized neuron state update attempt from %s", request.remote_addr)
-            return jsonify({
-                "success": False,
-                "error": "Admin token required for state updates"
-            }), 403
-        
-        body = request.get_json()
+        admin_error = _require_admin_mutation(
+            "neuron state update",
+            "Admin token required for state updates",
+        )
+        if admin_error:
+            return admin_error
+
+        body = request.get_json(silent=True)
         if not body:
             return jsonify({
                 "success": False,
@@ -297,7 +355,14 @@ def configure_neurons():
         {"success": true, "data": {...}}
     """
     try:
-        body = request.get_json()
+        admin_error = _require_admin_mutation(
+            "neuron configure",
+            "Admin token required for neuron configuration",
+        )
+        if admin_error:
+            return admin_error
+
+        body = request.get_json(silent=True)
         if not body:
             return jsonify({
                 "success": False,
@@ -831,33 +896,21 @@ def update_neuron_config(neuron_id: str):
     if not body:
         return jsonify({"success": False, "error": "Empty body"}), 400
 
+    admin_error = _require_admin_mutation(
+        "neuron config update",
+        "Admin token required for neuron configuration updates",
+    )
+    if admin_error:
+        return admin_error
+
     try:
         manager = get_neuron_manager()
-        # Try full ID, then short name
-        neuron = manager.get_neuron(neuron_id) or manager.get_neuron(
-            neuron_id.split(".")[-1] if "." in neuron_id else neuron_id
-        )
+        neuron = _resolve_neuron(manager, neuron_id)
         if not neuron:
             return jsonify({"success": False, "error": f"Neuron not found: {neuron_id}"}), 404
 
         config = neuron.config
-        changed = []
-
-        for key in ("threshold", "decay_rate", "smoothing_factor"):
-            if key in body:
-                val = float(body[key])
-                if not 0.0 <= val <= 1.0:
-                    return jsonify({"success": False, "error": f"{key} must be between 0.0 and 1.0"}), 400
-                setattr(config, key, val)
-                changed.append(key)
-
-        if "weights" in body and isinstance(body["weights"], dict):
-            config.weights.update({str(k): float(v) for k, v in body["weights"].items()})
-            changed.append("weights")
-
-        if "enabled" in body:
-            config.enabled = bool(body["enabled"])
-            changed.append("enabled")
+        changed = _apply_neuron_config_patch(config, body)
 
         # Persist if manager supports it
         if hasattr(manager, "persist_neuron_config"):
@@ -886,11 +939,16 @@ def enable_neuron(neuron_id: str):
     if not validate_neuron_id(neuron_id):
         return jsonify({"success": False, "error": "Invalid neuron_id format"}), 400
 
+    admin_error = _require_admin_mutation(
+        "neuron enable",
+        "Admin token required for neuron enable",
+    )
+    if admin_error:
+        return admin_error
+
     try:
         manager = get_neuron_manager()
-        neuron = manager.get_neuron(neuron_id) or manager.get_neuron(
-            neuron_id.split(".")[-1] if "." in neuron_id else neuron_id
-        )
+        neuron = _resolve_neuron(manager, neuron_id)
         if not neuron:
             return jsonify({"success": False, "error": f"Neuron not found: {neuron_id}"}), 404
 
@@ -910,11 +968,16 @@ def disable_neuron(neuron_id: str):
     if not validate_neuron_id(neuron_id):
         return jsonify({"success": False, "error": "Invalid neuron_id format"}), 400
 
+    admin_error = _require_admin_mutation(
+        "neuron disable",
+        "Admin token required for neuron disable",
+    )
+    if admin_error:
+        return admin_error
+
     try:
         manager = get_neuron_manager()
-        neuron = manager.get_neuron(neuron_id) or manager.get_neuron(
-            neuron_id.split(".")[-1] if "." in neuron_id else neuron_id
-        )
+        neuron = _resolve_neuron(manager, neuron_id)
         if not neuron:
             return jsonify({"success": False, "error": f"Neuron not found: {neuron_id}"}), 404
 
@@ -945,6 +1008,13 @@ def batch_configure_neurons():
     if not configs or not isinstance(configs, dict):
         return jsonify({"success": False, "error": "Missing 'neurons' dict"}), 400
 
+    admin_error = _require_admin_mutation(
+        "neuron batch configure",
+        "Admin token required for neuron batch configuration",
+    )
+    if admin_error:
+        return admin_error
+
     manager = get_neuron_manager()
     results = {}
     errors = {}
@@ -954,32 +1024,19 @@ def batch_configure_neurons():
             errors[nid] = "Invalid neuron_id format"
             continue
 
-        neuron = manager.get_neuron(nid) or manager.get_neuron(
-            nid.split(".")[-1] if "." in nid else nid
-        )
+        neuron = _resolve_neuron(manager, nid)
         if not neuron:
             errors[nid] = "Neuron not found"
             continue
 
         try:
             cfg = neuron.config
-            for key in ("threshold", "decay_rate", "smoothing_factor"):
-                if key in patch:
-                    val = float(patch[key])
-                    if not 0.0 <= val <= 1.0:
-                        errors[nid] = f"{key} must be 0.0-1.0"
-                        continue
-                    setattr(cfg, key, val)
-            if "weights" in patch and isinstance(patch["weights"], dict):
-                cfg.weights.update({str(k): float(v) for k, v in patch["weights"].items()})
-            if "enabled" in patch:
-                cfg.enabled = bool(patch["enabled"])
-
+            _apply_neuron_config_patch(cfg, patch)
             results[nid] = cfg.to_dict()
         except (ValueError, TypeError) as e:
             errors[nid] = str(e)
 
-    if hasattr(manager, "persist_all_neuron_configs"):
+    if results and hasattr(manager, "persist_all_neuron_configs"):
         manager.persist_all_neuron_configs()
 
     return jsonify({

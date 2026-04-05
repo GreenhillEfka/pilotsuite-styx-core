@@ -24,7 +24,7 @@ CORE_API_BLUEPRINTS: List[Tuple[str, str, Optional[str]]] = [
     
     # Auth & Users
     ("copilot_core.api.v1.auth", "auth_bp", None),
-    ("copilot_core.api.v1.users", "users_bp", None),
+    ("copilot_core.api.v1.users", "bp", None),
     
     # Zones & Automation
     ("copilot_core.api.v1.zones", "zones_bp", None),
@@ -84,7 +84,7 @@ CORE_API_BLUEPRINTS: List[Tuple[str, str, Optional[str]]] = [
     
     # RAG & Search
     ("copilot_core.api.v1.search", "bp", None),
-    ("copilot_core.api.v1.rag", "rag_bp", None),
+    ("copilot_core.api.v1.rag", "bp", None),
     ("copilot_core.api.v1.rag_ui", "rag_ui_bp", None),
     
     # Notifications & Communication

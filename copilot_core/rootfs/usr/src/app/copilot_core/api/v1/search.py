@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 from flask import Blueprint, jsonify, request
+from werkzeug.exceptions import BadRequest
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -40,6 +41,13 @@ RESULT_TYPE_AUTOMATION = "automation"
 RESULT_TYPE_SCRIPT = "script"
 RESULT_TYPE_SCENE = "scene"
 RESULT_TYPE_SERVICE = "service"
+VALID_RESULT_TYPES = {
+    RESULT_TYPE_ENTITY,
+    RESULT_TYPE_AUTOMATION,
+    RESULT_TYPE_SCRIPT,
+    RESULT_TYPE_SCENE,
+    RESULT_TYPE_SERVICE,
+}
 
 
 @dataclass
@@ -437,6 +445,55 @@ def get_search_engine() -> QuickSearchEngine:
     return _search_engine
 
 
+def _error_response(message: str, status_code: int):
+    return jsonify({"success": False, "error": message}), status_code
+
+
+def _parse_limit(raw_value: str, *, default: int, max_value: int) -> int:
+    if raw_value == "":
+        return default
+    try:
+        limit = int(raw_value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"limit must be a positive integer <= {max_value}") from exc
+    if limit <= 0 or limit > max_value:
+        raise ValueError(f"limit must be a positive integer <= {max_value}")
+    return limit
+
+
+def _parse_types(raw_value: str) -> Optional[List[str]]:
+    if not raw_value:
+        return None
+
+    types = [value.strip() for value in raw_value.split(",") if value.strip()]
+    invalid = [value for value in types if value not in VALID_RESULT_TYPES]
+    if invalid:
+        allowed = ", ".join(sorted(VALID_RESULT_TYPES))
+        raise ValueError(f"invalid search types: {', '.join(invalid)}; allowed: {allowed}")
+    return types or None
+
+
+def _get_json_body() -> Dict[str, Any]:
+    try:
+        body = request.get_json(silent=False)
+    except BadRequest as exc:
+        raise ValueError("Request body must be valid JSON") from exc
+    if body is None:
+        raise ValueError("No JSON body provided")
+    if not isinstance(body, dict):
+        raise ValueError("Request body must be a JSON object")
+    return body
+
+
+def _require_object_field(body: Dict[str, Any], field_name: str) -> Dict[str, Any] | None:
+    value = body.get(field_name)
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise ValueError(f"Field '{field_name}' must be an object")
+    return value
+
+
 # =============================================================================
 # API Endpoints
 # =============================================================================
@@ -463,19 +520,19 @@ def search_all():
     """
     query = request.args.get("q", "").strip()
     if not query:
-        return jsonify({
-            "success": False,
-            "error": "Query parameter 'q' is required"
-        }), 400
-    
-    types_param = request.args.get("types", "")
-    types = types_param.split(",") if types_param else None
-    
-    limit = min(int(request.args.get("limit", "20")), 100)
-    
-    engine = get_search_engine()
-    response = engine.search(query, types, limit)
-    
+        return _error_response("Query parameter 'q' is required", 400)
+
+    try:
+        types = _parse_types(request.args.get("types", ""))
+        limit = _parse_limit(request.args.get("limit", ""), default=20, max_value=100)
+        engine = get_search_engine()
+        response = engine.search(query, types, limit)
+    except ValueError as exc:
+        return _error_response(str(exc), 400)
+    except Exception as exc:
+        _LOGGER.error("Error performing search: %s", exc)
+        return _error_response(str(exc), 500)
+
     return jsonify({
         "success": True,
         "data": {
@@ -513,11 +570,17 @@ def search_entities():
     domain = request.args.get("domain")
     state = request.args.get("state")
     area = request.args.get("area")
-    limit = min(int(request.args.get("limit", "50")), 200)
-    
-    engine = get_search_engine()
-    results = engine.filter_entities(domain, state, area, limit)
-    
+
+    try:
+        limit = _parse_limit(request.args.get("limit", ""), default=50, max_value=200)
+        engine = get_search_engine()
+        results = engine.filter_entities(domain, state, area, limit)
+    except ValueError as exc:
+        return _error_response(str(exc), 400)
+    except Exception as exc:
+        _LOGGER.error("Error filtering search entities: %s", exc)
+        return _error_response(str(exc), 500)
+
     return jsonify({
         "success": True,
         "data": {
@@ -541,9 +604,13 @@ def search_entities():
 @bp.route("/stats", methods=["GET"])
 def get_search_stats():
     """Get search index statistics."""
-    engine = get_search_engine()
-    stats = engine.get_stats()
-    
+    try:
+        engine = get_search_engine()
+        stats = engine.get_stats()
+    except Exception as exc:
+        _LOGGER.error("Error retrieving search stats: %s", exc)
+        return _error_response(str(exc), 500)
+
     return jsonify({
         "success": True,
         "data": stats
@@ -564,28 +631,28 @@ def update_search_index():
         }
     """
     try:
-        body = request.get_json()
-        if not body:
-            return jsonify({
-                "success": False,
-                "error": "No JSON body provided"
-            }), 400
-        
+        body = _get_json_body()
+        entities = _require_object_field(body, "entities")
+        automations = _require_object_field(body, "automations")
+        scripts = _require_object_field(body, "scripts")
+        scenes = _require_object_field(body, "scenes")
+        services = _require_object_field(body, "services")
+
         engine = get_search_engine()
-        
-        if "entities" in body:
-            engine.update_entities(body["entities"])
-        if "automations" in body:
-            engine.update_automations(body["automations"])
-        if "scripts" in body:
-            engine.update_scripts(body["scripts"])
-        if "scenes" in body:
-            engine.update_scenes(body["scenes"])
-        if "services" in body:
-            engine.update_services(body["services"])
-        
+
+        if entities is not None:
+            engine.update_entities(entities)
+        if automations is not None:
+            engine.update_automations(automations)
+        if scripts is not None:
+            engine.update_scripts(scripts)
+        if scenes is not None:
+            engine.update_scenes(scenes)
+        if services is not None:
+            engine.update_services(services)
+
         stats = engine.get_stats()
-        
+
         return jsonify({
             "success": True,
             "data": {
@@ -593,12 +660,11 @@ def update_search_index():
                 "message": "Search index updated"
             }
         })
-    except Exception as e:
-        _LOGGER.error("Error updating search index: %s", e)
-        return jsonify({
-            "success": False,
-            "error": str(e)
-        }), 500
+    except ValueError as exc:
+        return _error_response(str(exc), 400)
+    except Exception as exc:
+        _LOGGER.error("Error updating search index: %s", exc)
+        return _error_response(str(exc), 500)
 
 
 __all__ = ["bp", "get_search_engine", "QuickSearchEngine"]

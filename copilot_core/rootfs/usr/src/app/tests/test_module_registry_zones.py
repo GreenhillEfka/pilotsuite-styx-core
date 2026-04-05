@@ -89,6 +89,19 @@ class TestZoneModuleStates:
         registry.set_zone_state("wohnbereich", "licht", "off")
         assert registry.get_zone_state("wohnbereich", "licht") == "off"
 
+    def test_delete_zone_state_restores_global_fallback(self, registry):
+        """Deleting a zone override should restore the global state."""
+        registry.set_state("licht", "learning")
+        registry.set_zone_state("wohnbereich", "licht", "off")
+
+        assert registry.delete_zone_state("wohnbereich", "licht") is True
+        assert registry.get_zone_state("wohnbereich", "licht") == "learning"
+        assert registry.get_zone_states("wohnbereich") == {}
+
+    def test_delete_zone_state_missing(self, registry):
+        """Deleting a missing zone override should be a no-op."""
+        assert registry.delete_zone_state("wohnbereich", "licht") is False
+
 
 class TestShouldAutoApplyZone:
     """Double-safety at zone level."""

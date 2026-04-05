@@ -112,6 +112,19 @@ def _is_valid_zone_type(zone_type: str) -> bool:
     return normalized in {value.value for value in ZoneType}
 
 
+def _zone_engine_unavailable_response():
+    """Return a consistent 503 response when the zone engine is unavailable."""
+    return jsonify({"ok": False, "error": "Zone engine not initialized"}), 503
+
+
+def _get_zone_engine_or_unavailable():
+    """Return the zone engine instance or a consistent 503 response tuple."""
+    try:
+        return get_zone_engine()
+    except RuntimeError:
+        return _zone_engine_unavailable_response()
+
+
 def _require_zone(engine: HabitusZoneEngine, zone_id: str):
     """Return zone or a 404 response tuple."""
     zone = engine.get_zone(zone_id)
@@ -137,20 +150,19 @@ def list_zones():
 
     Supports optional filtering by canonical ``zone_type`` via query parameter.
     """
-    try:
-        engine = get_zone_engine()
-    except RuntimeError:
-        return jsonify({"ok": False, "error": "Zone engine not initialized"}), 503
-    
+    engine = _get_zone_engine_or_unavailable()
+    if isinstance(engine, tuple):
+        return engine
+
     requested_zone_type = (request.args.get("zone_type") or "").strip().lower()
     if requested_zone_type and not _is_valid_zone_type(requested_zone_type):
         return jsonify({"ok": False, "error": f"Invalid zone_type: {requested_zone_type}"}), 400
 
     overview = engine.get_overview()
-    
+
     if not overview:
-        return jsonify({"ok": False, "error": "Zone engine not initialized"}), 503
-    
+        return _zone_engine_unavailable_response()
+
     zones_data = []
     for zone in overview.zones:
         zone_details = engine.get_zone(zone["zone_id"])
@@ -159,7 +171,7 @@ def list_zones():
         if requested_zone_type and zone_details.get("zone_type") != requested_zone_type:
             continue
         zones_data.append(zone_details)
-    
+
     return jsonify({
         "ok": True,
         "zones": zones_data,
@@ -170,16 +182,15 @@ def list_zones():
 @zone_editor_bp.route("/zones/<zone_id>", methods=["GET"])
 def get_zone(zone_id: str):
     """Get details for a specific zone."""
-    try:
-        engine = get_zone_engine()
-    except RuntimeError:
-        return jsonify({"ok": False, "error": "Zone engine not initialized"}), 503
-    
+    engine = _get_zone_engine_or_unavailable()
+    if isinstance(engine, tuple):
+        return engine
+
     zone = engine.get_zone(zone_id)
-    
+
     if not zone:
         return jsonify({"ok": False, "error": f"Zone {zone_id} not found"}), 404
-    
+
     return jsonify({
         "ok": True,
         "zone": zone,
@@ -189,7 +200,9 @@ def get_zone(zone_id: str):
 @zone_editor_bp.route("/zones/<zone_id>/state", methods=["GET"])
 def get_zone_state(zone_id: str):
     """Get current state of a zone."""
-    engine = get_zone_engine()
+    engine = _get_zone_engine_or_unavailable()
+    if isinstance(engine, tuple):
+        return engine
     state = engine.get_zone_state(zone_id)
     
     if not state:
@@ -216,7 +229,9 @@ def get_zone_state(zone_id: str):
 @zone_editor_bp.route("/rooms", methods=["GET"])
 def list_rooms():
     """List all rooms."""
-    engine = get_zone_engine()
+    engine = _get_zone_engine_or_unavailable()
+    if isinstance(engine, tuple):
+        return engine
     rooms = engine.get_rooms()
     unassigned_only = request.args.get("unassigned", "false").lower() == "true"
     
@@ -243,7 +258,9 @@ def list_rooms():
 @zone_editor_bp.route("/rooms/<room_id>", methods=["GET"])
 def get_room(room_id: str):
     """Get details for a specific room."""
-    engine = get_zone_engine()
+    engine = _get_zone_engine_or_unavailable()
+    if isinstance(engine, tuple):
+        return engine
     room = engine.get_room(room_id)
     
     if not room:
@@ -261,19 +278,18 @@ def get_overview():
 
     Supports optional filtering by canonical ``zone_type`` via query parameter.
     """
-    try:
-        engine = get_zone_engine()
-    except RuntimeError:
-        return jsonify({"ok": False, "error": "Zone engine not initialized"}), 503
+    engine = _get_zone_engine_or_unavailable()
+    if isinstance(engine, tuple):
+        return engine
 
     requested_zone_type = (request.args.get("zone_type") or "").strip().lower()
     if requested_zone_type and not _is_valid_zone_type(requested_zone_type):
         return jsonify({"ok": False, "error": f"Invalid zone_type: {requested_zone_type}"}), 400
 
     overview = engine.get_overview()
-    
+
     if not overview:
-        return jsonify({"ok": False, "error": "Zone engine not initialized"}), 503
+        return _zone_engine_unavailable_response()
 
     zones = overview.zones
     if requested_zone_type:
@@ -344,7 +360,9 @@ def review_homeassistant_topology():
 @zone_editor_bp.route("/templates", methods=["GET"])
 def list_templates():
     """List available zone templates."""
-    engine = get_zone_engine()
+    engine = _get_zone_engine_or_unavailable()
+    if isinstance(engine, tuple):
+        return engine
     templates = engine.get_templates()
     
     return jsonify({
@@ -356,7 +374,9 @@ def list_templates():
 @zone_editor_bp.route("/modes", methods=["GET"])
 def list_modes():
     """List available zone modes."""
-    engine = get_zone_engine()
+    engine = _get_zone_engine_or_unavailable()
+    if isinstance(engine, tuple):
+        return engine
     modes = engine.get_modes()
     
     return jsonify({
@@ -382,7 +402,9 @@ def create_zone():
     if not name:
         return jsonify({"ok": False, "error": "Missing required field: name"}), 400
 
-    engine = get_zone_engine()
+    engine = _get_zone_engine_or_unavailable()
+    if isinstance(engine, tuple):
+        return engine
     if engine.get_zone(zone_id):
         return jsonify({"ok": False, "error": f"Zone {zone_id} already exists"}), 409
 
@@ -424,7 +446,9 @@ def update_zone(zone_id: str):
     if not data:
         return jsonify({"ok": False, "error": "Missing request body"}), 400
 
-    engine = get_zone_engine()
+    engine = _get_zone_engine_or_unavailable()
+    if isinstance(engine, tuple):
+        return engine
     existing = _require_zone(engine, zone_id)
     if not isinstance(existing, dict):
         return existing
@@ -471,7 +495,9 @@ def update_zone(zone_id: str):
 @require_token
 def delete_zone(zone_id: str):
     """Delete a zone on the modern /zone-editor API."""
-    engine = get_zone_engine()
+    engine = _get_zone_engine_or_unavailable()
+    if isinstance(engine, tuple):
+        return engine
     existing = _require_zone(engine, zone_id)
     if not isinstance(existing, dict):
         return existing
@@ -494,7 +520,9 @@ def add_room(zone_id: str):
     if not room_id:
         return jsonify({"ok": False, "error": "Missing required field: room_id"}), 400
 
-    engine = get_zone_engine()
+    engine = _get_zone_engine_or_unavailable()
+    if isinstance(engine, tuple):
+        return engine
     existing = _require_zone(engine, zone_id)
     if not isinstance(existing, dict):
         return existing
@@ -510,7 +538,9 @@ def add_room(zone_id: str):
 @require_token
 def remove_room(zone_id: str, room_id: str):
     """Remove a room from a zone on the modern /zone-editor API."""
-    engine = get_zone_engine()
+    engine = _get_zone_engine_or_unavailable()
+    if isinstance(engine, tuple):
+        return engine
     existing = _require_zone(engine, zone_id)
     if not isinstance(existing, dict):
         return existing
@@ -544,7 +574,9 @@ def create_zone_legacy():
     if "name" not in data:
         return jsonify({"error": "Missing required field: name"}), 400
     
-    engine = get_zone_engine()
+    engine = _get_zone_engine_or_unavailable()
+    if isinstance(engine, tuple):
+        return jsonify({"error": engine[0]["error"]}), engine[1]
     zone_id = data["zone_id"]
     
     # Check for duplicate
@@ -589,10 +621,9 @@ def create_zone_legacy():
 @require_token
 def list_zones_legacy():
     """List all zones (legacy endpoint)."""
-    try:
-        engine = get_zone_engine()
-    except RuntimeError:
-        return jsonify({"error": "Zone engine not initialized"}), 503
+    engine = _get_zone_engine_or_unavailable()
+    if isinstance(engine, tuple):
+        return jsonify({"error": engine[0]["error"]}), engine[1]
 
     requested_zone_type = (request.args.get("zone_type") or "").strip().lower()
     if requested_zone_type and not _is_valid_zone_type(requested_zone_type):
@@ -620,7 +651,9 @@ def list_zones_legacy():
 @require_token
 def get_zone_legacy(zone_id: str):
     """Get details for a specific zone (legacy endpoint)."""
-    engine = get_zone_engine()
+    engine = _get_zone_engine_or_unavailable()
+    if isinstance(engine, tuple):
+        return jsonify({"error": engine[0]["error"]}), engine[1]
     zone = engine.get_zone(zone_id)
     
     if not zone:
@@ -644,7 +677,9 @@ def update_zone_legacy(zone_id: str):
     if not data:
         return jsonify({"error": "Missing request body"}), 400
     
-    engine = get_zone_engine()
+    engine = _get_zone_engine_or_unavailable()
+    if isinstance(engine, tuple):
+        return jsonify({"error": engine[0]["error"]}), engine[1]
     existing = engine.get_zone(zone_id)
     
     if not existing:
@@ -686,7 +721,9 @@ def update_zone_legacy(zone_id: str):
 @require_token
 def delete_zone_legacy(zone_id: str):
     """Delete a zone (legacy endpoint)."""
-    engine = get_zone_engine()
+    engine = _get_zone_engine_or_unavailable()
+    if isinstance(engine, tuple):
+        return jsonify({"error": engine[0]["error"]}), engine[1]
     existing = engine.get_zone(zone_id)
     
     if not existing:
@@ -717,7 +754,9 @@ def add_room_legacy(zone_id: str):
         return jsonify({"error": "Missing required field: room_id"}), 400
     
     room_id = data["room_id"]
-    engine = get_zone_engine()
+    engine = _get_zone_engine_or_unavailable()
+    if isinstance(engine, tuple):
+        return jsonify({"error": engine[0]["error"]}), engine[1]
     
     existing = engine.get_zone(zone_id)
     if not existing:
@@ -740,7 +779,9 @@ def add_room_legacy(zone_id: str):
 @require_token
 def remove_room_legacy(zone_id: str, room_id: str):
     """Remove a room from a zone (legacy endpoint)."""
-    engine = get_zone_engine()
+    engine = _get_zone_engine_or_unavailable()
+    if isinstance(engine, tuple):
+        return jsonify({"error": engine[0]["error"]}), engine[1]
     
     existing = engine.get_zone(zone_id)
     if not existing:

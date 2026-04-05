@@ -31,6 +31,30 @@ def _require_engine():
     return _engine, None
 
 
+def _handle_engine_exception(action: str, exc: Exception):
+    """Liefere konsistente JSON-500-Pfade statt unkontrollierter Runtime-Fehler."""
+    _LOGGER.exception("Alarm API action failed: %s", action)
+    return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+def _call_engine(action: str, func, *args, **kwargs):
+    """Fuehre Engine-Calls mit konsistentem Fehlerpfad aus."""
+    try:
+        return func(*args, **kwargs), None
+    except Exception as exc:  # pragma: no cover - exercised via contracts
+        return None, _handle_engine_exception(action, exc)
+
+
+def _require_json_object():
+    """Erzwinge einen JSON-Body fuer Mutationspfade."""
+    data = request.get_json(silent=True)
+    if data is None:
+        return None, (jsonify({"ok": False, "error": "No JSON body provided"}), 400)
+    if not isinstance(data, dict):
+        return None, (jsonify({"ok": False, "error": "JSON body must be an object"}), 400)
+    return data, None
+
+
 # ── Dashboard ──────────────────────────────────────────────────────────────
 
 @alarm_bp.route("/dashboard", methods=["GET"])
@@ -40,7 +64,10 @@ def alarm_dashboard():
     engine, err = _require_engine()
     if err:
         return err
-    return jsonify({"ok": True, **engine.get_dashboard()})
+    dashboard, err = _call_engine("get_dashboard", engine.get_dashboard)
+    if err:
+        return err
+    return jsonify({"ok": True, **dashboard})
 
 
 # ── CRUD ───────────────────────────────────────────────────────────────────
@@ -52,7 +79,10 @@ def alarm_list():
     engine, err = _require_engine()
     if err:
         return err
-    return jsonify({"ok": True, "alarms": engine.list_alarms()})
+    alarms, err = _call_engine("list_alarms", engine.list_alarms)
+    if err:
+        return err
+    return jsonify({"ok": True, "alarms": alarms})
 
 
 @alarm_bp.route("/alarms", methods=["POST"])
@@ -63,8 +93,12 @@ def alarm_create():
     engine, err = _require_engine()
     if err:
         return err
-    data = request.get_json(silent=True) or {}
-    config = engine.create_alarm(data)
+    data, err = _require_json_object()
+    if err:
+        return err
+    config, err = _call_engine("create_alarm", engine.create_alarm, data)
+    if err:
+        return err
     return jsonify({"ok": True, "alarm": config.to_dict()}), 201
 
 
@@ -75,7 +109,9 @@ def alarm_get(alarm_id: str):
     engine, err = _require_engine()
     if err:
         return err
-    alarm = engine.get_alarm(alarm_id)
+    alarm, err = _call_engine("get_alarm", engine.get_alarm, alarm_id)
+    if err:
+        return err
     if not alarm:
         return jsonify({"ok": False, "error": "Alarm not found"}), 404
     return jsonify({"ok": True, "alarm": alarm})
@@ -88,8 +124,12 @@ def alarm_update(alarm_id: str):
     engine, err = _require_engine()
     if err:
         return err
-    data = request.get_json(silent=True) or {}
-    config = engine.update_alarm(alarm_id, data)
+    data, err = _require_json_object()
+    if err:
+        return err
+    config, err = _call_engine("update_alarm", engine.update_alarm, alarm_id, data)
+    if err:
+        return err
     if not config:
         return jsonify({"ok": False, "error": "Alarm not found"}), 404
     return jsonify({"ok": True, "alarm": config.to_dict()})
@@ -102,7 +142,10 @@ def alarm_delete(alarm_id: str):
     engine, err = _require_engine()
     if err:
         return err
-    if not engine.delete_alarm(alarm_id):
+    deleted, err = _call_engine("delete_alarm", engine.delete_alarm, alarm_id)
+    if err:
+        return err
+    if not deleted:
         return jsonify({"ok": False, "error": "Alarm not found"}), 404
     return jsonify({"ok": True, "deleted": alarm_id})
 
@@ -116,7 +159,9 @@ def alarm_trigger(alarm_id: str):
     engine, err = _require_engine()
     if err:
         return err
-    result = engine.trigger_alarm(alarm_id)
+    result, err = _call_engine("trigger_alarm", engine.trigger_alarm, alarm_id)
+    if err:
+        return err
     if not result:
         return jsonify({"ok": False, "error": "Alarm not found"}), 404
     return jsonify({"ok": True, **result})
@@ -129,7 +174,9 @@ def alarm_snooze(alarm_id: str):
     engine, err = _require_engine()
     if err:
         return err
-    result = engine.snooze_alarm(alarm_id)
+    result, err = _call_engine("snooze_alarm", engine.snooze_alarm, alarm_id)
+    if err:
+        return err
     if not result:
         return jsonify({"ok": False, "error": "Alarm not found"}), 404
     return jsonify({"ok": True, **result})
@@ -142,7 +189,9 @@ def alarm_cancel(alarm_id: str):
     engine, err = _require_engine()
     if err:
         return err
-    result = engine.cancel_alarm(alarm_id)
+    result, err = _call_engine("cancel_alarm", engine.cancel_alarm, alarm_id)
+    if err:
+        return err
     if not result:
         return jsonify({"ok": False, "error": "Alarm not found"}), 404
     return jsonify({"ok": True, **result})
@@ -157,7 +206,9 @@ def alarm_zone_list(zone_id: str):
     engine, err = _require_engine()
     if err:
         return err
-    alarms = engine.get_alarms_for_zone(zone_id)
+    alarms, err = _call_engine("get_alarms_for_zone", engine.get_alarms_for_zone, zone_id)
+    if err:
+        return err
     return jsonify({"ok": True, "zone_id": zone_id, "alarms": alarms})
 
 
@@ -170,7 +221,10 @@ def alarm_presets_list():
     engine, err = _require_engine()
     if err:
         return err
-    return jsonify({"ok": True, "presets": engine.list_presets()})
+    presets, err = _call_engine("list_presets", engine.list_presets)
+    if err:
+        return err
+    return jsonify({"ok": True, "presets": presets})
 
 
 @alarm_bp.route("/presets/<preset_id>", methods=["GET"])
@@ -180,7 +234,9 @@ def alarm_preset_get(preset_id: str):
     engine, err = _require_engine()
     if err:
         return err
-    preset = engine.get_preset(preset_id)
+    preset, err = _call_engine("get_preset", engine.get_preset, preset_id)
+    if err:
+        return err
     if not preset:
         return jsonify({"ok": False, "error": "Preset not found"}), 404
     return jsonify({"ok": True, "preset": preset})
@@ -193,7 +249,10 @@ def alarm_preset_delete(preset_id: str):
     engine, err = _require_engine()
     if err:
         return err
-    if not engine.delete_preset(preset_id):
+    deleted, err = _call_engine("delete_preset", engine.delete_preset, preset_id)
+    if err:
+        return err
+    if not deleted:
         return jsonify({"ok": False, "error": "Preset not found"}), 404
     return jsonify({"ok": True, "deleted": preset_id})
 
@@ -206,8 +265,12 @@ def alarm_create_from_preset(preset_id: str):
     engine, err = _require_engine()
     if err:
         return err
-    overrides = request.get_json(silent=True) or {}
-    config = engine.create_from_preset(preset_id, overrides)
+    overrides, err = _require_json_object()
+    if err:
+        return err
+    config, err = _call_engine("create_from_preset", engine.create_from_preset, preset_id, overrides)
+    if err:
+        return err
     if not config:
         return jsonify({"ok": False, "error": "Preset not found"}), 404
     return jsonify({"ok": True, "alarm": config.to_dict()}), 201

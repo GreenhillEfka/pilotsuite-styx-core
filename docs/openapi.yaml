@@ -19635,7 +19635,7 @@ paths:
 
   /api/v1/zones/assign:
     post:
-      summary: Zones pilot: Assign room to zone
+      summary: 'Zones pilot: Assign room to zone'
       description: Minimal PS-133 pilot for standardized zone-assignment errors.
       operationId: zones_assign_room_to_zone
       tags:
@@ -19700,7 +19700,7 @@ paths:
                   summary: Unknown zone type in request
                   value:
                     code: INVALID_ZONE_TYPE
-                    message: Ungültiger Zone-Typ: spa.
+                    message: 'Ungültiger Zone-Typ: spa.'
                     field: zone_type
                     context:
                       allowed_values:
@@ -19718,7 +19718,7 @@ paths:
                   summary: Zone missing in registry
                   value:
                     code: ZONE_NOT_FOUND
-                    message: Zone nicht gefunden: living
+                    message: 'Zone nicht gefunden: living'
                     field: zone_type
       security:
       - apiKeyAuth: []
@@ -19885,7 +19885,7 @@ components:
         message:
           type: string
           description: Human-readable error message
-          example: Ungültiger Zone-Typ: spa.
+          example: 'Ungültiger Zone-Typ: spa.'
         field:
           type: string
           nullable: true
@@ -19967,7 +19967,7 @@ components:
         details:
           type: object
           additionalProperties: true
-      description: Source schema: pilotsuite_ops/schemas/webhook_response.schema.json
+      description: 'Source schema: pilotsuite_ops/schemas/webhook_response.schema.json'
     WebhookErrorResponse:
       type: object
       required:

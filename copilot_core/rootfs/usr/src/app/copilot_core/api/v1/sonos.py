@@ -30,6 +30,20 @@ def _get_sonos():
     return client, None
 
 
+def _handle_client_exception(action: str, exc: Exception):
+    """Liefere konsistente JSON-500-Pfade statt unkontrollierter Runtime-Fehler."""
+    _LOGGER.exception("Sonos API action failed: %s", action)
+    return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+def _call_client(action: str, func, *args, **kwargs):
+    """Fuehre Sonos-Client-Call mit konsistentem Fehlerpfad aus."""
+    try:
+        return func(*args, **kwargs), None
+    except Exception as exc:  # pragma: no cover - exercised via contracts
+        return None, _handle_client_exception(action, exc)
+
+
 # ── Discovery / Status ─────────────────────────────────────────
 
 @sonos_bp.route("/zones", methods=["GET"])
@@ -41,8 +55,14 @@ def get_zones():
     if err:
         return err
 
-    zones = client.discover_zones()
-    speakers = client.get_speakers()
+    zones, err = _call_client("discover_zones", client.discover_zones)
+    if err:
+        return err
+
+    speakers, err = _call_client("get_speakers", client.get_speakers)
+    if err:
+        return err
+
     return jsonify({
         "ok": True,
         "total_speakers": len(speakers),
@@ -59,7 +79,10 @@ def get_speakers():
     if err:
         return err
 
-    speakers = client.get_speakers()
+    speakers, err = _call_client("get_speakers", client.get_speakers)
+    if err:
+        return err
+
     return jsonify({
         "ok": True,
         "speakers": [
@@ -91,7 +114,11 @@ def get_summary():
     if err:
         return err
 
-    return jsonify({"ok": True, **client.get_summary()})
+    summary, err = _call_client("get_summary", client.get_summary)
+    if err:
+        return err
+
+    return jsonify({"ok": True, **summary})
 
 
 @sonos_bp.route("/health", methods=["GET"])
@@ -101,7 +128,10 @@ def health_check():
     if err:
         return err
 
-    healthy = client.health_check()
+    healthy, err = _call_client("health_check", client.health_check)
+    if err:
+        return err
+
     return jsonify({"ok": healthy, "service": "node-sonos-http-api"}), 200 if healthy else 503
 
 
@@ -121,7 +151,10 @@ def play():
     if not room:
         return jsonify({"ok": False, "error": "Missing 'room'"}), 400
 
-    ok = client.play(room)
+    ok, err = _call_client("play", client.play, room)
+    if err:
+        return err
+
     return jsonify({"ok": ok, "room": room, "action": "play"})
 
 
@@ -139,7 +172,10 @@ def pause():
     if not room:
         return jsonify({"ok": False, "error": "Missing 'room'"}), 400
 
-    ok = client.pause(room)
+    ok, err = _call_client("pause", client.pause, room)
+    if err:
+        return err
+
     return jsonify({"ok": ok, "room": room, "action": "pause"})
 
 
@@ -157,7 +193,10 @@ def next_track():
     if not room:
         return jsonify({"ok": False, "error": "Missing 'room'"}), 400
 
-    ok = client.next_track(room)
+    ok, err = _call_client("next_track", client.next_track, room)
+    if err:
+        return err
+
     return jsonify({"ok": ok, "room": room, "action": "next"})
 
 
@@ -175,7 +214,10 @@ def previous_track():
     if not room:
         return jsonify({"ok": False, "error": "Missing 'room'"}), 400
 
-    ok = client.previous_track(room)
+    ok, err = _call_client("previous_track", client.previous_track, room)
+    if err:
+        return err
+
     return jsonify({"ok": ok, "room": room, "action": "previous"})
 
 
@@ -199,7 +241,10 @@ def set_volume():
     if volume is None or not isinstance(volume, (int, float)):
         return jsonify({"ok": False, "error": "Missing or invalid 'volume'"}), 400
 
-    ok = client.set_volume(room, int(volume))
+    ok, err = _call_client("set_volume", client.set_volume, room, int(volume))
+    if err:
+        return err
+
     return jsonify({"ok": ok, "room": room, "volume": int(volume)})
 
 
@@ -219,7 +264,10 @@ def set_mute():
     if not room:
         return jsonify({"ok": False, "error": "Missing 'room'"}), 400
 
-    ok = client.set_mute(room, bool(muted))
+    ok, err = _call_client("set_mute", client.set_mute, room, bool(muted))
+    if err:
+        return err
+
     return jsonify({"ok": ok, "room": room, "muted": bool(muted)})
 
 
@@ -234,7 +282,11 @@ def get_favorites():
     if err:
         return err
 
-    return jsonify({"ok": True, "favorites": client.get_favorites()})
+    favorites, err = _call_client("get_favorites", client.get_favorites)
+    if err:
+        return err
+
+    return jsonify({"ok": True, "favorites": favorites})
 
 
 @sonos_bp.route("/favorite/play", methods=["POST"])
@@ -253,7 +305,10 @@ def play_favorite():
     if not room or not name:
         return jsonify({"ok": False, "error": "Missing 'room' or 'name'"}), 400
 
-    ok = client.play_favorite(room, name)
+    ok, err = _call_client("play_favorite", client.play_favorite, room, name)
+    if err:
+        return err
+
     return jsonify({"ok": ok, "room": room, "favorite": name})
 
 
@@ -266,7 +321,11 @@ def get_playlists():
     if err:
         return err
 
-    return jsonify({"ok": True, "playlists": client.get_playlists()})
+    playlists, err = _call_client("get_playlists", client.get_playlists)
+    if err:
+        return err
+
+    return jsonify({"ok": True, "playlists": playlists})
 
 
 # ── TTS / Say ──────────────────────────────────────────────────
@@ -291,7 +350,10 @@ def say():
     if len(text) > 500:
         return jsonify({"ok": False, "error": "Text too long (max 500 chars)"}), 400
 
-    ok = client.say(room, text, language=language, volume=volume)
+    ok, err = _call_client("say", client.say, room, text, language=language, volume=volume)
+    if err:
+        return err
+
     return jsonify({"ok": ok, "room": room, "action": "say"})
 
 
@@ -314,7 +376,10 @@ def say_all():
     if len(text) > 500:
         return jsonify({"ok": False, "error": "Text too long (max 500 chars)"}), 400
 
-    ok = client.say_all(text, language=language, volume=volume)
+    ok, err = _call_client("say_all", client.say_all, text, language=language, volume=volume)
+    if err:
+        return err
+
     return jsonify({"ok": ok, "action": "say-all"})
 
 
@@ -335,7 +400,10 @@ def create_musikwolke():
     if not isinstance(rooms, list) or len(rooms) < 2:
         return jsonify({"ok": False, "error": "Need at least 2 rooms"}), 400
 
-    ok = client.create_musikwolke(rooms)
+    ok, err = _call_client("create_musikwolke", client.create_musikwolke, rooms)
+    if err:
+        return err
+
     return jsonify({"ok": ok, "rooms": rooms, "action": "musikwolke-create"})
 
 
@@ -354,7 +422,10 @@ def dissolve_musikwolke():
     if not isinstance(rooms, list) or len(rooms) < 1:
         return jsonify({"ok": False, "error": "Need at least 1 room"}), 400
 
-    ok = client.dissolve_musikwolke(rooms)
+    ok, err = _call_client("dissolve_musikwolke", client.dissolve_musikwolke, rooms)
+    if err:
+        return err
+
     return jsonify({"ok": ok, "rooms": rooms, "action": "musikwolke-dissolve"})
 
 
@@ -375,11 +446,16 @@ def follow_user():
     if not user_room:
         return jsonify({"ok": False, "error": "Missing 'user_room'"}), 400
 
-    ok = client.follow_user(
+    ok, err = _call_client(
+        "follow_user",
+        client.follow_user,
         user_room=user_room,
         previous_room=previous_room,
         musikwolke_rooms=musikwolke_rooms,
     )
+    if err:
+        return err
+
     return jsonify({"ok": ok, "user_room": user_room, "action": "follow"})
 
 
@@ -399,7 +475,10 @@ def join():
     if not room or not target:
         return jsonify({"ok": False, "error": "Missing 'room' or 'target'"}), 400
 
-    ok = client.join(room, target)
+    ok, err = _call_client("join", client.join, room, target)
+    if err:
+        return err
+
     return jsonify({"ok": ok, "room": room, "target": target, "action": "join"})
 
 
@@ -418,5 +497,8 @@ def leave():
     if not room:
         return jsonify({"ok": False, "error": "Missing 'room'"}), 400
 
-    ok = client.leave(room)
+    ok, err = _call_client("leave", client.leave, room)
+    if err:
+        return err
+
     return jsonify({"ok": ok, "room": room, "action": "leave"})

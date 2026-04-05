@@ -11,10 +11,9 @@ Endpoints:
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, request
 
 from copilot_core.api.security import require_token
 from copilot_core.brain_graph.brain_growth_read_model import (
@@ -96,11 +95,29 @@ def _zone_link_to_dict(link: ZoneBrainLink) -> Dict[str, Any]:
     }
 
 
+def _require_read_model() -> Optional[tuple]:
+    if _read_model is None:
+        return jsonify({"error": "Brain Growth API not initialized"}), 503
+    return None
+
+
+def _parse_positive_limit(default: int = 50, maximum: int = 200) -> int:
+    raw_limit = request.args.get("limit", str(default))
+    try:
+        limit = int(raw_limit)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("limit must be a positive integer") from exc
+
+    if limit <= 0:
+        raise ValueError("limit must be a positive integer")
+    return min(limit, maximum)
+
+
 @brain_growth_bp.route("/summary", methods=["GET"])
 @require_token
 def get_brain_growth_summary() -> tuple:
     """Get high-level summary of brain activity and growth.
-    
+
     Returns:
         JSON with brain statistics:
         - total_nodes, total_edges: Graph size
@@ -111,9 +128,10 @@ def get_brain_growth_summary() -> tuple:
         - active_zone_count: Zones with recent activity
         - module_context_count: Module-derived contexts
     """
-    if not _read_model:
-        return jsonify({"error": "Brain Growth API not initialized"}), 503
-    
+    not_initialized = _require_read_model()
+    if not_initialized:
+        return not_initialized
+
     try:
         summary = _read_model.get_brain_growth_summary()
         return jsonify(_summary_to_dict(summary)), 200
@@ -126,10 +144,10 @@ def get_brain_growth_summary() -> tuple:
 @require_token
 def get_semantic_transfer_trace(input_id: str) -> tuple:
     """Get trace of how a specific input triggered brain updates.
-    
+
     Args:
         input_id: Identifier of the triggering input (event/entity/sensor)
-    
+
     Returns:
         JSON with trace data:
         - input_id, input_type, input_timestamp: Input details
@@ -139,9 +157,10 @@ def get_semantic_transfer_trace(input_id: str) -> tuple:
         - propagation_depth: How many hops the influence propagated
         - confidence_score: 0.0-1.0 confidence in the transfer chain
     """
-    if not _read_model:
-        return jsonify({"error": "Brain Growth API not initialized"}), 503
-    
+    not_initialized = _require_read_model()
+    if not_initialized:
+        return not_initialized
+
     try:
         trace = _read_model.get_semantic_transfer_trace(input_id)
         if not trace:
@@ -156,7 +175,7 @@ def get_semantic_transfer_trace(input_id: str) -> tuple:
 @require_token
 def get_zone_brain_links() -> tuple:
     """Get linkage between zones and their brain representations.
-    
+
     Returns:
         JSON array of zone links:
         - zone_id, zone_name: Zone identifiers
@@ -166,9 +185,10 @@ def get_zone_brain_links() -> tuple:
         - last_activity_timestamp: Most recent zone activity
         - activity_score: 0.0-1.0 activity level
     """
-    if not _read_model:
-        return jsonify({"error": "Brain Growth API not initialized"}), 503
-    
+    not_initialized = _require_read_model()
+    if not_initialized:
+        return not_initialized
+
     try:
         links = _read_model.get_zone_brain_links()
         return jsonify([_zone_link_to_dict(link) for link in links]), 200
@@ -181,21 +201,25 @@ def get_zone_brain_links() -> tuple:
 @require_token
 def get_brain_activity_timeline() -> tuple:
     """Get recent brain activity timeline.
-    
+
     Query params:
         limit: Max entries to return (default: 50)
-    
+
     Returns:
         JSON array of recent semantic transfer traces
     """
-    if not _read_model:
-        return jsonify({"error": "Brain Growth API not initialized"}), 503
-    
+    not_initialized = _require_read_model()
+    if not_initialized:
+        return not_initialized
+
     try:
-        limit = int(request.args.get("limit", 50))
-        # Access internal trace log (would need to be exposed in read model)
-        # For now, return empty array - implementation detail
-        return jsonify([]), 200
+        limit = _parse_positive_limit()
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    try:
+        activity = _read_model.get_recent_activity(limit=limit)
+        return jsonify([_trace_to_dict(trace) for trace in activity]), 200
     except Exception as exc:
         logger.exception("Failed to get brain activity timeline")
         return jsonify({"error": str(exc)}), 500
