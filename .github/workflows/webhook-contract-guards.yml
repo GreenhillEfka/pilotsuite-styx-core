@@ -10,7 +10,7 @@ jobs:
     name: Webhook Contract Guards (PS-DAI-055)
     runs-on: ubuntu-latest
     # Optional on PRs: only run when label is present. Always allowed via workflow_dispatch.
-    if: github.event_name == "workflow_dispatch" || (github.event.pull_request != null && contains(github.event.pull_request.labels.*.name, "run-webhook-guards"))
+    if: github.event_name != 'push' && (github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'run-webhook-guards'))
 
     steps:
       - name: Checkout Core (this repo)
