@@ -248,7 +248,12 @@ def test_backend_ui_static_surfaces_contract(monkeypatch) -> None:
     response = client.get("/api/v1/backend/brain")
     assert response.status_code == 200
     brain = response.get_json()
-    assert brain["graph"]["nodes"] == 350
+    # Slice 129: Graph stats are now dynamic from BrainGraphService (may be 0 in test env)
+    assert "graph" in brain
+    assert "nodes" in brain["graph"]
+    assert "edges" in brain["graph"]
+    assert isinstance(brain["graph"]["nodes"], int)
+    assert isinstance(brain["graph"]["edges"], int)
     assert brain["pipeline"]["suggestions_generated"] == 3
 
     response = client.get("/api/v1/backend/mood")

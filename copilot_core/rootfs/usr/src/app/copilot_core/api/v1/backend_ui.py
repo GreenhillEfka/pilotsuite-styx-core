@@ -590,7 +590,23 @@ def update_module(module_id: str):
 
 @backend_ui_bp.route("/brain", methods=["GET"])
 def get_brain():
-    """Brain data — Neurons, Graph, Pipeline."""
+    """Brain data — Neurons, Graph, Pipeline.
+    
+    Slice 129: Stats now from canonical BrainGraphService instead of static placeholders.
+    """
+    # Import BrainGraphService lazily to avoid circular imports
+    try:
+        from copilot_core.brain_graph.service import BrainGraphService
+        service = BrainGraphService()
+        stats = service.get_graph_stats()
+        nodes = stats.get("node_count", 0)
+        edges = stats.get("edge_count", 0)
+        last_update = stats.get("last_update", "2026-04-01T00:30:00Z")
+    except Exception:
+        nodes = 0
+        edges = 0
+        last_update = "2026-04-01T00:30:00Z"
+    
     return jsonify({
         "neurons": {
             "context": [
@@ -612,15 +628,15 @@ def get_brain():
             ],
         },
         "graph": {
-            "nodes": 350,
-            "edges": 1200,
-            "last_update": "2026-04-01T00:30:00Z",
+            "nodes": nodes,
+            "edges": edges,
+            "last_update": last_update,
             "svg_url": "/api/v1/graph/snapshot.svg",
         },
         "pipeline": {
-            "events_last_hour": 150,
-            "patterns_discovered": 5,
-            "suggestions_generated": 3,
+            "events_last_hour": 150,  # Still placeholder - requires ingest metrics
+            "patterns_discovered": 5,  # Still placeholder - requires pattern store
+            "suggestions_generated": 3,  # Still placeholder - requires proposals store
             "last_run": "2026-04-01T00:29:00Z",
         },
     })
