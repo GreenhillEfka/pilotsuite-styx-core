@@ -321,3 +321,125 @@ def rules_activate(rule_id: str):
             return jsonify({"error": str(e)}), 500
     
     return jsonify({"error": "Rule activation not supported"}), 405
+
+
+# ── SLICE 146: Modules API Expansion ─────────────────────────────────
+
+@bp.get("/health")
+def modules_health():
+    """Get health status of all modules.
+    
+    Returns per-module:
+    - module_id
+    - status: healthy|degraded|unhealthy
+    - last_seen: Last activity timestamp
+    - error_count: Recent error count
+    """
+    from copilot_core.modules.registry import get_module_registry
+    
+    try:
+        registry = get_module_registry()
+        health = registry.get_all_modules_health()
+    except Exception as e:
+        _LOGGER.warning("Failed to get modules health: %s", e)
+        health = []
+    
+    return jsonify({
+        "ok": True,
+        "health": health,
+        "count": len(health),
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    })
+
+
+@bp.get("/<module_id>/health")
+def module_health(module_id):
+    """Get health status of a specific module.
+    
+    Returns:
+    - module_id
+    - status: healthy|degraded|unhealthy
+    - last_seen: Last activity timestamp
+    - error_count: Recent error count
+    - details: Additional health details
+    """
+    from copilot_core.modules.registry import get_module_registry
+    
+    try:
+        registry = get_module_registry()
+        health = registry.get_module_health(module_id=module_id)
+    except Exception as e:
+        _LOGGER.warning("Failed to get module health: %s", e)
+        health = {
+            "module_id": module_id,
+            "status": "unknown",
+            "last_seen": None,
+            "error_count": 0,
+            "details": {}
+        }
+    
+    return jsonify({
+        "ok": True,
+        "health": health,
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    })
+
+
+@bp.get("/dependencies")
+def modules_dependencies():
+    """Get module dependency graph.
+    
+    Query params:
+    - module_id: Specific module (optional, all if omitted)
+    """
+    from copilot_core.modules.registry import get_module_registry
+    
+    module_id = request.args.get("module_id")
+    
+    try:
+        registry = get_module_registry()
+        if module_id:
+            deps = registry.get_module_dependencies(module_id=module_id)
+        else:
+            deps = registry.get_all_dependencies()
+    except Exception as e:
+        _LOGGER.warning("Failed to get dependencies: %s", e)
+        deps = {"nodes": [], "edges": []}
+    
+    return jsonify({
+        "ok": True,
+        "dependencies": deps,
+        "module_id": module_id,
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    })
+
+
+@bp.get("/metrics")
+def modules_metrics():
+    """Get performance metrics for all modules.
+    
+    Query params:
+    - hours: Time range (default 24)
+    """
+    from copilot_core.modules.registry import get_module_registry
+    
+    try:
+        hours = int(request.args.get("hours", "24"))
+    except (ValueError, TypeError):
+        hours = 24
+    
+    hours = max(1, min(hours, 720))
+    
+    try:
+        registry = get_module_registry()
+        metrics = registry.get_modules_metrics(hours=hours)
+    except Exception as e:
+        _LOGGER.warning("Failed to get modules metrics: %s", e)
+        metrics = []
+    
+    return jsonify({
+        "ok": True,
+        "metrics": metrics,
+        "hours": hours,
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    })
