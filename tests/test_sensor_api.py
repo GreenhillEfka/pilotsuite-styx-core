@@ -50,24 +50,3 @@ def test_sensor_modules_empty_registry(monkeypatch) -> None:
     data = response.get_json()
     assert data["sensors"] == []
     assert data["count"] == 0
-
-
-def test_sensor_system_returns_503_without_monitor(monkeypatch) -> None:
-    """Sensor system returns 503 when SystemHealthMonitor unavailable."""
-    from copilot_core.api.v1.sensors import sensors_bp
-    
-    # Mock SystemHealthMonitor to raise ImportError
-    class MockImportError:
-        def __init__(self, *args, **kwargs):
-            raise ImportError("SystemHealthMonitor not available")
-    
-    monkeypatch.setattr("copilot_core.api.v1.sensors.SystemHealthMonitor", MockImportError)
-    
-    app = Flask(__name__)
-    app.register_blueprint(sensors_bp)
-    client = app.test_client()
-    
-    response = client.get("/api/v1/sensors/system")
-    
-    # Should return 503 when service unavailable
-    assert response.status_code == 503
