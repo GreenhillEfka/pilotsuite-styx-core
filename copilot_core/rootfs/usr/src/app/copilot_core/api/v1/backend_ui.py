@@ -299,7 +299,31 @@ def _sync_zone_module_state(zone_id: str, module_id: str, state: str) -> bool:
 
 @backend_ui_bp.route("/dashboard", methods=["GET"])
 def get_dashboard():
-    """Dashboard data — Info-Übersicht, System-Status."""
+    """Dashboard data — Info-Übersicht, System-Status.
+    
+    Slice 128: Stats now from canonical Registry/Engine truth instead of static placeholders.
+    """
+    registry = _get_module_registry()
+    
+    # Get actual module count from Registry
+    try:
+        all_states = registry.get_all_states()
+        module_count = len(all_states)
+    except Exception:
+        module_count = 0
+    
+    # Get actual zone count from Engine
+    zone_count = 0
+    entity_count = 0
+    if HAS_ENGINE:
+        try:
+            engine = HabitusZoneEngine()
+            overview = engine.get_overview()
+            zone_count = overview.get("total_zones", 0)
+            entity_count = overview.get("total_entities", 0)
+        except Exception:
+            pass
+    
     return jsonify({
         "system": {
             "status": "healthy",
@@ -309,11 +333,11 @@ def get_dashboard():
             "ha_version": "15.2.10",
         },
         "stats": {
-            "zones": 10,
-            "modules": 25,
-            "entities": 150,
-            "automations": 45,
-            "proposals_pending": 3,
+            "zones": zone_count,
+            "modules": module_count,
+            "entities": entity_count,
+            "automations": 45,  # Still placeholder - automation count not yet in Registry
+            "proposals_pending": 3,  # Still placeholder - proposals not yet in Registry
         },
         "health": {
             "cpu_usage": 15.2,
