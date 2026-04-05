@@ -537,3 +537,8 @@ class NotificationEngine:
 def create_notification_engine() -> NotificationEngine:
     """Factory function to create notification engine."""
     return NotificationEngine()
+# Backwards-compatibility aliases (matching test imports)
+Priority = NotificationPriority
+NotificationDigest = Notification
+DEFAULT_DEDUP_WINDOW_SECONDS = 300  # 5 minutes
+
