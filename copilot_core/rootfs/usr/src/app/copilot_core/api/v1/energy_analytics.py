@@ -222,3 +222,110 @@ def update_effectiveness():
     store.update_effectiveness_metrics(metrics)
     
     return jsonify({"status": "ok", "message": "Metrics updated"}), 200
+
+
+# ── SLICE 135: Energy-Analytics Expansion ─────────────────────────────────
+
+@bp.get("/tariff")
+def energy_tariff_analytics():
+    """Get tariff/analytics data.
+    
+    Returns:
+    - current_price: Current energy price (ct/kWh)
+    - avg_price_24h: 24h average
+    - min_price_24h: Minimum price + time
+    - max_price_24h: Maximum price + time
+    - optimal_usage_times: Best times for high-consumption activities
+    """
+    from copilot_core.energy.analytics import get_energy_analytics
+    
+    try:
+        analytics = get_energy_analytics()
+        tariff_data = analytics.get_tariff_analytics()
+    except Exception as e:
+        _LOGGER.warning("Failed to get tariff analytics: %s", e)
+        tariff_data = {
+            "current_price": 0.0,
+            "avg_price_24h": 0.0,
+            "min_price_24h": {"price": 0.0, "time": None},
+            "max_price_24h": {"price": 0.0, "time": None},
+            "optimal_usage_times": []
+        }
+    
+    return jsonify({
+        "ok": True,
+        "tariff": tariff_data,
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    })
+
+
+@bp.get("/battery")
+def energy_battery_analytics():
+    """Get battery management analytics.
+    
+    Returns:
+    - current_charge: Current battery level (%)
+    - predicted_charge_24h: 24h prediction
+    - optimal_charge_times: Best times to charge
+    - optimal_discharge_times: Best times to use battery
+    - savings_potential: Estimated cost savings
+    """
+    from copilot_core.energy.analytics import get_energy_analytics
+    
+    try:
+        analytics = get_energy_analytics()
+        battery_data = analytics.get_battery_analytics()
+    except Exception as e:
+        _LOGGER.warning("Failed to get battery analytics: %s", e)
+        battery_data = {
+            "current_charge": 0.0,
+            "predicted_charge_24h": [],
+            "optimal_charge_times": [],
+            "optimal_discharge_times": [],
+            "savings_potential": 0.0
+        }
+    
+    return jsonify({
+        "ok": True,
+        "battery": battery_data,
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    })
+
+
+@bp.get("/consumption/patterns")
+def energy_consumption_patterns():
+    """Get ML-based consumption pattern detection.
+    
+    Query params:
+    - days: Days to analyze (default 7)
+    - limit: Max patterns (default 10)
+    """
+    from copilot_core.energy.analytics import get_energy_analytics
+    
+    try:
+        days = int(request.args.get("days", "7"))
+    except (ValueError, TypeError):
+        days = 7
+    
+    try:
+        limit = int(request.args.get("limit", "10"))
+    except (ValueError, TypeError):
+        limit = 10
+    
+    days = max(1, min(days, 90))
+    limit = max(1, min(limit, 50))
+    
+    try:
+        analytics = get_energy_analytics()
+        patterns = analytics.get_consumption_patterns(days=days, limit=limit)
+    except Exception as e:
+        _LOGGER.warning("Failed to get consumption patterns: %s", e)
+        patterns = []
+    
+    return jsonify({
+        "ok": True,
+        "patterns": patterns,
+        "count": len(patterns),
+        "days": days,
+        "limit": limit
+    })
