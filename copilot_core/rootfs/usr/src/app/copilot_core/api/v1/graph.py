@@ -257,3 +257,152 @@ def clear_cache():
         "message": "Cache cleared",
         "timestamp_ms": int(time.time() * 1000)
     })
+
+
+# ── SLICE 130: Graph Query Expansion ─────────────────────────────────
+
+@bp.get("/query")
+def graph_query():
+    """SPARQL-like graph query endpoint.
+    
+    Query params:
+    - subject: Node ID to start from
+    - predicate: Edge type filter
+    - object: Target node filter
+    - hops: Max traversal depth (1-3)
+    - limit: Max results (default 100)
+    """
+    subject = request.args.get("subject")
+    predicate = request.args.get("predicate")
+    obj = request.args.get("object")
+    
+    try:
+        hops = int(request.args.get("hops", "1"))
+    except (ValueError, TypeError):
+        hops = 1
+    
+    try:
+        limit = int(request.args.get("limit", "100"))
+    except (ValueError, TypeError):
+        limit = 100
+    
+    hops = max(1, min(hops, 3))
+    limit = max(1, min(limit, 500))
+    
+    svc = _svc()
+    results = svc.query_graph(
+        subject=subject,
+        predicate=predicate,
+        object=obj,
+        hops=hops,
+        limit=limit
+    )
+    
+    return jsonify({
+        "ok": True,
+        "results": results,
+        "count": len(results),
+        "query": {
+            "subject": subject,
+            "predicate": predicate,
+            "object": obj,
+            "hops": hops,
+            "limit": limit
+        }
+    })
+
+
+@bp.get("/analytics")
+def graph_analytics():
+    """Graph analytics: centrality, clustering, patterns.
+    
+    Query params:
+    - metric: centrality|clustering|pagerank|degree
+    - top: Top N results (default 10)
+    """
+    metric = request.args.get("metric", "centrality")
+    
+    try:
+        top = int(request.args.get("top", "10"))
+    except (ValueError, TypeError):
+        top = 10
+    
+    top = max(1, min(top, 100))
+    
+    svc = _svc()
+    
+    if metric == "centrality":
+        results = svc.get_centrality(top=top)
+    elif metric == "clustering":
+        results = svc.get_clustering_coefficient()
+    elif metric == "pagerank":
+        results = svc.get_pagerank(top=top)
+    elif metric == "degree":
+        results = svc.get_degree_distribution()
+    else:
+        return jsonify({
+            "ok": False,
+            "error": f"Unknown metric: {metric}",
+            "valid_metrics": ["centrality", "clustering", "pagerank", "degree"]
+        }), 400
+    
+    return jsonify({
+        "ok": True,
+        "metric": metric,
+        "results": results,
+        "count": len(results) if isinstance(results, list) else 1
+    })
+
+
+@bp.get("/traverse")
+def graph_traverse():
+    """Multi-hop traversal from a given node.
+    
+    Query params:
+    - start: Starting node ID
+    - hops: Number of hops (1-5)
+    - direction: outgoing|incoming|both (default: both)
+    - limit: Max nodes to return (default 50)
+    """
+    start = request.args.get("start")
+    if not start:
+        return jsonify({
+            "ok": False,
+            "error": "Missing required parameter: start"
+        }), 400
+    
+    try:
+        hops = int(request.args.get("hops", "2"))
+    except (ValueError, TypeError):
+        hops = 2
+    
+    direction = request.args.get("direction", "both")
+    
+    try:
+        limit = int(request.args.get("limit", "50"))
+    except (ValueError, TypeError):
+        limit = 50
+    
+    hops = max(1, min(hops, 5))
+    limit = max(1, min(limit, 200))
+    
+    svc = _svc()
+    result = svc.traverse_from(
+        start_node=start,
+        hops=hops,
+        direction=direction,
+        limit=limit
+    )
+    
+    return jsonify({
+        "ok": True,
+        "start": start,
+        "hops": hops,
+        "direction": direction,
+        "nodes": result.get("nodes", []),
+        "edges": result.get("edges", []),
+        "count": {
+            "nodes": len(result.get("nodes", [])),
+            "edges": len(result.get("edges", []))
+        }
+    })
