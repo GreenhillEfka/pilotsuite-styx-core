@@ -148,3 +148,107 @@ def record_execution(closure_id: str):
         executed_at=_as_text(payload.get("executed_at")),
     )
     return jsonify({"ok": True, "closure": closure})
+
+
+# ── SLICE 133: Action-Closure Expansion ─────────────────────────────────
+
+@bp.get("/resume-conflict")
+def action_closure_resume_conflict():
+    """Get active resume conflicts.
+    
+    Returns actions that cannot be resumed due to context conflicts.
+    
+    Query params:
+    - limit: Max conflicts (default 10)
+    """
+    from copilot_core.action_closure import get_closure_store
+    
+    try:
+        limit = int(request.args.get("limit", "10"))
+    except (ValueError, TypeError):
+        limit = 10
+    
+    limit = max(1, min(limit, 50))
+    
+    store = get_closure_store()
+    conflicts = store.get_resume_conflicts(limit=limit)
+    
+    return jsonify({
+        "ok": True,
+        "conflicts": conflicts,
+        "count": len(conflicts),
+        "limit": limit
+    })
+
+
+@bp.post("/resume-conflict/resolve")
+def resolve_resume_conflict():
+    """Resolve a resume conflict by starting new context.
+    
+    Requires admin token.
+    
+    Body:
+    - conflict_id: ID of conflict to resolve
+    - new_context_id: New context UUID
+    """
+    auth_error = _require_admin_mutation("RESOLVE_RESUME_CONFLICT", "Admin token required")
+    if auth_error:
+        return auth_error
+    
+    data = request.get_json() or {}
+    conflict_id = data.get("conflict_id")
+    new_context_id = data.get("new_context_id", str(uuid.uuid4()))
+    
+    if not conflict_id:
+        return jsonify({
+            "ok": False,
+            "error": "Missing conflict_id"
+        }), 400
+    
+    from copilot_core.action_closure import get_closure_store
+    
+    store = get_closure_store()
+    result = store.resolve_conflict(conflict_id=conflict_id, new_context_id=new_context_id)
+    
+    return jsonify({
+        "ok": True,
+        "conflict_id": conflict_id,
+        "new_context_id": new_context_id,
+        "resolved": result
+    })
+
+
+@bp.get("/history")
+def action_closure_history():
+    """Get closure history.
+    
+    Query params:
+    - limit: Max entries (default 20)
+    - action_id: Filter by action
+    - status: Filter by status (success|failed|conflict)
+    """
+    from copilot_core.action_closure import get_closure_store
+    
+    try:
+        limit = int(request.args.get("limit", "20"))
+    except (ValueError, TypeError):
+        limit = 20
+    
+    action_id = request.args.get("action_id")
+    status = request.args.get("status")
+    
+    limit = max(1, min(limit, 100))
+    
+    store = get_closure_store()
+    history = store.get_history(
+        limit=limit,
+        action_id=action_id,
+        status=status
+    )
+    
+    return jsonify({
+        "ok": True,
+        "history": history,
+        "count": len(history),
+        "limit": limit
+    })
