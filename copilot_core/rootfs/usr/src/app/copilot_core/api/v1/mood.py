@@ -375,3 +375,112 @@ def aggregated():
         _LOGGER = current_app.logger
         _LOGGER.exception("Aggregated mood failed")
         return jsonify({"ok": False, "error": str(e)}), 500
+
+
+# ── SLICE 134: Mood-Engine Expansion ─────────────────────────────────
+
+@bp.get("/dimensions")
+def mood_dimensions():
+    """Get current mood across all 5 dimensions.
+    
+    Returns:
+    - energy: 0.0-1.0
+    - focus: 0.0-1.0
+    - social: 0.0-1.0
+    - calm: 0.0-1.0
+    - creative: 0.0-1.0
+    - overall: Composite score
+    """
+    from copilot_core.mood.engine import get_mood_engine
+    
+    try:
+        engine = get_mood_engine()
+        dimensions = engine.get_current_dimensions()
+    except Exception as e:
+        _LOGGER.warning("Failed to get mood dimensions: %s", e)
+        dimensions = {
+            "energy": 0.5,
+            "focus": 0.5,
+            "social": 0.5,
+            "calm": 0.5,
+            "creative": 0.5,
+            "overall": 0.5
+        }
+    
+    return jsonify({
+        "ok": True,
+        "dimensions": dimensions,
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    })
+
+
+@bp.get("/history/dimensions")
+def mood_dimensions_history():
+    """Get mood dimensions history.
+    
+    Query params:
+    - limit: Max entries (default 24)
+    - hours: Time range in hours (default 24)
+    """
+    from copilot_core.mood.history import get_mood_history_store
+    
+    try:
+        limit = int(request.args.get("limit", "24"))
+    except (ValueError, TypeError):
+        limit = 24
+    
+    try:
+        hours = int(request.args.get("hours", "24"))
+    except (ValueError, TypeError):
+        hours = 24
+    
+    limit = max(1, min(limit, 168))
+    hours = max(1, min(hours, 720))
+    
+    try:
+        store = get_mood_history_store()
+        history = store.get_dimensions_history(limit=limit, hours=hours)
+    except Exception as e:
+        _LOGGER.warning("Failed to get mood dimensions history: %s", e)
+        history = []
+    
+    return jsonify({
+        "ok": True,
+        "history": history,
+        "count": len(history),
+        "limit": limit,
+        "hours": hours
+    })
+
+
+@bp.get("/suggestions")
+def mood_suggestions():
+    """Get mood-driven suggestions.
+    
+    Returns actions/activities based on current mood state.
+    
+    Query params:
+    - limit: Max suggestions (default 5)
+    """
+    from copilot_core.mood.engine import get_mood_engine
+    
+    try:
+        limit = int(request.args.get("limit", "5"))
+    except (ValueError, TypeError):
+        limit = 5
+    
+    limit = max(1, min(limit, 20))
+    
+    try:
+        engine = get_mood_engine()
+        suggestions = engine.get_mood_based_suggestions(limit=limit)
+    except Exception as e:
+        _LOGGER.warning("Failed to get mood suggestions: %s", e)
+        suggestions = []
+    
+    return jsonify({
+        "ok": True,
+        "suggestions": suggestions,
+        "count": len(suggestions),
+        "limit": limit
+    })
