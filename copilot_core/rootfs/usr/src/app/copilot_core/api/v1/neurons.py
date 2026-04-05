@@ -1046,3 +1046,100 @@ def batch_configure_neurons():
 
 
 __all__ = ["bp"]
+
+# ── SLICE 131: Neuron-View Expansion ─────────────────────────────────
+
+@bp.get("/activity-stream")
+def neuron_activity_stream():
+    """Real-time neuron firing activity.
+    
+    Query params:
+    - limit: Max recent activations (default 50)
+    - neuron_id: Filter by specific neuron
+    - timeframe: Minutes to look back (default 5)
+    """
+    try:
+        limit = int(request.args.get("limit", "50"))
+    except (ValueError, TypeError):
+        limit = 50
+    
+    neuron_id = request.args.get("neuron_id")
+    
+    try:
+        timeframe = int(request.args.get("timeframe", "5"))
+    except (ValueError, TypeError):
+        timeframe = 5
+    
+    limit = max(1, min(limit, 500))
+    timeframe = max(1, min(timeframe, 60))
+    
+    manager = get_neuron_manager()
+    activity = manager.get_recent_activations(
+        limit=limit,
+        neuron_id=neuron_id,
+        timeframe_minutes=timeframe
+    )
+    
+    return jsonify({
+        "ok": True,
+        "activity": activity,
+        "count": len(activity),
+        "timeframe_minutes": timeframe
+    })
+
+
+@bp.get("/clusters")
+def neuron_clusters():
+    """Get neuron clusters by function/context.
+    
+    Query params:
+    - group_by: domain|category|activation_rate (default: domain)
+    - min_size: Minimum cluster size (default: 1)
+    """
+    group_by = request.args.get("group_by", "domain")
+    
+    try:
+        min_size = int(request.args.get("min_size", "1"))
+    except (ValueError, TypeError):
+        min_size = 1
+    
+    manager = get_neuron_manager()
+    clusters = manager.get_neuron_clusters(group_by=group_by, min_size=min_size)
+    
+    return jsonify({
+        "ok": True,
+        "group_by": group_by,
+        "clusters": clusters,
+        "cluster_count": len(clusters),
+        "total_neurons": sum(len(c.get("neurons", [])) for c in clusters)
+    })
+
+
+@bp.get("/health")
+def neuron_health():
+    """Neuron health metrics: activation rates, latency, errors.
+    
+    Query params:
+    - neuron_id: Specific neuron (optional)
+    - timeframe: Hours to analyze (default 24)
+    """
+    neuron_id = request.args.get("neuron_id")
+    
+    try:
+        timeframe = int(request.args.get("timeframe", "24"))
+    except (ValueError, TypeError):
+        timeframe = 24
+    
+    timeframe = max(1, min(timeframe, 168))
+    
+    manager = get_neuron_manager()
+    health = manager.get_neuron_health(
+        neuron_id=neuron_id,
+        timeframe_hours=timeframe
+    )
+    
+    return jsonify({
+        "ok": True,
+        "timeframe_hours": timeframe,
+        "health": health
+    })
