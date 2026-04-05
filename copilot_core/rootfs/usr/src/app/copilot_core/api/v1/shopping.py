@@ -506,3 +506,103 @@ def get_reminders_context_for_llm() -> str:
                 conn.close()
     except Exception:
         return ""
+
+
+# ── SLICE 140: Shopping-List Expansion ─────────────────────────────────
+
+@bp.get("/suggestions")
+def shopping_suggestions():
+    """Get smart shopping suggestions based on usage patterns.
+    
+    Returns items the system predicts you'll need based on:
+    - Historical purchase patterns
+    - Current inventory levels
+    - Upcoming events/recipes
+    - Seasonal trends
+    
+    Query params:
+    - limit: Max suggestions (default 10)
+    """
+    from copilot_core.shopping.engine import get_shopping_engine
+    
+    try:
+        limit = int(request.args.get("limit", "10"))
+    except (ValueError, TypeError):
+        limit = 10
+    
+    limit = max(1, min(limit, 50))
+    
+    try:
+        engine = get_shopping_engine()
+        suggestions = engine.get_smart_suggestions(limit=limit)
+    except Exception as e:
+        _LOGGER.warning("Failed to get shopping suggestions: %s", e)
+        suggestions = []
+    
+    return jsonify({
+        "ok": True,
+        "suggestions": suggestions,
+        "count": len(suggestions),
+        "limit": limit
+    })
+
+
+@bp.get("/prices")
+def shopping_price_tracking():
+    """Get price tracking data for shopping list items.
+    
+    Query params:
+    - item_ids: Comma-separated item IDs (optional, all if omitted)
+    - stores: Comma-separated store names (optional, all stores)
+    """
+    from copilot_core.shopping.engine import get_shopping_engine
+    
+    item_ids = request.args.get("item_ids")
+    item_list = [i.strip() for i in item_ids.split(",")] if item_ids else None
+    
+    stores = request.args.get("stores")
+    store_list = [s.strip() for s in stores.split(",")] if stores else None
+    
+    try:
+        engine = get_shopping_engine()
+        prices = engine.get_price_tracking(item_ids=item_list, stores=store_list)
+    except Exception as e:
+        _LOGGER.warning("Failed to get price tracking: %s", e)
+        prices = []
+    
+    return jsonify({
+        "ok": True,
+        "prices": prices,
+        "count": len(prices),
+        "items": item_list,
+        "stores": store_list
+    })
+
+
+@bp.get("/inventory/sync")
+def shopping_inventory_sync():
+    """Get inventory sync status and pending syncs.
+    
+    Returns:
+    - last_sync: Last successful sync timestamp
+    - pending_items: Items awaiting sync
+    - sync_errors: Recent sync errors
+    """
+    from copilot_core.shopping.engine import get_shopping_engine
+    
+    try:
+        engine = get_shopping_engine()
+        sync_status = engine.get_inventory_sync_status()
+    except Exception as e:
+        _LOGGER.warning("Failed to get inventory sync status: %s", e)
+        sync_status = {
+            "last_sync": None,
+            "pending_items": [],
+            "sync_errors": []
+        }
+    
+    return jsonify({
+        "ok": True,
+        "sync_status": sync_status,
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    })
