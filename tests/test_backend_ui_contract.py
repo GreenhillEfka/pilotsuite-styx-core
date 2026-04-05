@@ -593,11 +593,16 @@ def test_backend_ui_module_and_model_update_validation_contracts(monkeypatch) ->
         json={"state": "learning", "config": {"presence_hold_minutes": 7}},
     )
     assert response.status_code == 200
-    assert response.get_json() == {
-        "success": True,
-        "module_id": "presence",
-        "updated_fields": ["state", "config"],
-    }
+    res = response.get_json()
+    assert res["success"] is True
+    assert res["module_id"] == "presence"
+    assert res["updated_fields"] == ["state", "config"]
+    # Slice 131: Audit fields
+    assert "execution_id" in res
+    assert "provenance" in res
+    assert res["provenance"]["source_agent"] == "pilotclaw"
+    assert "versioning" in res
+    
     assert registry.global_states["presence"] == "learning"
     assert registry.state_events == [("set", "presence", "learning")]
 
