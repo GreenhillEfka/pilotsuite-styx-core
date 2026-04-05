@@ -186,3 +186,76 @@ def areas_statistics_summary():
         "summary": summary,
         "timestamp": datetime.now(timezone.utc).isoformat()
     })
+
+
+# ── SLICE 174: Areas/Floorplan Integration ─────────────────────────────────
+
+@bp.get("/<area_id>/floorplan")
+def areas_get_floorplan(area_id):
+    """Get floorplan associated with an area.
+    
+    Returns floorplan ID, image URL, and zone mapping for this area.
+    """
+    from copilot_core.areas.manager import get_areas_manager
+    
+    try:
+        manager = get_areas_manager()
+        floorplan = manager.get_floorplan(area_id=area_id)
+    except Exception as e:
+        _LOGGER.warning("Failed to get area floorplan: %s", e)
+        floorplan = None
+    
+    if not floorplan:
+        return jsonify({
+            "ok": False,
+            "error": "No floorplan associated with this area"
+        }), 404
+    
+    return jsonify({
+        "ok": True,
+        "area_id": area_id,
+        "floorplan": floorplan,
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    })
+
+
+@bp.put("/<area_id>/floorplan")
+def areas_set_floorplan(area_id):
+    """Associate a floorplan with an area.
+    
+    Requires admin token.
+    
+    Body:
+    - floorplan_id: Floorplan to associate
+    - zone_mapping: Optional {area_sub_id: floorplan_zone_id} mapping
+    """
+    auth_error = _require_admin_mutation("SET_AREA_FLOORPLAN", "Admin token required")
+    if auth_error:
+        return auth_error
+    
+    data = request.get_json() or {}
+    floorplan_id = data.get("floorplan_id")
+    zone_mapping = data.get("zone_mapping", {})
+    
+    if not floorplan_id:
+        return jsonify({
+            "ok": False,
+            "error": "Missing floorplan_id"
+        }), 400
+    
+    from copilot_core.areas.manager import get_areas_manager
+    
+    try:
+        manager = get_areas_manager()
+        result = manager.set_floorplan(area_id=area_id, floorplan_id=floorplan_id, zone_mapping=zone_mapping)
+        success = result.get("success", False)
+    except Exception as e:
+        _LOGGER.warning("Failed to set area floorplan: %s", e)
+        success = False
+    
+    return jsonify({
+        "ok": success,
+        "area_id": area_id,
+        "floorplan_id": floorplan_id,
+        "zone_mapping": zone_mapping
+    })

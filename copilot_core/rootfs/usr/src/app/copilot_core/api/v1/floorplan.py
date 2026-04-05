@@ -209,3 +209,51 @@ def floorplan_export(floorplan_id):
         "overlay": overlay,
         "export_url": export_url
     })
+
+
+# ── SLICE 174: Floorplan Zone Resolution ─────────────────────────────────
+
+@bp.get("/<floorplan_id>/zones/resolve")
+def floorplan_zones_resolve(floorplan_id):
+    """Resolve floorplan zones to area IDs.
+    
+    Returns mapping of floorplan zone IDs to their corresponding area entities.
+    """
+    from copilot_core.floorplan.manager import get_floorplan_manager
+    
+    try:
+        manager = get_floorplan_manager()
+        resolution = manager.resolve_zones_to_areas(floorplan_id=floorplan_id)
+    except Exception as e:
+        _LOGGER.warning("Failed to resolve floorplan zones: %s", e)
+        resolution = {}
+    
+    return jsonify({
+        "ok": True,
+        "floorplan_id": floorplan_id,
+        "zone_resolution": resolution,
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    })
+
+
+@bp.get("/<floorplan_id>/navigation")
+def floorplan_navigation(floorplan_id):
+    """Get navigation data for floorplan.
+    
+    Returns clickable zones linked to areas and entities for UI navigation.
+    """
+    from copilot_core.floorplan.manager import get_floorplan_manager
+    
+    try:
+        manager = get_floorplan_manager()
+        nav_data = manager.get_navigation_data(floorplan_id=floorplan_id)
+    except Exception as e:
+        _LOGGER.warning("Failed to get floorplan navigation: %s", e)
+        nav_data = {"zones": [], "entities": []}
+    
+    return jsonify({
+        "ok": True,
+        "floorplan_id": floorplan_id,
+        "navigation": nav_data,
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    })
