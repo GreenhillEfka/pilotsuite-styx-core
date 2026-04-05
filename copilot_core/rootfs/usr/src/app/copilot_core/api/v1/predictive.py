@@ -399,3 +399,125 @@ def observe_action():
     except Exception as exc:  # pragma: no cover - defensive
         _LOGGER.error("Error observing predictive action: %s", exc)
         return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+# ── SLICE 136: Predictive-Analytics Expansion ─────────────────────────────────
+
+@bp.get("/suggestions")
+def predictive_suggestions():
+    """Get ML-based predictive suggestions.
+    
+    Returns actions the system predicts the user will want based on:
+    - Time of day
+    - Historical patterns
+    - Current context (mood, zone, presence)
+    - Weather/external factors
+    
+    Query params:
+    - limit: Max suggestions (default 5)
+    - confidence_min: Minimum confidence threshold (default 0.5)
+    """
+    from copilot_core.predictive.automation_engine import get_automation_engine
+    
+    try:
+        limit = int(request.args.get("limit", "5"))
+    except (ValueError, TypeError):
+        limit = 5
+    
+    try:
+        confidence_min = float(request.args.get("confidence_min", "0.5"))
+    except (ValueError, TypeError):
+        confidence_min = 0.5
+    
+    limit = max(1, min(limit, 20))
+    confidence_min = max(0.0, min(confidence_min, 1.0))
+    
+    try:
+        engine = get_automation_engine()
+        suggestions = engine.get_predictive_suggestions(
+            limit=limit,
+            confidence_min=confidence_min
+        )
+    except Exception as e:
+        _LOGGER.warning("Failed to get predictive suggestions: %s", e)
+        suggestions = []
+    
+    return jsonify({
+        "ok": True,
+        "suggestions": suggestions,
+        "count": len(suggestions),
+        "limit": limit,
+        "confidence_min": confidence_min
+    })
+
+
+@bp.get("/anomalies")
+def predictive_anomalies():
+    """Get anomaly detection alerts.
+    
+    Returns unusual patterns detected in:
+    - Energy consumption
+    - Presence patterns
+    - Module usage
+    - Mood transitions
+    
+    Query params:
+    - hours: Time range (default 24)
+    - severity: min|moderate|severe (default: moderate)
+    """
+    from copilot_core.predictive.automation_engine import get_automation_engine
+    
+    try:
+        hours = int(request.args.get("hours", "24"))
+    except (ValueError, TypeError):
+        hours = 24
+    
+    severity = request.args.get("severity", "moderate")
+    
+    hours = max(1, min(hours, 720))
+    
+    try:
+        engine = get_automation_engine()
+        anomalies = engine.get_anomalies(hours=hours, severity=severity)
+    except Exception as e:
+        _LOGGER.warning("Failed to get anomalies: %s", e)
+        anomalies = []
+    
+    return jsonify({
+        "ok": True,
+        "anomalies": anomalies,
+        "count": len(anomalies),
+        "hours": hours,
+        "severity": severity
+    })
+
+
+@bp.get("/learning-progress")
+def predictive_learning_progress():
+    """Get model learning progress and accuracy metrics.
+    
+    Returns:
+    - model_accuracy: Current prediction accuracy
+    - training_samples: Number of samples learned
+    - improvement_rate: Accuracy improvement over time
+    - last_updated: Last training timestamp
+    """
+    from copilot_core.predictive.automation_engine import get_automation_engine
+    
+    try:
+        engine = get_automation_engine()
+        progress = engine.get_learning_progress()
+    except Exception as e:
+        _LOGGER.warning("Failed to get learning progress: %s", e)
+        progress = {
+            "model_accuracy": 0.0,
+            "training_samples": 0,
+            "improvement_rate": 0.0,
+            "last_updated": None
+        }
+    
+    return jsonify({
+        "ok": True,
+        "progress": progress,
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    })
