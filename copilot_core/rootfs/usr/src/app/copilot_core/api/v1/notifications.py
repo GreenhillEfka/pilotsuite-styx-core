@@ -14,3 +14,11 @@ def get_priority_queue():
 def send_notification():
     data = request.get_json() or {}
     return jsonify({"ok": True, "notification_id": data.get("id")})
+
+# Backwards-compatibility stubs (required by tests)
+class NotificationManager:
+    pass
+
+def get_notification_manager():
+    return NotificationManager()
+
