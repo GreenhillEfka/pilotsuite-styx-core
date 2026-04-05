@@ -18,6 +18,7 @@ from __future__ import annotations
 import logging
 from flask import Blueprint, jsonify, request
 from datetime import datetime, timezone
+import uuid
 
 from copilot_core.module_registry import ModuleRegistry
 
@@ -513,6 +514,16 @@ def update_zone_module(zone_id: str):
             **payload,
             "zone_updated": True,
             "ha_synced": ha_synced,
+            "execution_id": str(uuid.uuid4()),
+            "provenance": {
+                "source_agent": "pilotclaw",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "api_version": "v1",
+            },
+            "versioning": {
+                "schema_version": "1.0.0",
+                "api_contract_version": "v1",
+            },
         })
     except Exception as exc:  # pragma: no cover - focused backend_ui tests cover public contract
         _LOGGER.exception("Failed to update zone module for %s/%s", zone_id, module_id)
@@ -581,7 +592,21 @@ def update_module(module_id: str):
     if not updated_fields:
         return jsonify({"error": "No updatable fields provided"}), 400
 
-    return jsonify({"success": True, "module_id": normalized_module_id, "updated_fields": updated_fields})
+    return jsonify({
+        "success": True,
+        "module_id": normalized_module_id,
+        "updated_fields": updated_fields,
+        "execution_id": str(uuid.uuid4()),
+        "provenance": {
+            "source_agent": "pilotclaw",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "api_version": "v1",
+        },
+        "versioning": {
+            "schema_version": "1.0.0",
+            "api_contract_version": "v1",
+        },
+    })
 
 
 # =============================================================================

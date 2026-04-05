@@ -486,17 +486,21 @@ def test_backend_ui_zone_module_mutation_validation_and_sync_reporting(monkeypat
         json={"module_id": " light ", "state": "active"},
     )
     assert response.status_code == 200
-    assert response.get_json() == {
-        "success": True,
-        "zone_id": "living",
-        "module_id": "light",
-        "state": "active",
-        "global_state": "active",
-        "override_state": None,
-        "has_override": False,
-        "zone_updated": True,
-        "ha_synced": False,
-    }
+    result = response.get_json()
+    assert result["success"] is True
+    assert result["zone_id"] == "living"
+    assert result["module_id"] == "light"
+    assert result["state"] == "active"
+    assert result["global_state"] == "active"
+    assert result["override_state"] is None
+    assert result["has_override"] is False
+    assert result["zone_updated"] is True
+    assert result["ha_synced"] is False
+    # Slice 131: Audit fields (execution_id, provenance, versioning)
+    assert "execution_id" in result
+    assert "provenance" in result
+    assert result["provenance"]["source_agent"] == "pilotclaw"
+    assert "versioning" in result
     assert registry.events == [("delete", "living", "light", None)]
     assert registry.zone_states["living"] == {}
     # Registry is canonical truth - zone.enabled_modules is no longer shadow-written
@@ -510,17 +514,18 @@ def test_backend_ui_zone_module_mutation_validation_and_sync_reporting(monkeypat
         json={"module_id": "light", "state": "off"},
     )
     assert response.status_code == 200
-    assert response.get_json() == {
-        "success": True,
-        "zone_id": "sleep",
-        "module_id": "light",
-        "state": "off",
-        "global_state": "active",
-        "override_state": "off",
-        "has_override": True,
-        "zone_updated": True,
-        "ha_synced": False,
-    }
+    result2 = response.get_json()
+    assert result2["success"] is True
+    assert result2["zone_id"] == "sleep"
+    assert result2["module_id"] == "light"
+    assert result2["state"] == "off"
+    assert result2["global_state"] == "active"
+    assert result2["override_state"] == "off"
+    assert result2["has_override"] is True
+    assert result2["zone_updated"] is True
+    assert result2["ha_synced"] is False
+    assert "execution_id" in result2
+    assert "provenance" in result2
     assert registry.events[-1] == ("set", "sleep", "light", "off")
     assert registry.zone_states["sleep"]["light"] == "off"
     # Registry has the override, zone.enabled_modules is deprecated for truth
