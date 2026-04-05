@@ -226,7 +226,7 @@ def update_effectiveness():
 
 # ── SLICE 135: Energy-Analytics Expansion ─────────────────────────────────
 
-@bp.get("/tariff")
+@analytics_bp.get("/tariff")
 def energy_tariff_analytics():
     """Get tariff/analytics data.
     
@@ -259,7 +259,7 @@ def energy_tariff_analytics():
     })
 
 
-@bp.get("/battery")
+@analytics_bp.get("/battery")
 def energy_battery_analytics():
     """Get battery management analytics.
     
@@ -292,7 +292,7 @@ def energy_battery_analytics():
     })
 
 
-@bp.get("/consumption/patterns")
+@analytics_bp.get("/consumption/patterns")
 def energy_consumption_patterns():
     """Get ML-based consumption pattern detection.
     

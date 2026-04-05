@@ -510,7 +510,7 @@ def get_reminders_context_for_llm() -> str:
 
 # ── SLICE 140: Shopping-List Expansion ─────────────────────────────────
 
-@bp.get("/suggestions")
+@shopping_bp.get("/suggestions")
 def shopping_suggestions():
     """Get smart shopping suggestions based on usage patterns.
     
@@ -547,7 +547,7 @@ def shopping_suggestions():
     })
 
 
-@bp.get("/prices")
+@shopping_bp.get("/prices")
 def shopping_price_tracking():
     """Get price tracking data for shopping list items.
     
@@ -579,7 +579,7 @@ def shopping_price_tracking():
     })
 
 
-@bp.get("/inventory/sync")
+@shopping_bp.get("/inventory/sync")
 def shopping_inventory_sync():
     """Get inventory sync status and pending syncs.
     

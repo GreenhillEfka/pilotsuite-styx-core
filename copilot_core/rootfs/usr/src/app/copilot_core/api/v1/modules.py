@@ -325,7 +325,7 @@ def rules_activate(rule_id: str):
 
 # ── SLICE 146: Modules API Expansion ─────────────────────────────────
 
-@bp.get("/health")
+@modules_bp.get("/health")
 def modules_health():
     """Get health status of all modules.
     
@@ -352,7 +352,7 @@ def modules_health():
     })
 
 
-@bp.get("/<module_id>/health")
+@modules_bp.get("/<module_id>/health")
 def module_health(module_id):
     """Get health status of a specific module.
     
@@ -385,7 +385,7 @@ def module_health(module_id):
     })
 
 
-@bp.get("/dependencies")
+@modules_bp.get("/dependencies")
 def modules_dependencies():
     """Get module dependency graph.
     
@@ -414,7 +414,7 @@ def modules_dependencies():
     })
 
 
-@bp.get("/metrics")
+@modules_bp.get("/metrics")
 def modules_metrics():
     """Get performance metrics for all modules.
     

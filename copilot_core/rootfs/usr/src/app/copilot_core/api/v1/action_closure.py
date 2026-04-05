@@ -152,7 +152,7 @@ def record_execution(closure_id: str):
 
 # ── SLICE 133: Action-Closure Expansion ─────────────────────────────────
 
-@bp.get("/resume-conflict")
+@action_closure_bp.get("/resume-conflict")
 def action_closure_resume_conflict():
     """Get active resume conflicts.
     
@@ -181,7 +181,7 @@ def action_closure_resume_conflict():
     })
 
 
-@bp.post("/resume-conflict/resolve")
+@action_closure_bp.post("/resume-conflict/resolve")
 def resolve_resume_conflict():
     """Resolve a resume conflict by starting new context.
     
@@ -218,7 +218,7 @@ def resolve_resume_conflict():
     })
 
 
-@bp.get("/history")
+@action_closure_bp.get("/history")
 def action_closure_history():
     """Get closure history.
     

@@ -52,7 +52,7 @@ def setup_token():
 
 # ── SLICE 148: Auth API Expansion ─────────────────────────────────
 
-@bp.get("/sessions")
+@auth_bp.get("/sessions")
 def auth_sessions():
     """List active auth sessions.
     
@@ -87,7 +87,7 @@ def auth_sessions():
     })
 
 
-@bp.delete("/sessions/<session_id>")
+@auth_bp.delete("/sessions/<session_id>")
 def auth_revoke_session(session_id):
     """Revoke an active session.
     
@@ -113,7 +113,7 @@ def auth_revoke_session(session_id):
     })
 
 
-@bp.get("/api-keys")
+@auth_bp.get("/api-keys")
 def auth_api_keys():
     """List API keys.
     
@@ -142,7 +142,7 @@ def auth_api_keys():
     })
 
 
-@bp.post("/api-keys")
+@auth_bp.post("/api-keys")
 def auth_create_api_key():
     """Create a new API key.
     
@@ -199,7 +199,7 @@ def auth_create_api_key():
     })
 
 
-@bp.delete("/api-keys/<key_id>")
+@auth_bp.delete("/api-keys/<key_id>")
 def auth_revoke_api_key(key_id):
     """Revoke an API key.
     

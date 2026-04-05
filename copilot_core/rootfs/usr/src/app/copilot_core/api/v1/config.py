@@ -61,7 +61,7 @@ __all__ = ["config_bp"]
 
 # ── SLICE 147: Config API Expansion ─────────────────────────────────
 
-@bp.post("/validate")
+@config_bp.post("/validate")
 def config_validate():
     """Validate config without applying.
     
@@ -104,7 +104,7 @@ def config_validate():
     })
 
 
-@bp.get("/history")
+@config_bp.get("/history")
 def config_history():
     """Get config change history.
     
@@ -143,7 +143,7 @@ def config_history():
     })
 
 
-@bp.get("/history/<version_id>")
+@config_bp.get("/history/<version_id>")
 def config_get_version(version_id):
     """Get config at specific version.
     
@@ -171,7 +171,7 @@ def config_get_version(version_id):
     })
 
 
-@bp.post("/rollback")
+@config_bp.post("/rollback")
 def config_rollback():
     """Rollback config to previous version.
     

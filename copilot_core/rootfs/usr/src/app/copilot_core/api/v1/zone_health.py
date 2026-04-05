@@ -819,7 +819,7 @@ def get_zone_health_detail(zone_id: str):
 
 # ── SLICE 139: Zone-Health Expansion ─────────────────────────────────
 
-@bp.get("/<zone_id>/diagnostics")
+@zone_health_bp.get("/<zone_id>/diagnostics")
 def zone_diagnostics(zone_id):
     """Get detailed diagnostics for a specific zone.
     
@@ -854,7 +854,7 @@ def zone_diagnostics(zone_id):
     })
 
 
-@bp.get("/<zone_id>/modules/health")
+@zone_health_bp.get("/<zone_id>/modules/health")
 def zone_modules_health(zone_id):
     """Get health status of all modules in a zone.
     
@@ -882,7 +882,7 @@ def zone_modules_health(zone_id):
     })
 
 
-@bp.get("/<zone_id>/health/trends")
+@zone_health_bp.get("/<zone_id>/health/trends")
 def zone_health_trends(zone_id):
     """Get health trends for a zone over time.
     

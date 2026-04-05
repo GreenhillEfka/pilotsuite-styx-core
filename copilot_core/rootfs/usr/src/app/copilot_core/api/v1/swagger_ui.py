@@ -71,7 +71,7 @@ def _detect_base_path() -> str:
     return ""
 
 
-@bp.get("/")
+@openapi_bp.get("/")
 def swagger_ui():
     """Serve Swagger UI HTML with auto-detected base path."""
     base = _detect_base_path()
@@ -143,7 +143,7 @@ window.onload = function() {{
     return Response(html, mimetype="text/html")
 
 
-@bp.get("/openapi.yaml")
+@openapi_bp.get("/openapi.yaml")
 def openapi_spec():
     """Serve OpenAPI YAML spec."""
     spec = _get_openapi_spec()
@@ -153,7 +153,7 @@ def openapi_spec():
     return Response(spec, mimetype="text/yaml")
 
 
-@bp.get("/openapi.json")
+@openapi_bp.get("/openapi.json")
 def openapi_json():
     """Serve OpenAPI JSON spec (convenience endpoint)."""
     import yaml
@@ -187,7 +187,7 @@ paths:
 
 
 # Additional endpoint for spec validation + enriched info
-@bp.get("/validate")
+@openapi_bp.get("/validate")
 def validate_spec():
     """Validate OpenAPI spec and return enriched status."""
     import yaml
@@ -232,7 +232,7 @@ def validate_spec():
         return jsonify({"ok": False, "error": str(e)})
 
 
-@bp.get("/info")
+@openapi_bp.get("/info")
 def api_info():
     """Return API metadata and connectivity info."""
     from copilot_core import __version__ as core_version

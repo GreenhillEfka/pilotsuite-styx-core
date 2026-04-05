@@ -205,7 +205,7 @@ def birthday_remind():
 
 # ── SLICE 141: Reminders Expansion ─────────────────────────────────
 
-@bp.get("/suggestions")
+@reminders_bp.get("/suggestions")
 def reminder_suggestions():
     """Get smart reminder suggestions based on patterns.
     
@@ -242,7 +242,7 @@ def reminder_suggestions():
     })
 
 
-@bp.get("/recurring")
+@reminders_bp.get("/recurring")
 def recurring_reminders():
     """Get all recurring reminders.
     
@@ -272,7 +272,7 @@ def recurring_reminders():
     })
 
 
-@bp.get("/completion/analytics")
+@reminders_bp.get("/completion/analytics")
 def reminder_completion_analytics():
     """Get reminder completion analytics.
     

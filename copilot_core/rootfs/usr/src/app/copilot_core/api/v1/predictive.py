@@ -403,7 +403,7 @@ def observe_action():
 
 # ── SLICE 136: Predictive-Analytics Expansion ─────────────────────────────────
 
-@bp.get("/suggestions")
+@predictive_bp.get("/suggestions")
 def predictive_suggestions():
     """Get ML-based predictive suggestions.
     
@@ -451,7 +451,7 @@ def predictive_suggestions():
     })
 
 
-@bp.get("/anomalies")
+@predictive_bp.get("/anomalies")
 def predictive_anomalies():
     """Get anomaly detection alerts.
     
@@ -492,7 +492,7 @@ def predictive_anomalies():
     })
 
 
-@bp.get("/learning-progress")
+@predictive_bp.get("/learning-progress")
 def predictive_learning_progress():
     """Get model learning progress and accuracy metrics.
     

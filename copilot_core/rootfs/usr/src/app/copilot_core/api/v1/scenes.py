@@ -394,7 +394,7 @@ def get_scene_context_for_llm() -> str:
 
 # ── SLICE 162: Scenes API Expansion ─────────────────────────────────
 
-@bp.post("/<scene_id>/activate")
+@scenes_bp.post("/<scene_id>/activate")
 def scenes_activate(scene_id):
     """Activate a scene.
     
@@ -426,7 +426,7 @@ def scenes_activate(scene_id):
     })
 
 
-@bp.get("/schedules")
+@scenes_bp.get("/schedules")
 def scenes_schedules():
     """List scene schedules.
     
@@ -449,7 +449,7 @@ def scenes_schedules():
     })
 
 
-@bp.post("/schedules")
+@scenes_bp.post("/schedules")
 def scenes_create_schedule():
     """Create a new scene schedule.
     
@@ -505,7 +505,7 @@ def scenes_create_schedule():
     })
 
 
-@bp.get("/<scene_id>/variants")
+@scenes_bp.get("/<scene_id>/variants")
 def scenes_variants(scene_id):
     """Get variants of a scene.
     
@@ -529,7 +529,7 @@ def scenes_variants(scene_id):
     })
 
 
-@bp.post("/<scene_id>/variants")
+@scenes_bp.post("/<scene_id>/variants")
 def scenes_create_variant(scene_id):
     """Create a new variant of a scene.
     
@@ -566,7 +566,7 @@ def scenes_create_variant(scene_id):
     })
 
 
-@bp.get("/analytics")
+@scenes_bp.get("/analytics")
 def scenes_analytics():
     """Get scene usage analytics.
     
