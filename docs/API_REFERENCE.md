@@ -1,7 +1,7 @@
 # PilotSuite Styx Core API Reference
 
 > **Status:** LEGACY / PARTIALLY OUTDATED — do not use as contract truth
-> **Versioning rule:** This document tracks the **Core/Add-on** API surface. Do **not** infer the current **HA/HACS** release from this file. Verify HA/HACS truth in `pilotsuite-styx-ha` manifests/tags/releases. Current Core/Add-on release line here: **15.2.7**.
+> **Versioning rule:** This document tracks the **Core/Add-on** API surface. Do **not** infer the current **HA/HACS** release from this file. Verify HA/HACS truth in `pilotsuite-styx-ha` manifests/tags/releases. Current Core/Add-on release line here: **15.3.43**.
 > **Canonical API truth:** current OpenAPI / live contract checks in the active repos and release gates
 
 **Historical reference version in this file:** 13.9.0  
