@@ -291,3 +291,144 @@ def metrics_summary():
             "message": str(e),
         }), 500
 
+
+
+# ── SLICE 144: Metrics API Expansion ─────────────────────────────────
+
+@bp.get("/custom")
+def custom_metrics():
+    """Get custom user-defined metrics.
+    
+    Query params:
+    - names: Comma-separated metric names (optional, all if omitted)
+    - limit: Max metrics (default 50)
+    """
+    from copilot_core.metrics.store import get_metrics_store
+    
+    names = request.args.get("names")
+    name_list = [n.strip() for n in names.split(",")] if names else None
+    
+    try:
+        limit = int(request.args.get("limit", "50"))
+    except (ValueError, TypeError):
+        limit = 50
+    
+    limit = max(1, min(limit, 500))
+    
+    try:
+        store = get_metrics_store()
+        metrics = store.get_custom_metrics(names=name_list, limit=limit)
+    except Exception as e:
+        _LOGGER.warning("Failed to get custom metrics: %s", e)
+        metrics = []
+    
+    return jsonify({
+        "ok": True,
+        "metrics": metrics,
+        "count": len(metrics),
+        "names": name_list,
+        "limit": limit
+    })
+
+
+@bp.post("/custom")
+def create_custom_metric():
+    """Create or update a custom metric.
+    
+    Body:
+    - name: Metric name
+    - value: Metric value (number)
+    - labels: Optional labels dict
+    - timestamp: Optional timestamp (defaults to now)
+    """
+    data = request.get_json() or {}
+    name = data.get("name")
+    value = data.get("value")
+    labels = data.get("labels", {})
+    timestamp = data.get("timestamp")
+    
+    if not name or value is None:
+        return jsonify({
+            "ok": False,
+            "error": "Missing name or value"
+        }), 400
+    
+    from copilot_core.metrics.store import get_metrics_store
+    
+    try:
+        store = get_metrics_store()
+        store.set_custom_metric(
+            name=name,
+            value=value,
+            labels=labels,
+            timestamp=timestamp
+        )
+        success = True
+    except Exception as e:
+        _LOGGER.warning("Failed to set custom metric: %s", e)
+        success = False
+    
+    return jsonify({
+        "ok": success,
+        "name": name,
+        "value": value,
+        "labels": labels
+    })
+
+
+@bp.get("/aggregation")
+def metrics_aggregation():
+    """Get aggregated metrics over time range.
+    
+    Query params:
+    - names: Comma-separated metric names
+    - hours: Time range in hours (default 24)
+    - interval: Aggregation interval in minutes (default 60)
+    - functions: Aggregation functions (avg,min,max,p95, default: avg)
+    """
+    from copilot_core.metrics.store import get_metrics_store
+    
+    names = request.args.get("names")
+    if not names:
+        return jsonify({
+            "ok": False,
+            "error": "Missing required parameter: names"
+        }), 400
+    
+    name_list = [n.strip() for n in names.split(",")]
+    
+    try:
+        hours = int(request.args.get("hours", "24"))
+    except (ValueError, TypeError):
+        hours = 24
+    
+    try:
+        interval = int(request.args.get("interval", "60"))
+    except (ValueError, TypeError):
+        interval = 60
+    
+    functions = request.args.get("functions", "avg").split(",")
+    
+    hours = max(1, min(hours, 720))
+    interval = max(1, min(interval, 1440))
+    
+    try:
+        store = get_metrics_store()
+        aggregation = store.get_aggregation(
+            names=name_list,
+            hours=hours,
+            interval=interval,
+            functions=functions
+        )
+    except Exception as e:
+        _LOGGER.warning("Failed to get aggregation: %s", e)
+        aggregation = []
+    
+    return jsonify({
+        "ok": True,
+        "aggregation": aggregation,
+        "names": name_list,
+        "hours": hours,
+        "interval_minutes": interval,
+        "functions": functions
+    })
