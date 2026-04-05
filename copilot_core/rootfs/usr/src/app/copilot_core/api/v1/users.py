@@ -337,3 +337,137 @@ bp = _get_bp()
 
 
 __all__ = ["bp", "create_users_blueprint"]
+
+
+# ── SLICE 142: Users API Expansion ─────────────────────────────────
+
+@bp.get("/<user_id>/preferences")
+def user_preferences(user_id):
+    """Get user preferences.
+    
+    Returns all stored preferences for the user.
+    """
+    from copilot_core.users.store import get_user_store
+    
+    try:
+        store = get_user_store()
+        prefs = store.get_preferences(user_id=user_id)
+    except Exception as e:
+        _LOGGER.warning("Failed to get user preferences: %s", e)
+        prefs = {}
+    
+    return jsonify({
+        "ok": True,
+        "user_id": user_id,
+        "preferences": prefs,
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    })
+
+
+@bp.put("/<user_id>/preferences")
+def update_user_preferences(user_id):
+    """Update user preferences.
+    
+    Requires admin token.
+    
+    Body:
+    - preferences: Dict of preference key-value pairs
+    """
+    auth_error = _require_admin_mutation("UPDATE_USER_PREFS", "Admin token required")
+    if auth_error:
+        return auth_error
+    
+    data = request.get_json() or {}
+    prefs = data.get("preferences", {})
+    
+    from copilot_core.users.store import get_user_store
+    
+    try:
+        store = get_user_store()
+        store.update_preferences(user_id=user_id, preferences=prefs)
+        success = True
+    except Exception as e:
+        _LOGGER.warning("Failed to update user preferences: %s", e)
+        success = False
+    
+    return jsonify({
+        "ok": success,
+        "user_id": user_id,
+        "preferences": prefs
+    })
+
+
+@bp.get("/<user_id>/activity")
+def user_activity(user_id):
+    """Get user activity history.
+    
+    Query params:
+    - limit: Max entries (default 20)
+    - days: Days to look back (default 7)
+    """
+    from copilot_core.users.store import get_user_store
+    
+    try:
+        limit = int(request.args.get("limit", "20"))
+    except (ValueError, TypeError):
+        limit = 20
+    
+    try:
+        days = int(request.args.get("days", "7"))
+    except (ValueError, TypeError):
+        days = 7
+    
+    limit = max(1, min(limit, 100))
+    days = max(1, min(days, 90))
+    
+    try:
+        store = get_user_store()
+        activity = store.get_activity(user_id=user_id, limit=limit, days=days)
+    except Exception as e:
+        _LOGGER.warning("Failed to get user activity: %s", e)
+        activity = []
+    
+    return jsonify({
+        "ok": True,
+        "user_id": user_id,
+        "activity": activity,
+        "count": len(activity),
+        "limit": limit,
+        "days": days
+    })
+
+
+@bp.get("/activity/analytics")
+def users_activity_analytics():
+    """Get aggregated user activity analytics.
+    
+    Query params:
+    - days: Days to analyze (default 30)
+    """
+    from copilot_core.users.store import get_user_store
+    
+    try:
+        days = int(request.args.get("days", "30"))
+    except (ValueError, TypeError):
+        days = 30
+    
+    days = max(1, min(days, 365))
+    
+    try:
+        store = get_user_store()
+        analytics = store.get_activity_analytics(days=days)
+    except Exception as e:
+        _LOGGER.warning("Failed to get activity analytics: %s", e)
+        analytics = {
+            "total_users": 0,
+            "active_users": 0,
+            "total_actions": 0,
+            "avg_actions_per_user": 0.0
+        }
+    
+    return jsonify({
+        "ok": True,
+        "analytics": analytics,
+        "days": days,
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    })
