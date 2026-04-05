@@ -2,6 +2,9 @@
 
 # ── SLICE 155: Automation API Expansion ─────────────────────────────────
 
+bp = Blueprint("automation", __name__, url_prefix="/automation")
+
+
 @bp.get("/templates")
 def automation_templates():
     """List available automation templates.

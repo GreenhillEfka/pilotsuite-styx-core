@@ -2,6 +2,9 @@
 
 # ── SLICE 151: Backup API Expansion ─────────────────────────────────
 
+bp = Blueprint("backup", __name__, url_prefix="/backup")
+
+
 @bp.get("/schedules")
 def backup_schedules():
     """List backup schedules.

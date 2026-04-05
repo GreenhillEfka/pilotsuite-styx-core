@@ -2,6 +2,9 @@
 
 # ── SLICE 173: Blueprints API Expansion ─────────────────────────────────
 
+bp = Blueprint("blueprints", __name__, url_prefix="/blueprints")
+
+
 @bp.get("/categories")
 def blueprints_categories():
     """List blueprint categories.

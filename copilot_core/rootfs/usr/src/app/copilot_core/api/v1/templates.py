@@ -2,6 +2,9 @@
 
 # ── SLICE 163: Templates API Expansion ─────────────────────────────────
 
+bp = Blueprint("templates", __name__, url_prefix="/templates")
+
+
 @bp.get("/categories")
 def templates_categories():
     """List template categories.

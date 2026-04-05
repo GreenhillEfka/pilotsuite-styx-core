@@ -2,6 +2,9 @@
 
 # ── SLICE 166: Areas API Expansion ─────────────────────────────────
 
+bp = Blueprint("areas", __name__, url_prefix="/areas")
+
+
 @bp.get("/hierarchy")
 def areas_hierarchy():
     """Get area hierarchy (parent/child relationships).

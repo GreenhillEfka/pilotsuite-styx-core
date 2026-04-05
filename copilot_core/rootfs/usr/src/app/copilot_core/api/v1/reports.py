@@ -2,6 +2,9 @@
 
 # ── SLICE 152: Reports API Expansion ─────────────────────────────────
 
+bp = Blueprint("reports", __name__, url_prefix="/reports")
+
+
 @bp.get("/schedules")
 def reports_schedules():
     """List report schedules.

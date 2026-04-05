@@ -2,6 +2,9 @@
 
 # ── SLICE 157: Cache API Expansion ─────────────────────────────────
 
+bp = Blueprint("cache", __name__, url_prefix="/cache")
+
+
 @bp.get("/keys")
 def cache_keys():
     """List cached keys.

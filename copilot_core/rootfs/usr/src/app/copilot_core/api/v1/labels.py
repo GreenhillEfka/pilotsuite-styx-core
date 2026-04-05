@@ -2,6 +2,9 @@
 
 # ── SLICE 168: Labels API Expansion ─────────────────────────────────
 
+bp = Blueprint("labels", __name__, url_prefix="/labels")
+
+
 @bp.put("/<label_id>/color")
 def labels_set_color(label_id):
     """Set color for a label.

@@ -2,6 +2,9 @@
 
 # ── SLICE 167: Floor Plan API Expansion ─────────────────────────────────
 
+bp = Blueprint("floorplan", __name__, url_prefix="/floorplan")
+
+
 @bp.post("/upload")
 def floorplan_upload():
     """Upload a new floor plan image.

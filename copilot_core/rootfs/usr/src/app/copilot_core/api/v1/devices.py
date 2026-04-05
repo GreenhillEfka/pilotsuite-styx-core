@@ -2,6 +2,9 @@
 
 # ── SLICE 165: Devices API Expansion ─────────────────────────────────
 
+bp = Blueprint("devices", __name__, url_prefix="/devices")
+
+
 @bp.get("/registry")
 def devices_registry():
     """Get full device registry.

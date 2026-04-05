@@ -1,6 +1,9 @@
 """Health API compatibility bridge for blueprint reconciliation."""
 
 from copilot_core.system_health.api import (
+
+bp = Blueprint("health", __name__, url_prefix="/health")
+
     init_system_health_api,
     system_health_bp as health_bp,
 )

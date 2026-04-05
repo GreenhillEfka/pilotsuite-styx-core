@@ -2,6 +2,9 @@
 
 # ── SLICE 159: Tags API Expansion ─────────────────────────────────
 
+bp = Blueprint("tags", __name__, url_prefix="/tags")
+
+
 @bp.get("/hierarchies")
 def tags_hierarchies():
     """Get tag hierarchies (parent/child relationships).

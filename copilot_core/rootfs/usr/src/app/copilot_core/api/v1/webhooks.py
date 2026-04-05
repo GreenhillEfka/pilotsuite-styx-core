@@ -2,6 +2,9 @@
 
 # ── SLICE 153: Webhooks API Expansion ─────────────────────────────────
 
+bp = Blueprint("webhooks", __name__, url_prefix="/webhooks")
+
+
 @bp.get("/triggers")
 def webhooks_triggers():
     """List available webhook triggers.

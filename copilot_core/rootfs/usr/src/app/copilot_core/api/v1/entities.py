@@ -2,6 +2,9 @@
 
 # ── SLICE 164: Entities API Expansion ─────────────────────────────────
 
+bp = Blueprint("entities", __name__, url_prefix="/entities")
+
+
 @bp.post("/bulk/update")
 def entities_bulk_update():
     """Bulk update multiple entities.

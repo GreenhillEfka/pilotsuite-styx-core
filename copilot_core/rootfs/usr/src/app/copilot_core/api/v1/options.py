@@ -2,6 +2,9 @@
 
 # ── SLICE 169: Options API Expansion ─────────────────────────────────
 
+bp = Blueprint("options", __name__, url_prefix="/options")
+
+
 @bp.get("/groups")
 def options_groups():
     """List option groups/categories.

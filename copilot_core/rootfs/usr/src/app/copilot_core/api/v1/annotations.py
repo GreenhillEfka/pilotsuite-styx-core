@@ -2,6 +2,9 @@
 
 # ── SLICE 161: Annotations API Expansion ─────────────────────────────────
 
+bp = Blueprint("annotations", __name__, url_prefix="/annotations")
+
+
 @bp.get("/layers")
 def annotations_layers():
     """List annotation layers.

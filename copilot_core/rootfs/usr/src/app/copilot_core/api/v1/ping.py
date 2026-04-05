@@ -2,6 +2,9 @@
 
 # ── SLICE 171: Ping API Expansion ─────────────────────────────────
 
+bp = Blueprint("ping", __name__, url_prefix="/ping")
+
+
 @bp.get("/diagnostics")
 def ping_diagnostics():
     """Extended ping with component health checks.

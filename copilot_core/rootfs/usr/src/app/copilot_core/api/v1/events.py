@@ -2,6 +2,9 @@
 
 # ── SLICE 145: Events API Expansion ─────────────────────────────────
 
+bp = Blueprint("events", __name__, url_prefix="/events")
+
+
 @bp.get("/filtered")
 def events_filtered():
     """Get events with advanced filtering.

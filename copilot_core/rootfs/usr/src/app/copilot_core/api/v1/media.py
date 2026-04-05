@@ -2,6 +2,9 @@
 
 # ── SLICE 160: Media API Expansion ─────────────────────────────────
 
+bp = Blueprint("media", __name__, url_prefix="/media")
+
+
 @bp.post("/<media_id>/transcode")
 def media_transcode(media_id):
     """Transcode media to different format.

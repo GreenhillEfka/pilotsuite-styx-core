@@ -2,6 +2,9 @@
 
 # ── SLICE 154: Integrations API Expansion ─────────────────────────────────
 
+bp = Blueprint("integrations", __name__, url_prefix="/integrations")
+
+
 @bp.get("/status")
 def integrations_status():
     """Get status of all integrations.

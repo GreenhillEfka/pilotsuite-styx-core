@@ -2,6 +2,9 @@
 
 # ── SLICE 172: Services API Expansion ─────────────────────────────────
 
+bp = Blueprint("services", __name__, url_prefix="/services")
+
+
 @bp.get("/registry")
 def services_registry():
     """Get full service registry with metadata.

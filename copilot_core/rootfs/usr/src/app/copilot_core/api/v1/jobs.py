@@ -2,6 +2,9 @@
 
 # ── SLICE 156: Jobs API Expansion ─────────────────────────────────
 
+bp = Blueprint("jobs", __name__, url_prefix="/jobs")
+
+
 @bp.get("/queue")
 def jobs_queue():
     """Get job queue status.

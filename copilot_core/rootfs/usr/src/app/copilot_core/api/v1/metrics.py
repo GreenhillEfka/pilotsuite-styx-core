@@ -295,7 +295,7 @@ def metrics_summary():
 
 # ── SLICE 144: Metrics API Expansion ─────────────────────────────────
 
-@bp.get("/custom")
+@metrics_bp.get("/custom")
 def custom_metrics():
     """Get custom user-defined metrics.
     
@@ -331,7 +331,7 @@ def custom_metrics():
     })
 
 
-@bp.post("/custom")
+@metrics_bp.post("/custom")
 def create_custom_metric():
     """Create or update a custom metric.
     
@@ -376,7 +376,7 @@ def create_custom_metric():
     })
 
 
-@bp.get("/aggregation")
+@metrics_bp.get("/aggregation")
 def metrics_aggregation():
     """Get aggregated metrics over time range.
     

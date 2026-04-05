@@ -2,6 +2,9 @@
 
 # ── SLICE 170: System API Expansion ─────────────────────────────────
 
+bp = Blueprint("system", __name__, url_prefix="/system")
+
+
 @bp.post("/restart")
 def system_restart():
     """Trigger system restart.
