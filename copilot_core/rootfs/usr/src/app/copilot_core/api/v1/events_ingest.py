@@ -25,6 +25,14 @@ DEPRECATION_NOTICE = {
     "sunset_date": "2026-06-01",
 }
 
+# Runtime callback wiring (used by core_setup.init_services → EventProcessor pipeline)
+_ingest_callback: callable = None
+
+
+def set_post_ingest_callback(callback: callable) -> None:
+    global _ingest_callback
+    _ingest_callback = callback
+
 
 def _error(message: str, status_code: int):
     return jsonify({"ok": False, "error": message, **DEPRECATION_NOTICE}), status_code
