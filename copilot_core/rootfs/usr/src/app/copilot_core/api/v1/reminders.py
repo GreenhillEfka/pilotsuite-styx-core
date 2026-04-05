@@ -201,3 +201,108 @@ def birthday_remind():
         else:
             return jsonify({"ok": True, "message": "Keine Geburtstage heute."})
     return _run_service_call("birthday_remind", lambda: _birthday_service.deliver_reminder(message, tts_entity))
+
+
+# ── SLICE 141: Reminders Expansion ─────────────────────────────────
+
+@bp.get("/suggestions")
+def reminder_suggestions():
+    """Get smart reminder suggestions based on patterns.
+    
+    Returns reminders the system suggests based on:
+    - Historical patterns
+    - Calendar events
+    - Location context
+    - Time-based habits
+    
+    Query params:
+    - limit: Max suggestions (default 5)
+    """
+    from copilot_core.reminders.engine import get_reminders_engine
+    
+    try:
+        limit = int(request.args.get("limit", "5"))
+    except (ValueError, TypeError):
+        limit = 5
+    
+    limit = max(1, min(limit, 20))
+    
+    try:
+        engine = get_reminders_engine()
+        suggestions = engine.get_smart_suggestions(limit=limit)
+    except Exception as e:
+        _LOGGER.warning("Failed to get reminder suggestions: %s", e)
+        suggestions = []
+    
+    return jsonify({
+        "ok": True,
+        "suggestions": suggestions,
+        "count": len(suggestions),
+        "limit": limit
+    })
+
+
+@bp.get("/recurring")
+def recurring_reminders():
+    """Get all recurring reminders.
+    
+    Query params:
+    - pattern: daily|weekly|monthly|yearly (optional, all if omitted)
+    - active_only: true|false (default: true)
+    """
+    from copilot_core.reminders.engine import get_reminders_engine
+    
+    pattern = request.args.get("pattern")
+    
+    active_only = request.args.get("active_only", "true").lower() == "true"
+    
+    try:
+        engine = get_reminders_engine()
+        recurring = engine.get_recurring_reminders(pattern=pattern, active_only=active_only)
+    except Exception as e:
+        _LOGGER.warning("Failed to get recurring reminders: %s", e)
+        recurring = []
+    
+    return jsonify({
+        "ok": True,
+        "recurring": recurring,
+        "count": len(recurring),
+        "pattern": pattern,
+        "active_only": active_only
+    })
+
+
+@bp.get("/completion/analytics")
+def reminder_completion_analytics():
+    """Get reminder completion analytics.
+    
+    Query params:
+    - days: Days to analyze (default 30)
+    """
+    from copilot_core.reminders.engine import get_reminders_engine
+    
+    try:
+        days = int(request.args.get("days", "30"))
+    except (ValueError, TypeError):
+        days = 30
+    
+    days = max(1, min(days, 365))
+    
+    try:
+        engine = get_reminders_engine()
+        analytics = engine.get_completion_analytics(days=days)
+    except Exception as e:
+        _LOGGER.warning("Failed to get completion analytics: %s", e)
+        analytics = {
+            "total_reminders": 0,
+            "completed": 0,
+            "missed": 0,
+            "completion_rate": 0.0
+        }
+    
+    return jsonify({
+        "ok": True,
+        "analytics": analytics,
+        "days": days,
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    })
