@@ -3921,3 +3921,150 @@ __all__ = [
     "send_ha_notification",
     "test_ha_connection",
 ]
+
+
+# ── SLICE 138: Notifications Expansion ─────────────────────────────────
+
+@bp.get("/categories")
+def notification_categories():
+    """Get notification categories and counts.
+    
+    Returns:
+    - alert: Critical alerts count
+    - warning: Warning count
+    - info: Informational count
+    - action: Action-required count
+    """
+    from copilot_core.notifications.store import get_notification_store
+    
+    try:
+        store = get_notification_store()
+        categories = store.get_categories_summary()
+    except Exception as e:
+        _LOGGER.warning("Failed to get notification categories: %s", e)
+        categories = {
+            "alert": 0,
+            "warning": 0,
+            "info": 0,
+            "action": 0
+        }
+    
+    return jsonify({
+        "ok": True,
+        "categories": categories,
+        "total": sum(categories.values()),
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    })
+
+
+@bp.get("/priority-queue")
+def notification_priority_queue():
+    """Get prioritized notification queue.
+    
+    Query params:
+    - priority: urgent|high|normal|low (default: high)
+    - limit: Max notifications (default 20)
+    """
+    from copilot_core.notifications.store import get_notification_store
+    
+    priority = request.args.get("priority", "high")
+    
+    try:
+        limit = int(request.args.get("limit", "20"))
+    except (ValueError, TypeError):
+        limit = 20
+    
+    limit = max(1, min(limit, 100))
+    
+    try:
+        store = get_notification_store()
+        queue = store.get_priority_queue(priority=priority, limit=limit)
+    except Exception as e:
+        _LOGGER.warning("Failed to get priority queue: %s", e)
+        queue = []
+    
+    return jsonify({
+        "ok": True,
+        "queue": queue,
+        "count": len(queue),
+        "priority": priority,
+        "limit": limit
+    })
+
+
+@bp.get("/user/preferences")
+def notification_user_preferences():
+    """Get user notification preferences.
+    
+    Query params:
+    - user_id: User ID (optional, defaults to current user)
+    """
+    from copilot_core.notifications.preferences import get_user_preferences
+    
+    user_id = request.args.get("user_id")
+    
+    try:
+        prefs = get_user_preferences(user_id=user_id)
+    except Exception as e:
+        _LOGGER.warning("Failed to get user preferences: %s", e)
+        prefs = {
+            "channels": ["in_app"],
+            "categories": ["alert", "warning", "info", "action"],
+            "quiet_hours": {"start": "22:00", "end": "07:00"},
+            "digest_enabled": False
+        }
+    
+    return jsonify({
+        "ok": True,
+        "preferences": prefs,
+        "user_id": user_id or "current"
+    })
+
+
+@bp.post("/user/preferences")
+def update_notification_user_preferences():
+    """Update user notification preferences.
+    
+    Requires admin token.
+    
+    Body:
+    - user_id: User ID
+    - channels: List of enabled channels
+    - categories: List of enabled categories
+    - quiet_hours: {start, end}
+    - digest_enabled: true|false
+    """
+    auth_error = _require_admin_mutation("UPDATE_NOTIFICATION_PREFS", "Admin token required")
+    if auth_error:
+        return auth_error
+    
+    data = request.get_json() or {}
+    user_id = data.get("user_id")
+    
+    if not user_id:
+        return jsonify({
+            "ok": False,
+            "error": "Missing user_id"
+        }), 400
+    
+    from copilot_core.notifications.preferences import update_user_preferences
+    
+    prefs = {
+        "channels": data.get("channels", ["in_app"]),
+        "categories": data.get("categories", ["alert", "warning", "info", "action"]),
+        "quiet_hours": data.get("quiet_hours", {"start": "22:00", "end": "07:00"}),
+        "digest_enabled": data.get("digest_enabled", False)
+    }
+    
+    try:
+        update_user_preferences(user_id=user_id, preferences=prefs)
+        success = True
+    except Exception as e:
+        _LOGGER.warning("Failed to update preferences: %s", e)
+        success = False
+    
+    return jsonify({
+        "ok": success,
+        "user_id": user_id,
+        "preferences": prefs
+    })
