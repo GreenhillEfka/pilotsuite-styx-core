@@ -56,8 +56,12 @@ def test_sensor_system_returns_503_without_monitor(monkeypatch) -> None:
     """Sensor system returns 503 when SystemHealthMonitor unavailable."""
     from copilot_core.api.v1.sensors import sensors_bp
     
-    # Import fails -> 503
-    monkeypatch.setattr("copilot_core.api.v1.sensors.SystemHealthMonitor", None)
+    # Mock SystemHealthMonitor to raise ImportError
+    class MockImportError:
+        def __init__(self, *args, **kwargs):
+            raise ImportError("SystemHealthMonitor not available")
+    
+    monkeypatch.setattr("copilot_core.api.v1.sensors.SystemHealthMonitor", MockImportError)
     
     app = Flask(__name__)
     app.register_blueprint(sensors_bp)
