@@ -1,0 +1,17 @@
+openapi: 3.0.3
+info:
+  title: HACS Gate API
+  version: 1.0.0
+paths:
+  /api/v1/hacs/gate:
+    get:
+      summary: HACS gate status
+      responses:
+        '200':
+          description: Gate status
+  /api/hacs/discovery:
+    get:
+      summary: HACS discovery
+  /api/hacs/versions:
+    get:
+      summary: Available versions
