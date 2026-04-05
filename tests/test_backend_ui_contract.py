@@ -536,17 +536,19 @@ def test_backend_ui_zone_module_mutation_validation_and_sync_reporting(monkeypat
         json={"module_id": " climate ", "state": "off"},
     )
     assert response.status_code == 200
-    assert response.get_json() == {
-        "success": True,
-        "zone_id": "living",
-        "module_id": "climate",
-        "state": "off",
-        "global_state": "learning",
-        "override_state": "off",
-        "has_override": True,
-        "zone_updated": True,
-        "ha_synced": False,
-    }
+    result3 = response.get_json()
+    assert result3["success"] is True
+    assert result3["zone_id"] == "living"
+    assert result3["module_id"] == "climate"
+    assert result3["state"] == "off"
+    assert result3["global_state"] == "learning"
+    assert result3["override_state"] == "off"
+    assert result3["has_override"] is True
+    assert result3["zone_updated"] is True
+    assert result3["ha_synced"] is False
+    assert "execution_id" in result3
+    assert "provenance" in result3
+
     assert registry.events[-1] == ("set", "living", "climate", "off")
 
 
