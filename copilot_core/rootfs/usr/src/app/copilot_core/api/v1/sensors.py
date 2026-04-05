@@ -1,439 +1,142 @@
-"""Sensor Data API Endpoints with Caching.
+"""Sensor API — Flat endpoints for Home Assistant integration.
 
-Provides cached access to sensor data for performance optimization.
-Cache TTL: 5 minutes (300 seconds)
-
-Endpoints:
-- GET /api/v1/sensors - List all sensors with cached data
-- GET /api/v1/sensors/<entity_id> - Get specific sensor data
-- GET /api/v1/sensors/types - Get sensors grouped by type
-- GET /api/v1/sensors/cache/stats - Get cache statistics
+Slice 135: Provides HA-compatible sensor data from canonical sources.
 """
+
 from __future__ import annotations
 
-import asyncio
 import logging
-from datetime import datetime, timezone
-from flask import Blueprint, jsonify, request
-from typing import Any, Dict, List, Optional
+from flask import Blueprint, jsonify
+from typing import Any, Dict, List
+
+from copilot_core.module_registry import ModuleRegistry
 
 _LOGGER = logging.getLogger(__name__)
 
-bp = Blueprint("sensors", __name__, url_prefix="/api/v1/sensors")
-
-from copilot_core.api.security import validate_token as _validate_token
-from copilot_core.cache import get_sensor_cache
+sensors_bp = Blueprint("sensors", __name__, url_prefix="/api/v1/sensors")
 
 
-@bp.before_request
-def _require_auth():
-    if not _validate_token(request):
-        return jsonify({"error": "unauthorized", "message": "Valid X-Auth-Token or Bearer token required"}), 401
+def _get_registry() -> ModuleRegistry:
+    """Get or create the ModuleRegistry singleton."""
+    return ModuleRegistry.get_instance()
 
 
-class SensorService:
-    """Service for fetching and caching sensor data.
+@sensors_bp.route("/modules", methods=["GET"])
+def get_sensor_modules():
+    """Module states as flat sensor data for HA.
     
-    In production, this would connect to Home Assistant or other data sources.
-    For now, provides simulated sensor data with realistic patterns.
+    Returns:
+        List of sensor-compatible module entries with state, icon, attributes.
     """
+    registry = _get_registry()
+    global_states = registry.get_all_states()
     
-    def __init__(self):
-        self._cache = get_sensor_cache()
-        self._lock = asyncio.Lock()
+    sensors: List[Dict[str, Any]] = []
     
-    def _generate_sensor_id(self, sensor_type: str, room: str, index: int = 1) -> str:
-        """Generate Home Assistant style entity ID."""
-        return f"sensor.{room}_{sensor_type}_{index}"
+    for module_id, state in global_states.items():
+        sensor = {
+            "unique_id": f"pilotsuite_module_{module_id}",
+            "name": module_id.replace("_", " ").title(),
+            "state": state,
+            "attributes": {
+                "module_id": module_id,
+                "friendly_name": module_id.replace("_", " ").title(),
+            },
+            "icon": _module_icon(module_id),
+        }
+        sensors.append(sensor)
     
-    def _get_simulated_sensors(self) -> List[Dict[str, Any]]:
-        """Generate simulated sensor data for demonstration."""
-        now = datetime.now(timezone.utc)
-        hour = now.hour
-        
-        # Simulate various sensor types across rooms
-        sensors = [
-            # Temperature sensors
-            {
-                "entity_id": "sensor.wohnzimmer_temperature_1",
-                "name": "Wohnzimmer Temperatur",
-                "state": str(21.5 + (hour - 12) * 0.3),  # Varies with time
-                "attributes": {
-                    "unit_of_measurement": "°C",
-                    "device_class": "temperature",
-                    "room": "wohnzimmer",
-                    "floor": "og",
-                },
-                "last_updated": now.isoformat(),
-            },
-            {
-                "entity_id": "sensor.kueche_temperature_1",
-                "name": "Küche Temperatur",
-                "state": str(22.0 + (hour - 12) * 0.4),
-                "attributes": {
-                    "unit_of_measurement": "°C",
-                    "device_class": "temperature",
-                    "room": "kueche",
-                    "floor": "eg",
-                },
-                "last_updated": now.isoformat(),
-            },
-            {
-                "entity_id": "sensor.schlafzimmer_temperature_1",
-                "name": "Schlafzimmer Temperatur",
-                "state": str(19.0 + (hour - 12) * 0.2),
-                "attributes": {
-                    "unit_of_measurement": "°C",
-                    "device_class": "temperature",
-                    "room": "schlafzimmer",
-                    "floor": "og",
-                },
-                "last_updated": now.isoformat(),
-            },
-            # Humidity sensors
-            {
-                "entity_id": "sensor.badezimmer_humidity_1",
-                "name": "Badezimmer Luftfeuchtigkeit",
-                "state": str(55.0 + (hour % 6) * 2),
-                "attributes": {
-                    "unit_of_measurement": "%",
-                    "device_class": "humidity",
-                    "room": "badezimmer",
-                    "floor": "og",
-                },
-                "last_updated": now.isoformat(),
-            },
-            {
-                "entity_id": "sensor.keller_humidity_1",
-                "name": "Keller Luftfeuchtigkeit",
-                "state": str(65.0 + (hour % 4)),
-                "attributes": {
-                    "unit_of_measurement": "%",
-                    "device_class": "humidity",
-                    "room": "keller",
-                    "floor": "ug",
-                },
-                "last_updated": now.isoformat(),
-            },
-            # Energy sensors
-            {
-                "entity_id": "sensor.stromverbrauch_1",
-                "name": "Stromverbrauch",
-                "state": str(1250.5 + hour * 50),
-                "attributes": {
-                    "unit_of_measurement": "W",
-                    "device_class": "power",
-                    "room": "hvr",
-                },
-                "last_updated": now.isoformat(),
-            },
-            {
-                "entity_id": "sensor.energie_kwh_1",
-                "name": "Energieverbrauch",
-                "state": str(12.5 + hour * 0.8),
-                "attributes": {
-                    "unit_of_measurement": "kWh",
-                    "device_class": "energy",
-                    "room": "hvr",
-                },
-                "last_updated": now.isoformat(),
-            },
-            # Motion/Presence sensors
-            {
-                "entity_id": "sensor.wohnzimmer_motion_1",
-                "name": "Wohnzimmer Bewegung",
-                "state": "on" if 8 <= hour <= 22 else "off",
-                "attributes": {
-                    "device_class": "motion",
-                    "room": "wohnzimmer",
-                    "floor": "og",
-                },
-                "last_updated": now.isoformat(),
-            },
-            {
-                "entity_id": "sensor.flur_presence_1",
-                "name": "Flur Präsenz",
-                "state": "on" if 7 <= hour <= 23 else "off",
-                "attributes": {
-                    "device_class": "occupancy",
-                    "room": "flur",
-                    "floor": "og",
-                },
-                "last_updated": now.isoformat(),
-            },
-            # Air quality sensors
-            {
-                "entity_id": "sensor.wohnzimmer_co2_1",
-                "name": "Wohnzimmer CO2",
-                "state": str(450 + hour * 20),
-                "attributes": {
-                    "unit_of_measurement": "ppm",
-                    "device_class": "carbon_dioxide",
-                    "room": "wohnzimmer",
-                    "floor": "og",
-                },
-                "last_updated": now.isoformat(),
-            },
-            {
-                "entity_id": "sensor.wohnzimmer_voc_1",
-                "name": "Wohnzimmer VOC",
-                "state": str(100 + hour * 5),
-                "attributes": {
-                    "unit_of_measurement": "µg/m³",
-                    "device_class": "volatile_organic_compounds",
-                    "room": "wohnzimmer",
-                    "floor": "og",
-                },
-                "last_updated": now.isoformat(),
-            },
-        ]
-        
-        return sensors
-    
-    async def get_all_sensors(self, use_cache: bool = True) -> List[Dict[str, Any]]:
-        """Get all sensor data with optional caching."""
-        cache_key = "sensors:all"
-        
-        if use_cache:
-            cached = await self._cache.get(cache_key)
-            if cached is not None:
-                _LOGGER.debug("Sensor cache hit: %s", cache_key)
-                return cached
-        
-        # Fetch fresh data
-        async with self._lock:
-            sensors = self._get_simulated_sensors()
-            await self._cache.set(cache_key, sensors)
-            _LOGGER.debug("Sensor cache set: %s (count=%d)", cache_key, len(sensors))
-        
-        return sensors
-    
-    async def get_sensor(self, entity_id: str, use_cache: bool = True) -> Optional[Dict[str, Any]]:
-        """Get specific sensor data."""
-        cache_key = f"sensor:{entity_id}"
-        
-        if use_cache:
-            cached = await self._cache.get(cache_key)
-            if cached is not None:
-                _LOGGER.debug("Sensor cache hit: %s", cache_key)
-                return cached
-        
-        # Fetch fresh data
-        all_sensors = await self.get_all_sensors(use_cache=False)
-        sensor = next((s for s in all_sensors if s["entity_id"] == entity_id), None)
-        
-        if sensor and use_cache:
-            await self._cache.set(cache_key, sensor)
-        
-        return sensor
-    
-    async def get_sensors_by_type(self, sensor_type: str, use_cache: bool = True) -> List[Dict[str, Any]]:
-        """Get sensors filtered by type."""
-        cache_key = f"sensors:type:{sensor_type}"
-        
-        if use_cache:
-            cached = await self._cache.get(cache_key)
-            if cached is not None:
-                return cached
-        
-        all_sensors = await self.get_all_sensors(use_cache=False)
-        
-        # Filter by device class or entity domain
-        filtered = [
-            s for s in all_sensors
-            if s.get("attributes", {}).get("device_class") == sensor_type
-            or sensor_type in s.get("entity_id", "")
-        ]
-        
-        if use_cache:
-            await self._cache.set(cache_key, filtered)
-        
-        return filtered
-    
-    async def get_sensors_by_room(self, room: str, use_cache: bool = True) -> List[Dict[str, Any]]:
-        """Get sensors filtered by room."""
-        cache_key = f"sensors:room:{room}"
-        
-        if use_cache:
-            cached = await self._cache.get(cache_key)
-            if cached is not None:
-                return cached
-        
-        all_sensors = await self.get_all_sensors(use_cache=False)
-        
-        # Filter by room attribute
-        filtered = [
-            s for s in all_sensors
-            if s.get("attributes", {}).get("room") == room
-        ]
-        
-        if use_cache:
-            await self._cache.set(cache_key, filtered)
-        
-        return filtered
-    
-    async def invalidate_sensor_cache(self, entity_id: Optional[str] = None) -> None:
-        """Invalidate sensor cache (all or specific)."""
-        if entity_id:
-            await self._cache.delete(f"sensor:{entity_id}")
-            await self._cache.delete("sensors:all")
-        else:
-            await self._cache.clear()
-        
-        _LOGGER.info("Sensor cache invalidated: %s", entity_id or "all")
+    return jsonify({
+        "sensors": sensors,
+        "count": len(sensors),
+    })
 
 
-# Global service instance
-_sensor_service: Optional[SensorService] = None
-
-
-def _get_service() -> SensorService:
-    """Get or create sensor service instance."""
-    global _sensor_service
-    if _sensor_service is None:
-        _sensor_service = SensorService()
-    return _sensor_service
-
-
-@bp.route("", methods=["GET"])
-def get_sensors():
-    """Get all sensors with cached data."""
+@sensors_bp.route("/zones", methods=["GET"])
+def get_sensor_zones():
+    """Zone states as flat sensor data for HA.
+    
+    Returns:
+        List of sensor-compatible zone entries with module counts.
+    """
     try:
-        service = _get_service()
+        from copilot_core.hub.habitus_zones import HabitusZoneEngine
+        engine = HabitusZoneEngine()
+        overview = engine.get_overview()
         
-        # Check if cache should be bypassed
-        use_cache = request.args.get("cache", "true").lower() != "false"
+        sensors: List[Dict[str, Any]] = []
         
-        sensors = asyncio.run(service.get_all_sensors(use_cache=use_cache))
+        for zone_id, zone_data in overview.get("zones", {}).items():
+            enabled_modules = zone_data.get("enabled_modules", [])
+            
+            sensor = {
+                "unique_id": f"pilotsuite_zone_{zone_id}",
+                "name": zone_data.get("name", zone_id.replace("_", " ").title()),
+                "state": "active" if enabled_modules else "off",
+                "attributes": {
+                    "zone_id": zone_id,
+                    "enabled_modules": enabled_modules,
+                    "module_count": len(enabled_modules),
+                    "friendly_name": zone_data.get("name", zone_id.replace("_", " ").title()),
+                },
+                "icon": "mdi:home",
+            }
+            sensors.append(sensor)
         
         return jsonify({
-            "status": "ok",
-            "count": len(sensors),
-            "cached": use_cache,
             "sensors": sensors,
+            "count": len(sensors),
         })
+    except Exception as exc:
+        _LOGGER.warning("Zone sensors failed: %s", exc)
+        return jsonify({"sensors": [], "count": 0, "error": str(exc)}), 503
+
+
+@sensors_bp.route("/system", methods=["GET"])
+def get_sensor_system():
+    """System health as flat sensor data for HA.
     
-    except Exception as e:
-        _LOGGER.error("Failed to get sensors: %s", e)
-        return jsonify({"status": "error", "message": str(e)}), 500
-
-
-@bp.route("/<entity_id>", methods=["GET"])
-def get_sensor(entity_id: str):
-    """Get specific sensor data."""
+    Returns:
+        System health metrics as sensor-compatible entries.
+    """
     try:
-        service = _get_service()
+        from copilot_core.system_health.service import SystemHealthMonitor
+        monitor = SystemHealthMonitor()
+        health = monitor.get_full_health()
         
-        use_cache = request.args.get("cache", "true").lower() != "false"
-        
-        sensor = asyncio.run(service.get_sensor(entity_id, use_cache=use_cache))
-        
-        if sensor is None:
-            return jsonify({"status": "error", "message": f"Sensor not found: {entity_id}"}), 404
+        sensors: List[Dict[str, Any]] = [
+            {
+                "unique_id": "pilotsuite_system_health",
+                "name": "PilotSuite System",
+                "state": health.get("status", "unknown"),
+                "attributes": {
+                    "cpu_usage": health.get("cpu_usage", 0),
+                    "memory_usage": health.get("memory_usage", 0),
+                    "disk_usage": health.get("disk_usage", 0),
+                    "uptime_hours": health.get("uptime_hours", 0),
+                },
+                "icon": "mdi:server",
+            }
+        ]
         
         return jsonify({
-            "status": "ok",
-            "sensor": sensor,
+            "sensors": sensors,
+            "count": len(sensors),
         })
-    
-    except Exception as e:
-        _LOGGER.error("Failed to get sensor %s: %s", entity_id, e)
-        return jsonify({"status": "error", "message": str(e)}), 500
+    except Exception as exc:
+        _LOGGER.warning("System sensors failed: %s", exc)
+        return jsonify({"sensors": [], "count": 0, "error": str(exc)}), 503
 
 
-@bp.route("/types", methods=["GET"])
-def get_sensor_types():
-    """Get sensors grouped by type."""
-    try:
-        service = _get_service()
-        all_sensors = asyncio.run(service.get_all_sensors())
-        
-        # Group by device_class
-        grouped: Dict[str, List[Dict[str, Any]]] = {}
-        for sensor in all_sensors:
-            device_class = sensor.get("attributes", {}).get("device_class", "unknown")
-            if device_class not in grouped:
-                grouped[device_class] = []
-            grouped[device_class].append(sensor)
-        
-        return jsonify({
-            "status": "ok",
-            "types": {
-                type_name: {
-                    "count": len(sensors),
-                    "sensors": sensors,
-                }
-                for type_name, sensors in grouped.items()
-            },
-        })
-    
-    except Exception as e:
-        _LOGGER.error("Failed to get sensor types: %s", e)
-        return jsonify({"status": "error", "message": str(e)}), 500
-
-
-@bp.route("/rooms", methods=["GET"])
-def get_sensor_rooms():
-    """Get sensors grouped by room."""
-    try:
-        service = _get_service()
-        all_sensors = asyncio.run(service.get_all_sensors())
-        
-        # Group by room
-        grouped: Dict[str, List[Dict[str, Any]]] = {}
-        for sensor in all_sensors:
-            room = sensor.get("attributes", {}).get("room", "unknown")
-            if room not in grouped:
-                grouped[room] = []
-            grouped[room].append(sensor)
-        
-        return jsonify({
-            "status": "ok",
-            "rooms": {
-                room_name: {
-                    "count": len(sensors),
-                    "sensors": sensors,
-                }
-                for room_name, sensors in grouped.items()
-            },
-        })
-    
-    except Exception as e:
-        _LOGGER.error("Failed to get sensor rooms: %s", e)
-        return jsonify({"status": "error", "message": str(e)}), 500
-
-
-@bp.route("/cache/stats", methods=["GET"])
-def get_cache_stats():
-    """Get sensor cache statistics."""
-    try:
-        cache = get_sensor_cache()
-        stats = asyncio.run(cache.get_stats())
-        
-        return jsonify({
-            "status": "ok",
-            "cache_type": "sensor",
-            "ttl_seconds": 300,
-            "stats": stats,
-        })
-    
-    except Exception as e:
-        _LOGGER.error("Failed to get cache stats: %s", e)
-        return jsonify({"status": "error", "message": str(e)}), 500
-
-
-@bp.route("/cache/clear", methods=["POST"])
-def clear_cache():
-    """Clear sensor cache."""
-    try:
-        cache = get_sensor_cache()
-        asyncio.run(cache.clear())
-        
-        return jsonify({
-            "status": "ok",
-            "message": "Sensor cache cleared",
-        })
-    
-    except Exception as e:
-        _LOGGER.error("Failed to clear cache: %s", e)
-        return jsonify({"status": "error", "message": str(e)}), 500
+def _module_icon(module_id: str) -> str:
+    """Return appropriate icon for module type."""
+    icons = {
+        "presence": "mdi:motion-sensor",
+        "light": "mdi:lightbulb",
+        "climate": "mdi:thermostat",
+        "media": "mdi:speaker",
+        "mood": "mdi:emoticon",
+        "automation": "mdi:robot",
+        "rag": "mdi:brain",
+    }
+    return icons.get(module_id, "mdi:puzzle")
