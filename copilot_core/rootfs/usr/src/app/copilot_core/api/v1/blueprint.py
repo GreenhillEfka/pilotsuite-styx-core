@@ -104,6 +104,7 @@ from copilot_core.api.v1.neurons_ui import neurons_ui_bp
 from copilot_core.api.v1.rag_ui import rag_ui_bp
 from copilot_core.api.v1.zone_automation_api import zone_automation_api_bp
 from copilot_core.api.v1.backend_ui import backend_ui_bp
+from copilot_core.api.v1.sensors import sensors_bp
 from copilot_core.api.v1.chat import chat_bp
 from copilot_core.api.v1.energy_forecast import energy_forecast_bp
 from copilot_core.api.v1.predictive import predictive_bp
@@ -118,6 +119,7 @@ api_v1.register_blueprint(neurons_ui_bp)
 api_v1.register_blueprint(rag_ui_bp)
 api_v1.register_blueprint(zone_automation_api_bp)
 api_v1.register_blueprint(backend_ui_bp)
+api_v1.register_blueprint(sensors_bp)
 api_v1.register_blueprint(chat_bp)
 api_v1.register_blueprint(energy_forecast_bp)
 api_v1.register_blueprint(predictive_bp)
