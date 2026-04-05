@@ -1468,3 +1468,151 @@ def _searxng_search_sync(
         if warnings is not None:
             warnings.append(f"Web search failed: {exc}")
         return []
+
+
+# ── SLICE 137: RAG-Search Expansion ─────────────────────────────────
+
+@bp.get("/search/semantic")
+def rag_semantic_search():
+    """Semantic search with natural language queries.
+    
+    Query params:
+    - q: Natural language query
+    - collections: Comma-separated collection names (optional, all if omitted)
+    - limit: Max results (default 10)
+    - threshold: Similarity threshold 0.0-1.0 (default 0.7)
+    """
+    from copilot_core.rag.search import get_rag_searcher
+    
+    query = request.args.get("q")
+    if not query:
+        return jsonify({
+            "ok": False,
+            "error": "Missing required parameter: q"
+        }), 400
+    
+    collections = request.args.get("collections")
+    collection_list = [c.strip() for c in collections.split(",")] if collections else None
+    
+    try:
+        limit = int(request.args.get("limit", "10"))
+    except (ValueError, TypeError):
+        limit = 10
+    
+    try:
+        threshold = float(request.args.get("threshold", "0.7"))
+    except (ValueError, TypeError):
+        threshold = 0.7
+    
+    limit = max(1, min(limit, 100))
+    threshold = max(0.0, min(threshold, 1.0))
+    
+    try:
+        searcher = get_rag_searcher()
+        results = searcher.semantic_search(
+            query=query,
+            collections=collection_list,
+            limit=limit,
+            threshold=threshold
+        )
+    except Exception as e:
+        _LOGGER.warning("Semantic search failed: %s", e)
+        results = []
+    
+    return jsonify({
+        "ok": True,
+        "query": query,
+        "results": results,
+        "count": len(results),
+        "collections": collection_list,
+        "limit": limit,
+        "threshold": threshold
+    })
+
+
+@bp.get("/search/analytics")
+def rag_search_analytics():
+    """Get search analytics: popular queries, patterns, usage.
+    
+    Query params:
+    - days: Days to analyze (default 7)
+    - limit: Max results (default 20)
+    """
+    from copilot_core.rag.search import get_rag_searcher
+    
+    try:
+        days = int(request.args.get("days", "7"))
+    except (ValueError, TypeError):
+        days = 7
+    
+    try:
+        limit = int(request.args.get("limit", "20"))
+    except (ValueError, TypeError):
+        limit = 20
+    
+    days = max(1, min(days, 90))
+    limit = max(1, min(limit, 100))
+    
+    try:
+        searcher = get_rag_searcher()
+        analytics = searcher.get_search_analytics(days=days, limit=limit)
+    except Exception as e:
+        _LOGGER.warning("Failed to get search analytics: %s", e)
+        analytics = {
+            "popular_queries": [],
+            "total_searches": 0,
+            "avg_results_per_query": 0.0
+        }
+    
+    return jsonify({
+        "ok": True,
+        "analytics": analytics,
+        "days": days,
+        "limit": limit
+    })
+
+
+@bp.post("/feedback")
+def rag_relevance_feedback():
+    """Submit relevance feedback for search results.
+    
+    Body:
+    - query_id: ID of the search query
+    - result_id: ID of the result
+    - relevant: true|false
+    """
+    auth_error = _require_admin_mutation("RAG_FEEDBACK", "Admin token required")
+    if auth_error:
+        return auth_error
+    
+    data = request.get_json() or {}
+    query_id = data.get("query_id")
+    result_id = data.get("result_id")
+    relevant = data.get("relevant", True)
+    
+    if not query_id or not result_id:
+        return jsonify({
+            "ok": False,
+            "error": "Missing query_id or result_id"
+        }), 400
+    
+    from copilot_core.rag.search import get_rag_searcher
+    
+    try:
+        searcher = get_rag_searcher()
+        searcher.submit_feedback(
+            query_id=query_id,
+            result_id=result_id,
+            relevant=relevant
+        )
+        success = True
+    except Exception as e:
+        _LOGGER.warning("Failed to submit feedback: %s", e)
+        success = False
+    
+    return jsonify({
+        "ok": success,
+        "query_id": query_id,
+        "result_id": result_id,
+        "relevant": relevant
+    })
