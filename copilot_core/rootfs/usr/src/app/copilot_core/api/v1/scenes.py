@@ -390,3 +390,213 @@ def get_scene_context_for_llm() -> str:
         suffix = f" (+{len(names)-4})" if len(names) > 4 else ""
         lines.append(f"  {zname}: {', '.join(sample)}{suffix}")
     return "\n".join(lines) if len(lines) > 1 else ""
+
+
+# ── SLICE 162: Scenes API Expansion ─────────────────────────────────
+
+@bp.post("/<scene_id>/activate")
+def scenes_activate(scene_id):
+    """Activate a scene.
+    
+    Body:
+    - transition: Transition duration in seconds (optional)
+    - override: Optional entity overrides
+    """
+    data = request.get_json() or {}
+    transition = data.get("transition")
+    override = data.get("override", {})
+    
+    from copilot_core.scenes.engine import get_scenes_engine
+    
+    try:
+        engine = get_scenes_engine()
+        result = engine.activate(scene_id=scene_id, transition=transition, override=override)
+        success = result.get("success", False)
+        activated_entities = result.get("activated_entities", 0)
+    except Exception as e:
+        _LOGGER.warning("Failed to activate scene: %s", e)
+        success = False
+        activated_entities = 0
+    
+    return jsonify({
+        "ok": success,
+        "scene_id": scene_id,
+        "activated_entities": activated_entities,
+        "transition": transition
+    })
+
+
+@bp.get("/schedules")
+def scenes_schedules():
+    """List scene schedules.
+    
+    Returns configured automated scene activation schedules.
+    """
+    from copilot_core.scenes.engine import get_scenes_engine
+    
+    try:
+        engine = get_scenes_engine()
+        schedules = engine.list_schedules()
+    except Exception as e:
+        _LOGGER.warning("Failed to list scene schedules: %s", e)
+        schedules = []
+    
+    return jsonify({
+        "ok": True,
+        "schedules": schedules,
+        "count": len(schedules),
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    })
+
+
+@bp.post("/schedules")
+def scenes_create_schedule():
+    """Create a new scene schedule.
+    
+    Requires admin token.
+    
+    Body:
+    - scene_id: Scene to activate
+    - name: Schedule name
+    - frequency: once|daily|weekly|custom
+    - time: HH:MM for activation time
+    - days: For weekly, which days (0-6)
+    """
+    auth_error = _require_admin_mutation("CREATE_SCENE_SCHEDULE", "Admin token required")
+    if auth_error:
+        return auth_error
+    
+    data = request.get_json() or {}
+    scene_id = data.get("scene_id")
+    name = data.get("name", "Scene Schedule")
+    frequency = data.get("frequency", "daily")
+    time = data.get("time", "08:00")
+    days = data.get("days", [])
+    
+    if not scene_id:
+        return jsonify({
+            "ok": False,
+            "error": "Missing scene_id"
+        }), 400
+    
+    from copilot_core.scenes.engine import get_scenes_engine
+    
+    try:
+        engine = get_scenes_engine()
+        schedule_id = engine.create_schedule(
+            scene_id=scene_id,
+            name=name,
+            frequency=frequency,
+            time=time,
+            days=days
+        )
+        success = True
+    except Exception as e:
+        _LOGGER.warning("Failed to create scene schedule: %s", e)
+        success = False
+        schedule_id = None
+    
+    return jsonify({
+        "ok": success,
+        "schedule_id": schedule_id,
+        "scene_id": scene_id,
+        "name": name,
+        "frequency": frequency
+    })
+
+
+@bp.get("/<scene_id>/variants")
+def scenes_variants(scene_id):
+    """Get variants of a scene.
+    
+    Variants allow multiple configurations for the same scene.
+    """
+    from copilot_core.scenes.engine import get_scenes_engine
+    
+    try:
+        engine = get_scenes_engine()
+        variants = engine.get_variants(scene_id=scene_id)
+    except Exception as e:
+        _LOGGER.warning("Failed to get scene variants: %s", e)
+        variants = []
+    
+    return jsonify({
+        "ok": True,
+        "scene_id": scene_id,
+        "variants": variants,
+        "count": len(variants),
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    })
+
+
+@bp.post("/<scene_id>/variants")
+def scenes_create_variant(scene_id):
+    """Create a new variant of a scene.
+    
+    Body:
+    - name: Variant name
+    - entities: Entity states for this variant
+    """
+    data = request.get_json() or {}
+    name = data.get("name")
+    entities = data.get("entities", {})
+    
+    if not name:
+        return jsonify({
+            "ok": False,
+            "error": "Missing name"
+        }), 400
+    
+    from copilot_core.scenes.engine import get_scenes_engine
+    
+    try:
+        engine = get_scenes_engine()
+        variant_id = engine.create_variant(scene_id=scene_id, name=name, entities=entities)
+        success = True
+    except Exception as e:
+        _LOGGER.warning("Failed to create scene variant: %s", e)
+        success = False
+        variant_id = None
+    
+    return jsonify({
+        "ok": success,
+        "variant_id": variant_id,
+        "scene_id": scene_id,
+        "name": name
+    })
+
+
+@bp.get("/analytics")
+def scenes_analytics():
+    """Get scene usage analytics.
+    
+    Query params:
+    - days: Days to analyze (default 30)
+    """
+    from copilot_core.scenes.engine import get_scenes_engine
+    
+    try:
+        days = int(request.args.get("days", "30"))
+    except (ValueError, TypeError):
+        days = 30
+    
+    days = max(1, min(days, 365))
+    
+    try:
+        engine = get_scenes_engine()
+        analytics = engine.get_analytics(days=days)
+    except Exception as e:
+        _LOGGER.warning("Failed to get scene analytics: %s", e)
+        analytics = {
+            "total_scenes": 0,
+            "total_activations": 0,
+            "most_used_scenes": [],
+            "avg_activations_per_day": 0.0
+        }
+    
+    return jsonify({
+        "ok": True,
+        "analytics": analytics,
+        "days": days,
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    })
