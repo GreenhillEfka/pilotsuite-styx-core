@@ -815,3 +815,108 @@ def get_zone_health_detail(zone_id: str):
         "ok": True,
         "zone": result.to_detail_dict(),
     })
+
+
+# ── SLICE 139: Zone-Health Expansion ─────────────────────────────────
+
+@bp.get("/<zone_id>/diagnostics")
+def zone_diagnostics(zone_id):
+    """Get detailed diagnostics for a specific zone.
+    
+    Returns:
+    - entity_status: Count of available/unavailable entities
+    - module_status: Per-module health
+    - automation_status: Active/failed automations
+    - connectivity: Network/sensor connectivity status
+    - last_updated: Last health check timestamp
+    """
+    from copilot_core.zone_health import get_zone_health_service
+    
+    try:
+        service = get_zone_health_service()
+        diagnostics = service.get_zone_diagnostics(zone_id=zone_id)
+    except Exception as e:
+        _LOGGER.warning("Failed to get zone diagnostics: %s", e)
+        diagnostics = {
+            "zone_id": zone_id,
+            "entity_status": {"available": 0, "unavailable": 0},
+            "module_status": [],
+            "automation_status": {"active": 0, "failed": 0},
+            "connectivity": {"status": "unknown"},
+            "last_updated": None
+        }
+    
+    return jsonify({
+        "ok": True,
+        "zone_id": zone_id,
+        "diagnostics": diagnostics,
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    })
+
+
+@bp.get("/<zone_id>/modules/health")
+def zone_modules_health(zone_id):
+    """Get health status of all modules in a zone.
+    
+    Returns per-module:
+    - module_id
+    - status: healthy|degraded|unhealthy
+    - last_seen: Last activity timestamp
+    - error_count: Recent error count
+    """
+    from copilot_core.zone_health import get_zone_health_service
+    
+    try:
+        service = get_zone_health_service()
+        modules = service.get_modules_health(zone_id=zone_id)
+    except Exception as e:
+        _LOGGER.warning("Failed to get modules health: %s", e)
+        modules = []
+    
+    return jsonify({
+        "ok": True,
+        "zone_id": zone_id,
+        "modules": modules,
+        "count": len(modules),
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    })
+
+
+@bp.get("/<zone_id>/health/trends")
+def zone_health_trends(zone_id):
+    """Get health trends for a zone over time.
+    
+    Query params:
+    - hours: Time range (default 24)
+    - interval: Data point interval in minutes (default 60)
+    """
+    from copilot_core.zone_health import get_zone_health_service
+    
+    try:
+        hours = int(request.args.get("hours", "24"))
+    except (ValueError, TypeError):
+        hours = 24
+    
+    try:
+        interval = int(request.args.get("interval", "60"))
+    except (ValueError, TypeError):
+        interval = 60
+    
+    hours = max(1, min(hours, 720))
+    interval = max(5, min(interval, 1440))
+    
+    try:
+        service = get_zone_health_service()
+        trends = service.get_health_trends(zone_id=zone_id, hours=hours, interval=interval)
+    except Exception as e:
+        _LOGGER.warning("Failed to get health trends: %s", e)
+        trends = []
+    
+    return jsonify({
+        "ok": True,
+        "zone_id": zone_id,
+        "trends": trends,
+        "hours": hours,
+        "interval_minutes": interval,
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    })
