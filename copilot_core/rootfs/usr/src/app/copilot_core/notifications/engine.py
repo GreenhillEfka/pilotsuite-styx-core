@@ -140,7 +140,7 @@ class UserPreferences:
 class NotificationEngine:
     """Multi-channel notification engine."""
     
-    def __init__(self, dedup_window_seconds: int = 300):
+    def __init__(self, dedup_window_seconds: int = 300, rate_limit_per_hour: int = None, **kwargs):
         self._notifications: Dict[str, Notification] = {}
         self._templates: Dict[str, NotificationTemplate] = {}
         self._dedup_window = dedup_window_seconds
