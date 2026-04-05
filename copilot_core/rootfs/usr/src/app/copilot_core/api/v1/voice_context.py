@@ -319,3 +319,107 @@ def get_voice_context_provider() -> VoiceContextProvider:
     if _voice_context_provider is None:
         _voice_context_provider = VoiceContextProvider()
     return _voice_context_provider
+
+# ── SLICE 132: Voice-Context Expansion ─────────────────────────────────
+
+@bp.get("/state")
+def voice_context_state():
+    """Get current voice context state.
+    
+    Returns the full voice context including:
+    - voice_state: listening|processing|response_ready|follow_up_open|follow_up_terminal|error
+    - transcript: Latest speech-to-text result
+    - confidence: STT confidence score (0.0-1.0)
+    - response_text: Prepared response text
+    - response_tts_url: Text-to-speech audio URL
+    - conversation_id: Active conversation UUID
+    """
+    from copilot_core.voice_context import get_voice_context
+    
+    ctx = get_voice_context()
+    
+    return jsonify({
+        "ok": True,
+        "voice_state": ctx.get("voice_state", "neutral"),
+        "transcript": ctx.get("transcript"),
+        "confidence": ctx.get("confidence"),
+        "response_text": ctx.get("response_text"),
+        "response_tts_url": ctx.get("response_tts_url"),
+        "conversation_id": ctx.get("conversation_id"),
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    })
+
+
+@bp.post("/state")
+def set_voice_context_state():
+    """Set voice context state (for testing/debugging).
+    
+    Requires admin token.
+    
+    Body:
+    - voice_state: Target state
+    - transcript: Optional transcript
+    - response_text: Optional response
+    """
+    from copilot_core.voice_context import set_voice_context
+    
+    auth_error = _require_admin_mutation("SET_VOICE_CONTEXT", "Admin token required to set voice context")
+    if auth_error:
+        return auth_error
+    
+    data = request.get_json() or {}
+    voice_state = data.get("voice_state")
+    
+    valid_states = ["listening", "processing", "response_ready", "follow_up_open", "follow_up_terminal", "error", "neutral"]
+    if voice_state not in valid_states:
+        return jsonify({
+            "ok": False,
+            "error": f"Invalid voice_state. Must be one of: {valid_states}"
+        }), 400
+    
+    ctx = {
+        "voice_state": voice_state,
+        "transcript": data.get("transcript"),
+        "confidence": data.get("confidence", 1.0),
+        "response_text": data.get("response_text"),
+        "response_tts_url": data.get("response_tts_url"),
+        "conversation_id": data.get("conversation_id", str(uuid.uuid4())),
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    set_voice_context(ctx)
+    
+    return jsonify({
+        "ok": True,
+        "voice_state": voice_state,
+        "conversation_id": ctx["conversation_id"]
+    })
+
+
+@bp.get("/history")
+def voice_context_history():
+    """Get voice context history.
+    
+    Query params:
+    - limit: Max entries (default 20)
+    - conversation_id: Filter by conversation
+    """
+    from copilot_core.voice_context import get_voice_history
+    
+    try:
+        limit = int(request.args.get("limit", "20"))
+    except (ValueError, TypeError):
+        limit = 20
+    
+    conversation_id = request.args.get("conversation_id")
+    
+    limit = max(1, min(limit, 100))
+    
+    history = get_voice_history(limit=limit, conversation_id=conversation_id)
+    
+    return jsonify({
+        "ok": True,
+        "history": history,
+        "count": len(history),
+        "limit": limit
+    })
