@@ -140,9 +140,10 @@ class UserPreferences:
 class NotificationEngine:
     """Multi-channel notification engine."""
     
-    def __init__(self):
+    def __init__(self, dedup_window_seconds: int = 300):
         self._notifications: Dict[str, Notification] = {}
         self._templates: Dict[str, NotificationTemplate] = {}
+        self._dedup_window = dedup_window_seconds
         self._user_preferences: Dict[str, UserPreferences] = {}
         self._channel_handlers: Dict[NotificationChannel, Callable] = {}
         self._delivery_history: List[Notification] = []
