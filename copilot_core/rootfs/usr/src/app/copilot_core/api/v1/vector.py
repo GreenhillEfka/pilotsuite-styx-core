@@ -538,3 +538,140 @@ def compute_similarity(body: SimilarityRequest):
     except Exception as e:
         _LOGGER.exception("Failed to compute similarity")
         return jsonify({"ok": False, "error": str(e)}), 500
+
+
+# ── SLICE 143: Vector API Expansion ─────────────────────────────────
+
+@bp.get("/collections")
+def vector_collections():
+    """List all vector collections.
+    
+    Returns:
+    - collections: List of collection names
+    - count: Total number of collections
+    """
+    from copilot_core.vector.store import get_vector_store
+    
+    try:
+        store = get_vector_store()
+        collections = store.list_collections()
+    except Exception as e:
+        _LOGGER.warning("Failed to list collections: %s", e)
+        collections = []
+    
+    return jsonify({
+        "ok": True,
+        "collections": collections,
+        "count": len(collections),
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    })
+
+
+@bp.post("/collections/<collection_name>")
+def create_vector_collection(collection_name):
+    """Create a new vector collection.
+    
+    Requires admin token.
+    
+    Body (optional):
+    - dimension: Vector dimension (default: 384)
+    - metric: Similarity metric (cosine|dot|euclidean, default: cosine)
+    """
+    auth_error = _require_admin_mutation("CREATE_VECTOR_COLLECTION", "Admin token required")
+    if auth_error:
+        return auth_error
+    
+    data = request.get_json() or {}
+    dimension = data.get("dimension", 384)
+    metric = data.get("metric", "cosine")
+    
+    from copilot_core.vector.store import get_vector_store
+    
+    try:
+        store = get_vector_store()
+        store.create_collection(
+            name=collection_name,
+            dimension=dimension,
+            metric=metric
+        )
+        success = True
+    except Exception as e:
+        _LOGGER.warning("Failed to create collection: %s", e)
+        success = False
+    
+    return jsonify({
+        "ok": success,
+        "collection": collection_name,
+        "dimension": dimension,
+        "metric": metric
+    })
+
+
+@bp.delete("/collections/<collection_name>")
+def delete_vector_collection(collection_name):
+    """Delete a vector collection.
+    
+    Requires admin token.
+    """
+    auth_error = _require_admin_mutation("DELETE_VECTOR_COLLECTION", "Admin token required")
+    if auth_error:
+        return auth_error
+    
+    from copilot_core.vector.store import get_vector_store
+    
+    try:
+        store = get_vector_store()
+        store.delete_collection(name=collection_name)
+        success = True
+    except Exception as e:
+        _LOGGER.warning("Failed to delete collection: %s", e)
+        success = False
+    
+    return jsonify({
+        "ok": success,
+        "collection": collection_name
+    })
+
+
+@bp.post("/batch/upsert")
+def vector_batch_upsert():
+    """Batch upsert multiple documents.
+    
+    Body:
+    - collection: Collection name
+    - documents: List of {id, vector, metadata}
+    """
+    data = request.get_json() or {}
+    collection = data.get("collection")
+    documents = data.get("documents", [])
+    
+    if not collection:
+        return jsonify({
+            "ok": False,
+            "error": "Missing collection name"
+        }), 400
+    
+    if not documents or len(documents) > 1000:
+        return jsonify({
+            "ok": False,
+            "error": "Documents required (max 1000 per batch)"
+        }), 400
+    
+    from copilot_core.vector.store import get_vector_store
+    
+    try:
+        store = get_vector_store()
+        result = store.batch_upsert(collection=collection, documents=documents)
+        success = True
+        inserted = result.get("inserted", len(documents))
+    except Exception as e:
+        _LOGGER.warning("Failed to batch upsert: %s", e)
+        success = False
+        inserted = 0
+    
+    return jsonify({
+        "ok": success,
+        "collection": collection,
+        "inserted": inserted,
+        "total": len(documents)
+    })
