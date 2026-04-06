@@ -1,6 +1,7 @@
 
 
 # ── SLICE 153: Webhooks API Expansion ─────────────────────────────────
+from flask import Blueprint
 
 bp = Blueprint("webhooks", __name__, url_prefix="/webhooks")
 

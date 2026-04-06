@@ -1,6 +1,7 @@
 
 
 # ── SLICE 157: Cache API Expansion ─────────────────────────────────
+from flask import Blueprint
 
 bp = Blueprint("cache", __name__, url_prefix="/cache")
 

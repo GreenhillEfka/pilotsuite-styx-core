@@ -1,6 +1,7 @@
 
 
 # ── SLICE 160: Media API Expansion ─────────────────────────────────
+from flask import Blueprint
 
 bp = Blueprint("media", __name__, url_prefix="/media")
 

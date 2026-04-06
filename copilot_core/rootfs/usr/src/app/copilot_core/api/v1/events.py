@@ -1,6 +1,7 @@
 
 
 # ── SLICE 145: Events API Expansion ─────────────────────────────────
+from flask import Blueprint
 
 bp = Blueprint("events", __name__, url_prefix="/events")
 

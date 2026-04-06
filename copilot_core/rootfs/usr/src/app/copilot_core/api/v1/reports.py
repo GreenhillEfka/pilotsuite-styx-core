@@ -1,6 +1,7 @@
 
 
 # ── SLICE 152: Reports API Expansion ─────────────────────────────────
+from flask import Blueprint
 
 bp = Blueprint("reports", __name__, url_prefix="/reports")
 

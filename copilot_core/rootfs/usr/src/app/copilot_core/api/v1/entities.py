@@ -1,6 +1,7 @@
 
 
 # ── SLICE 164: Entities API Expansion ─────────────────────────────────
+from flask import Blueprint
 
 bp = Blueprint("entities", __name__, url_prefix="/entities")
 

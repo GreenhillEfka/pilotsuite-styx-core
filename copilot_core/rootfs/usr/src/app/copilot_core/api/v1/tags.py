@@ -1,6 +1,7 @@
 
 
 # ── SLICE 159: Tags API Expansion ─────────────────────────────────
+from flask import Blueprint
 
 bp = Blueprint("tags", __name__, url_prefix="/tags")
 

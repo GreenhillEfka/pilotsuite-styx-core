@@ -1,6 +1,7 @@
 
 
 # ── SLICE 163: Templates API Expansion ─────────────────────────────────
+from flask import Blueprint
 
 bp = Blueprint("templates", __name__, url_prefix="/templates")
 

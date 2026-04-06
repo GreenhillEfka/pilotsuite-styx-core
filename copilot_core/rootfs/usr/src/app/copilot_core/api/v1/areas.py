@@ -1,6 +1,7 @@
 
 
 # ── SLICE 166: Areas API Expansion ─────────────────────────────────
+from flask import Blueprint
 
 bp = Blueprint("areas", __name__, url_prefix="/areas")
 

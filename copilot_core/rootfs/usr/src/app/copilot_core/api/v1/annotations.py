@@ -1,6 +1,7 @@
 
 
 # ── SLICE 161: Annotations API Expansion ─────────────────────────────────
+from flask import Blueprint
 
 bp = Blueprint("annotations", __name__, url_prefix="/annotations")
 

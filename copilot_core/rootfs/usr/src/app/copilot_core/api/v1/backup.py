@@ -1,6 +1,7 @@
 
 
 # ── SLICE 151: Backup API Expansion ─────────────────────────────────
+from flask import Blueprint
 
 bp = Blueprint("backup", __name__, url_prefix="/backup")
 

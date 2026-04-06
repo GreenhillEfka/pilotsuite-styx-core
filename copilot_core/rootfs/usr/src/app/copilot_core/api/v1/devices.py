@@ -1,6 +1,7 @@
 
 
 # ── SLICE 165: Devices API Expansion ─────────────────────────────────
+from flask import Blueprint
 
 bp = Blueprint("devices", __name__, url_prefix="/devices")
 

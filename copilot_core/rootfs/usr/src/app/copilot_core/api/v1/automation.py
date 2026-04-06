@@ -1,6 +1,7 @@
 
 
 # ── SLICE 155: Automation API Expansion ─────────────────────────────────
+from flask import Blueprint
 
 bp = Blueprint("automation", __name__, url_prefix="/automation")
 

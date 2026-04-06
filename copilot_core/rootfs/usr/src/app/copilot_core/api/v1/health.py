@@ -12,6 +12,7 @@ __all__ = ["health_bp", "init_system_health_api"]
 
 
 # ── SLICE 149: Health API Expansion ─────────────────────────────────
+from flask import Blueprint
 
 @bp.get("/components")
 def health_components():

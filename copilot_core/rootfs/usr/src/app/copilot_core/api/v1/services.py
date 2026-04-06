@@ -1,6 +1,7 @@
 
 
 # ── SLICE 172: Services API Expansion ─────────────────────────────────
+from flask import Blueprint
 
 bp = Blueprint("services", __name__, url_prefix="/services")
 

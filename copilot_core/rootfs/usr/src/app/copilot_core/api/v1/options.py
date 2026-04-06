@@ -1,6 +1,7 @@
 
 
 # ── SLICE 169: Options API Expansion ─────────────────────────────────
+from flask import Blueprint
 
 bp = Blueprint("options", __name__, url_prefix="/options")
 

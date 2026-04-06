@@ -1,6 +1,7 @@
 
 
 # ── SLICE 168: Labels API Expansion ─────────────────────────────────
+from flask import Blueprint
 
 bp = Blueprint("labels", __name__, url_prefix="/labels")
 

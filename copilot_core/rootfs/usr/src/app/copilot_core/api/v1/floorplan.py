@@ -1,6 +1,7 @@
 
 
 # ── SLICE 167: Floor Plan API Expansion ─────────────────────────────────
+from flask import Blueprint
 
 bp = Blueprint("floorplan", __name__, url_prefix="/floorplan")
 
