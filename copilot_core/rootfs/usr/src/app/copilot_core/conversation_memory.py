@@ -183,12 +183,30 @@ class ConversationMemory:
             finally:
                 conn.close()
 
-    def get_relevant_context(self, query: str, limit: int = 5) -> str:
+    def get_relevant_context(self, query: str, limit: int = 5, user_id: str = None) -> str:
         """Get relevant conversation context for a new query.
 
         Searches past conversations for similar topics and returns
         a formatted context string for LLM injection.
+        
+        Args:
+            query: The user query to find context for
+            limit: Max results to return
+            user_id: Optional user ID for per-user context (P1-003)
         """
+        # Try per-user preferences first (P1-003)
+        if user_id:
+            try:
+                from copilot_core.preference_learning import get_preference_learner
+                learner = get_preference_learner()
+                user_prefs = learner.get_user_preferences(user_id, min_confidence=0.3)
+                if user_prefs:
+                    pref_lines = [f"  {p.key}: {p.value} (Sicherheit: {p.confidence:.0%})" for p in user_prefs[:10]]
+                    return "Nutzerpraeferenzen:\n" + "\n".join(pref_lines)
+            except Exception as e:
+                logger.debug("Per-user context failed for %s: %s", user_id, e)
+        
+        # Fallback to legacy topic-based search
         topics = self._extract_topics(query)
         if not topics:
             return self._get_recent_summary()
@@ -211,7 +229,7 @@ class ConversationMemory:
                         if age_days < MEMORY_HALF_LIFE_DAYS * 2:
                             context_parts.append(f"[Vor {int(age_days)}d] {content[:100]}")
 
-                # Get active user preferences
+                # Get active user preferences (legacy global)
                 prefs = conn.execute(
                     "SELECT key, value, confidence FROM user_preferences "
                     "WHERE confidence > 0.3 ORDER BY confidence DESC LIMIT 10"
