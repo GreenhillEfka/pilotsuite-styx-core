@@ -102,7 +102,7 @@ class EncryptedPayload:
         return base64.b64encode(self._key).decode()
 
     @staticmethod
-    def from_key_b64(key_b64: str) "EncryptedPayload":
+    def from_key_b64(key_b64: str) -> "EncryptedPayload":
         return EncryptedPayload(base64.b64decode(key_b64))
 
     def encrypt(self, plaintext: bytes) -> bytes:
