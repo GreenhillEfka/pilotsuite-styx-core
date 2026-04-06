@@ -1,4 +1,4 @@
-"""Climate & HVAC Tests — Slice 245 (CORE ONLY)."""
+"""Climate & HVAC Tests — Slice 263 (CORE ONLY)."""
 import unittest, tempfile, json
 try:
     from copilot_core.app import create_app
@@ -15,14 +15,19 @@ class TestClimateHVAC(unittest.TestCase):
             r = c.get("/api/v1/climate/state")
             d = json.loads(r.data)
             self.assertTrue(d.get("ok"))
-    def test_set_climate(self):
+    def test_get_hvac_zones(self):
         with self._app().test_client() as c:
-            r = c.post("/api/v1/climate/set", json={"temperature": 22.0})
+            r = c.get("/api/v1/hvac/zones")
             d = json.loads(r.data)
             self.assertTrue(d.get("ok"))
-    def test_get_climate_schedules(self):
+    def test_set_climate(self):
         with self._app().test_client() as c:
-            r = c.get("/api/v1/climate/schedules")
+            r = c.post("/api/v1/climate/set", json={"temp": 23.0})
+            d = json.loads(r.data)
+            self.assertTrue(d.get("ok"))
+    def test_set_hvac_mode(self):
+        with self._app().test_client() as c:
+            r = c.post("/api/v1/hvac/mode", json={"mode": "cool"})
             d = json.loads(r.data)
             self.assertTrue(d.get("ok"))
 if __name__ == "__main__": unittest.main()
