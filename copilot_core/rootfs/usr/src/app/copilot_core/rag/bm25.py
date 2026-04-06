@@ -615,5 +615,4 @@ def _bm25_term_score(
         return 0.0
     return float(idf) * (float(tf) * (k1 + 1.0)) / denom
 
-# Alias for backwards compatibility with tests
 BM25Index = BM25SqliteIndex
