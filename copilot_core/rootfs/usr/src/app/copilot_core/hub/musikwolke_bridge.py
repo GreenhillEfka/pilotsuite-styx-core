@@ -30,13 +30,17 @@ class MusikwolkeBridge:
         sonos: SonosCloudClient | None = None,
         media_follow: MediaFollowEngine | None = None,
         zone_speaker_map: dict[str, str] | None = None,
+        zone_favorites: dict[str, str] | None = None,
     ) -> None:
         self._sonos = sonos
         self._media_follow = media_follow
         # zone_id -> Sonos room name (e.g., "wohnzimmer" -> "Wohnzimmer")
         self._zone_speaker_map: dict[str, str] = zone_speaker_map or {}
+        # zone_id -> favorite name (e.g., "wohnzimmer" -> "Jazz Radio")
+        self._zone_favorites: dict[str, str] = zone_favorites or {}
         self._active_zones: set[str] = set()
         self._last_occupied_zone: str | None = None
+        self._zone_volume_history: dict[str, int] = {}  # For volume restoration
 
     # ── Configuration ─────────────────────────────────────────────────────
 
@@ -51,6 +55,18 @@ class MusikwolkeBridge:
     def get_zone_speaker_map(self) -> dict[str, str]:
         """Get current zone-to-speaker mapping."""
         return dict(self._zone_speaker_map)
+
+    def set_zone_favorite(self, zone_id: str, favorite_name: str) -> None:
+        """Set a preselected favorite for a zone."""
+        self._zone_favorites[zone_id] = favorite_name
+
+    def get_zone_favorite(self, zone_id: str) -> str | None:
+        """Get the favorite for a zone."""
+        return self._zone_favorites.get(zone_id)
+
+    def get_zone_favorites(self) -> dict[str, str]:
+        """Get all zone favorites mapping."""
+        return dict(self._zone_favorites)
 
     def auto_discover_mappings(self) -> int:
         """Try to auto-map zones to Sonos rooms by name similarity.
@@ -124,15 +140,30 @@ class MusikwolkeBridge:
         self, zone_id: str, sonos_room: str | None,
         actions: dict[str, Any], result: dict[str, Any],
     ) -> None:
-        """Start music playback in a zone."""
+        """Start music playback in a zone with optional favorite and smooth fade-in."""
         volume = actions.get("music_volume_pct", 30)
+        fade_in_s = actions.get("music_fade_in_s", 0)
+        favorite = actions.get("music_favorite") or self._zone_favorites.get(zone_id)
 
         if self._sonos and sonos_room:
-            # Set volume first, then play
-            self._sonos.set_volume(sonos_room, volume)
-            self._sonos.play(sonos_room)
-            result["executed"].append(f"sonos_play:{sonos_room}@{volume}%")
-            logger.info("Musikwolke: play '%s' @ %d%%", sonos_room, volume)
+            # Store volume for later restoration
+            self._zone_volume_history[sonos_room] = volume
+            
+            # Play favorite if configured, otherwise just play current queue
+            if favorite:
+                self._sonos.set_volume(sonos_room, 0 if fade_in_s > 0 else volume)
+                self._sonos.play_favorite(sonos_room, favorite)
+                result["executed"].append(f"sonos_favorite:{sonos_room}:{favorite}@{volume}%")
+                logger.info("Musikwolke: play favorite '%s' in '%s' @ %d%%", favorite, sonos_room, volume)
+            else:
+                self._sonos.set_volume(sonos_room, 0 if fade_in_s > 0 else volume)
+                self._sonos.play(sonos_room)
+                result["executed"].append(f"sonos_play:{sonos_room}@{volume}%")
+                logger.info("Musikwolke: play '%s' @ %d%%", sonos_room, volume)
+            
+            # Smooth fade-in if requested
+            if fade_in_s > 0 and volume > 0:
+                self._fade_in_volume(sonos_room, volume, fade_in_s)
         else:
             logger.debug("No Sonos room mapped for zone '%s'", zone_id)
 
@@ -200,8 +231,38 @@ class MusikwolkeBridge:
         t = threading.Thread(target=_do_fade, daemon=True)
         t.start()
 
+    def _fade_in_volume(self, room: str, target_volume: int, fade_s: int) -> None:
+        """Gradually increase volume from 0 to target over fade_s seconds.
+
+        Runs in a background daemon thread.
+        """
+        import threading
+
+        def _do_fade_in():
+            import time
+            steps = min(fade_s * 2, 20)  # 2 steps/second, max 20 steps
+            interval = fade_s / steps if steps > 0 else fade_s
+            vol_step = target_volume / steps if steps > 0 else target_volume
+
+            for i in range(1, steps + 1):
+                target_vol = min(target_volume, int(vol_step * i))
+                try:
+                    self._sonos.set_volume(room, target_vol)
+                except Exception:
+                    break
+                time.sleep(interval)
+
+        t = threading.Thread(target=_do_fade_in, daemon=True)
+        t.start()
+
     def _handle_music_follow(self, zone_id: str, result: dict[str, Any]) -> None:
-        """Handle music follow (Musikwolke) when user moves between zones."""
+        """Handle music follow (Musikwolke) when user moves between zones with smooth transition.
+
+        Implements:
+        - Cross-fade: old zone fades out while new zone fades in
+        - Zone-specific favorites: new zone plays its configured favorite
+        - Volume continuity: maintains consistent volume level across zones
+        """
         if not self._sonos:
             return
 
@@ -209,26 +270,60 @@ class MusikwolkeBridge:
         current_room = self._zone_speaker_map.get(zone_id)
         previous_room = self._zone_speaker_map.get(previous_zone) if previous_zone else None
 
-        if current_room and previous_room and current_room != previous_room:
-            # Get current musikwolke members
-            musikwolke_rooms = [
-                self._zone_speaker_map[z]
-                for z in self._active_zones
-                if z in self._zone_speaker_map
-            ]
+        if not current_room:
+            self._last_occupied_zone = zone_id
+            return
 
-            success = self._sonos.follow_user(
-                user_room=current_room,
-                previous_room=previous_room,
-                musikwolke_rooms=musikwolke_rooms,
+        # Get current musikwolke members
+        musikwolke_rooms = [
+            self._zone_speaker_map[z]
+            for z in self._active_zones
+            if z in self._zone_speaker_map
+        ]
+
+        # Determine target volume and favorite for new zone
+        target_volume = self._zone_volume_history.get(current_room, 30)
+        target_favorite = self._zone_favorites.get(zone_id)
+        
+        if previous_room and previous_room != current_room:
+            # Smooth handoff: previous room fades out, new room joins and fades in
+            fade_s = 3  # Cross-fade duration
+            
+            # Start playing favorite in new room (if configured) at low volume
+            if target_favorite:
+                self._sonos.play_favorite(current_room, target_favorite)
+                result["executed"].append(f"favorite:{target_favorite}")
+            
+            # Join new room to musikwolke group
+            if musikwolke_rooms:
+                coordinator = musikwolke_rooms[0]
+                if current_room != coordinator:
+                    self._sonos.join(current_room, coordinator)
+            
+            # Start fade-in on new room
+            self._sonos.set_volume(current_room, 0)
+            self._sonos.play(current_room)
+            self._fade_in_volume(current_room, target_volume, fade_s)
+            
+            # Fade-out and optionally leave old room
+            self._fade_and_pause(previous_room, fade_s)
+            
+            result["executed"].append(
+                f"crossfade:{previous_room}→{current_room}@{target_volume}%"
             )
-            if success:
-                result["executed"].append(
-                    f"follow:{previous_room}→{current_room}"
-                )
-                logger.info(
-                    "Musikwolke follow: %s → %s", previous_room, current_room
-                )
+            logger.info(
+                "Musikwolke cross-fade: %s → %s (favorite: %s)",
+                previous_room, current_room, target_favorite or "queue"
+            )
+        else:
+            # No previous room or same room - just ensure playback
+            if not previous_room:
+                if target_favorite:
+                    self._sonos.play_favorite(current_room, target_favorite)
+                else:
+                    self._sonos.play(current_room)
+                self._fade_in_volume(current_room, target_volume, 2)
+                result["executed"].append(f"play:{current_room}@{target_volume}%")
 
         self._last_occupied_zone = zone_id
 

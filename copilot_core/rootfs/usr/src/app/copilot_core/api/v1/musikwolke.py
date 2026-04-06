@@ -268,3 +268,60 @@ def dissolve_musikwolke():
         return jsonify({"ok": success, "zone_ids": zone_ids})
     except Exception as exc:
         return _handle_bridge_exception("dissolve", exc)
+
+
+@musikwolke_bp.route("/favorites", methods=["GET"])
+@require_token
+def get_zone_favorites():
+    """Get zone-to-favorite mapping."""
+    if not _bridge:
+        return _bridge_unavailable()
+    try:
+        return jsonify({"ok": True, "zone_favorites": _bridge.get_zone_favorites()})
+    except Exception as exc:
+        return _handle_bridge_exception("favorites.get", exc)
+
+
+@musikwolke_bp.route("/favorites/<zone_id>", methods=["POST"])
+@require_token
+def set_zone_favorite(zone_id: str):
+    """Set a preselected favorite for a zone.
+
+    Body: {"favorite_name": "..."}
+    """
+    if not _bridge:
+        return _bridge_unavailable()
+
+    if not _validate_zone_id(zone_id):
+        return _json_error("Invalid zone_id format", 400)
+
+    data, err = _require_json_object()
+    if err:
+        return err
+
+    favorite_name = str(data.get("favorite_name", "")).strip()
+    if not favorite_name:
+        return _json_error("favorite_name required", 400)
+
+    try:
+        _bridge.set_zone_favorite(zone_id, favorite_name)
+        return jsonify({"ok": True, "zone_id": zone_id, "favorite_name": favorite_name})
+    except Exception as exc:
+        return _handle_bridge_exception("favorites.set", exc)
+
+
+@musikwolke_bp.route("/favorites/<zone_id>", methods=["DELETE"])
+@require_token
+def delete_zone_favorite(zone_id: str):
+    """Remove favorite configuration for a zone."""
+    if not _bridge:
+        return _bridge_unavailable()
+
+    if not _validate_zone_id(zone_id):
+        return _json_error("Invalid zone_id format", 400)
+
+    try:
+        _bridge.set_zone_favorite(zone_id, "")  # Clear favorite
+        return jsonify({"ok": True, "zone_id": zone_id, "favorite_name": None})
+    except Exception as exc:
+        return _handle_bridge_exception("favorites.delete", exc)

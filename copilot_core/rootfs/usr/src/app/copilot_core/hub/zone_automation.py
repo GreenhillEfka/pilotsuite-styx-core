@@ -76,6 +76,9 @@ class ZoneMusicConfig:
     follow_mode: bool = True  # Music follows user between zones
     default_volume_pct: int = 30  # Default playback volume (slider: 0-100)
     fade_duration_s: int = 3  # Cross-fade duration when following
+    favorite_name: str = ""  # Preselected favorite (Sonos favorite name) for this zone
+    favorite_uri: str = ""  # Optional URI for custom station/playlist
+    crossfade_enabled: bool = True  # Enable smooth cross-fade between zones
 
 
 AUTOMATION_MODES = ("off", "learning", "autonomy")

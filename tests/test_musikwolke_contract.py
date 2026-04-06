@@ -212,3 +212,57 @@ def test_musikwolke_missing_bridge_and_runtime_errors_return_consistent_json(mon
     response = client.post("/api/v1/musikwolke/auto-discover")
     assert response.status_code == 500
     assert response.get_json() == {"ok": False, "error": "discover failed"}
+
+
+def test_musikwolke_zone_favorites_contracts(monkeypatch) -> None:
+    """Test zone favorites API endpoints."""
+    bridge = MagicMock()
+    bridge.get_zone_favorites.return_value = {"living": "Jazz Radio", "kitchen": "Pop Hits"}
+    client = _build_client(monkeypatch, bridge=bridge)
+
+    # GET /favorites - retrieve all zone favorites
+    response = client.get("/api/v1/musikwolke/favorites")
+    assert response.status_code == 200
+    assert response.get_json() == {
+        "ok": True,
+        "zone_favorites": {"living": "Jazz Radio", "kitchen": "Pop Hits"},
+    }
+
+    # POST /favorites/<zone_id> - set favorite for a zone
+    response = client.post(
+        "/api/v1/musikwolke/favorites/bedroom",
+        json={"favorite_name": "Classical Mix"},
+    )
+    assert response.status_code == 200
+    assert response.get_json() == {
+        "ok": True,
+        "zone_id": "bedroom",
+        "favorite_name": "Classical Mix",
+    }
+    bridge.set_zone_favorite.assert_called_with("bedroom", "Classical Mix")
+
+    # DELETE /favorites/<zone_id> - remove favorite
+    response = client.delete("/api/v1/musikwolke/favorites/bedroom")
+    assert response.status_code == 200
+    assert response.get_json() == {
+        "ok": True,
+        "zone_id": "bedroom",
+        "favorite_name": None,
+    }
+    bridge.set_zone_favorite.assert_called_with("bedroom", "")
+
+    # Validation: invalid zone_id
+    response = client.post(
+        "/api/v1/musikwolke/favorites/invalid zone!",
+        json={"favorite_name": "Test"},
+    )
+    assert response.status_code == 400
+    assert response.get_json() == {"ok": False, "error": "Invalid zone_id format"}
+
+    # Validation: missing favorite_name
+    response = client.post(
+        "/api/v1/musikwolke/favorites/bedroom",
+        json={},
+    )
+    assert response.status_code == 400
+    assert response.get_json() == {"ok": False, "error": "favorite_name required"}
