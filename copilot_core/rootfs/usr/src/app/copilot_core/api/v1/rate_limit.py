@@ -14,3 +14,6 @@ def create_rate_limit():
 @bp.get("/rate_limits/check")
 def check_rate_limit():
     return jsonify({"ok": True, "allowed": True})
+-e 
+# Backwards compatibility
+rate_limit_bp = bp
