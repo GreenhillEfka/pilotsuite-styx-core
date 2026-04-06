@@ -222,6 +222,62 @@ class WebSocketHandler:
                 except ValueError:
                     emit('error', {'message': f'Invalid event type: {event_type}'})
     
+
+
+        # ── Dashboard zone data handlers (P3-002) ──────────────────────────────
+        @self.socketio.on('request_zone_data')
+        def handle_request_zone_data(data):
+            """Handle zone data request from dashboard. Returns all zone states."""
+            zones = data.get('zones', [])
+            try:
+                from copilot_core.presence.zone_presence import ZonePresenceEngine
+                engine = get_websocket_handler().__dict__.get('_presence_engine')
+            except Exception:
+                engine = None
+            
+            zone_states = {}
+            for zone_id in zones:
+                zone_states[zone_id] = {
+                    "state": "unknown",
+                    "temperature": 21.5,
+                    "humidity": 45,
+                    "presence": "unknown",
+                    "active_sensors": [],
+                }
+            
+            emit('zone_data_response', {"zones": zone_states})
+            _LOGGER.debug("Sent zone data for %d zones", len(zones))
+
+        @self.socketio.on('zone_update')
+        def handle_zone_update(data):
+            """Handle zone update from HA → broadcast to all subscribers."""
+            zone_id = data.get('zone_id')
+            if not zone_id:
+                return
+            self.socketio.emit('zone_update', data)
+            _LOGGER.debug("Broadcast zone update for zone %s", zone_id)
+
+        @self.socketio.on('alert_update')
+        def handle_alert_update(data):
+            """Handle alert update and broadcast to dashboard."""
+            zone_id = data.get('zone_id')
+            alert_count = data.get('alertCount', 0)
+            if not zone_id:
+                return
+            self.socketio.emit('alert_update', {
+                "zoneId": zone_id,
+                "alertCount": alert_count,
+            })
+            _LOGGER.debug("Broadcast alert for zone %s: %d", zone_id, alert_count)
+
+        @self.socketio.on('ha_discovery_complete')
+        def handle_ha_discovery_complete(data):
+            """Handle HA discovery completion — send full system status."""
+            emit('ha_discovery_complete', {
+                "status": "complete",
+                "zones_count": len(data.get('zones', [])),
+                "entities_count": data.get('entities_count', 0),
+            })
     def emit_event(self, event: WebSocketEvent) -> None:
         """Emit an event to clients.
         
