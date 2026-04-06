@@ -54,7 +54,7 @@ def send_message(session_id: str):
     data = request.get_json()
     
     if not data or "message" not in data:
-        return jsonify({"error": "Message required"}), 400
+        return bad_request("Message required", req=request)
     
     message = data["message"]
     context = data.get("context", {})
@@ -74,7 +74,7 @@ def send_message(session_id: str):
         })
     except Exception as e:
         _LOGGER.error(f"Chat error: {e}")
-        return jsonify({"error": str(e)}), 500
+        return internal_error("Chat processing failed", str(e), request)
 
 
 @chat_bp.route("/webhooks/telegram", methods=["POST"])
@@ -96,7 +96,7 @@ def telegram_webhook():
         
         return jsonify({"status": "processed", "response": response.get("response", "")})
     except Exception as e:
-        return jsonify({"status": "error", "error": str(e)}), 500
+        return internal_error("Chat processing failed", str(e), request)
 
 
 @chat_bp.route("/webhooks/rest", methods=["POST"])
@@ -107,7 +107,7 @@ def rest_webhook():
     session_id = data.get("session_id", "rest_default")
     
     if not query:
-        return jsonify({"error": "Query required"}), 400
+        return bad_request("Query required", req=request)
     
     try:
         from copilot_core.styx.chat_handler import ChatHandler
@@ -120,4 +120,4 @@ def rest_webhook():
             "response": response.get("response", ""),
         })
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return internal_error("Chat processing failed", str(e), request)
