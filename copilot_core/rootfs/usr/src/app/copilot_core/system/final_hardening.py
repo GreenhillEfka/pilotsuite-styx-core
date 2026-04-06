@@ -50,8 +50,8 @@ class SystemConfigManager:
     def __init__(self):
         self._locked = False
         self._config = {
-            "api_version": "1.0.0",
-            "environment": "stable",
+            "api_version": "1.0.0-rc5",
+            "environment": "testing",
             "security_level": "high"
         }
 
@@ -84,8 +84,8 @@ def lock_system():
 @final_hardening_bp.route("/status/final", methods=["GET"])
 def get_final_status():
     return jsonify({
-        "version": "1.0.0",
-        "build": "stable",
+        "version": "1.0.0-rc5",
+        "build": "release_candidate",
         "ready": run_final_sanity_check(),
         "integrity": "verified"
     })
