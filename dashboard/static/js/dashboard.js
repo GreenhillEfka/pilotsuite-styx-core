@@ -542,3 +542,21 @@ HabitusDashboard.prototype.renderBrainGraphWidget = function() {
         if (grid) grid.innerHTML = html;
     }
 };
+
+// Anomaly widget (P3-005)
+window.addEventListener('DOMContentLoaded', () => {
+    const el = document.createElement('div');
+    el.id = 'anomaly-widgets';
+    el.style.cssText = 'position:fixed;bottom:60px;right:24px;width:280px;z-index:200;display:flex;flex-direction:column;gap:6px;';
+    const footer = document.querySelector('.dashboard-footer');
+    if (footer) footer.parentElement.insertBefore(el, footer);
+    fetch('/api/v1/anomaly/history?limit=5').then(r => r.ok ? r.json() : {anomalies:[]}).then(d => {
+        const c = document.getElementById('anomaly-widgets');
+        if (!c || !d.anomalies) return;
+        const m = {low:'#4caf50',medium:'#ff9800',high:'#f44336',critical:'#9c27b0'};
+        c.innerHTML = d.anomalies.slice(0,3).map(a =>
+            '<div style="background:#1e1e2e;border-left:3px solid '+(m[a.severity]||'#9e9e9e')+';padding:6px 10px;border-radius:4px;font-size:11px;color:#e0e0e0">'
+            +'<b>'+(a.anomaly_type||'?')+'</b> '+((a.zone_id)||'')+'<br><span style="color:#9e9e9e">'+(a.description||'')+'</span></div>'
+        ).join('');
+    }).catch(() => {});
+});
