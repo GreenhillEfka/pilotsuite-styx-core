@@ -1,6 +1,6 @@
 # PilotSuite Styx Core
 
-**Version:** 15.3.0  
+**Version:** 1.0.0-rc2  
 **Status:** ✅ Life-Long-Learning Dachsystem — End-to-End Verkabelt
 
 ---
