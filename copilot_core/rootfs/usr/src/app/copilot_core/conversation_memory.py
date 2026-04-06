@@ -123,10 +123,20 @@ class ConversationMemory:
                 conn.close()
 
     def store_message(self, role: str, content: str, character: str = "copilot",
-                      mood_context: dict = None, conversation_id: str = None) -> int:
+                      mood_context: dict = None, conversation_id: str = None,
+                      user_id: str = None) -> int:
         """Store a conversation message and extract preferences.
 
-        Returns the message ID.
+        Args:
+            role: "user" or "assistant"
+            content: Message content
+            character: Character preset name
+            mood_context: Optional mood context dict
+            conversation_id: Optional conversation session ID
+            user_id: Optional user ID for per-user preference learning
+
+        Returns:
+            The message ID.
         """
         now = time.time()
         mood_json = json.dumps(mood_context or {})
@@ -138,6 +148,15 @@ class ConversationMemory:
         prefs = {}
         if role == "user":
             prefs = self._extract_preferences(content)
+            
+            # Also learn preferences via the new per-user system (P1-003)
+            if user_id:
+                try:
+                    from copilot_core.preference_learning import get_preference_learner
+                    learner = get_preference_learner()
+                    learner.learn_from_message(user_id, content, {"topic_tags": topic_tags})
+                except Exception as e:
+                    logger.debug("Preference learning failed for user %s: %s", user_id, e)
 
         with self._lock:
             conn = sqlite3.connect(self._db_path)
@@ -151,7 +170,7 @@ class ConversationMemory:
                 )
                 msg_id = cursor.lastrowid
 
-                # Update user preferences table
+                # Update user preferences table (legacy global system)
                 for key, value in prefs.items():
                     self._upsert_preference(conn, key, value, "explicit")
 
@@ -250,8 +269,25 @@ class ConversationMemory:
             finally:
                 conn.close()
 
-    def get_preferences_for_prompt(self) -> str:
-        """Get user preferences formatted for LLM system prompt injection."""
+    def get_preferences_for_prompt(self, user_id: str = None) -> str:
+        """Get user preferences formatted for LLM system prompt injection.
+        
+        Args:
+            user_id: Optional user ID for per-user preferences (P1-003).
+                    If None, uses legacy global preferences.
+        """
+        # Try new per-user system first (P1-003)
+        if user_id:
+            try:
+                from copilot_core.preference_learning import get_preference_learner
+                learner = get_preference_learner()
+                prefs_str = learner.get_preferences_for_prompt(user_id)
+                if prefs_str:
+                    return prefs_str
+            except Exception as e:
+                logger.debug("Failed to get per-user preferences for %s: %s", user_id, e)
+        
+        # Fallback to legacy global preferences
         prefs = self.get_user_preferences()
         if not prefs:
             return ""
