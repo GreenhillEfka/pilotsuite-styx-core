@@ -4,6 +4,7 @@ import logging
 from flask import Blueprint, jsonify, request
 _LOGGER = logging.getLogger(__name__)
 bp = Blueprint("metrics", __name__, url_prefix="/api/v1")
+metrics_bp = bp  # Alias for blueprint.py import
 @bp.get("/metrics/summary")
 def get_metrics_summary():
     return jsonify({"ok": True, "cpu": 25, "memory": 128, "requests_per_sec": 10})
