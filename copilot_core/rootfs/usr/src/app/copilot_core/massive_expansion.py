@@ -80,4 +80,4 @@ def init_massive_expansion_api(bp):
 
     @bp.route("/system/version", methods=["GET"])
     def get_version():
-        return {"version": "1.0.0", "status": "production", "tag": "v1.0.0-final"}
+        return {"version": "1.0.0", "status": "stable", "tag": "v1.0.0"}
