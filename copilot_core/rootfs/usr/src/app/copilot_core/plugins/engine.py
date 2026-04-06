@@ -177,7 +177,7 @@ class PluginEngine:
         plugin_dirs: Optional[List[str]] = None,
         *,
         plugins_dir: Optional[str] = None,
-        core_version: str = "15.3.0",
+        core_version: str = "1.0.0",
     ):
         if plugins_dir is not None:
             normalized_dirs = [str(plugins_dir)]
@@ -696,7 +696,7 @@ def create_plugin_engine(
     plugin_dirs: Optional[List[str]] = None,
     *,
     plugins_dir: Optional[str] = None,
-    core_version: str = "15.3.0",
+    core_version: str = "1.0.0",
 ) -> PluginEngine:
     """Factory function to create plugin engine.
 

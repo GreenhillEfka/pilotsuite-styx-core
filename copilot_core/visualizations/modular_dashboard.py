@@ -373,14 +373,14 @@ class UpdateManager:
             self._updates = {
                 "core": UpdateInfo(
                     component="core",
-                    current_version="15.3.0",
-                    available_version="15.3.0",
+                    current_version="1.0.0",
+                    available_version="1.0.0",
                     is_available=False,
                 ),
                 "ha": UpdateInfo(
                     component="ha",
-                    current_version="15.3.0",
-                    available_version="15.3.0",
+                    current_version="1.0.0",
+                    available_version="1.0.0",
                     is_available=False,
                 ),
                 "dependencies": UpdateInfo(

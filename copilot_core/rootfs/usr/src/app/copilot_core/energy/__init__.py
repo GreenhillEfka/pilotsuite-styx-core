@@ -67,4 +67,4 @@ __all__ = [
     "TariffPeriod",
     "create_energy_optimization_engine",
 ]
-__version__ = "0.5.0"
+__version__ = "1.0.0"
