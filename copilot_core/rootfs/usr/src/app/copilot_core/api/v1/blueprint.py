@@ -26,6 +26,7 @@ from copilot_core.api.v1.notifications import bp as notifications_bp
 from copilot_core.api.v1.user_hints import bp as user_hints_bp
 from copilot_core.api.v1.conversation import conversation_bp
 from copilot_core.api.v1.preferences import bp as preferences_bp
+from copilot_core.api.v1.calendar import bp as calendar_bp
 
 # Phase 5: Cross-Home Sync and Collective Intelligence
 from copilot_core.sharing.api import sharing_bp
@@ -74,6 +75,9 @@ api_v1.register_blueprint(conversation_bp)
 # Register Multi-User Preference Learning API (P1-003)
 api_v1.register_blueprint(preferences_bp)
 
+# Register Calendar API
+api_v1.register_blueprint(calendar_bp)
+
 # Register Phase 5 APIs
 api_v1.register_blueprint(sharing_bp)
 api_v1.register_blueprint(federated_bp)
@@ -113,6 +117,7 @@ from copilot_core.api.v1.auth import auth_bp
 from copilot_core.api.v1.chat import chat_bp
 from copilot_core.api.v1.energy_forecast import energy_forecast_bp
 from copilot_core.api.v1.predictive import predictive_bp
+from copilot_core.api.v1.advanced_analytics import advanced_analytics_bp
 
 # Register additional blueprints
 api_v1.register_blueprint(ml_forecast_bp)
@@ -129,3 +134,4 @@ api_v1.register_blueprint(auth_bp)
 api_v1.register_blueprint(chat_bp)
 api_v1.register_blueprint(energy_forecast_bp)
 api_v1.register_blueprint(predictive_bp)
+api_v1.register_blueprint(advanced_analytics_bp)

@@ -1,0 +1,329 @@
+# PilotSuite Advanced Analytics Dashboard Card
+# Home Assistant Lovelace Card Configuration
+# 
+# This card displays the Advanced Analytics Dashboard for PilotSuite.
+# It fetches data from the /api/v1/analytics/overview endpoint and renders:
+# - Module health cards with status indicators
+# - System-wide KPIs
+# - Time-series charts for key metrics
+# - Attention-required alerts
+
+type: custom:stack-in-card
+cards:
+  # Header with title and last updated timestamp
+  - type: custom:button-card
+    template:
+      - card_header
+    custom_fields:
+      title: PilotSuite Advanced Analytics
+      subtitle: '[[[ return entity.attributes.last_updated; ]]]'
+    styles:
+      card:
+        - background: var(--card-background-color)
+        - border-radius: 12px
+        - box-shadow: var(--ha-card-box-shadow)
+
+  # Overall System Health KPI
+  - type: horizontal-stack
+    cards:
+      - type: custom:mini-graph-card
+        name: System Health
+        icon: mdi:heart-pulse
+        entities:
+          - entity: sensor.pilotsuite_system_health
+        show:
+          graph: line
+          extrema: true
+        color_thresholds:
+          - value: 0
+            color: '#ff4444'
+          - value: 0.6
+            color: '#ffaa00'
+          - value: 0.8
+            color: '#00cc66'
+        hours_to_show: 168
+        points_per_hour: 0.5
+
+      - type: custom:mini-graph-card
+        name: Total Events (24h)
+        icon: mdi:chart-timeline-variant
+        entities:
+          - entity: sensor.pilotsuite_total_events
+        show:
+          graph: bar
+        hours_to_show: 24
+        color: '#4a90d9'
+
+      - type: custom:mini-graph-card
+        name: Acceptance Rate
+        icon: mdi:thumb-up-outline
+        entities:
+          - entity: sensor.pilotsuite_acceptance_rate
+        show:
+          graph: line
+        color_thresholds:
+          - value: 0
+            color: '#ff4444'
+          - value: 0.5
+            color: '#ffaa00'
+          - value: 0.7
+            color: '#00cc66'
+        hours_to_show: 168
+
+  # Module Health Cards Grid
+  - type: grid
+    columns: 2
+    square: false
+    cards:
+      # Zone Truth Module
+      - type: custom:button-card
+        template:
+          - analytics_module_card
+        entity: sensor.pilotsuite_zone_truth_health
+        variables:
+          module_name: Zone Truth
+          module_id: zone_truth
+          icon: mdi:map-check
+        custom_fields:
+          health_score: '[[[ return entity.state; ]]]'
+          status: '[[[ return entity.attributes.status; ]]]'
+          total_events: '[[[ return entity.attributes.total_events; ]]]'
+          trend_7d: '[[[ return entity.attributes.trend_7d; ]]]'
+
+      # Proposal Lifecycle Module
+      - type: custom:button-card
+        template:
+          - analytics_module_card
+        entity: sensor.pilotsuite_proposal_lifecycle_health
+        variables:
+          module_name: Proposal Lifecycle
+          module_id: proposal_lifecycle
+          icon: mdi:file-document-check-outline
+        custom_fields:
+          health_score: '[[[ return entity.state; ]]]'
+          status: '[[[ return entity.attributes.status; ]]]'
+          total_events: '[[[ return entity.attributes.total_events; ]]]'
+          trend_7d: '[[[ return entity.attributes.trend_7d; ]]]'
+
+      # Action Closure Module
+      - type: custom:button-card
+        template:
+          - analytics_module_card
+        entity: sensor.pilotsuite_action_closure_health
+        variables:
+          module_name: Action Closure
+          module_id: action_closure
+          icon: mdi:check-circle-outline
+        custom_fields:
+          health_score: '[[[ return entity.state; ]]]'
+          status: '[[[ return entity.attributes.status; ]]]'
+          total_events: '[[[ return entity.attributes.total_events; ]]]'
+          trend_7d: '[[[ return entity.attributes.trend_7d; ]]]'
+
+      # Brain & Neuron Module
+      - type: custom:button-card
+        template:
+          - analytics_module_card
+        entity: sensor.pilotsuite_brain_neuron_health
+        variables:
+          module_name: Brain & Neuron
+          module_id: brain_neuron
+          icon: mdi:brain
+        custom_fields:
+          health_score: '[[[ return entity.state; ]]]'
+          status: '[[[ return entity.attributes.status; ]]]'
+          total_events: '[[[ return entity.attributes.total_events; ]]]'
+          trend_7d: '[[[ return entity.attributes.trend_7d; ]]]'
+
+      # Chat & RAG Module
+      - type: custom:button-card
+        template:
+          - analytics_module_card
+        entity: sensor.pilotsuite_chat_rag_health
+        variables:
+          module_name: Chat & RAG
+          module_id: chat_rag
+          icon: mdi:chat-processing-outline
+        custom_fields:
+          health_score: '[[[ return entity.state; ]]]'
+          status: '[[[ return entity.attributes.status; ]]]'
+          total_events: '[[[ return entity.attributes.total_events; ]]]'
+          trend_7d: '[[[ return entity.attributes.trend_7d; ]]]'
+
+  # Time Series Chart - All Module Health Trends
+  - type: custom:mini-graph-card
+    name: Module Health Trends (7 Days)
+    icon: mdi:chart-areaspline
+    entities:
+      - entity: sensor.pilotsuite_zone_truth_health
+        name: Zone Truth
+      - entity: sensor.pilotsuite_proposal_lifecycle_health
+        name: Proposals
+      - entity: sensor.pilotsuite_action_closure_health
+        name: Actions
+      - entity: sensor.pilotsuite_brain_neuron_health
+        name: Brain
+      - entity: sensor.pilotsuite_chat_rag_health
+        name: Chat
+    hours_to_show: 168
+    points_per_hour: 0.25
+    show:
+      graph: line
+      legend: true
+      points: false
+
+  # Attention Required Section
+  - type: custom:stack-in-card
+    cards:
+      - type: custom:button-card
+        template:
+          - card_header
+        custom_fields:
+          title: '⚠️ Attention Required'
+        styles:
+          card:
+            - background: var(--card-background-color)
+      - type: entities
+        entities:
+          - entity: sensor.pilotsuite_attention_count
+            name: Items Requiring Attention
+        state_color: true
+
+  # Footer with refresh button
+  - type: custom:button-card
+    template:
+      - card_footer
+    tap_action:
+      action: call-service
+      service: homeassistant.update_entity
+      service_data:
+        entity_id:
+          - sensor.pilotsuite_system_health
+          - sensor.pilotsuite_total_events
+          - sensor.pilotsuite_acceptance_rate
+          - sensor.pilotsuite_zone_truth_health
+          - sensor.pilotsuite_proposal_lifecycle_health
+          - sensor.pilotsuite_action_closure_health
+          - sensor.pilotsuite_brain_neuron_health
+          - sensor.pilotsuite_chat_rag_health
+    custom_fields:
+      text: Refresh Analytics Data
+
+# -----------------------------------------------------------------------------
+# Templates for the card
+# -----------------------------------------------------------------------------
+
+templates:
+  analytics_module_card:
+    base: card
+    tap_action:
+      action: more-info
+    hold_action:
+      action: navigate
+      navigation_path: /analytics
+    styles:
+      card:
+        - height: 140px
+        - padding: 12px
+        - border-radius: 12px
+        - background: >
+            [[[
+              const status = entity?.attributes?.status || 'unknown';
+              if (status === 'critical') return 'rgba(255, 68, 68, 0.15)';
+              if (status === 'warning') return 'rgba(255, 170, 0, 0.15)';
+              return 'rgba(0, 204, 102, 0.15)';
+            ]]]
+        - border: >
+            [[[
+              const status = entity?.attributes?.status || 'unknown';
+              if (status === 'critical') return '2px solid rgba(255, 68, 68, 0.5)';
+              if (status === 'warning') return '2px solid rgba(255, 170, 0, 0.5)';
+              return '2px solid rgba(0, 204, 102, 0.5)';
+            ]]]
+      grid:
+        - grid-template-areas: '"icon" "name" "health" "events" "trend"'
+        - grid-template-columns: 1fr
+        - grid-template-rows: auto auto auto auto auto
+      custom_fields:
+        icon:
+          - justify-self: center
+          - font-size: 28px
+        name:
+          - justify-self: center
+          - font-size: 14px
+          - font-weight: 500
+          - margin-top: 4px
+        health:
+          - justify-self: center
+          - font-size: 24px
+          - font-weight: bold
+          - margin-top: 4px
+        events:
+          - justify-self: center
+          - font-size: 12px
+          - color: var(--secondary-text-color)
+          - margin-top: 2px
+        trend:
+          - justify-self: center
+          - font-size: 12px
+          - margin-top: 4px
+    custom_fields:
+      icon:
+        card:
+          type: custom:button-card
+          icon: '[[[ return variables.icon; ]]]'
+          styles:
+            icon:
+              - width: 28px
+              - height: 28px
+              - color: >
+                  [[[
+                    const status = entity?.attributes?.status || 'unknown';
+                    if (status === 'critical') return '#ff4444';
+                    if (status === 'warning') return '#ffaa00';
+                    return '#00cc66';
+                  ]]]
+      name: '[[[ return variables.module_name; ]]]'
+      health: '[[[ return `Health: ${(entity.state * 100).toFixed(0)}%`; ]]]'
+      events: '[[[ return `${variables.total_events || 0} events`; ]]]'
+      trend: >
+        [[[
+          const trend = variables.trend_7d || 0;
+          const icon = trend > 0 ? '↑' : trend < 0 ? '↓' : '→';
+          const color = trend > 0.02 ? '#00cc66' : trend < -0.02 ? '#ff4444' : 'var(--secondary-text-color)';
+          return `<span style="color: ${color}">${icon} ${Math.abs(trend * 100).toFixed(1)}% (7d)</span>`;
+        ]]]
+
+  card_header:
+    base: card
+    styles:
+      card:
+        - padding: 12px
+        - border-radius: 12px 12px 0 0
+        - background: var(--card-background-color)
+      grid:
+        - grid-template-areas: '"title subtitle"'
+        - grid-template-columns: 1fr auto
+      custom_fields:
+        title:
+          - font-size: 16px
+          - font-weight: 600
+        subtitle:
+          - font-size: 12px
+          - color: var(--secondary-text-color)
+
+  card_footer:
+    base: card
+    styles:
+      card:
+        - padding: 12px
+        - border-radius: 0 0 12px 12px
+        - background: var(--card-background-color)
+        - text-align: center
+      grid:
+        - grid-template-areas: '"text"'
+      custom_fields:
+        text:
+          - font-size: 13px
+          - color: var(--primary-text-color)
+          - cursor: pointer

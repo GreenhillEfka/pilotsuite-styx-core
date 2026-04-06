@@ -1,17 +1,17 @@
 """Module Configuration API (Slice 149).
 
-<<<<<<< HEAD
+
 Modular JSON editors for zone modules with field-level validation.
-=======
+
 Modular JSON editors for zone modules with validation.
->>>>>>> v1.0.0-rc2
+
 """
 
 from __future__ import annotations
 
 import logging
 from flask import Blueprint, jsonify, request
-<<<<<<< HEAD
+
 from typing import Any, Dict, List, Optional
 
 _LOGGER = logging.getLogger(__name__)
@@ -56,7 +56,7 @@ def get_zone_module_config(zone_id: str, module_id: str):
     if not schema:
         return jsonify({"ok": False, "error": "module_not_supported"}), 404
         
-=======
+
 from typing import Any, Dict, List, Optional, Union
 
 _LOGGER = logging.getLogger(__name__)
@@ -165,12 +165,12 @@ def set_module_config(zone_id: str, module_id: str):
     
     _LOGGER.info("Updated config for %s in zone %s", module_id, zone_id)
     
->>>>>>> v1.0.0-rc2
+
     return jsonify({
         "ok": True,
         "zone_id": zone_id,
         "module_id": module_id,
-<<<<<<< HEAD
+
         "config": {f["key"]: f["default"] for f in schema["fields"]},
         "schema": schema
     })
@@ -211,7 +211,7 @@ def validate_module_config(module_id: str):
     """Standalone validation endpoint for live UI feedback."""
     # Logic reused from POST /zones/...
     return jsonify({"ok": True, "valid": True})
-=======
+
         "config": config,
     })
 
@@ -284,4 +284,4 @@ def validate_module_config(module_id: str):
             "valid": False,
             "field_errors": result["errors"],
         }), 400
->>>>>>> v1.0.0-rc2
+

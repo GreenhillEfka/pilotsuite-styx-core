@@ -110,11 +110,11 @@ class EnergyService:
             "hvac": {"daily_kwh": 8.0, "peak_watts": 2000},
         }
 
-        # Anomaly thresholds
+        # Anomaly thresholds (σ-values)
         self._anomaly_thresholds = {
-            "low": 0.15,      # 15% deviation
-            "medium": 0.30,   # 30% deviation
-            "high": 0.50,     # 50% deviation
+            "low": 0.15,      # 15% deviation (placeholder)
+            "medium": 0.30,   # 30% deviation (placeholder)
+            "high": 0.50,     # 50% deviation (placeholder)
         }
 
     def _is_cache_valid(self) -> bool:
