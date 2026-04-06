@@ -117,9 +117,9 @@ const IntelligenceView: React.FC = () => {
 
   return (
     <div className="p-6 space-y-6 bg-ps-bg-dark min-h-screen text-white">
-      <div className="flex justify-between items-center">
+      <div className="flex justify-between items-center p-4 -m-6 mb-6 bg-gradient-to-r from-ps-brand-blue to-ps-brand-dark rounded-t-lg">
         <div>
-          <h1 className="text-2xl font-bold">Intelligence & RAG Trace</h1>
+          <h1 className="text-2xl font-bold text-white">Intelligence & RAG Trace</h1>
           {activeQuery && (
             <p className="text-ps-text-dim text-sm mt-1">
               Query: "{activeQuery}"
@@ -134,7 +134,7 @@ const IntelligenceView: React.FC = () => {
       <div className="space-y-3">
         {traces.map((step) => (
           <Card
-            className={`border-l-4 ${getStageColor(step.stage)} bg-ps-card-dark border-zinc-800 transition-all hover:translate-x-1`}
+            className={`border-l-4 ${getStageColor(step.stage)} bg-ps-card-dark border-zinc-800 transition-all hover:translate-x-1 active:scale-95 ${step.stage === 'retrieval' ? 'shadow-[0_0_15px_rgba(0,191,255,0.5)]' : ''}`}
             key={step.id}
           >
             <CardContent className="p-4">

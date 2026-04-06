@@ -69,13 +69,13 @@ const DashboardView: React.FC = () => {
 
   return (
     <div className="p-6 space-y-6 bg-ps-bg-dark min-h-screen text-white">
-      <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold">PilotSuite SOTA Dashboard</h1>
+      <div className="flex justify-between items-center p-4 -m-6 mb-6 bg-gradient-to-r from-ps-brand-blue to-ps-brand-dark rounded-t-lg">
+        <h1 className="text-2xl font-bold text-white">PilotSuite SOTA Dashboard</h1>
         <Badge variant={health === 'Healthy' ? 'success' : 'warning'}>{health}</Badge>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className="bg-ps-card-dark border-zinc-800">
+        <Card className="bg-ps-card-dark border-zinc-800 active:scale-95 transition-transform">
           <CardHeader><CardTitle className="text-sm">API Latency (p95)</CardTitle></CardHeader>
           <CardContent>
             <div className="text-2xl font-mono text-ps-brand-blue">{latest ? `${latest.latencyMs.toFixed(0)}ms` : '—'}</div>

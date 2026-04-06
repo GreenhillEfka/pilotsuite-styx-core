@@ -30,9 +30,9 @@ const ZonesView: React.FC = () => {
 
   return (
     <div className="p-6 space-y-6 bg-ps-bg-dark min-h-screen text-white">
-      <div className="flex justify-between items-center">
+      <div className="flex justify-between items-center p-4 -m-6 mb-6 bg-gradient-to-r from-ps-brand-blue to-ps-brand-dark rounded-t-lg">
         <div>
-          <h1 className="text-2xl font-bold">Zones & Symbiosis Mapper</h1>
+          <h1 className="text-2xl font-bold text-white">Zones & Symbiosis Mapper</h1>
           <p className="text-ps-text-dim text-sm mt-1">HA Areas ↔ PilotSuite Habitus Sync Status</p>
         </div>
         <Button 
@@ -40,7 +40,7 @@ const ZonesView: React.FC = () => {
           size="sm" 
           onClick={handleManualSync}
           disabled={isSyncing}
-          className="border-ps-brand-blue text-ps-brand-blue hover:bg-ps-brand-blue/10"
+          className="border-ps-brand-blue text-ps-brand-blue hover:bg-ps-brand-blue/10 active:scale-95 transition-transform"
         >
           <RefreshCw className={`w-4 h-4 mr-2 ${isSyncing ? 'animate-spin' : ''}`} />
           Run Zero-Config Reconciler
@@ -49,7 +49,7 @@ const ZonesView: React.FC = () => {
 
       <div className="grid grid-cols-1 gap-4">
         {links.map((link) => (
-          <Card key={link.id} className="bg-ps-card-dark border-zinc-800 hover:border-zinc-700 transition-all">
+          <Card key={link.id} className="bg-ps-card-dark border-zinc-800 hover:border-zinc-700 transition-all active:scale-95">
             <CardContent className="p-4 flex items-center justify-between">
               <div className="flex items-center gap-8 flex-1">
                 {/* HA Source */}
@@ -80,10 +80,10 @@ const ZonesView: React.FC = () => {
               </div>
 
               <div className="flex gap-2">
-                <Button size="icon" variant="ghost" className="text-ps-text-dim hover:text-white">
+                <Button size="icon" variant="ghost" className="text-ps-text-dim hover:text-white active:scale-95 transition-transform">
                   <CheckCircle2 className="w-4 h-4" />
                 </Button>
-                <Button size="icon" variant="ghost" className="text-ps-text-dim hover:text-red-400">
+                <Button size="icon" variant="ghost" className="text-ps-text-dim hover:text-red-400 active:scale-95 transition-transform">
                   <Unlink className="w-4 h-4" />
                 </Button>
               </div>
@@ -94,7 +94,7 @@ const ZonesView: React.FC = () => {
         {links.length === 0 && (
           <div className="text-center py-12 border-2 border-dashed border-zinc-800 rounded-lg">
             <p className="text-ps-text-dim">No zone mappings found.</p>
-            <Button size="sm" className="mt-4 bg-ps-brand-blue hover:bg-ps-brand-blue/80" onClick={handleManualSync}>
+            <Button size="sm" className="mt-4 bg-ps-brand-blue hover:bg-ps-brand-blue/80 active:scale-95 transition-transform" onClick={handleManualSync}>
               Run Initial Discovery
             </Button>
           </div>

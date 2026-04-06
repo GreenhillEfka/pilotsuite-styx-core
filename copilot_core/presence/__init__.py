@@ -5,6 +5,7 @@ Unified presence detection with multi-sensor fusion:
 - Wi-Fi/BLE fingerprinting — P3-008
 - Bayesian sensor fusion
 - Zone-aware presence with hold states
+- Calendar-aware presence prediction
 """
 from __future__ import annotations
 
@@ -22,6 +23,7 @@ from .mmwave_radar import (
     reset_mmwave_engine,
     HomeAssistantIntegration,
     TargetTracker,
+    fuse_calendar_presence,
 )
 
 from .wifi_ble_fingerprint import (
@@ -59,6 +61,7 @@ __all__ = [
     "reset_mmwave_engine",
     "HomeAssistantIntegration",
     "TargetTracker",
+    "fuse_calendar_presence",
     # Wi-Fi/BLE fingerprinting (P3-008)
     "FingerprintEngine",
     "DeviceFingerprintProfile",
@@ -77,4 +80,4 @@ __all__ = [
     "HoldAnalyticsSummaryV1",
 ]
 
-__version__ = "4.1.0"  # Bumped for P3-009 mmWave integration
+__version__ = "4.2.0"  # Bumped for calendar-aware presence fusion

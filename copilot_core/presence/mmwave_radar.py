@@ -1126,3 +1126,75 @@ def reset_mmwave_engine() -> None:
     global _mmwave_engine, _ha_integration
     _mmwave_engine = None
     _ha_integration = None
+
+
+# =============================================================================
+# Calendar-Aware Presence Fusion
+# =============================================================================
+
+
+def fuse_calendar_presence(
+    mmwave_present: bool,
+    mmwave_confidence: float,
+    calendar_probability: float,
+    calendar_away_events: Optional[List[Dict[str, Any]]] = None,
+    fusion_weight: float = 0.3
+) -> Dict[str, Any]:
+    """Fuse mmWave presence with calendar-based prediction.
+    
+    Uses weighted fusion where mmWave is primary (high confidence)
+    but calendar can influence uncertain states.
+    
+    Args:
+        mmwave_present: mmWave presence detection result
+        mmwave_confidence: mmWave confidence (0.0-1.0)
+        calendar_probability: Calendar-based presence probability (0.0-1.0)
+        calendar_away_events: List of away events from calendar
+        fusion_weight: Weight for calendar influence (0.0-1.0)
+        
+    Returns:
+        Dict with fused presence result
+    """
+    now = datetime.now(timezone.utc)
+    
+    # High-confidence mmWave detection overrides calendar
+    if mmwave_confidence >= 0.8:
+        fused_present = mmwave_present
+        fused_confidence = mmwave_confidence
+        fusion_reason = "mmWave high-confidence"
+    
+    # Low-confidence mmWave + calendar agreement
+    elif mmwave_confidence >= 0.5:
+        # Weighted fusion
+        if mmwave_present:
+            fused_probability = (mmwave_confidence * (1 - fusion_weight)) + (calendar_probability * fusion_weight)
+        else:
+            fused_probability = (mmwave_confidence * (1 - fusion_weight)) + ((1 - calendar_probability) * fusion_weight)
+        
+        fused_present = fused_probability >= 0.5
+        fused_confidence = max(0.3, fused_probability if fused_present else 1 - fused_probability)
+        fusion_reason = "mmWave + calendar fusion"
+    
+    # No mmWave detection - rely on calendar
+    else:
+        fused_present = calendar_probability >= 0.5
+        fused_confidence = max(calendar_probability, 1 - calendar_probability) * 0.6
+        fusion_reason = "calendar-only (no mmWave)"
+    
+    # Build result
+    result = {
+        "fused_present": fused_present,
+        "fused_confidence": round(fused_confidence, 3),
+        "mmwave_present": mmwave_present,
+        "mmwave_confidence": round(mmwave_confidence, 3),
+        "calendar_probability": round(calendar_probability, 3),
+        "fusion_reason": fusion_reason,
+        "fusion_weight": fusion_weight,
+        "timestamp": now.isoformat(),
+    }
+    
+    if calendar_away_events:
+        result["away_event_count"] = len(calendar_away_events)
+        result["next_away_event"] = calendar_away_events[0] if calendar_away_events else None
+    
+    return result

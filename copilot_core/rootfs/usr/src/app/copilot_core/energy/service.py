@@ -111,10 +111,11 @@ class EnergyService:
         }
 
         # Anomaly thresholds (σ-values)
+        # Specified as [mean + 1σ, mean + 2σ, mean + 3σ] in kWh
         self._anomaly_thresholds = {
-            "low": 0.15,      # 15% deviation (placeholder)
-            "medium": 0.30,   # 30% deviation (placeholder)
-            "high": 0.50,     # 50% deviation (placeholder)
+            "low": {"washer": 1.7, "dryer": 4.0, "heat_pump": 2.9, "ev_charger": 12.2},
+            "medium": {"washer": 1.9, "dryer": 4.5, "heat_pump": 3.3, "ev_charger": 13.4},
+            "high": {"washer": 2.1, "dryer": 5.0, "heat_pump": 3.7, "ev_charger": 14.6}
         }
 
     def _is_cache_valid(self) -> bool:
