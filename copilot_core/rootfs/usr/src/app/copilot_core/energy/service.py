@@ -269,11 +269,16 @@ class EnergyService:
         if expected_total > 0:
             deviation = (current_consumption - expected_total) / expected_total
 
-            if abs(deviation) >= self._anomaly_thresholds["high"]:
+            # Aggregate thresholds based on sum of 1σ values
+            aggregate_1sigma = sum(self._anomaly_thresholds["low"].values())
+            aggregate_2sigma = sum(self._anomaly_thresholds["medium"].values())
+            aggregate_3sigma = sum(self._anomaly_thresholds["high"].values())
+
+            if current_consumption >= aggregate_3sigma:
                 severity = "high"
-            elif abs(deviation) >= self._anomaly_thresholds["medium"]:
+            elif current_consumption >= aggregate_2sigma:
                 severity = "medium"
-            elif abs(deviation) >= self._anomaly_thresholds["low"]:
+            elif current_consumption >= aggregate_1sigma:
                 severity = "low"
             else:
                 severity = None
@@ -293,35 +298,54 @@ class EnergyService:
                 )
                 anomalies.append(anomaly)
 
-        # Device-specific anomaly checks
+        # Device-specific anomaly checks using σ-thresholds
         device_checks = [
             ("washer", "sensor.washer_energy"),
             ("dryer", "sensor.dryer_energy"),
-            ("dishwasher", "sensor.dishwasher_energy"),
+            ("heat_pump", "sensor.heat_pump_energy"),
             ("ev_charger", "sensor.ev_charger_energy"),
         ]
 
         for device_type, entity_id in device_checks:
             current = self._read_entity(entity_id)
             if current is not None:
-                expected = self._baselines.get(device_type, {}).get("daily_kwh", 0)
-                if expected > 0:
-                    deviation = (current - expected) / expected
-                    if abs(deviation) >= self._anomaly_thresholds["medium"]:
-                        severity = "high" if abs(deviation) >= self._anomaly_thresholds["high"] else "medium"
-                        direction = "above" if deviation > 0 else "below"
-                        anomaly = EnergyAnomaly(
-                            id=self._generate_id("anomaly"),
-                            timestamp=self._get_timestamp(),
-                            device_id=entity_id,
-                            device_type=device_type,
-                            expected_value=expected,
-                            actual_value=current,
-                            deviation_percent=deviation * 100,
-                            severity=severity,
-                            description=f"{device_type} consumption {abs(deviation)*100:.1f}% {direction} expected"
-                        )
-                        anomalies.append(anomaly)
+                # Get σ-thresholds for this device type
+                thresholds = {
+                    "low": self._anomaly_thresholds["low"].get(device_type),
+                    "medium": self._anomaly_thresholds["medium"].get(device_type),
+                    "high": self._anomaly_thresholds["high"].get(device_type)
+                }
+
+                # Skip if no thresholds defined for this device
+                if thresholds["low"] is None:
+                    continue
+
+                # Determine severity based on σ-thresholds (kWh values)
+                if current >= thresholds["high"]:
+                    severity = "high"
+                elif current >= thresholds["medium"]:
+                    severity = "medium"
+                elif current >= thresholds["low"]:
+                    severity = "low"
+                else:
+                    severity = None
+
+                if severity:
+                    expected = thresholds["low"]  # Use 1σ as baseline reference
+                    deviation = (current - expected) / expected if expected > 0 else 0
+                    direction = "above" if current > expected else "below"
+                    anomaly = EnergyAnomaly(
+                        id=self._generate_id("anomaly"),
+                        timestamp=self._get_timestamp(),
+                        device_id=entity_id,
+                        device_type=device_type,
+                        expected_value=expected,
+                        actual_value=current,
+                        deviation_percent=deviation * 100,
+                        severity=severity,
+                        description=f"{device_type} consumption {current:.1f} kWh exceeds {severity} threshold ({thresholds[severity]:.1f} kWh)"
+                    )
+                    anomalies.append(anomaly)
 
         return anomalies
 

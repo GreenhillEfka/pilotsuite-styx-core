@@ -81,13 +81,13 @@ const DashboardView: React.FC = () => {
             <div className="text-2xl font-mono text-ps-brand-blue">{latest ? `${latest.latencyMs.toFixed(0)}ms` : '—'}</div>
           </CardContent>
         </Card>
-        <Card className="bg-ps-card-dark border-zinc-800">
+        <Card className="bg-ps-card-dark border-zinc-800 active:scale-95 transition-transform">
           <CardHeader><CardTitle className="text-sm">Ops / min</CardTitle></CardHeader>
           <CardContent>
             <div className="text-2xl font-mono text-ps-brand-gold">{latest ? `${latest.ops.toFixed(0)}` : '—'}</div>
           </CardContent>
         </Card>
-        <Card className="bg-ps-card-dark border-zinc-800">
+        <Card className="bg-ps-card-dark border-zinc-800 active:scale-95 transition-transform">
           <CardHeader><CardTitle className="text-sm">Anomaly Score</CardTitle></CardHeader>
           <CardContent>
             <div className="text-2xl font-mono text-ps-brand-red">{latest ? latest.anomaly_score.toFixed(2) : '—'}</div>
@@ -95,7 +95,7 @@ const DashboardView: React.FC = () => {
         </Card>
       </div>
 
-      <Card className="bg-ps-card-dark border-zinc-800 h-64">
+      <Card className="bg-ps-card-dark border-zinc-800 h-64 active:scale-95 transition-transform">
         <CardHeader><CardTitle className="text-sm text-ps-text-dim">System Throughput (Ops/min)</CardTitle></CardHeader>
         <CardContent className="h-full pb-12">
           <ResponsiveContainer width="100%" height="100%">
