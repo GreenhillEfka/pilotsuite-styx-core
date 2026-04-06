@@ -4,6 +4,7 @@ import logging
 from flask import Blueprint, jsonify, request
 _LOGGER = logging.getLogger(__name__)
 bp = Blueprint("rate_limit", __name__, url_prefix="/api/v1")
+rate_limit_bp = bp
 @bp.get("/ratelimit/status")
 def get_ratelimit_status():
     return jsonify({"ok": True, "limit": 100, "remaining": 100})
