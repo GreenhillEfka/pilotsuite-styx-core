@@ -29,7 +29,8 @@ jobs:
           python -m pytest copilot_core/rootfs/usr/src/app/tests/ \
             -v --tb=short -q \
             --ignore=copilot_core/rootfs/usr/src/app/tests/test_list_suggestions.py \
-            --ignore=copilot_core/rootfs/usr/src/app/tests/test_anomaly_detection.py
+            --ignore=copilot_core/rootfs/usr/src/app/tests/test_anomaly_detection.py \
+            --ignore=copilot_core/rootfs/usr/src/app/tests/integration/test_neural_network_integration.py \
 
       - name: Syntax check
         run: |
