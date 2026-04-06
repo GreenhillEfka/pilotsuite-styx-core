@@ -43,7 +43,7 @@ class TestRangeConversions:
         """Test basic bin to range conversion."""
         assert bin_to_range(10, 0.0, 0.1) == 1.05  # Center of bin 10
         assert bin_to_range(0, 0.0, 0.1) == 0.05
-        assert bin_to_range(50, 0.0, 0.1) == 5.05
+        assert abs(bin_to_range(50, 0.0, 0.1) - 5.05) < 0.001
 
 
 class TestSignalProcessing:
