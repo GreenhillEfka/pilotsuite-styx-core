@@ -1,4 +1,4 @@
-"""Workspace API — Slice 352 (CORE ONLY)."""
+"""Workspace API — Slice 442 (CORE ONLY)."""
 from __future__ import annotations
 import logging
 from flask import Blueprint, jsonify, request
@@ -15,6 +15,3 @@ def create_workspace():
 def delete_workspace():
     data = request.get_json() or {}
     return jsonify({"ok": True, "deleted": data.get("id")})
-@bp.get("/workspaces/active")
-def get_active_workspace():
-    return jsonify({"ok": True, "workspace": None})
