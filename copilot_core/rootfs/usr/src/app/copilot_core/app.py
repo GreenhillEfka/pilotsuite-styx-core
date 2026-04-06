@@ -310,6 +310,19 @@ def create_app() -> Flask:
     except Exception:
         logging.getLogger(__name__).exception("Failed to register Zone Presence Hold Analytics API blueprint")
 
+    # Harmonization API endpoints (/api/v1/harmonization/*)
+    try:
+        from copilot_core.api.v1.harmonization import harmonization_bp, set_rules_engine
+        app.register_blueprint(harmonization_bp)
+        
+        # Initialize rules engine connection
+        from copilot_core.orchestration.rules_engine import create_rules_engine
+        rules_engine = create_rules_engine()
+        set_rules_engine(rules_engine)
+        logging.getLogger(__name__).info("Harmonization API registered with rules engine")
+    except Exception:
+        logging.getLogger(__name__).exception("Failed to register Harmonization API blueprint")
+
     # Music/Media Analytics API endpoints (/api/v1/media/analytics/*)
     try:
         from copilot_core.api.v1.music_analytics import music_analytics_bp
