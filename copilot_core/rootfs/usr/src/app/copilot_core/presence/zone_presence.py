@@ -314,7 +314,7 @@ class PresenceModule:
                 continue
             
             is_present = self._sensor_states.get(sensor_id, False)
-            sensor_readings[sensor_id] = (is_present, sensor.sensor_type, sensor.confidence)
+            sensor_readings[sensor_id] = (is_present, sensor.sensor_type.value if hasattr(sensor.sensor_type, 'value') else sensor.sensor_type, sensor.confidence)
             
             if is_present:
                 active_sensors.append(sensor_id)
@@ -892,15 +892,29 @@ SENSOR_TYPE_PRIORS = {
 }
 
 def bayesian_presence_probability(sensor_readings):
+    """Bayesian P(present) via Beta-Binomial conjugate model.
+    
+    Prior: historical base rate per sensor type (Beta distribution).
+    Likelihood: sensor triggered/confirmed.
+    Confidence: scales alpha of prior (reliability weight).
+    """
     if not sensor_readings: return 0.0, "none"
     total_log_odds = 0.0; total_weight = 0.0
     for sid, (triggered, stype, reliability) in sensor_readings.items():
-        a, b = SENSOR_TYPE_PRIORS.get(stype, (2.0, 3.0))
-        post_a = a + (1 if triggered else 0)
-        post_b = b + (0 if triggered else 1)
-        pm = post_a / (post_a + post_b)
-        weight = reliability * math.sqrt(a + b)
-        eps = 1e-6
+        base_a, base_b = SENSOR_TYPE_PRIORS.get(stype, (2.0, 3.0))
+        # Scale prior by sensor confidence (reliability prior modifier)
+        a = base_a * reliability
+        b = base_b * reliability
+        # Posterior after observing evidence
+        if triggered:
+            post_a = a + 1.0; post_b = b
+        else:
+            post_a = a; post_b = b + 1.0
+        # Posterior mean
+        eps = 1e-9
+        pm = (post_a + eps) / (post_a + post_b + 2*eps)
+        # Weight = informativeness of prior (sqrt of sample size)
+        weight = math.sqrt(a + b)
         odds = (pm + eps) / (1 - pm + eps)
         total_log_odds += weight * math.log(odds)
         total_weight += weight
