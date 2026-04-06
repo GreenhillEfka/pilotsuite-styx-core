@@ -262,6 +262,14 @@ def create_app() -> Flask:
     except Exception:
         logging.getLogger(__name__).exception("Failed to register RAG Search Flask wrappers")
 
+    # SPARQL Query Interface for Knowledge Graph (/api/v1/knowledge/sparql)
+    try:
+        from copilot_core.knowledge_graph.sparql_endpoint import sparql_bp
+        app.register_blueprint(sparql_bp)
+        logging.getLogger(__name__).info("SPARQL Query Interface registered")
+    except Exception:
+        logging.getLogger(__name__).exception("Failed to register SPARQL Query Interface blueprint")
+
     # Styx Chat API endpoints (/api/styx/*)
     try:
         from copilot_core.api.v1.styx_chat import bp as styx_chat_bp

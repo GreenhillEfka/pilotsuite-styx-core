@@ -10,6 +10,7 @@ from .models import NodeType, EdgeType, Node, Edge, GraphQuery
 from .graph_store import GraphStore, get_graph_store
 from .builder import GraphBuilder
 from .pattern_importer import PatternImporter
+from .sparql_endpoint import SPARQLParser, SPARQLExecutor, execute_sparql, validate_sparql_query, sparql_bp
 
 __all__ = [
     "NodeType",
@@ -21,4 +22,9 @@ __all__ = [
     "get_graph_store",
     "GraphBuilder",
     "PatternImporter",
+    "SPARQLParser",
+    "SPARQLExecutor",
+    "execute_sparql",
+    "validate_sparql_query",
+    "sparql_bp",
 ]
