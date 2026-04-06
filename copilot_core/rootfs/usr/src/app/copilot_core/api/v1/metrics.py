@@ -14,3 +14,5 @@ def get_metrics_stats():
 def record_metric():
     data = request.get_json() or {}
     return jsonify({"ok": True, "id": data.get("name")})
+# Backwards compatibility
+metrics_bp = bp
