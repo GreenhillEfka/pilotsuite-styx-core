@@ -7,6 +7,7 @@ für präzise Energieverbrauchs-Prognosen.
 from __future__ import annotations
 
 import logging
+_LOGGER = logging.getLogger(__name__)
 import math
 from dataclasses import dataclass, asdict
 from datetime import datetime, timedelta

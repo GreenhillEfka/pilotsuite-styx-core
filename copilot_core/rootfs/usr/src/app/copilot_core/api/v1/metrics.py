@@ -1,19 +1,18 @@
-"""Metrics API — Slice 304 (CORE ONLY)."""
+"""Metrics API — Slice 452 (CORE ONLY)."""
 from __future__ import annotations
 import logging
 from flask import Blueprint, jsonify, request
 _LOGGER = logging.getLogger(__name__)
 bp = Blueprint("metrics", __name__, url_prefix="/api/v1")
-metrics_bp = bp  # Alias for blueprint.py import
-@bp.get("/metrics/summary")
-def get_metrics_summary():
-    return jsonify({"ok": True, "cpu": 25, "memory": 128, "requests_per_sec": 10})
-@bp.get("/metrics/detailed")
-def get_metrics_detailed():
-    return jsonify({"ok": True, "details": {"db_queries": 100, "cache_hits": 90}})
-@bp.get("/metrics/latency")
-def get_metrics_latency():
-    return jsonify({"ok": True, "avg_ms": 50})
-@bp.get("/metrics/errors")
-def get_metrics_errors():
-    return jsonify({"ok": True, "errors": 0})
+@bp.get("/metrics/list")
+def get_metrics_list():
+    return jsonify({"ok": True, "metrics": []})
+@bp.get("/metrics/stats")
+def get_metrics_stats():
+    return jsonify({"ok": True, "stats": {}})
+@bp.post("/metrics/record")
+def record_metric():
+    data = request.get_json() or {}
+    return jsonify({"ok": True, "id": data.get("name")})
+# Backwards compatibility
+metrics_bp = bp

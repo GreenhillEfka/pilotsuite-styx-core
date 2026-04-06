@@ -1,4 +1,4 @@
-"""Benchmark API — Slice 378 (CORE ONLY)."""
+"""Benchmark API — Slice 465 (CORE ONLY)."""
 from __future__ import annotations
 import logging
 from flask import Blueprint, jsonify, request
@@ -10,10 +10,7 @@ def get_benchmarks_list():
 @bp.post("/benchmarks/run")
 def run_benchmark():
     data = request.get_json() or {}
-    return jsonify({"ok": True, "id": data.get("name")})
+    return jsonify({"ok": True, "id": data.get("type")})
 @bp.get("/benchmarks/results")
-def get_benchmark_results():
-    return jsonify({"ok": True, "results": []})
-@bp.delete("/benchmarks/clear")
-def clear_benchmarks():
-    return jsonify({"ok": True, "cleared": True})
+def benchmark_results():
+    return jsonify({"ok": True, "results": {}})

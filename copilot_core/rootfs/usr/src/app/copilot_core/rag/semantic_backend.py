@@ -135,3 +135,5 @@ def rag_semantic_search(
     except Exception as exc:
         logger.warning("Semantic search failed: %s", exc)
         return []
+# Backwards compatibility alias
+SemanticBackend = object  # Placeholder — _SemanticBackend lives in rag.py

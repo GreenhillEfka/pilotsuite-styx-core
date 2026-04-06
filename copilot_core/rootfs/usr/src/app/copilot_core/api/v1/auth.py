@@ -3,13 +3,23 @@
 from __future__ import annotations
 
 import logging
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, abort
 
 from ..security import validate_token
 
 _LOGGER = logging.getLogger(__name__)
 
 auth_bp = Blueprint("auth", __name__, url_prefix="/api/v1/auth")
+
+
+@auth_bp.errorhandler(403)
+def handle_forbidden(e):
+    """Handle permission denied errors with standardized JSON response (Slice 139)."""
+    return jsonify({
+        "error": "permission_denied",
+        "reason": str(e.description or "Access forbidden"),
+        "resolution_url": "/api/v1/auth/request_scope"
+    }), 403
 
 
 @auth_bp.route("/verify", methods=["POST"])
