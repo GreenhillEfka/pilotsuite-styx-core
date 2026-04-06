@@ -277,13 +277,17 @@ class ModuleRegistry:
         state = self.get_state(module_id)
         return state in ("active", "learning")
 
-    def should_collect_data(self, module_id: str) -> bool:
-        """Return ``True`` if *module_id* should collect/observe data.
+    async def set_state_async(self, module_id: str, state: str) -> bool:
+        """Async version of set_state to prevent blocking I/O."""
+        import asyncio
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, self.set_state, module_id, state)
 
-        Both ``"active"`` and ``"learning"`` modules collect data.
-        Only ``"off"`` modules are fully silent.
-        """
-        return not self.is_off(module_id)
+    async def get_state_async(self, module_id: str) -> str:
+        """Async version of get_state to prevent blocking I/O."""
+        import asyncio
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, self.get_state, module_id)
 
     def get_suggestion_mode(self, source_module: str,
                             target_module: str) -> str:

@@ -7,6 +7,8 @@ from flask import Blueprint, jsonify, make_response, request
 
 from copilot_core.brain_graph.provider import get_graph_service
 from copilot_core.performance import brain_graph_cache
+from copilot_core.api.api_errors import unauthorized, bad_request, internal_error
+from copilot_core.api.cache_control import cache
 
 bp = Blueprint("graph", __name__, url_prefix="/api/v1/graph")
 
@@ -16,7 +18,7 @@ from copilot_core.api.security import validate_token as _validate_token
 @bp.before_request
 def _require_auth():
     if not _validate_token(request):
-        return jsonify({"error": "unauthorized", "message": "Valid X-Auth-Token or Bearer token required"}), 401
+        return unauthorized("Valid X-Auth-Token or Bearer token required")
 
 
 def _svc():
@@ -31,6 +33,7 @@ def _compute_cache_key(prefix: str, **params) -> str:
 
 
 @bp.get("/state")
+@cache(max_age=30)
 def graph_state():
     # Multi-value query params: kind=...&kind=...
     kinds = request.args.getlist("kind")
@@ -59,7 +62,7 @@ def graph_state():
 
     # Check cache bypass
     nocache = request.args.get('nocache', '0') == '1'
-    
+
     # Compute cache key
     cache_key = _compute_cache_key(
         "graph_state",
@@ -70,7 +73,7 @@ def graph_state():
         limit_nodes=limit_nodes,
         limit_edges=limit_edges
     )
-    
+
     # Try cache first (unless nocache)
     if not nocache:
         cached_result = brain_graph_cache.get(cache_key)
@@ -82,7 +85,7 @@ def graph_state():
     # Convert query params to match BrainGraphService.get_graph_state signature
     kinds = [k for k in kinds if isinstance(k, str)]
     domains = [d for d in domains if isinstance(d, str)]
-    
+
     state = _svc().get_graph_state(
         kinds=kinds if kinds else None,
         domains=domains if domains else None,
@@ -91,20 +94,20 @@ def graph_state():
         limit_nodes=limit_nodes,
         limit_edges=limit_edges,
     )
-    
+
     # Cache the result
     brain_graph_cache.set(cache_key, state, ttl=30.0)
     state["_cached"] = False
-    
+
     return jsonify(state)
 
 
 @bp.get("/stats")
+@cache(max_age=30)
 def graph_stats():
     """Graph statistics for health checks."""
-    # Get cache stats
     cache_stats = brain_graph_cache.get_stats()
-    
+
     state = _svc().get_graph_state(limit_nodes=1, limit_edges=1)
     return jsonify({
         "version": 1,
@@ -125,6 +128,7 @@ def graph_stats():
 
 
 @bp.get("/patterns")
+@cache(max_age=60)
 def graph_patterns():
     """Pattern summary for health checks."""
     patterns = _svc().infer_patterns()
@@ -237,7 +241,7 @@ def graph_sequences():
             min_occurrences=min_occ,
         )
     except Exception:
-        return jsonify({"ok": False, "error": "sequence detection failed"}), 500
+        return internal_error("sequence detection failed", "detect_sequences failed", request)
 
     return jsonify({
         "ok": True,
@@ -340,11 +344,11 @@ def graph_analytics():
     elif metric == "degree":
         results = svc.get_degree_distribution()
     else:
-        return jsonify({
-            "ok": False,
-            "error": f"Unknown metric: {metric}",
-            "valid_metrics": ["centrality", "clustering", "pagerank", "degree"]
-        }), 400
+        return bad_request(
+            f"Unknown metric: {metric}",
+            details={"valid_metrics": ["centrality", "clustering", "pagerank", "degree"]},
+            req=request,
+        )
     
     return jsonify({
         "ok": True,
@@ -366,10 +370,7 @@ def graph_traverse():
     """
     start = request.args.get("start")
     if not start:
-        return jsonify({
-            "ok": False,
-            "error": "Missing required parameter: start"
-        }), 400
+        return bad_request("Missing required parameter: start", req=request)
     
     try:
         hops = int(request.args.get("hops", "2"))

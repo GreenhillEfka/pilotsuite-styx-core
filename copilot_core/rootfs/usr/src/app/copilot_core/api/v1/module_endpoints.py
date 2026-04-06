@@ -8,6 +8,8 @@ from __future__ import annotations
 import logging
 from flask import Blueprint, jsonify, request
 
+from copilot_core.api.api_errors import service_unavailable
+
 from copilot_core.api.security import require_token
 
 logger = logging.getLogger(__name__)
@@ -45,7 +47,7 @@ def init_module_endpoints(
 def licht_dashboard():
     """Get Lichtmodul dashboard."""
     if not _licht_engine:
-        return jsonify({"error": "Lichtmodul not initialized"}), 503
+        return service_unavailable("Lichtmodul not initialized", req=request)
     return jsonify({"ok": True, **_licht_engine.get_summary()})
 
 
@@ -54,7 +56,7 @@ def licht_dashboard():
 def licht_zone(zone_id):
     """Get light state for a zone."""
     if not _licht_engine:
-        return jsonify({"error": "Lichtmodul not initialized"}), 503
+        return service_unavailable("Lichtmodul not initialized", req=request)
     from dataclasses import asdict
     state = _licht_engine.get_zone_state(zone_id)
     return jsonify({"ok": True, **asdict(state)})
@@ -65,7 +67,7 @@ def licht_zone(zone_id):
 def licht_target():
     """Get current time-based light target."""
     if not _licht_engine:
-        return jsonify({"error": "Lichtmodul not initialized"}), 503
+        return service_unavailable("Lichtmodul not initialized", req=request)
     hour = request.args.get("hour", type=int)
     return jsonify({"ok": True, **_licht_engine.get_target_for_hour(hour)})
 
@@ -77,7 +79,7 @@ def licht_target():
 def helligkeit_dashboard():
     """Get Helligkeitsmodul dashboard."""
     if not _helligkeit_engine:
-        return jsonify({"error": "Helligkeitsmodul not initialized"}), 503
+        return service_unavailable("Helligkeitsmodul not initialized", req=request)
     return jsonify({"ok": True, **_helligkeit_engine.get_summary()})
 
 
@@ -86,7 +88,7 @@ def helligkeit_dashboard():
 def helligkeit_zone(zone_id):
     """Get brightness analysis for a zone."""
     if not _helligkeit_engine:
-        return jsonify({"error": "Helligkeitsmodul not initialized"}), 503
+        return service_unavailable("Helligkeitsmodul not initialized", req=request)
     from dataclasses import asdict
     zb = _helligkeit_engine.get_zone_brightness(zone_id)
     return jsonify({"ok": True, **asdict(zb)})
@@ -99,7 +101,7 @@ def helligkeit_zone(zone_id):
 def heiz_dashboard():
     """Get Heizmodul dashboard."""
     if not _heiz_engine:
-        return jsonify({"error": "Heizmodul not initialized"}), 503
+        return service_unavailable("Heizmodul not initialized", req=request)
     return jsonify({"ok": True, **_heiz_engine.get_summary()})
 
 
@@ -108,7 +110,7 @@ def heiz_dashboard():
 def heiz_zone(zone_id):
     """Get climate state for a zone."""
     if not _heiz_engine:
-        return jsonify({"error": "Heizmodul not initialized"}), 503
+        return service_unavailable("Heizmodul not initialized", req=request)
     from dataclasses import asdict
     zc = _heiz_engine.get_zone_climate(zone_id)
     return jsonify({"ok": True, **asdict(zc)})
@@ -121,7 +123,7 @@ def heiz_zone(zone_id):
 def bewegung_dashboard():
     """Get Bewegungsmodul dashboard."""
     if not _bewegung_engine:
-        return jsonify({"error": "Bewegungsmodul not initialized"}), 503
+        return service_unavailable("Bewegungsmodul not initialized", req=request)
     return jsonify({"ok": True, **_bewegung_engine.get_summary()})
 
 
@@ -130,7 +132,7 @@ def bewegung_dashboard():
 def bewegung_zone(zone_id):
     """Get motion state for a zone."""
     if not _bewegung_engine:
-        return jsonify({"error": "Bewegungsmodul not initialized"}), 503
+        return service_unavailable("Bewegungsmodul not initialized", req=request)
     from dataclasses import asdict
     zm = _bewegung_engine.get_zone_motion(zone_id)
     return jsonify({"ok": True, **asdict(zm)})
@@ -143,7 +145,7 @@ def bewegung_zone(zone_id):
 def praesenz_dashboard():
     """Get Praesenzmodul dashboard."""
     if not _praesenz_engine:
-        return jsonify({"error": "Praesenzmodul not initialized"}), 503
+        return service_unavailable("Praesenzmodul not initialized", req=request)
     return jsonify({"ok": True, **_praesenz_engine.get_summary()})
 
 
@@ -152,7 +154,7 @@ def praesenz_dashboard():
 def praesenz_zone(zone_id):
     """Get presence state for a zone."""
     if not _praesenz_engine:
-        return jsonify({"error": "Praesenzmodul not initialized"}), 503
+        return service_unavailable("Praesenzmodul not initialized", req=request)
     from dataclasses import asdict
     zp = _praesenz_engine.get_zone_presence(zone_id)
     return jsonify({"ok": True, **asdict(zp)})
@@ -163,7 +165,7 @@ def praesenz_zone(zone_id):
 def praesenz_persons():
     """Get all persons currently home."""
     if not _praesenz_engine:
-        return jsonify({"error": "Praesenzmodul not initialized"}), 503
+        return service_unavailable("Praesenzmodul not initialized", req=request)
     persons = _praesenz_engine.get_all_persons_home()
     return jsonify({"ok": True, "persons": persons, "count": len(persons)})
 

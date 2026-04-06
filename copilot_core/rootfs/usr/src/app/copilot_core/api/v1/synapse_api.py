@@ -21,6 +21,9 @@ from typing import Any, Dict, List, Optional
 from flask import Blueprint, jsonify, request
 
 from copilot_core.api.security import validate_token as _validate_token
+from copilot_core.api.api_errors import (
+    bad_request, unauthorized, internal_error,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -55,10 +58,7 @@ def init_synapse_api(
 @bp.before_request
 def _require_auth():
     if not _validate_token(request):
-        return jsonify({
-            "error": "unauthorized",
-            "message": "Valid X-Auth-Token or Bearer token required"
-        }), 401
+        return unauthorized("Valid X-Auth-Token or Bearer token required")
 
 
 # =============================================================================
@@ -93,9 +93,9 @@ def synapse_feed():
         attributes = data.get("attributes", {})
 
         if not entity_id:
-            return jsonify({"error": "missing_entity_id"}), 400
+            return bad_request("entity_id is required", req=request)
         if state is None:
-            return jsonify({"error": "missing_state"}), 400
+            return bad_request("state is required", req=request)
 
         # Lazy import to avoid circular deps
         if _neuron_feeder is None:
@@ -120,7 +120,7 @@ def synapse_feed():
 
     except Exception as e:
         _LOGGER.error("Failed to feed synapse event: %s", e)
-        return jsonify({"error": "feed_failed", "message": str(e)}), 500
+        return internal_error("Synapse feed failed", str(e), request)
 
 
 # =============================================================================
@@ -150,7 +150,7 @@ def synapse_batch_feed():
         events = data.get("events", [])
 
         if not isinstance(events, list):
-            return jsonify({"error": "events_must_be_array"}), 400
+            return bad_request("events must be an array", req=request)
 
         from copilot_core.neurons.feeding import NeuronFeeder, FeedEvent
         feeder = _neuron_feeder if _neuron_feeder else NeuronFeeder()
@@ -183,7 +183,7 @@ def synapse_batch_feed():
 
     except Exception as e:
         _LOGGER.error("Failed to batch feed synapse events: %s", e)
-        return jsonify({"error": "batch_feed_failed", "message": str(e)}), 500
+        return internal_error("Synapse batch feed failed", str(e), request)
 
 
 # =============================================================================
@@ -246,7 +246,7 @@ def synapse_resolve(entity_id: str):
 
     except Exception as e:
         _LOGGER.error("Failed to resolve entity %s: %s", entity_id, e)
-        return jsonify({"error": "resolve_failed", "message": str(e)}), 500
+        return internal_error("Synapse resolve failed", str(e), request)
 
 
 # =============================================================================
@@ -300,7 +300,7 @@ def synapse_contracts():
 
     except Exception as e:
         _LOGGER.error("Failed to list contracts: %s", e)
-        return jsonify({"error": "contracts_failed", "message": str(e)}), 500
+        return internal_error("Synapse contracts query failed", str(e), request)
 
 
 # =============================================================================
@@ -338,7 +338,7 @@ def dynamic_neurons(neuron_type: str):
 
     except Exception as e:
         _LOGGER.error("Failed to get dynamic neurons: %s", e)
-        return jsonify({"error": "dynamic_query_failed", "message": str(e)}), 500
+        return internal_error("Dynamic neuron query failed", str(e), request)
 
 
 # =============================================================================
@@ -374,7 +374,7 @@ def all_dynamic_neurons():
 
     except Exception as e:
         _LOGGER.error("Failed to get dynamic neurons: %s", e)
-        return jsonify({"error": "dynamic_query_failed", "message": str(e)}), 500
+        return internal_error("Dynamic neuron query failed", str(e), request)
 
 
 # =============================================================================
@@ -408,7 +408,7 @@ def zone_presence(zone_id: str):
 
     except Exception as e:
         _LOGGER.error("Failed to get zone presence: %s", e)
-        return jsonify({"error": "presence_failed", "message": str(e)}), 500
+        return internal_error("Zone presence query failed", str(e), request)
 
 
 # =============================================================================
@@ -441,7 +441,7 @@ def all_zone_presence():
 
     except Exception as e:
         _LOGGER.error("Failed to get zone presence: %s", e)
-        return jsonify({"error": "presence_failed", "message": str(e)}), 500
+        return internal_error("Zone presence query failed", str(e), request)
 
 
 # =============================================================================
@@ -479,7 +479,7 @@ def automation_synapses():
 
     except Exception as e:
         _LOGGER.error("Failed to get automation synapses: %s", e)
-        return jsonify({"error": "automation_query_failed", "message": str(e)}), 500
+        return internal_error("Automation synapse query failed", str(e), request)
 
 
 # =============================================================================
@@ -508,4 +508,4 @@ def zone_synapses(zone_id: str):
 
     except Exception as e:
         _LOGGER.error("Failed to get zone synapses: %s", e)
-        return jsonify({"error": "zone_synapses_failed", "message": str(e)}), 500
+        return internal_error("Zone synapses query failed", str(e), request)
