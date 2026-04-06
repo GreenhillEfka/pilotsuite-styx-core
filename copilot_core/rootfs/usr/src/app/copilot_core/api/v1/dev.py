@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 
 from flask import Blueprint, current_app, jsonify, request, send_file
 
-from diagnostics_contract import build_bundle_zip
+from ...diagnostics_contract import build_bundle_zip
 
 bp = Blueprint("dev", __name__, url_prefix="/api/v1/dev")
 
