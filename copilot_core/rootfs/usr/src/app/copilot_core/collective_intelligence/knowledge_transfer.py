@@ -226,3 +226,89 @@ class KnowledgeTransfer:
         self.knowledge_base.clear()
         self.transfer_log.clear()
         self.knowledge_types.clear()
+
+
+# Slice 70: Knowledge Transfer API Contract (P2-009)
+# REST API endpoints for cross-home knowledge sharing
+
+class KnowledgeTransferAPI:
+    """API contract for Knowledge Transfer operations."""
+
+    # ─── REST Endpoints ──────────────────────────────────────────────────────────
+    #
+    # GET    /api/v1/knowledge                          → list all knowledge items
+    # GET    /api/v1/knowledge/{knowledge_id}            → get single item
+    # POST   /api/v1/knowledge                          → extract new knowledge
+    # POST   /api/v1/knowledge/{knowledge_id}/transfer   → transfer to target
+    # DELETE /api/v1/knowledge/{knowledge_id}           → delete knowledge
+    #
+    # GET    /api/v1/knowledge/types                    → list knowledge types
+    # GET    /api/v1/knowledge/types/{type}             → list items by type
+    #
+    # GET    /api/v1/knowledge/transfer-log             → get transfer history
+    #
+    # ─── API Contract ───────────────────────────────────────────────────────────
+    #
+    # POST /api/v1/knowledge
+    # Body: { node_id, knowledge_type, payload, confidence }
+    # Response 201: { knowledge_id, hash, created_at }
+    #
+    # POST /api/v1/knowledge/{knowledge_id}/transfer
+    # Body: { target_node_id }
+    # Response 200: { success, knowledge_id, target_node_id, transferred_at }
+    # Response 404: { error: "Knowledge not found" }
+    # Response 429: { error: "Rate limit exceeded" }
+    #
+    # GET /api/v1/knowledge
+    # Query: ?type=&min_confidence=&limit=&offset=
+    # Response 200: { items: [...], total, limit, offset }
+    #
+    # DELETE /api/v1/knowledge/{knowledge_id}
+    # Response 200: { success: true }
+    # Response 404: { error: "Knowledge not found" }
+
+    @staticmethod
+    def validate_knowledge_payload(payload: Dict[str, Any]) -> tuple[bool, Optional[str]]:
+        """Validate POST payload. Returns (valid, error_message)."""
+        if not isinstance(payload.get("node_id"), str):
+            return False, "node_id must be string"
+        if not isinstance(payload.get("knowledge_type"), str):
+            return False, "knowledge_type must be string"
+        if not isinstance(payload.get("payload"), dict):
+            return False, "payload must be dict"
+        conf = payload.get("confidence", 1.0)
+        if not isinstance(conf, (int, float)) or not (0.0 <= conf <= 1.0):
+            return False, "confidence must be in [0.0, 1.0]"
+        return True, None
+
+    @staticmethod
+    def validate_transfer_payload(payload: Dict[str, Any]) -> tuple[bool, Optional[str]]:
+        """Validate transfer POST payload."""
+        if not isinstance(payload.get("target_node_id"), str):
+            return False, "target_node_id must be string"
+        if not payload["target_node_id"].strip():
+            return False, "target_node_id cannot be empty"
+        return True, None
+
+    @staticmethod
+    def format_knowledge_response(item: "KnowledgeItem") -> Dict[str, Any]:
+        """Format a KnowledgeItem for API response."""
+        return {
+            "knowledge_id": item.knowledge_hash,
+            "source_node_id": item.source_node_id,
+            "knowledge_type": item.knowledge_type,
+            "confidence": item.confidence,
+            "timestamp": item.timestamp,
+            "payload": item.payload,
+        }
+
+    @staticmethod
+    def format_transfer_log_entry(entry: Dict[str, Any]) -> Dict[str, Any]:
+        """Format a transfer log entry for API response."""
+        return {
+            "knowledge_id": entry.get("knowledge_id"),
+            "source_node_id": entry.get("source_node_id"),
+            "target_node_id": entry.get("target_node_id"),
+            "transferred_at": entry.get("transferred_at"),
+            "success": entry.get("success"),
+        }
