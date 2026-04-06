@@ -40,6 +40,25 @@ class ConflictStrategy(str, Enum):
     REMOTE_WINS = "remote_wins"
 
 
+class ConflictSeverity(str, Enum):
+    """Severity level for conflicts."""
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    CRITICAL = "critical"
+
+
+class ConflictType(str, Enum):
+    """Type of conflict."""
+    VALUE_MISMATCH = "value_mismatch"
+    TIMESTAMP_CONFLICT = "timestamp_conflict"
+    SCHEMA_CONFLICT = "schema_conflict"
+    DELETION_CONFLICT = "deletion_conflict"
+
+
+class Conflict:
+
+
 # -----------------------------------------------------------------------------
 
 
