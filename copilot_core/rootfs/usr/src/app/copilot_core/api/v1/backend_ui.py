@@ -187,11 +187,18 @@ def _backend_module_zone_counters(
 def _backend_module_cards(registry: ModuleRegistry) -> list[dict[str, Any]]:
     zone_enabled_counts, zone_override_counts, discovered_module_ids = _backend_module_zone_counters(registry)
 
+    # Slice 136a: Fetch module summary data from core modules
+    module_summaries = _fetch_module_summaries()
+
     modules = []
     for module_id in _backend_module_order(discovered_module_ids):
         defaults = _module_card_defaults(module_id)
         global_state = registry.get_state(module_id)
         override_count = zone_override_counts.get(module_id, 0)
+        
+        # Slice 136a: Add get_summary data if available
+        summary = module_summaries.get(module_id, {})
+        
         modules.append({
             **defaults,
             "state": global_state,
@@ -199,9 +206,53 @@ def _backend_module_cards(registry: ModuleRegistry) -> list[dict[str, Any]]:
             "zones_enabled": zone_enabled_counts.get(module_id, 0),
             "zone_overrides": override_count,
             "has_zone_overrides": override_count > 0,
+            # Slice 136a: Add detailed module data
+            "summary": summary.get("summary", ""),
+            "detailed_states": summary.get("detailed_states", []),
+            "active_features": summary.get("active_features", []),
+            "anomalies": summary.get("anomalies", []),
         })
 
     return modules
+
+
+def _fetch_module_summaries() -> dict[str, dict[str, Any]]:
+    """Slice 136a: Fetch get_summary() data from core modules."""
+    summaries = {}
+    
+    # Presence Module
+    try:
+        from copilot_core.presence.zone_presence import create_presence_module
+        presence = create_presence_module()
+        summaries["presence"] = presence.get_summary()
+    except Exception as exc:
+        _LOGGER.debug("Could not fetch presence summary: %s", exc)
+    
+    # Light Module
+    try:
+        from copilot_core.light.zone_light import create_light_module
+        light = create_light_module()
+        summaries["light"] = light.get_summary()
+    except Exception as exc:
+        _LOGGER.debug("Could not fetch light summary: %s", exc)
+    
+    # Climate Module
+    try:
+        from copilot_core.climate.climate import create_climate_module
+        climate = create_climate_module()
+        summaries["climate"] = climate.get_summary()
+    except Exception as exc:
+        _LOGGER.debug("Could not fetch climate summary: %s", exc)
+    
+    # Media Module (MediaZoneManager)
+    try:
+        from copilot_core.media_zone_manager import MediaZoneManager
+        media = MediaZoneManager()
+        summaries["media"] = media.get_summary()
+    except Exception as exc:
+        _LOGGER.debug("Could not fetch media summary: %s", exc)
+    
+    return summaries
 
 
 def _zone_module_payload(registry: ModuleRegistry, zone_id: str, module_id: str) -> dict[str, Any]:
