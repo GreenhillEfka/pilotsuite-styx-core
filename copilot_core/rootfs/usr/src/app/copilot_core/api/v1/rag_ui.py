@@ -239,3 +239,46 @@ def voice_query():
     }
     
     return jsonify(response)
+
+
+@rag_ui_bp.route("/search/enhanced", methods=["POST"])
+def search_enhanced():
+    """Slice 140: Enhanced RAG Search mit Multi-Turn Context."""
+    from copilot_core.rag.context_manager import RAGContextManager
+    
+    data = request.get_json()
+    query = data.get("query", "")
+    session_id = data.get("session_id", "default")
+    max_context_tokens = data.get("max_context_tokens", 2000)
+    
+    if not query:
+        return jsonify({"error": "Query required"}), 400
+    
+    # Add user query to history
+    ctx = RAGContextManager()
+    ctx.add_message(session_id, "user", query)
+    
+    # Get formatted context (conversation history)
+    context = ctx.get_formatted_context(session_id, max_context_tokens)
+    
+    # TODO: Echte Hybrid-Suche (local + SearXNG)
+    results = [
+        {
+            "id": f"local_{i}",
+            "text": f"Lokales Ergebnis {i} für '{query}' mit Context",
+            "score": 0.95 - i * 0.05,
+            "source": "rag_store",
+        }
+        for i in range(3)
+    ]
+    
+    # Add assistant response to history
+    ctx.add_message(session_id, "assistant", f"Found {len(results)} results for your query.")
+    
+    return jsonify({
+        "query": query,
+        "context": context,
+        "results": results,
+        "session_id": session_id,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    })
