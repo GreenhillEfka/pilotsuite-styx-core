@@ -119,6 +119,10 @@ from copilot_core.api.v1.energy_forecast import energy_forecast_bp
 from copilot_core.api.v1.predictive import predictive_bp
 from copilot_core.api.v1.advanced_analytics import advanced_analytics_bp
 
+# Blueprint Registry API
+from copilot_core.api.v1.registry_blueprints import bp as registry_blueprints_bp
+from copilot_core.admin.blueprints_panel import bp as blueprints_admin_bp
+
 # Register additional blueprints
 api_v1.register_blueprint(ml_forecast_bp)
 api_v1.register_blueprint(cache_control_bp)
@@ -135,3 +139,7 @@ api_v1.register_blueprint(chat_bp)
 api_v1.register_blueprint(energy_forecast_bp)
 api_v1.register_blueprint(predictive_bp)
 api_v1.register_blueprint(advanced_analytics_bp)
+
+# Register Blueprint Registry APIs
+api_v1.register_blueprint(registry_blueprints_bp)
+api_v1.register_blueprint(blueprints_admin_bp)

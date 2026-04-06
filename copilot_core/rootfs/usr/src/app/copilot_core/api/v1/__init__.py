@@ -18,6 +18,7 @@ from . import event_bus_admin
 from . import learning_memory
 from . import learning_memory_admin
 from . import scenes_api
+from . import registry_blueprints
 from . import sync_api
 
 __all__ = [
@@ -32,4 +33,5 @@ __all__ = [
     'learning_memory', 'learning_memory_admin',
     'scenes_api',
     'sync_api',
+    'registry_blueprints',
 ]
