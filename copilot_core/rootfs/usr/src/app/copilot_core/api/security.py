@@ -47,7 +47,9 @@ def _ensure_auto_token() -> str:
 
     token = secrets.token_urlsafe(32)
     try:
-        with open(AUTO_TOKEN_PATH, "w", encoding="utf-8") as fh:
+        # P2: Ensure restrictive permissions from the start
+        fd = os.open(AUTO_TOKEN_PATH, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
             fh.write(token)
         _LOGGER.info("Auto-generated API token (1-Key-Flow): %s...%s", token[:8], token[-4:])
     except Exception:
