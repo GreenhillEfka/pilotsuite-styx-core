@@ -36,6 +36,7 @@ _LOGGER = logging.getLogger(__name__)
 
 # Blueprint mit absolutem Prefix (wird direkt auf App registriert)
 bp = Blueprint("habitus_zones", __name__, url_prefix="/api/v1/habitus/zones")
+habitus_zones_bp = bp
 
 # Global zone engine instance
 _zone_engine: Optional[HabitusZoneEngine] = None

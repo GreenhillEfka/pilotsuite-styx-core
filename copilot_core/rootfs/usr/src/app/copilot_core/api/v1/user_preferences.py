@@ -18,6 +18,7 @@ from copilot_core.storage.user_preferences import (
 )
 
 bp = Blueprint("user_preferences", __name__, url_prefix="/user")
+user_prefs_bp = bp
 
 from copilot_core.api.security import validate_token as _validate_token
 

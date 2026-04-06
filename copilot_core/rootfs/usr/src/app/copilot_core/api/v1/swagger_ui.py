@@ -15,6 +15,7 @@ import time
 from flask import Blueprint, jsonify, Response, request, current_app
 
 bp = Blueprint("swagger_ui", __name__, url_prefix="/docs")
+swagger_ui_bp = bp
 
 # Separate blueprint for /api/v1/openapi.json endpoint
 openapi_bp = Blueprint("openapi_spec", __name__)

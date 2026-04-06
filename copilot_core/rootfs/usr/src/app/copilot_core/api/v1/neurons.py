@@ -26,6 +26,7 @@ _LOGGER = logging.getLogger(__name__)
 
 # Create blueprint
 bp = Blueprint("neurons", __name__, url_prefix="/neurons")
+neurons_bp = bp
 
 from copilot_core.api.security import validate_token as _validate_token, require_admin_token
 from copilot_core.api.v1 import neuron_graph as neuron_graph_module
