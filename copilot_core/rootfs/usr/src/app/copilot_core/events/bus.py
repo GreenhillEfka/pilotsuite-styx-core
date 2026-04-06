@@ -469,3 +469,78 @@ class EventBusEngine:
 def create_event_bus_engine(max_queue_size: int = 10000) -> EventBusEngine:
     """Factory function to create event bus engine."""
     return EventBusEngine(max_queue_size=max_queue_size)
+
+
+# Slice 70: Event Propagation Systematics (P2-006)
+# Propagation rules: chain limits, direction, conflict resolution
+
+PROPAGATION_RULES: Dict[str, dict] = {
+    # HA → Core
+    "ha.zone.updated": {
+        "direction": "ha→core",
+        "chain_limit": 3,
+        "merge_policy": "last_write_wins",
+        "conflicts_to": "ha_wins",
+        "bypass": ["ha_events.py"],
+    },
+    "ha.entity.changed": {
+        "direction": "ha→core",
+        "chain_limit": 2,
+        "merge_policy": "ha_state_snapshot",
+        "conflicts_to": "ha_wins",
+        "bypass": [],
+    },
+    "ha.habitus.detected": {
+        "direction": "ha→core",
+        "chain_limit": 1,  # Direct, no relay
+        "merge_policy": "newest",
+        "conflicts_to": "core_wins",
+        "bypass": [],
+    },
+    # Core → HA
+    "core.automation.triggered": {
+        "direction": "core→ha",
+        "chain_limit": 3,
+        "merge_policy": "first_write_wins",
+        "conflicts_to": "core_wins",
+        "bypass": [],
+    },
+    "core.presence.changed": {
+        "direction": "core→ha",
+        "chain_limit": 2,
+        "merge_policy": "core_state",
+        "conflicts_to": "core_wins",
+        "bypass": [],
+    },
+    # Internal
+    "internal.state.update": {
+        "direction": "internal",
+        "chain_limit": 5,
+        "merge_policy": "priority",
+        "conflicts_to": "highest_priority",
+        "bypass": [],
+    },
+}
+
+
+def get_propagation_rule(event_type: str) -> dict:
+    """Get propagation rule for event type."""
+    return PROPAGATION_RULES.get(event_type, {
+        "direction": "internal",
+        "chain_limit": 3,
+        "merge_policy": "last_write_wins",
+        "conflicts_to": "internal",
+        "bypass": [],
+    })
+
+
+def resolve_propagation_chain(event_types: List[str]) -> Dict[str, int]:
+    """Check chain limits for a set of event types.
+    
+    Returns dict of event_type -> remaining hops.
+    """
+    remaining = {}
+    for et in event_types:
+        rule = get_propagation_rule(et)
+        remaining[et] = rule["chain_limit"]
+    return remaining
