@@ -17,6 +17,7 @@ import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import yaml
@@ -115,18 +116,26 @@ class DriftDetector:
                 severity="info",
             )
         elif entry.hash != current_hash:
-            cur = conn.execute(
-                """
-                UPDATE blueprint_registry
-                SET drift_count = drift_count + 1,
-                    last_drift_at = ?,
-                    updated_at = ?
-                WHERE blueprint_id = ?
-                """,
-                (now, now, blueprint_id),
+            # Record drift in registry
+            self._registry.record_drift(blueprint_id)
+            # Re-fetch to get updated drift count
+            updated = self._registry.get(blueprint_id)
+            drift_count = updated.drift_count if updated else (entry.drift_count + 1)
+            severity = "critical" if drift_count >= 3 else "warning"
+            alert = DriftAlert(
+                blueprint_id=blueprint_id,
+                name=name,
+                status=DriftStatus.DRIFTED,
+                stored_hash=entry.hash,
+                current_hash=current_hash,
+                message=(
+                    f"Blueprint '{name}' has changed — "
+                    f"expected hash {entry.hash[:12]}..., "
+                    f"got {current_hash[:12]}... "
+                    f"(drift #{drift_count})"
+                ),
+                severity=severity,
             )
-            conn.commit()
-            return cur.rowcount > 0
         else:
             alert = DriftAlert(
                 blueprint_id=blueprint_id,
