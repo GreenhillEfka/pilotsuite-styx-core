@@ -930,3 +930,45 @@ def wilson_confidence(n_present, n_total):
     center = (p_hat + z*z/(2*n_total)) / denom
     margin = z * math.sqrt((p_hat*(1-p_hat) + z*z/(4*n_total)) / n_total) / denom
     return max(0.0, center - margin)
+
+
+# Slice 70: Thompson Sampling for Energy/Action Selection (P2-005)
+def thompson_sampling(arms: Dict[str, Tuple[str, str]]) -> Dict[str, float]:
+    """Sample from posterior Beta distributions for multi-armed bandit.
+    
+    Args:
+        arms: {arm_id: (prior_alpha, prior_beta)}
+    
+    Returns:
+        {arm_id: sampled_value} sorted by value descending
+    """
+    import random, math
+    samples = {}
+    for arm_id, (alpha, beta) in arms.items():
+        try:
+            # Sample from Beta using Marsaglia & Tsang's method
+            if alpha <= 0 or beta <= 0:
+                samples[arm_id] = 0.0
+                continue
+            while True:
+                U = random.random()
+                V = random.random()
+                X = alpha * (1 - V) / (alpha + beta)
+                Y = math.pow(U * (alpha + beta) * (alpha + beta), 1 / (alpha + beta))
+                if Y <= (1 - X) ** beta or Y <= X ** alpha:
+                    samples[arm_id] = X
+                    break
+        except (ValueError, ZeroDivisionError):
+            samples[arm_id] = 0.0
+    return dict(sorted(samples.items(), key=lambda x: x[1], reverse=True))
+
+
+def update_beta_arm(arms: Dict[str, Tuple[float, float]], arm_id: str, success: bool) -> None:
+    """Update Beta posterior for an arm after observation."""
+    if arm_id not in arms:
+        arms[arm_id] = (1.0, 1.0)
+    a, b = arms[arm_id]
+    if success:
+        arms[arm_id] = (a + 1, b)
+    else:
+        arms[arm_id] = (a, b + 1)
