@@ -396,15 +396,83 @@ def graph_traverse():
         limit=limit
     )
     
-    return jsonify({
-        "ok": True,
-        "start": start,
-        "hops": hops,
+@bp.get("/subgraph")
+def graph_subgraph():
+    """Get a cursor-paginated subgraph around a root node.
+    
+    Query params:
+    - root: Root node ID (required)
+    - radius: Hop radius (1-3, default 1)
+    - kind: Filter by node kind (optional)
+    - domain: Filter by domain (optional)
+    - limit: Page size 1-100 (default 50)
+    - cursor: Opaque pagination cursor (optional)
+    - direction: outgoing|incoming|both (default both)
+    """
+    root = request.args.get("root")
+    if not root:
+        return bad_request("Missing required parameter: root", req=request)
+    
+    try:
+        radius = int(request.args.get("radius", "1"))
+    except (ValueError, TypeError):
+        radius = 1
+    radius = max(1, min(radius, 3))
+    
+    kind_filter = request.args.get("kind")
+    domain_filter = request.args.get("domain")
+    direction = request.args.get("direction", "both")
+    
+    try:
+        limit = int(request.args.get("limit", "50"))
+    except (ValueError, TypeError):
+        limit = 50
+    limit = max(1, min(limit, 100))
+    
+    cursor = request.args.get("cursor")
+    after = request.args.get("after")
+    
+    svc = _svc()
+    
+    try:
+        # get_subgraph returns (nodes, edges, has_next, next_start)
+        # Fetch limit+1 to detect has_next
+        nodes, edges, has_next, next_start = svc.get_subgraph(
+            root_node=root,
+            radius=radius,
+            kind_filter=kind_filter,
+            domain_filter=domain_filter,
+            direction=direction,
+            limit=limit + 1,
+        )
+    except Exception as e:
+        return internal_error("subgraph retrieval failed", str(e), request)
+    
+    if not nodes and not edges:
+        return not_found(f"subgraph for root={root}", req=request)
+    
+    # Build page result with cursor pagination
+    page = cursor_page(
+        items=nodes,
+        before=None,
+        after=after,
+        has_next=has_next,
+        has_prev=False,
+        limit=limit,
+        build_next=lambda n: n.get("id") if isinstance(n, dict) else str(n),
+        item_to_dict=True,
+    )
+    
+    # Attach edges and subgraph metadata
+    page["subgraph"] = {
+        "root": root,
+        "radius": radius,
         "direction": direction,
-        "nodes": result.get("nodes", []),
-        "edges": result.get("edges", []),
-        "count": {
-            "nodes": len(result.get("nodes", [])),
-            "edges": len(result.get("edges", []))
-        }
-    })
+        "kind_filter": kind_filter,
+        "domain_filter": domain_filter,
+        "edges": edges[:limit * 2],  # Attach edges alongside page
+        "edge_count": len(edges),
+    }
+    page["ok"] = True
+    
+    return jsonify(page)
