@@ -474,3 +474,71 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Export für globalen Zugriff
 window.dashboard = dashboard;
+
+
+// ── Brain Graph Integration (P3-003) ──────────────────────────────────────────
+HabitusDashboard.prototype.initBrainGraph = function() {
+    // Load brain graph visualization when tab becomes active
+    const observer = new MutationObserver((mutations) => {
+        mutations.forEach((mutation) => {
+            if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
+                const activePane = document.querySelector('.tab-pane.active');
+                if (activePane && activePane.id === 'pane-brain') {
+                    this.loadBrainGraph();
+                }
+            }
+        });
+    });
+
+    const tabsContainer = document.querySelector('.tabs-container');
+    if (tabsContainer) {
+        observer.observe(tabsContainer, { attributes: true, subtree: true });
+    }
+
+    // Also add brain tab to zones
+    this.zones.push({
+        id: 'brain',
+        name: 'Brain Graph',
+        icon: 'mdi-brain',
+        alertCount: 0
+    });
+};
+
+HabitusDashboard.prototype.loadBrainGraph = function() {
+    if (this._brainGraphLoaded) return;
+    this._brainGraphLoaded = true;
+
+    fetch('/api/v1/backend/brain/graph/state?limit_nodes=30&limit_edges=60')
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+            if (!data) return;
+            this._brainGraphData = data;
+            this.renderBrainGraphWidget();
+        })
+        .catch(() => {});
+};
+
+HabitusDashboard.prototype.renderBrainGraphWidget = function() {
+    const data = this._brainGraphData;
+    if (!data) return;
+
+    let html = '<div class="zone-card widget-container" style="grid-column: 1/-1;">';
+    html += '<div class="zone-card-header"><div class="zone-card-icon"><i class="mdi mdi-brain"></i></div>';
+    html += '<div class="zone-card-status"><span class="status-dot active"></span><span>Active</span></div></div>';
+    html += '<div class="zone-card-title">Brain Graph</div>';
+    html += '<div class="zone-card-subtitle">Nodes: ' + (data.nodes ? data.nodes.length : 0) + ' | Edges: ' + (data.edges ? data.edges.length : 0) + '</div>';
+    html += '<div class="zone-card-metrics">';
+    if (data.nodes) {
+        data.nodes.slice(0, 5).forEach(n => {
+            html += '<div class="zone-metric"><span class="zone-metric-label">' + (n.label || n.id || '?') + '</span><span class="zone-metric-value">' + (n.type || 'node') + '</span></div>';
+        });
+    }
+    html += '</div></div>';
+    html += '</div>';
+
+    const pane = document.getElementById('pane-brain');
+    if (pane) {
+        const grid = pane.querySelector('.zone-grid');
+        if (grid) grid.innerHTML = html;
+    }
+};
