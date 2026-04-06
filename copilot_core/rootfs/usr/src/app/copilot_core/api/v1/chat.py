@@ -23,6 +23,8 @@ from typing import Any, Dict, List, Optional
 from datetime import datetime, timezone
 import uuid
 
+from copilot_core.api.api_errors import bad_request, internal_error
+
 _LOGGER = logging.getLogger(__name__)
 
 chat_bp = Blueprint("chat", __name__, url_prefix="/api/v1/chat")
