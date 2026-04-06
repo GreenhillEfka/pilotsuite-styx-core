@@ -766,6 +766,41 @@ class PresenceModule:
         hold_state = self._get_effective_hold_state(zone_id)
         return hold_state in (ZoneHoldState.FORCE_ON, ZoneHoldState.FORCE_OFF)
     
+    def get_summary(self) -> Dict[str, Any]:
+        """Slice 136: Return module summary for Backend-UI read model.
+        
+        Design Contract: summary, detailed_states, active_features, anomalies
+        """
+        now = datetime.now(timezone.utc)
+        
+        # Build detailed states for all zones
+        detailed_states = []
+        for zone_id, zone_state in self._zone_states.items():
+            detailed_states.append({
+                "entity_id": f"presence.{zone_id}",
+                "state": zone_state.state.value,
+                "attributes": {
+                    "confidence": zone_state.confidence,
+                    "last_changed": zone_state.last_changed.isoformat() if zone_state.last_changed else None,
+                    "active_sensors": zone_state.active_sensors,
+                    "hold_state": self.get_hold_state(zone_id),
+                    "is_hold_enforced": self.is_hold_enforced(zone_id),
+                }
+            })
+        
+        # Count present zones
+        present_count = sum(
+            1 for zs in self._zone_states.values()
+            if zs.state == PresenceState.PRESENT
+        )
+        
+        return {
+            "summary": f"{present_count}/{len(self._zone_states)} zones occupied",
+            "detailed_states": detailed_states,
+            "active_features": ["Multi-Sensor Fusion", "Zone Timers", "Hold Integration"],
+            "anomalies": [],  # Could be populated with low-confidence detections
+        }
+    
     def _lock(self):
         """Simple context manager for thread safety."""
         return self._thread_lock
