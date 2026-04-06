@@ -1,1 +1,0 @@
-"""Home Assistant Bridge v2 - Slice 311 Adapter Interface"""
