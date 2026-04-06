@@ -414,5 +414,6 @@ def tools_call():
     except Exception as e:
         current_app.logger.exception("MCP tool call failed")
         return jsonify({"ok": False, "error": str(e)}), 500
+-e 
 # Backwards compatibility alias
 mcp_bp = bp
