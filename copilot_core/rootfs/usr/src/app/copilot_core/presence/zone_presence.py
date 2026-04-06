@@ -304,6 +304,9 @@ class PresenceModule:
         weighted_confidence = 0.0
         total_weight = 0
         
+        # Build sensor readings for Bayesian inference
+        sensor_readings = {}
+        
         for sensor_id in zone_sensors:
             sensor = self._sensors.get(sensor_id)
             
@@ -311,6 +314,7 @@ class PresenceModule:
                 continue
             
             is_present = self._sensor_states.get(sensor_id, False)
+            sensor_readings[sensor_id] = (is_present, sensor.sensor_type, sensor.confidence)
             
             if is_present:
                 active_sensors.append(sensor_id)
@@ -320,11 +324,12 @@ class PresenceModule:
             
             total_weight += sensor.priority
         
-        # Normalize confidence
-        if total_weight > 0:
+        # Bayesian presence probability (P1-001)
+        confidence, evidence_strength = bayesian_presence_probability(sensor_readings)
+        
+        # Fallback if Bayesian returns 0
+        if confidence == 0.0 and total_weight > 0:
             confidence = weighted_confidence / total_weight
-        else:
-            confidence = 0.0
         
         # Get previous state
         previous_state = self._zone_states[zone_id].state if zone_id in self._zone_states else PresenceState.ABSENT
