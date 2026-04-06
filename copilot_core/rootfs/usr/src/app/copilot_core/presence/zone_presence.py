@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional, Set, Tuple
 from enum import Enum
+import math
 import threading
 import uuid
 
@@ -878,3 +879,35 @@ class ZonePresenceEngine:
         self._publish("light_cleanup", {**payload, "action": "turn_off"})
         self._publish("climate_eco", {**payload, "mode": "eco"})
         self._publish("energy_optimization", {**payload, "profile": "away"})
+
+
+SENSOR_TYPE_PRIORS = {
+    "mmwave": (8.0, 2.0), "pir": (3.0, 4.0), "device_tracker": (4.0, 5.0),
+    "person": (6.0, 2.0), "camera": (5.0, 3.0), "custom": (2.0, 3.0),
+}
+
+def bayesian_presence_probability(sensor_readings):
+    if not sensor_readings: return 0.0, "none"
+    total_log_odds = 0.0; total_weight = 0.0
+    for sid, (triggered, stype, reliability) in sensor_readings.items():
+        a, b = SENSOR_TYPE_PRIORS.get(stype, (2.0, 3.0))
+        post_a = a + (1 if triggered else 0)
+        post_b = b + (0 if triggered else 1)
+        pm = post_a / (post_a + post_b)
+        weight = reliability * math.sqrt(a + b)
+        eps = 1e-6
+        odds = (pm + eps) / (1 - pm + eps)
+        total_log_odds += weight * math.log(odds)
+        total_weight += weight
+    if total_weight == 0: return 0.0, "none"
+    prob = 1 / (1 + math.exp(-total_log_odds / total_weight))
+    strength = "strong" if total_weight > 15 else "moderate" if total_weight > 8 else "weak" if total_weight > 2 else "none"
+    return min(1.0, max(0.0, prob)), strength
+    
+def wilson_confidence(n_present, n_total):
+    if n_total == 0: return 0.0
+    p_hat = n_present / n_total; z = 1.645
+    denom = 1 + z*z / n_total
+    center = (p_hat + z*z/(2*n_total)) / denom
+    margin = z * math.sqrt((p_hat*(1-p_hat) + z*z/(4*n_total)) / n_total) / denom
+    return max(0.0, center - margin)
