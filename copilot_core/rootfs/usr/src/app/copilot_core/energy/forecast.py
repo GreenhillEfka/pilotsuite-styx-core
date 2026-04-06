@@ -376,3 +376,35 @@ class EnergyForecastEngine:
                 days=hours // 24 + 1, weather_data=weather_data
             )],
         }
+    
+    def predict_with_ml(self, hours: int, weather_data: Optional[list[dict]] = None) -> list[ForecastDataPoint]:
+        """Slice 152: ML-based prediction using LSTM (if available)."""
+        if not self._use_ml or self._ml_model is None:
+            _LOGGER.debug("ML model not available, falling back to statistical method")
+            return []
+        
+        try:
+            return self._ml_model.predict(
+                hours=hours,
+                base_load_kw=self._base_load_kw,
+                weather_data=weather_data,
+            )
+        except Exception as exc:
+            _LOGGER.warning("ML prediction failed, falling back: %s", exc)
+            return []
+    
+    def train_ml_model(self, training_data: list[dict]) -> bool:
+        """Slice 152: Train LSTM model on historical data."""
+        if not self._use_ml:
+            _LOGGER.info("ML disabled, skipping training")
+            return False
+        
+        try:
+            if self._ml_model:
+                self._ml_model.train(training_data)
+                _LOGGER.info("LSTM model trained on %d samples", len(training_data))
+                return True
+        except Exception as exc:
+            _LOGGER.error("ML training failed: %s", exc)
+        
+        return False
