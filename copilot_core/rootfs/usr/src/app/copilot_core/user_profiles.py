@@ -1,16 +1,24 @@
-"""
-User Profiles -- Per-user preference tracking linked to HA person entities.
+"""User Profiles for Multi-User Preference Learning (P1-003).
 
-Each person.* entity in HA gets their own profile with learned preferences.
+Provides user identification by name, voice, or context for multi-household support.
+Privacy-first: all user data remains local.
+
+Features:
+- User identification (by name, voice ID, or context)
+- Per-user profile storage
+- Voice fingerprint association (optional, local-only)
+- Context-based user inference
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
 import sqlite3
 import threading
 import time
+from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
@@ -18,185 +26,421 @@ logger = logging.getLogger(__name__)
 DB_PATH = os.environ.get("USER_PROFILES_DB", "/data/user_profiles.db")
 
 
-class UserProfileManager:
-    """Manage per-user profiles backed by SQLite.
+@dataclass
+class UserProfile:
+    """A user profile with identification and preferences."""
+    user_id: str  # Unique identifier (UUID or hash)
+    name: str  # Display name
+    voice_id: Optional[str] = None  # Optional voice fingerprint hash
+    created_at: float = field(default_factory=time.time)
+    last_seen: float = field(default_factory=time.time)
+    interaction_count: int = 0
+    context_hints: Dict[str, Any] = field(default_factory=dict)  # e.g., {"timezone": "Europe/Berlin", "language": "de"}
+    is_active: bool = True
+    
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "user_id": self.user_id,
+            "name": self.name,
+            "voice_id": self.voice_id,
+            "created_at": self.created_at,
+            "last_seen": self.last_seen,
+            "interaction_count": self.interaction_count,
+            "context_hints": self.context_hints,
+            "is_active": self.is_active,
+        }
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "UserProfile":
+        return cls(
+            user_id=data.get("user_id", ""),
+            name=data.get("name", "Unknown"),
+            voice_id=data.get("voice_id"),
+            created_at=data.get("created_at", time.time()),
+            last_seen=data.get("last_seen", time.time()),
+            interaction_count=data.get("interaction_count", 0),
+            context_hints=data.get("context_hints", {}),
+            is_active=data.get("is_active", True),
+        )
 
-    Profiles are keyed by HA ``person.*`` entity IDs and store learned
-    preferences, suggestion history, and feedback statistics.
+
+class UserProfiles:
+    """User profile manager for multi-household support.
+    
+    Supports identification by:
+    - Name (explicit user identification)
+    - Voice ID (voice fingerprint, optional)
+    - Context (timezone, language, device, etc.)
     """
-
-    def __init__(self, db_path: str | None = None):
+    
+    def __init__(self, db_path: str = None):
         self._db_path = db_path or DB_PATH
         self._lock = threading.Lock()
         self._init_db()
-        logger.info("UserProfileManager initialized at %s", self._db_path)
-
-    # ------------------------------------------------------------------
-    # Database setup
-    # ------------------------------------------------------------------
-
-    def _init_db(self) -> None:
+        logger.info("UserProfiles initialized at %s", self._db_path)
+    
+    def _init_db(self):
+        """Initialize SQLite database."""
         with self._lock:
             conn = sqlite3.connect(self._db_path)
             try:
                 conn.executescript("""
-                    CREATE TABLE IF NOT EXISTS profiles (
-                        person_id    TEXT PRIMARY KEY,
-                        display_name TEXT NOT NULL DEFAULT '',
-                        preferences  TEXT NOT NULL DEFAULT '{}',
-                        suggestion_history TEXT NOT NULL DEFAULT '[]',
-                        created_at   TEXT NOT NULL,
-                        updated_at   TEXT NOT NULL
+                    CREATE TABLE IF NOT EXISTS user_profiles (
+                        user_id TEXT PRIMARY KEY,
+                        name TEXT NOT NULL,
+                        voice_id TEXT UNIQUE,
+                        created_at REAL NOT NULL,
+                        last_seen REAL NOT NULL,
+                        interaction_count INTEGER DEFAULT 0,
+                        context_hints TEXT DEFAULT '{}',
+                        is_active INTEGER DEFAULT 1
                     );
+                    CREATE INDEX IF NOT EXISTS idx_users_voice ON user_profiles(voice_id);
+                    CREATE INDEX IF NOT EXISTS idx_users_name ON user_profiles(name);
+                    CREATE INDEX IF NOT EXISTS idx_users_active ON user_profiles(is_active);
                 """)
                 conn.commit()
             finally:
                 conn.close()
-
-    # ------------------------------------------------------------------
-    # Helpers
-    # ------------------------------------------------------------------
-
-    def _now_iso(self) -> str:
-        return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-
-    def _ensure_profile(self, conn: sqlite3.Connection, person_id: str) -> None:
-        """Create a stub profile if none exists yet."""
-        row = conn.execute(
-            "SELECT 1 FROM profiles WHERE person_id = ?", (person_id,)
-        ).fetchone()
-        if row is None:
-            now = self._now_iso()
-            conn.execute(
-                "INSERT INTO profiles (person_id, display_name, preferences, "
-                "suggestion_history, created_at, updated_at) "
-                "VALUES (?, ?, '{}', '[]', ?, ?)",
-                (person_id, person_id, now, now),
-            )
-            conn.commit()
-
-    # ------------------------------------------------------------------
-    # Public API
-    # ------------------------------------------------------------------
-
-    def get_profile(self, person_id: str) -> Dict[str, Any]:
-        """Return the full profile dict for *person_id*."""
+    
+    def create_user(self, name: str, voice_id: str = None, 
+                    context_hints: Dict[str, Any] = None) -> UserProfile:
+        """Create a new user profile.
+        
+        Args:
+            name: User display name
+            voice_id: Optional voice fingerprint hash
+            context_hints: Optional context hints (timezone, language, etc.)
+        
+        Returns:
+            Created UserProfile
+        """
+        # Generate user_id from name + timestamp
+        user_id = hashlib.sha256(f"{name}:{time.time()}".encode()).hexdigest()[:16]
+        
+        profile = UserProfile(
+            user_id=user_id,
+            name=name,
+            voice_id=voice_id,
+            context_hints=context_hints or {},
+        )
+        
         with self._lock:
             conn = sqlite3.connect(self._db_path)
             try:
-                self._ensure_profile(conn, person_id)
+                conn.execute(
+                    "INSERT INTO user_profiles (user_id, name, voice_id, created_at, "
+                    "last_seen, interaction_count, context_hints, is_active) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    (profile.user_id, profile.name, profile.voice_id,
+                     profile.created_at, profile.last_seen, 0,
+                     json.dumps(profile.context_hints), 1 if profile.is_active else 0)
+                )
+                conn.commit()
+                logger.info("Created user profile: %s (%s)", name, user_id)
+                return profile
+            finally:
+                conn.close()
+    
+    def get_user(self, user_id: str) -> Optional[UserProfile]:
+        """Get user by ID."""
+        with self._lock:
+            conn = sqlite3.connect(self._db_path)
+            try:
                 row = conn.execute(
-                    "SELECT person_id, display_name, preferences, "
-                    "suggestion_history, created_at, updated_at "
-                    "FROM profiles WHERE person_id = ?",
-                    (person_id,),
+                    "SELECT user_id, name, voice_id, created_at, last_seen, "
+                    "interaction_count, context_hints, is_active "
+                    "FROM user_profiles WHERE user_id = ?",
+                    (user_id,)
                 ).fetchone()
-                if row is None:
-                    return {}
+                if row:
+                    return UserProfile(
+                        user_id=row[0],
+                        name=row[1],
+                        voice_id=row[2],
+                        created_at=row[3],
+                        last_seen=row[4],
+                        interaction_count=row[5],
+                        context_hints=json.loads(row[6]),
+                        is_active=bool(row[7]),
+                    )
+                return None
+            finally:
+                conn.close()
+    
+    def get_user_by_voice(self, voice_id: str) -> Optional[UserProfile]:
+        """Get user by voice fingerprint."""
+        with self._lock:
+            conn = sqlite3.connect(self._db_path)
+            try:
+                row = conn.execute(
+                    "SELECT user_id, name, voice_id, created_at, last_seen, "
+                    "interaction_count, context_hints, is_active "
+                    "FROM user_profiles WHERE voice_id = ?",
+                    (voice_id,)
+                ).fetchone()
+                if row:
+                    return UserProfile(
+                        user_id=row[0],
+                        name=row[1],
+                        voice_id=row[2],
+                        created_at=row[3],
+                        last_seen=row[4],
+                        interaction_count=row[5],
+                        context_hints=json.loads(row[6]),
+                        is_active=bool(row[7]),
+                    )
+                return None
+            finally:
+                conn.close()
+    
+    def get_user_by_name(self, name: str) -> Optional[UserProfile]:
+        """Get user by name (case-insensitive)."""
+        with self._lock:
+            conn = sqlite3.connect(self._db_path)
+            try:
+                row = conn.execute(
+                    "SELECT user_id, name, voice_id, created_at, last_seen, "
+                    "interaction_count, context_hints, is_active "
+                    "FROM user_profiles WHERE LOWER(name) = LOWER(?)",
+                    (name,)
+                ).fetchone()
+                if row:
+                    return UserProfile(
+                        user_id=row[0],
+                        name=row[1],
+                        voice_id=row[2],
+                        created_at=row[3],
+                        last_seen=row[4],
+                        interaction_count=row[5],
+                        context_hints=json.loads(row[6]),
+                        is_active=bool(row[7]),
+                    )
+                return None
+            finally:
+                conn.close()
+    
+    def identify_user(self, name: str = None, voice_id: str = None,
+                      context_hints: Dict[str, Any] = None) -> UserProfile:
+        """Identify or create a user from available context.
+        
+        Tries to match existing user by:
+        1. Voice ID (most reliable)
+        2. Name (case-insensitive)
+        3. Context hints (timezone, language, etc.)
+        
+        Creates new user if no match found.
+        
+        Args:
+            name: Optional user name
+            voice_id: Optional voice fingerprint
+            context_hints: Optional context hints
+        
+        Returns:
+            Matched or created UserProfile
+        """
+        # Try voice ID first
+        if voice_id:
+            user = self.get_user_by_voice(voice_id)
+            if user:
+                self._update_last_seen(user.user_id)
+                return user
+        
+        # Try name
+        if name:
+            user = self.get_user_by_name(name)
+            if user:
+                if voice_id and not user.voice_id:
+                    # Update voice ID for existing user
+                    self._set_voice_id(user.user_id, voice_id)
+                self._update_last_seen(user.user_id)
+                return user
+        
+        # Try context hints (simplified: match by timezone)
+        if context_hints and "timezone" in context_hints:
+            users = self.get_all_users()
+            for user in users:
+                if user.context_hints.get("timezone") == context_hints["timezone"]:
+                    # Fuzzy match - return first active user with same timezone
+                    if user.is_active:
+                        self._update_last_seen(user.user_id)
+                        return user
+        
+        # Create new user
+        display_name = name or f"User_{hashlib.sha256(str(time.time()).encode()).hexdigest()[:6]}"
+        return self.create_user(
+            name=display_name,
+            voice_id=voice_id,
+            context_hints=context_hints or {},
+        )
+    
+    def update_user(self, user_id: str, name: str = None, voice_id: str = None,
+                    context_hints: Dict[str, Any] = None) -> Optional[UserProfile]:
+        """Update user profile fields."""
+        user = self.get_user(user_id)
+        if not user:
+            return None
+        
+        with self._lock:
+            conn = sqlite3.connect(self._db_path)
+            try:
+                if name is not None:
+                    user.name = name
+                if voice_id is not None:
+                    user.voice_id = voice_id
+                if context_hints is not None:
+                    user.context_hints.update(context_hints)
+                
+                conn.execute(
+                    "UPDATE user_profiles SET name = ?, voice_id = ?, "
+                    "context_hints = ? WHERE user_id = ?",
+                    (user.name, user.voice_id, json.dumps(user.context_hints), user_id)
+                )
+                conn.commit()
+                return user
+            finally:
+                conn.close()
+    
+    def _set_voice_id(self, user_id: str, voice_id: str) -> bool:
+        """Set voice ID for a user."""
+        with self._lock:
+            conn = sqlite3.connect(self._db_path)
+            try:
+                conn.execute(
+                    "UPDATE user_profiles SET voice_id = ? WHERE user_id = ?",
+                    (voice_id, user_id)
+                )
+                conn.commit()
+                return True
+            finally:
+                conn.close()
+    
+    def _update_last_seen(self, user_id: str) -> None:
+        """Update last seen timestamp and increment interaction count."""
+        now = time.time()
+        with self._lock:
+            conn = sqlite3.connect(self._db_path)
+            try:
+                conn.execute(
+                    "UPDATE user_profiles SET last_seen = ?, "
+                    "interaction_count = interaction_count + 1 WHERE user_id = ?",
+                    (now, user_id)
+                )
+                conn.commit()
+            finally:
+                conn.close()
+    
+    def record_interaction(self, user_id: str) -> None:
+        """Record a user interaction."""
+        self._update_last_seen(user_id)
+    
+    def get_all_users(self, active_only: bool = False) -> List[UserProfile]:
+        """Get all user profiles."""
+        with self._lock:
+            conn = sqlite3.connect(self._db_path)
+            try:
+                query = "SELECT user_id, name, voice_id, created_at, last_seen, interaction_count, context_hints, is_active FROM user_profiles"
+                if active_only:
+                    query += " WHERE is_active = 1"
+                query += " ORDER BY last_seen DESC"
+                
+                rows = conn.execute(query).fetchall()
+                return [
+                    UserProfile(
+                        user_id=row[0],
+                        name=row[1],
+                        voice_id=row[2],
+                        created_at=row[3],
+                        last_seen=row[4],
+                        interaction_count=row[5],
+                        context_hints=json.loads(row[6]),
+                        is_active=bool(row[7]),
+                    )
+                    for row in rows
+                ]
+            finally:
+                conn.close()
+    
+    def get_active_users(self) -> List[UserProfile]:
+        """Get active users only."""
+        return self.get_all_users(active_only=True)
+    
+    def deactivate_user(self, user_id: str) -> bool:
+        """Deactivate a user profile (soft delete)."""
+        with self._lock:
+            conn = sqlite3.connect(self._db_path)
+            try:
+                result = conn.execute(
+                    "UPDATE user_profiles SET is_active = 0 WHERE user_id = ?",
+                    (user_id,)
+                )
+                conn.commit()
+                return result.rowcount > 0
+            finally:
+                conn.close()
+    
+    def delete_user(self, user_id: str) -> bool:
+        """Permanently delete a user profile (GDPR)."""
+        with self._lock:
+            conn = sqlite3.connect(self._db_path)
+            try:
+                result = conn.execute(
+                    "DELETE FROM user_profiles WHERE user_id = ?",
+                    (user_id,)
+                )
+                conn.commit()
+                if result.rowcount > 0:
+                    logger.info("Deleted user profile: %s", user_id)
+                    return True
+                return False
+            finally:
+                conn.close()
+    
+    def export_user_data(self, user_id: str) -> Optional[Dict[str, Any]]:
+        """Export all data for a user (GDPR)."""
+        user = self.get_user(user_id)
+        if not user:
+            return None
+        
+        return {
+            "user_profile": user.to_dict(),
+            "exported_at": time.time(),
+            "format_version": "1.0",
+        }
+    
+    def get_stats(self) -> Dict[str, Any]:
+        """Get user profile statistics."""
+        with self._lock:
+            conn = sqlite3.connect(self._db_path)
+            try:
+                total = conn.execute("SELECT COUNT(*) FROM user_profiles").fetchone()[0]
+                active = conn.execute("SELECT COUNT(*) FROM user_profiles WHERE is_active = 1").fetchone()[0]
+                with_voice = conn.execute("SELECT COUNT(*) FROM user_profiles WHERE voice_id IS NOT NULL").fetchone()[0]
+                
                 return {
-                    "person_id": row[0],
-                    "display_name": row[1],
-                    "preferences": json.loads(row[2]),
-                    "suggestion_history": json.loads(row[3]),
-                    "created_at": row[4],
-                    "updated_at": row[5],
+                    "total_users": total,
+                    "active_users": active,
+                    "users_with_voice": with_voice,
+                    "db_path": self._db_path,
                 }
             finally:
                 conn.close()
 
-    def update_preference(
-        self, person_id: str, key: str, value: Any, weight: float = 1.0
-    ) -> None:
-        """Set or update a single preference key for *person_id*."""
-        with self._lock:
-            conn = sqlite3.connect(self._db_path)
-            try:
-                self._ensure_profile(conn, person_id)
-                row = conn.execute(
-                    "SELECT preferences FROM profiles WHERE person_id = ?",
-                    (person_id,),
-                ).fetchone()
-                prefs: dict = json.loads(row[0]) if row else {}
-                prefs[key] = {"value": value, "weight": weight}
-                now = self._now_iso()
-                conn.execute(
-                    "UPDATE profiles SET preferences = ?, updated_at = ? "
-                    "WHERE person_id = ?",
-                    (json.dumps(prefs), now, person_id),
-                )
-                conn.commit()
-                logger.debug("Preference %s updated for %s", key, person_id)
-            finally:
-                conn.close()
 
-    def get_active_users(
-        self, hass_states: Optional[List[Dict[str, Any]]] = None
-    ) -> List[Dict[str, Any]]:
-        """Return profiles of persons currently at home.
+# Singleton instance
+_profiles: Optional[UserProfiles] = None
 
-        If *hass_states* is provided it should be a list of HA state dicts
-        for ``person.*`` entities.  Persons whose state is ``home`` are
-        considered active.  Without *hass_states* all known profiles are
-        returned.
-        """
-        if hass_states is None:
-            with self._lock:
-                conn = sqlite3.connect(self._db_path)
-                try:
-                    rows = conn.execute(
-                        "SELECT person_id FROM profiles"
-                    ).fetchall()
-                    return [self.get_profile(r[0]) for r in rows]
-                finally:
-                    conn.close()
 
-        home_ids = {
-            s["entity_id"]
-            for s in hass_states
-            if s.get("entity_id", "").startswith("person.")
-            and s.get("state") == "home"
-        }
-        return [self.get_profile(pid) for pid in home_ids]
+def get_user_profiles() -> UserProfiles:
+    """Get the global UserProfiles instance."""
+    global _profiles
+    if _profiles is None:
+        _profiles = UserProfiles()
+    return _profiles
 
-    def get_suggestions_for_user(self, person_id: str) -> List[Dict[str, Any]]:
-        """Return the suggestion history for *person_id*."""
-        profile = self.get_profile(person_id)
-        return profile.get("suggestion_history", [])
 
-    def record_feedback(
-        self, person_id: str, suggestion_id: str, action: str
-    ) -> None:
-        """Record user feedback (accept / reject / dismiss) for a suggestion."""
-        with self._lock:
-            conn = sqlite3.connect(self._db_path)
-            try:
-                self._ensure_profile(conn, person_id)
-                row = conn.execute(
-                    "SELECT suggestion_history FROM profiles WHERE person_id = ?",
-                    (person_id,),
-                ).fetchone()
-                history: list = json.loads(row[0]) if row else []
-                history.append(
-                    {
-                        "suggestion_id": suggestion_id,
-                        "action": action,
-                        "timestamp": self._now_iso(),
-                    }
-                )
-                # Keep last 500 entries
-                history = history[-500:]
-                now = self._now_iso()
-                conn.execute(
-                    "UPDATE profiles SET suggestion_history = ?, updated_at = ? "
-                    "WHERE person_id = ?",
-                    (json.dumps(history), now, person_id),
-                )
-                conn.commit()
-                logger.debug(
-                    "Feedback recorded for %s: suggestion=%s action=%s",
-                    person_id,
-                    suggestion_id,
-                    action,
-                )
-            finally:
-                conn.close()
+def init_user_profiles(db_path: str = None) -> UserProfiles:
+    """Initialize the global UserProfiles with custom config."""
+    global _profiles
+    _profiles = UserProfiles(db_path=db_path)
+    return _profiles
