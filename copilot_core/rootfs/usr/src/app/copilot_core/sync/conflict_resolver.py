@@ -57,9 +57,8 @@ class ConflictType(str, Enum):
 
 
 class Conflict:
-
-
-# -----------------------------------------------------------------------------
+    """Alias for ConflictRecord for backwards compatibility."""
+    pass
 
 
 @dataclass

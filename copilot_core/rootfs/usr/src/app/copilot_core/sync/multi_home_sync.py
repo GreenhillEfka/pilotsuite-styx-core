@@ -50,6 +50,44 @@ class SyncStatus(str, Enum):
     CONFLICT = "conflict"
 
 
+class SyncStatus(str, Enum):
+    """Sync job/operation status."""
+    PENDING = "pending"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CONFLICT = "conflict"
+
+
+@dataclass
+class SyncOperation:
+    """Represents a synchronization operation."""
+    id: str
+    source_home_id: str
+    target_home_id: str
+    operation_type: str  # config, state, automation
+    status: str = "pending"  # pending, running, completed, failed, conflict
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    completed_at: Optional[datetime] = None
+    data: dict[str, Any] = field(default_factory=dict)
+    conflict_info: Optional[dict[str, Any]] = None
+    error_message: Optional[str] = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "source_home_id": self.source_home_id,
+            "target_home_id": self.target_home_id,
+            "operation_type": self.operation_type,
+            "status": self.status,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "completed_at": self.completed_at.isoformat() if self.completed_at else None,
+            "data": self.data,
+            "conflict_info": self.conflict_info,
+            "error_message": self.error_message,
+        }
+
+
 class SyncScope(str, Enum):
     """What to synchronize."""
     CONFIG = "config"
