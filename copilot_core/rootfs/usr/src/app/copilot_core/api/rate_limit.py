@@ -169,18 +169,23 @@ def rate_limit(
 
             # Check rate limit
             allowed, info = limiter.is_allowed(key, ep)
-            
+
             if not allowed:
-                return jsonify({
+                retry_after = max(1, info["reset"] - int(time.time()))
+                resp = make_response(jsonify({
                     "ok": False,
-                    "error": "Rate limit exceeded",
-                    "message": f"Too many requests to {ep}",
+                    "error": "rate_limit_exceeded",
+                    "message": f"Too many requests to {ep}. Retry after {retry_after}s.",
                     "rate_limit": info,
-                }), 429
-            
+                }), 429)
+                resp.headers["Retry-After"] = str(retry_after)
+                resp.headers["X-RateLimit-Limit"] = str(info["limit"])
+                resp.headers["X-RateLimit-Remaining"] = "0"
+                resp.headers["X-RateLimit-Reset"] = str(info["reset"])
+                return resp
+
             # Add rate limit headers
             try:
-                from flask import make_response
                 response = make_response(f(*args, **kwargs))
                 response.headers["X-RateLimit-Limit"] = str(info["limit"])
                 response.headers["X-RateLimit-Remaining"] = str(info["remaining"])
