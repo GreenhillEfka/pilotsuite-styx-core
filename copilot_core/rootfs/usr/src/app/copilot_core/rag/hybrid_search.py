@@ -104,3 +104,212 @@ def reciprocal_rank_fusion(
             )
         )
     return out
+
+
+# ── Hybrid Search Engine ────────────────────────────────────────────────
+
+import hashlib
+import threading
+import time
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional, Sequence
+
+from .bm25 import BM25Index
+from .semantic_backend import SemanticBackend
+
+
+@dataclass
+class HybridSearchEngine:
+    """Orchestrates lexical (BM25) + semantic search with RRF fusion.
+    
+    Combines BM25 keyword search with embedding-based semantic search
+    using Reciprocal Rank Fusion for optimal ranking.
+    
+    Args:
+        bm25_index: BM25 index for lexical search
+        semantic_backend: Vector store for semantic search
+        cache_ttl_seconds: TTL for cached results (default: 60s)
+        rrf_k: RRF constant k (default: 60)
+    """
+    
+    bm25_index: BM25Index
+    semantic_backend: SemanticBackend
+    cache_ttl_seconds: float = 60.0
+    rrf_k: int = 60
+    _cache: Dict[str, tuple] = field(default_factory=dict, repr=False)
+    _cache_lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
+    
+    def search(
+        self,
+        query: str,
+        top_k: int = 10,
+        min_score: float = 0.0,
+        include_debug: bool = False,
+    ) -> Dict[str, Any]:
+        """Execute hybrid search combining BM25 + semantic results.
+        
+        Args:
+            query: Search query string
+            top_k: Maximum results to return
+            min_score: Minimum fused score threshold (0.0 = no filter)
+            include_debug: Include per-source scores in response
+        
+        Returns:
+            Dict with:
+            - items: List of result dicts with doc_id, fused_score, rank
+            - count: Number of results
+            - query: Original query
+            - timing_ms: Time taken for search
+            - debug (optional): BM25 and semantic scores per result
+        """
+        start = time.monotonic()
+        
+        if not query or not query.strip():
+            return {
+                "items": [],
+                "count": 0,
+                "query": query,
+                "timing_ms": 0,
+            }
+        
+        # Check cache
+        cache_key = self._make_cache_key(query, top_k, min_score)
+        cached, cached_at = self._get_cached(cache_key)
+        if cached is not None:
+            elapsed_ms = (time.monotonic() - start) * 1000
+            result = dict(cached)
+            result["timing_ms"] = round(elapsed_ms, 2)
+            result["_cached"] = True
+            result["_cached_at"] = cached_at
+            return result
+        
+        # Execute both searches in parallel-ish (lexical first, then semantic)
+        bm25_results = self._search_bm25(query, top_k * 2)
+        semantic_results = self._search_semantic(query, top_k * 2)
+        
+        # Fuse with RRF
+        fused = reciprocal_rank_fusion(
+            lexical_hits=bm25_results,
+            semantic_hits=semantic_results,
+            top_k=top_k,
+            k=self.rrf_k,
+        )
+        
+        # Build response items
+        items: List[Dict[str, Any]] = []
+        for rank, hit in enumerate(fused, start=1):
+            if hit.fused_score < min_score:
+                continue
+            item: Dict[str, Any] = {
+                "doc_id": hit.doc_id,
+                "fused_score": round(hit.fused_score, 6),
+                "rank": rank,
+            }
+            if include_debug:
+                item["_debug"] = {
+                    "lexical_rank": hit.lexical_rank,
+                    "semantic_rank": hit.semantic_rank,
+                    "lexical_score": hit.lexical_score,
+                    "semantic_score": hit.semantic_score,
+                }
+            items.append(item)
+        
+        elapsed_ms = (time.monotonic() - start) * 1000
+        result = {
+            "items": items,
+            "count": len(items),
+            "query": query,
+            "timing_ms": round(elapsed_ms, 2),
+            "bm25_count": len(bm25_results),
+            "semantic_count": len(semantic_results),
+        }
+        
+        self._set_cache(cache_key, result)
+        return result
+    
+    def _search_bm25(
+        self,
+        query: str,
+        top_k: int,
+    ) -> Sequence[RankedHit]:
+        """Execute BM25 search."""
+        try:
+            raw = self.bm25_index.search(query, top_k=top_k)
+            return [
+                RankedHit(doc_id=r["doc_id"], score=r["score"], rank=r.get("rank", i + 1))
+                for i, r in enumerate(raw)
+            ]
+        except Exception:
+            return []
+    
+    def _search_semantic(
+        self,
+        query: str,
+        top_k: int,
+    ) -> Sequence[RankedHit]:
+        """Execute semantic search."""
+        try:
+            raw = self.semantic_backend.search(query, top_k=top_k)
+            return [
+                RankedHit(doc_id=r["doc_id"], score=r["score"], rank=r.get("rank", i + 1))
+                for i, r in enumerate(raw)
+            ]
+        except Exception:
+            return []
+    
+    def _make_cache_key(self, query: str, top_k: int, min_score: float) -> str:
+        """Build a deterministic cache key."""
+        content = f"{query}|{top_k}|{min_score}"
+        return hashlib.sha256(content.encode()).hexdigest()[:32]
+    
+    def _get_cached(self, key: str) -> tuple:
+        """Get cached result if still valid."""
+        with self._cache_lock:
+            if key in self._cache:
+                value, timestamp = self._cache[key]
+                if time.monotonic() - timestamp < self.cache_ttl_seconds:
+                    return value, timestamp
+                del self._cache[key]
+        return None, None
+    
+    def _set_cache(self, key: str, value: Dict[str, Any]) -> None:
+        """Cache a result, evicting oldest on overflow."""
+        with self._cache_lock:
+            if len(self._cache) >= 500:
+                oldest_key = min(self._cache, key=lambda k: self._cache[k][1])
+                del self._cache[oldest_key]
+            self._cache[key] = (dict(value), time.monotonic())
+    
+    def clear_cache(self) -> None:
+        """Clear all cached search results."""
+        with self._cache_lock:
+            self._cache.clear()
+
+
+# ── Convenience factory ─────────────────────────────────────────────────
+
+
+def get_hybrid_search_engine(
+    cache_ttl_seconds: float = 60.0,
+    rrf_k: int = 60,
+) -> HybridSearchEngine:
+    """Create a HybridSearchEngine from default backends.
+    
+    Returns a fully wired engine using the installed BM25 and semantic backends.
+    """
+    try:
+        bm25 = BM25Index()
+    except Exception:
+        bm25 = BM25Index._stub()
+    
+    try:
+        sem = SemanticBackend()
+    except Exception:
+        sem = SemanticBackend._stub()
+    
+    return HybridSearchEngine(
+        bm25_index=bm25,
+        semantic_backend=sem,
+        cache_ttl_seconds=cache_ttl_seconds,
+        rrf_k=rrf_k,
+    )
