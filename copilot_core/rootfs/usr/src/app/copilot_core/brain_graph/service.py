@@ -469,6 +469,104 @@ class BrainGraphService:
             limit_edges=limit_edges,
         )
     
+    def get_subgraph(
+        self,
+        root_node: str,
+        radius: int = 1,
+        kind_filter: Optional[str] = None,
+        domain_filter: Optional[str] = None,
+        direction: str = "both",
+        limit: int = 50,
+    ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], bool, Optional[str]]:
+        """Get a paginated subgraph rooted at a specific node.
+        
+        Returns (nodes, edges, has_next, next_cursor) where has_next=True
+        indicates there are more nodes beyond the current page.
+        
+        Args:
+            root_node: Root node ID to start traversal
+            radius: Max hop distance from root (1-3)
+            kind_filter: Optional node kind to restrict results
+            domain_filter: Optional domain to restrict results
+            direction: Traversal direction - outgoing|incoming|both
+            limit: Max nodes per page (fetch limit+1 to detect has_next)
+        
+        Returns:
+            Tuple of (nodes_list, edges_list, has_next, next_cursor)
+        """
+        now_ms = int(time.time() * 1000)
+        visited_ids: Set[str] = set()
+        nodes_out: List[Dict[str, Any]] = []
+        edges_out: List[Dict[str, Any]] = []
+        
+        def serialize_node(node) -> Dict[str, Any]:
+            return {
+                "id": node.id,
+                "kind": node.kind,
+                "label": node.label,
+                "domain": node.domain,
+                "score": node.effective_score(now_ms, self.node_half_life_hours),
+                "updated_at_ms": node.updated_at_ms,
+                "source": node.source,
+                "tags": node.tags,
+                "meta": node.meta,
+            }
+        
+        def serialize_edge(edge) -> Dict[str, Any]:
+            return {
+                "id": edge.id,
+                "from": edge.from_node,
+                "to": edge.to_node,
+                "type": edge.edge_type,
+                "weight": edge.effective_weight(now_ms, self.edge_half_life_hours),
+                "updated_at_ms": edge.updated_at_ms,
+                "evidence": edge.evidence,
+                "meta": edge.meta,
+            }
+        
+        def visit_node(node_id: str, depth: int) -> None:
+            if depth > radius or node_id in visited_ids:
+                return
+            
+            visited_ids.add(node_id)
+            node = self.store.get_node(node_id)
+            if node is None:
+                return
+            
+            # Apply filters
+            if kind_filter and node.kind != kind_filter:
+                return
+            if domain_filter and node.domain != domain_filter:
+                return
+            
+            nodes_out.append(serialize_node(node))
+            
+            if depth >= radius:
+                return
+            
+            # Traverse edges
+            if direction in ("outgoing", "both"):
+                for edge in self.store.get_edges(from_node=node_id):
+                    edges_out.append(serialize_edge(edge))
+                    if len(nodes_out) < limit + 1:
+                        visit_node(edge.to_node, depth + 1)
+            
+            if direction in ("incoming", "both"):
+                for edge in self.store.get_edges(to_node=node_id):
+                    if edge not in edges_out:
+                        edges_out.append(serialize_edge(edge))
+                    if len(nodes_out) < limit + 1:
+                        visit_node(edge.from_node, depth + 1)
+        
+        visit_node(root_node, depth=0)
+        
+        # Determine pagination
+        has_next = len(nodes_out) > limit
+        nodes_page = nodes_out[:limit] if has_next else nodes_out
+        next_cursor = nodes_page[-1]["id"] if nodes_page else None
+        
+        return nodes_page, edges_out, has_next, next_cursor
+    
     def prune_now(self) -> Dict[str, int]:
         """Manually trigger graph pruning."""
         return self.store.prune_graph()
