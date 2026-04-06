@@ -650,6 +650,45 @@ class LightModule:
             "total_history_entries": sum(len(h) for h in self._light_history.values()),
             "active_manual_overrides": len(self._manual_override),
         }
+
+    def get_summary(self) -> Dict[str, Any]:
+        """Slice 136: Return module summary for Backend-UI read model.
+        
+        Design Contract: summary, detailed_states, active_features, anomalies
+        """
+        now = datetime.now(timezone.utc)
+        
+        # Build detailed states for all zones
+        detailed_states = []
+        for zone_id, zone_state in self._zone_states.items():
+            # Get entity IDs for this zone
+            zone_entity_ids = self._zone_entities.get(zone_id, [])
+            
+            detailed_states.append({
+                "entity_id": f"light.{zone_id}",
+                "state": zone_state.state.value,
+                "attributes": {
+                    "brightness": zone_state.brightness,
+                    "color_temp": zone_state.color_temp_kelvin,
+                    "scene": zone_state.scene.value if zone_state.scene else None,
+                    "is_override": zone_state.is_override,
+                    "last_changed": zone_state.last_changed.isoformat() if zone_state.last_changed else None,
+                    "entity_count": len(zone_entity_ids),
+                }
+            })
+        
+        # Count lights on
+        lights_on = sum(
+            1 for zs in self._zone_states.values()
+            if zs.state != LightState.OFF
+        )
+        
+        return {
+            "summary": f"{lights_on}/{len(self._zone_states)} zones lit",
+            "detailed_states": detailed_states,
+            "active_features": ["Adaptive Brightness", "Scene Control", "Manual Override Detection", "Energy Tracking"],
+            "anomalies": [],  # Could be populated with brightness anomalies
+        }
     
     def _lock(self):
         """Simple context manager for thread safety."""
