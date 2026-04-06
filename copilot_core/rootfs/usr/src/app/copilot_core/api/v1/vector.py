@@ -19,6 +19,7 @@ from flask import Blueprint, jsonify, request
 
 from copilot_core.api.validation import validate_json
 from copilot_core.api.v1.schemas import EmbeddingRequest, SimilarityRequest, BulkEmbeddingRequest
+from copilot_core.api.api_errors import unauthorized, bad_request, internal_error, not_found
 from copilot_core.vector_store.store import get_vector_store, VectorStore, VectorStoreConfig
 from copilot_core.vector_store.embeddings import get_embedding_engine, EmbeddingEngine
 
@@ -48,7 +49,7 @@ def _run_async(coro, timeout: int = 10):
 @bp.before_request
 def _require_auth():
     if not _validate_token(request):
-        return jsonify({"error": "unauthorized", "message": "Valid X-Auth-Token or Bearer token required"}), 401
+        return unauthorized("Valid X-Auth-Token or Bearer token required", req=request)
 
 
 def _store() -> VectorStore:
