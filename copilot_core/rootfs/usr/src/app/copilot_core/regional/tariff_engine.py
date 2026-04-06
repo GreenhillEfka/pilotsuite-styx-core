@@ -523,3 +523,50 @@ class RegionalTariffEngine:
     def tariff_type(self) -> str:
         """Current tariff type."""
         return self._tariff_type
+
+
+# Slice 70: Real-Time Pricing API Contract (P2-010)
+# REST endpoints for dynamic electricity pricing
+
+class RealTimePricingAPI:
+    """API contract for real-time dynamic pricing."""
+
+    # GET  /api/v1/pricing/current              → current price for today
+    # GET  /api/v1/pricing/forecast?days=2     → hourly forecast for N days
+    # GET  /api/v1/pricing/cheapest-windows   → best windows for charging
+    # GET  /api/v1/pricing/tariff             → current tariff info
+    # POST /api/v1/pricing/alerts             → register price alert
+
+    @staticmethod
+    def format_current_price(price: "HourlyPrice") -> dict:
+        return {
+            "timestamp": price.start_timestamp,
+            "price_ct_kwh": price.price_ct_kwh,
+            "price_eur_kwh": round(price.price_ct_kwh / 100, 4),
+            "currency": "EUR",
+            "level": price.level.value if hasattr(price.level, 'value') else price.level,
+            "source": price.source,
+        }
+
+    @staticmethod
+    def format_forecast(hourly_prices: list) -> dict:
+        return {
+            "prices": [RealTimePricingAPI.format_current_price(p) for p in hourly_prices],
+            "total_hours": len(hourly_prices),
+            "avg_price_ct": round(sum(p.price_ct_kwh for p in hourly_prices) / len(hourly_prices), 2) if hourly_prices else 0,
+            "min_price_ct": min((p.price_ct_kwh for p in hourly_prices), default=0),
+            "max_price_ct": max((p.price_ct_kwh for p in hourly_prices), default=0),
+        }
+
+    @staticmethod
+    def format_cheapest_windows(hours: list, top_n: int = 3) -> dict:
+        sorted_hours = sorted(hours, key=lambda h: h.price_ct_kwh)[:top_n]
+        return {
+            "windows": [{
+                "start_timestamp": h.start_timestamp,
+                "price_ct_kwh": h.price_ct_kwh,
+                "level": h.level.value if hasattr(h.level, 'value') else h.level,
+                "savings_vs_avg_pct": round((sum(x.price_ct_kwh for x in hours) / len(hours) - h.price_ct_kwh) / (sum(x.price_ct_kwh for x in hours) / len(hours)) * 100, 1) if hours else 0,
+            } for h in sorted_hours],
+            "recommendation": f"Charge battery in window(s) {', '.join(h.start_timestamp for h in sorted_hours)}" if sorted_hours else "No cheap windows found",
+        }
