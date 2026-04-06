@@ -502,4 +502,4 @@ def kg_upsert_zone():
         return jsonify({"ok": True, "zone": node.to_dict()})
     except Exception as e:
         _LOGGER.exception("Failed to upsert zone")
-        return jsonify({"ok": False, "error": str(e)}), 500
+        return jsonify({"ok": False, "error": str(e)}), 500# SPARQL Interface marker
