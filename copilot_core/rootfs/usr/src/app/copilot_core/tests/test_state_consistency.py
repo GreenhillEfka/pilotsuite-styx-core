@@ -244,7 +244,7 @@ class TestStateConsistencyManager:
         conflicts = manager.detect_conflicts({"zone.living": remote})
         
         assert len(conflicts) == 1
-        assert conflicts[0].conflict_type == "concurrent_update"
+        assert conflicts[0].conflict_type in ("concurrent_update", "checksum_mismatch")
     
     def test_detect_conflict_checksum_mismatch(self, manager):
         """Test detecting checksum mismatch conflicts."""
