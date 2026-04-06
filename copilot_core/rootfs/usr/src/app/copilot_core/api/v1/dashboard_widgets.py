@@ -1,170 +1,102 @@
-"""Dashboard Widgets API — Slice 175 Expansion.
+"""SOTA Dashboard Visualization (Slice 145).
 
-New widgets: floorplan, area_tree, service_actions, entity_grid
+Defines structured widget data for the 10 Dashboard tabs:
+1. Dashboard: Global Health, Uptime, Stats
+2. Zones: Activity Map, Zone Status
+3. Modules: State Distribution, Learning Progress
+4. Brain: Neuron Firing, Graph Density
+5. Mood: Dimension Radar, Current State
+6. Automation: Success Rate, Proposal Log
+7. RAG: Vector Count, Hybrid Score
+8. Media: Zone Playback, Camera Feeds
+9. Hardware: Zigbee/Z-Wave Map, Battery Levels
+10. System: Resource Usage, Version Drift
 """
+
 from __future__ import annotations
 
+import logging
 from flask import Blueprint, jsonify, request
+from typing import Any, Dict, List
 from datetime import datetime, timezone
 
-bp = Blueprint("dashboard_widgets", __name__, url_prefix="/api/v1/dashboard/widgets")
+_LOGGER = logging.getLogger(__name__)
 
+dashboard_viz_bp = Blueprint("dashboard_viz", __name__, url_prefix="/api/v1/backend/dashboard")
 
-# ── Floorplan Widget ─────────────────────────────────
-
-@bp.get("/floorplan/config")
-def widget_floorplan_config():
-    """Get floorplan widget configuration."""
+@dashboard_viz_bp.route("/widgets", methods=["GET"])
+def get_dashboard_widgets():
+    """Returns structured widget data for SOTA Dashboard visualization."""
     return jsonify({
-        "ok": True,
-        "widget_type": "floorplan",
-        "config": {
-            "floorplan_id": None,
-            "show_zones": True,
-            "show_entities": True,
-            "clickable": True,
-            "refresh_interval": 5
-        }
-    })
-
-
-@bp.get("/floorplan/data")
-def widget_floorplan_data():
-    """Get floorplan widget data with live entity states."""
-    floorplan_id = request.args.get("floorplan_id")
-    
-    if not floorplan_id:
-        return jsonify({"ok": False, "error": "Missing floorplan_id"}), 400
-    
-    from copilot_core.floorplan.manager import get_floorplan_manager
-    
-    try:
-        manager = get_floorplan_manager()
-        data = manager.get_widget_data(floorplan_id=floorplan_id)
-    except Exception as e:
-        data = {"zones": [], "entities": [], "image_url": None}
-    
-    return jsonify({
-        "ok": True,
-        "floorplan_id": floorplan_id,
-        "data": data,
-        "timestamp": datetime.now(timezone.utc).isoformat()
-    })
-
-
-# ── Area Tree Widget ─────────────────────────────────
-
-@bp.get("/area_tree/config")
-def widget_area_tree_config():
-    """Get area tree widget configuration."""
-    return jsonify({
-        "ok": True,
-        "widget_type": "area_tree",
-        "config": {
-            "root_area_id": None,
-            "show_devices": True,
-            "show_entities": True,
-            "expand_depth": 2
-        }
-    })
-
-
-@bp.get("/area_tree/data")
-def widget_area_tree_data():
-    """Get hierarchical area tree with counts."""
-    root_id = request.args.get("root_area_id")
-    
-    from copilot_core.areas.manager import get_areas_manager
-    
-    try:
-        manager = get_areas_manager()
-        tree = manager.get_widget_tree(root_id=root_id)
-    except Exception as e:
-        tree = []
-    
-    return jsonify({
-        "ok": True,
-        "root_area_id": root_id,
-        "tree": tree,
-        "timestamp": datetime.now(timezone.utc).isoformat()
-    })
-
-
-# ── Service Actions Widget ─────────────────────────────────
-
-@bp.get("/service_actions/config")
-def widget_service_actions_config():
-    """Get service quick actions widget config."""
-    return jsonify({
-        "ok": True,
-        "widget_type": "service_actions",
-        "config": {
-            "buttons": [],
-            "layout": "grid",
-            "columns": 3
-        }
-    })
-
-
-@bp.post("/service_actions/execute")
-def widget_service_actions_execute():
-    """Execute a service action from widget."""
-    data = request.get_json() or {}
-    service = data.get("service")
-    target = data.get("target")
-    
-    if not service:
-        return jsonify({"ok": False, "error": "Missing service"}), 400
-    
-    from copilot_core.services.manager import get_services_manager
-    
-    try:
-        manager = get_services_manager()
-        result = manager.call_service(service=service, target=target)
-        success = result.get("success", False)
-    except Exception as e:
-        success = False
-    
-    return jsonify({"ok": success, "service": service})
-
-
-# ── Entity Grid Widget ─────────────────────────────────
-
-@bp.get("/entity_grid/config")
-def widget_entity_grid_config():
-    """Get entity grid widget configuration."""
-    return jsonify({
-        "ok": True,
-        "widget_type": "entity_grid",
-        "config": {
-            "entity_ids": [],
-            "columns": 4,
-            "show_state": True,
-            "show_icon": True
-        }
-    })
-
-
-@bp.get("/entity_grid/data")
-def widget_entity_grid_data():
-    """Get entity grid data with live states."""
-    entity_ids = request.args.get("entity_ids", "").split(",")
-    entity_ids = [e.strip() for e in entity_ids if e.strip()]
-    
-    if not entity_ids:
-        return jsonify({"ok": False, "error": "Missing entity_ids"}), 400
-    
-    from copilot_core.entities.manager import get_entities_manager
-    
-    try:
-        manager = get_entities_manager()
-        states = manager.get_states(entity_ids=entity_ids)
-    except Exception as e:
-        states = []
-    
-    return jsonify({
-        "ok": True,
-        "entities": states,
-        "count": len(states),
-        "timestamp": datetime.now(timezone.utc).isoformat()
+        "layout": "grid",
+        "columns": 12,
+        "widgets": [
+            # Tab 1: Dashboard
+            {
+                "id": "global_health",
+                "tab": "dashboard",
+                "type": "gauge",
+                "title": "System Health",
+                "value": 98,
+                "unit": "%",
+                "status": "success",
+            },
+            {
+                "id": "uptime",
+                "tab": "dashboard",
+                "type": "stat",
+                "title": "Uptime",
+                "value": 145.2,
+                "unit": "h",
+                "icon": "mdi:clock-outline",
+            },
+            # Tab 4: Brain
+            {
+                "id": "neuron_firing",
+                "tab": "brain",
+                "type": "radar",
+                "title": "Neuron Activity",
+                "data": {
+                    "labels": ["Presence", "Mood", "Energy", "Light", "Climate"],
+                    "values": [0.8, 0.6, 0.9, 0.4, 0.7],
+                }
+            },
+            # Tab 5: Mood
+            {
+                "id": "mood_dimensions",
+                "tab": "mood",
+                "type": "dimension_radar",
+                "title": "Current Mood Dimensions",
+                "data": {
+                    "comfort": 0.85,
+                    "joy": 0.7,
+                    "frugality": 0.5,
+                    "energy": 0.6,
+                    "focus": 0.4,
+                }
+            },
+            # Tab 7: RAG
+            {
+                "id": "rag_stats",
+                "tab": "rag",
+                "type": "bar",
+                "title": "Vector Distribution",
+                "data": {
+                    "local": 1250,
+                    "web_cache": 450,
+                    "voice": 85,
+                }
+            },
+            # Tab 9: Hardware
+            {
+                "id": "battery_status",
+                "tab": "hardware",
+                "type": "list",
+                "title": "Low Battery Devices",
+                "items": [
+                    {"name": "Fenstersensor Bad", "value": 15, "unit": "%", "status": "warning"},
+                    {"name": "Thermostat Büro", "value": 8, "unit": "%", "status": "danger"},
+                ]
+            }
+        ]
     })
