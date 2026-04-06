@@ -73,6 +73,20 @@ class HomeRegistration:
         return d
 
 
+# Alias for role-based filtering
+HomeRole = HomeType
+
+
+@dataclass
+class SyncPair:
+    """Represents a sync pair between two homes."""
+    home_a: str
+    home_b: str
+    enabled: bool = True
+    scope: str = "all"
+    last_sync: Optional[datetime] = None
+
+
 class HomesRegistry:
     """Thread-safe registry of registered home instances.
 
