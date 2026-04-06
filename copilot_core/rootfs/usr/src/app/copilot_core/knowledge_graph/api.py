@@ -1,6 +1,7 @@
 """Knowledge Graph API endpoints.
 
 Provides REST API for querying and managing the Knowledge Graph.
+Includes Neo4j integration endpoints for visualization and advanced queries.
 """
 
 from __future__ import annotations
@@ -14,6 +15,14 @@ from .models import EdgeType, GraphQuery, NodeType
 from .graph_store import get_graph_store
 from .builder import GraphBuilder
 from .pattern_importer import PatternImporter
+
+try:
+    from .neo4j_adapter import get_neo4j_adapter, Neo4jAdapter, Neo4jConfig
+    NEO4J_AVAILABLE = True
+except ImportError:
+    NEO4J_AVAILABLE = False
+    _LOGGER = logging.getLogger(__name__)
+    _LOGGER.warning("Neo4j adapter not available - install neo4j driver")
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -502,4 +511,246 @@ def kg_upsert_zone():
         return jsonify({"ok": True, "zone": node.to_dict()})
     except Exception as e:
         _LOGGER.exception("Failed to upsert zone")
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+# ==================== Neo4j Integration ====================
+
+@bp.get("/neo4j/visualize")
+def kg_neo4j_visualize():
+    """Export graph data for Neo4j visualization.
+    
+    Query params:
+    - root: Optional root node ID for subgraph
+    - max_nodes: Max nodes to return (default 500)
+    - max_edges: Max edges to return (default 1000)
+    - include_properties: Include node properties (default false)
+    """
+    if not NEO4J_AVAILABLE:
+        return jsonify({
+            "ok": False,
+            "error": "Neo4j adapter not available",
+            "neo4j_available": False,
+        }), 503
+    
+    try:
+        root = request.args.get("root")
+        max_nodes = min(int(request.args.get("max_nodes", 500)), 1000)
+        max_edges = min(int(request.args.get("max_edges", 1000)), 2000)
+        include_properties = request.args.get("include_properties", "false").lower() == "true"
+        
+        adapter = get_neo4j_adapter()
+        try:
+            viz_data = adapter.export_visualization_data(
+                root_node=root,
+                max_nodes=max_nodes,
+                max_edges=max_edges,
+                include_properties=include_properties,
+            )
+            
+            return jsonify({
+                "ok": viz_data.get("success", False),
+                "data": viz_data,
+                "neo4j_available": True,
+            })
+        finally:
+            adapter.disconnect()
+            
+    except Exception as e:
+        _LOGGER.exception("Failed to export Neo4j visualization data")
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@bp.get("/neo4j/stats")
+def kg_neo4j_stats():
+    """Get Neo4j graph statistics."""
+    if not NEO4J_AVAILABLE:
+        return jsonify({
+            "ok": False,
+            "error": "Neo4j adapter not available",
+            "neo4j_available": False,
+        }), 503
+    
+    try:
+        adapter = get_neo4j_adapter()
+        try:
+            stats = adapter.get_graph_stats()
+            
+            return jsonify({
+                "ok": stats.get("success", False),
+                "stats": stats,
+                "neo4j_available": True,
+            })
+        finally:
+            adapter.disconnect()
+            
+    except Exception as e:
+        _LOGGER.exception("Failed to get Neo4j stats")
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@bp.get("/neo4j/central")
+def kg_neo4j_central_nodes():
+    """Get most central nodes in Neo4j graph.
+    
+    Query params:
+    - top: Number of top nodes (default 10)
+    """
+    if not NEO4J_AVAILABLE:
+        return jsonify({
+            "ok": False,
+            "error": "Neo4j adapter not available",
+            "neo4j_available": False,
+        }), 503
+    
+    try:
+        top = min(int(request.args.get("top", 10)), 50)
+        
+        adapter = get_neo4j_adapter()
+        try:
+            result = adapter.find_central_nodes(top_k=top)
+            
+            return jsonify({
+                "ok": result.success,
+                "nodes": result.records,
+                "count": len(result.records),
+                "neo4j_available": True,
+            })
+        finally:
+            adapter.disconnect()
+            
+    except Exception as e:
+        _LOGGER.exception("Failed to get central nodes")
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@bp.post("/neo4j/export")
+def kg_neo4j_export():
+    """Export Brain Graph to Neo4j.
+    
+    Expects JSON body with nodes and edges arrays.
+    """
+    if not NEO4J_AVAILABLE:
+        return jsonify({
+            "ok": False,
+            "error": "Neo4j adapter not available",
+            "neo4j_available": False,
+        }), 503
+    
+    try:
+        data = request.get_json() or {}
+        nodes_data = data.get("nodes", [])
+        edges_data = data.get("edges", [])
+        
+        # Convert from dict to Node/Edge objects
+        from .models import Node, Edge
+        
+        nodes = [Node.from_dict(n) for n in nodes_data if isinstance(n, dict)]
+        edges = [Edge.from_dict(e) for e in edges_data if isinstance(e, dict)]
+        
+        adapter = get_neo4j_adapter()
+        try:
+            stats = adapter.export_brain_graph(nodes, edges)
+            
+            return jsonify({
+                "ok": len(stats.get("errors", [])) == 0,
+                "stats": stats,
+                "neo4j_available": True,
+            })
+        finally:
+            adapter.disconnect()
+            
+    except Exception as e:
+        _LOGGER.exception("Failed to export to Neo4j")
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@bp.get("/neo4j/schema")
+def kg_neo4j_schema():
+    """Ensure Neo4j schema (constraints and indexes)."""
+    if not NEO4J_AVAILABLE:
+        return jsonify({
+            "ok": False,
+            "error": "Neo4j adapter not available",
+            "neo4j_available": False,
+        }), 503
+    
+    try:
+        adapter = get_neo4j_adapter()
+        try:
+            result = adapter.ensure_schema()
+            
+            return jsonify({
+                "ok": result.get("success", False),
+                "schema": result,
+                "neo4j_available": True,
+            })
+        finally:
+            adapter.disconnect()
+            
+    except Exception as e:
+        _LOGGER.exception("Failed to ensure Neo4j schema")
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@bp.get("/neo4j/query")
+def kg_neo4j_query():
+    """Execute custom Cypher query (read-only).
+    
+    Query params:
+    - cypher: Cypher query string
+    - params: JSON-encoded parameters (optional)
+    
+    Only read-only queries are allowed for safety.
+    """
+    if not NEO4J_AVAILABLE:
+        return jsonify({
+            "ok": False,
+            "error": "Neo4j adapter not available",
+            "neo4j_available": False,
+        }), 503
+    
+    try:
+        cypher = request.args.get("cypher")
+        if not cypher:
+            return jsonify({
+                "ok": False,
+                "error": "Missing required parameter: cypher",
+            }), 400
+        
+        # Validate query is read-only
+        from .cypher_adapter import CypherValidator
+        is_safe, warning = CypherValidator.is_safe(cypher)
+        if not is_safe:
+            return jsonify({
+                "ok": False,
+                "error": warning,
+                "safety_check": "failed",
+            }), 400
+        
+        # Parse optional parameters
+        params = {}
+        params_str = request.args.get("params")
+        if params_str:
+            import json
+            params = json.loads(params_str)
+        
+        adapter = get_neo4j_adapter()
+        try:
+            from .neo4j_adapter import CypherQuery
+            query = CypherQuery(query=cypher, parameters=params, read_only=True)
+            result = adapter.execute(query)
+            
+            return jsonify({
+                "ok": result.success,
+                "records": result.records,
+                "summary": result.summary,
+                "execution_time_ms": result.execution_time_ms,
+                "neo4j_available": True,
+            })
+        finally:
+            adapter.disconnect()
+            
+    except Exception as e:
+        _LOGGER.exception("Failed to execute Cypher query")
         return jsonify({"ok": False, "error": str(e)}), 500
