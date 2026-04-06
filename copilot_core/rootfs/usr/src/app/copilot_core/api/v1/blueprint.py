@@ -105,6 +105,7 @@ from copilot_core.api.v1.rag_ui import rag_ui_bp
 from copilot_core.api.v1.zone_automation_api import zone_automation_api_bp
 from copilot_core.api.v1.backend_ui import backend_ui_bp
 from copilot_core.api.v1.sensors import sensors_bp
+from copilot_core.api.v1.auth import auth_bp
 from copilot_core.api.v1.chat import chat_bp
 from copilot_core.api.v1.energy_forecast import energy_forecast_bp
 from copilot_core.api.v1.predictive import predictive_bp
