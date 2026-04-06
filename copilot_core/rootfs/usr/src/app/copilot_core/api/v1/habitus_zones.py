@@ -494,3 +494,240 @@ def _get_zone_metrics(zone_type: ZoneType) -> Dict[str, Any]:
         pass
 
     return metrics
+
+
+# =============================================================================
+# Zone Zero-Config Flow (habitus zone auto-setup)
+# =============================================================================
+
+@bp.route("/discover", methods=["POST"])
+def discover_zones():
+    """
+    Zero-Config Flow: HA Areas analysieren und Zonenvorschläge generieren.
+    
+    POST /api/v1/habitus/zones/discover
+    {
+      "ha_areas": ["Wohnzimmer", "Küche", "Schlafzimmer"],
+      "entities": {
+        "light.kitchen": {"area": "Küche", "type": "light"},
+        ...
+      }
+    }
+    
+    Returns:
+      { "proposals": [{ "area": "...", "zone_type": "...", "confidence": 0.95, "keywords_matched": [...] }] }
+    """
+    data = request.get_json() or {}
+    ha_areas = data.get("ha_areas", [])
+    entities = data.get("entities", {})
+
+    proposals = []
+    for area in ha_areas:
+        # Keyword-basiertes Matching
+        keywords = area.lower().split()
+        best_match = None
+        best_score = 0.0
+
+        for zt in ZoneType:
+            zone = HABITUS_ZONES.get(zt)
+            if not zone:
+                continue
+            # Score based on keyword overlap
+            kws = [k.lower() for k in zone.keywords_de]
+            score = sum(1 for kw in keywords if any(kw in k or k in kw for k in kws))
+            if score > best_score:
+                best_score = score
+                best_match = zt
+
+        if best_match and best_score > 0:
+            zone = HABITUS_ZONES[best_match]
+            matched = [k for k in zone.keywords_de if any(k.lower() in area.lower() or area.lower() in k.lower() for k in [k])]
+            proposals.append({
+                "area": area,
+                "zone_type": best_match.value,
+                "zone_name": zone.name_de,
+                "confidence": round(min(best_score / max(len(keywords), 1), 1.0), 2),
+                "keywords_matched": matched[:5],
+                "enabled_modules": list(_ZONE_ENABLED_MODULES.get(best_match, set())),
+                "suggestion": f"→ {best_match.value} (Confidence {best_score})",
+            })
+
+    return jsonify({
+        "proposals": proposals,
+        "unmatched_areas": [a for a in ha_areas if a not in [p["area"] for p in proposals]],
+        "total": len(proposals),
+    })
+
+
+@bp.route("/apply", methods=["POST"])
+def apply_zone_config():
+    """
+    Zero-Config Flow: Zone-Konfiguration übernehmen und als YAML exportieren.
+    
+    POST /api/v1/habitus/zones/apply
+    {
+      "mappings": [
+        {"area": "Wohnzimmer", "zone_type": "living"},
+        {"area": "Küche", "zone_type": "kitchen"}
+      ]
+    }
+    
+    Returns: YAML-config + Bestätigung
+    """
+    data = request.get_json() or {}
+    mappings = data.get("mappings", [])
+
+    applied = []
+    for m in mappings:
+        area = m.get("area", "")
+        ztype = m.get("zone_type", "")
+        try:
+            zt = ZoneType(ztype)
+            zone = HABITUS_ZONES.get(zt)
+            if not zone:
+                applied.append({"area": area, "status": "error", "message": f"Unknown zone type: {ztype}"})
+                continue
+            applied.append({
+                "area": area,
+                "zone_type": ztype,
+                "zone_name": zone.name_de,
+                "enabled_modules": list(_ZONE_ENABLED_MODULES.get(zt, set())),
+                "module_overrides": _MODULE_PIPELINE_DEFAULTS,
+                "priority": zone.priority,
+                "status": "applied",
+            })
+        except ValueError:
+            applied.append({"area": area, "status": "error", "message": f"Invalid zone_type: {ztype}"})
+
+    # Generate YAML
+    yaml_lines = ["# PilotSuite Habitus Zones — Auto-Generated", "# !!! This file is managed by PilotSuite !!!", ""]
+    for item in applied:
+        if item["status"] != "applied":
+            continue
+        ztype = item["zone_type"]
+        yaml_lines.append(f"{ztype}:")
+        yaml_lines.append(f"  name: {item['zone_name']}")
+        yaml_lines.append(f"  priority: {item['priority']}")
+        yaml_lines.append(f"  enabled_modules: [{', '.join(item['enabled_modules'])}]")
+        yaml_lines.append(f"  # area: {item['area']}")
+        yaml_lines.append("")
+
+    return jsonify({
+        "status": "ok",
+        "applied": applied,
+        "yaml_config": "\n".join(yaml_lines),
+        "yaml_preview": "\n".join(yaml_lines[:15]) + ("\n..." if len(yaml_lines) > 15 else ""),
+    })
+
+
+@bp.route("/<zone_id>/config/yaml", methods=["GET"])
+def export_zone_yaml(zone_id: str):
+    """Export a single zone's full configuration as YAML."""
+    try:
+        zone_type = ZoneType(zone_id)
+    except ValueError:
+        return jsonify({"error": f"Invalid zone_id: {zone_id}"}), 400
+
+    zone = HABITUS_ZONES.get(zone_type)
+    if not zone:
+        return jsonify({"error": f"Zone not found: {zone_id}"}), 404
+
+    enabled = _ZONE_ENABLED_MODULES.get(zone_type, set())
+    overrides = get_default_module_overrides(zone_type)
+
+    yaml = f"""# PilotSuite Habitus Zone: {zone.name_de}
+# Zone Type: {zone_type.value}
+# Generated: {datetime.now(timezone.utc).isoformat()}
+
+zone_type: {zone_type.value}
+name_de: "{zone.name_de}"
+name_en: "{zone.name_en}"
+description: "{zone.description}"
+priority: {zone.priority}
+
+keywords_de: [{', '.join(zone.keywords_de)}]
+keywords_en: [{', '.join(zone.keywords_en)}]
+
+enabled_modules: [{', '.join(sorted(enabled))}]
+
+module_overrides:
+"""
+    for mod in sorted(enabled):
+        defaults = _MODULE_PIPELINE_DEFAULTS.get(mod, {})
+        yaml += f"  {mod}:\n"
+        yaml += f"    input_adapter: {defaults.get('input_adapter', 'homeassistant')}\n"
+        yaml += f"    input_signals: {defaults.get('input_signals', [])}\n"
+        yaml += f"    output_mode: {defaults.get('output_mode', 'proposal_then_service_call')}\n"
+
+    return jsonify({
+        "zone_id": zone_id,
+        "yaml": yaml,
+        "yaml_lines": len(yaml.splitlines()),
+    })
+
+
+@bp.route("/<zone_id>/modules", methods=["PUT"])
+def update_zone_modules(zone_id: str):
+    """Update enabled modules for a zone."""
+    try:
+        zone_type = ZoneType(zone_id)
+    except ValueError:
+        return jsonify({"error": f"Invalid zone_id: {zone_id}"}), 400
+
+    data = request.get_json() or {}
+    new_modules = set(data.get("enabled_modules", []))
+    valid = set(MODULE_OVERRIDE_IDS)
+
+    invalid = new_modules - valid
+    if invalid:
+        return jsonify({
+            "error": "invalid_modules",
+            "valid_modules": list(valid),
+            "invalid": list(invalid),
+        }), 400
+
+    # Patch the in-memory dict (in production this would persist to DB)
+    _ZONE_ENABLED_MODULES[zone_type] = new_modules
+
+    return jsonify({
+        "status": "ok",
+        "zone_id": zone_id,
+        "enabled_modules": list(new_modules),
+    })
+
+
+@bp.route("/<zone_id>/modules/<module_id>/override", methods=["PUT"])
+def set_module_override(zone_id: str, module_id: str):
+    """Set a module override for a specific zone."""
+    try:
+        zone_type = ZoneType(zone_id)
+    except ValueError:
+        return jsonify({"error": f"Invalid zone_id: {zone_id}"}), 400
+
+    if module_id not in MODULE_OVERRIDE_IDS:
+        return jsonify({"error": f"Invalid module_id: {module_id}"}), 400
+
+    data = request.get_json() or {}
+    override = {
+        "input_adapter": data.get("input_adapter", "homeassistant"),
+        "input_signals": data.get("input_signals", []),
+        "output_adapter": data.get("output_adapter", "homeassistant"),
+        "output_mode": data.get("output_mode", "proposal_then_service_call"),
+        "neuron_targets": data.get("neuron_targets", []),
+    }
+
+    zone = HABITUS_ZONES.get(zone_type)
+    if not zone:
+        return jsonify({"error": "zone not found"}), 404
+
+    # Update module override
+    if not hasattr(zone, "_module_overrides"):
+        zone._module_overrides = {}
+    zone._module_overrides[module_id] = override
+
+    return jsonify({
+        "status": "ok",
+        "zone_id": zone_id,
+        "module_id": module_id,
+        "override": override,
+    })
