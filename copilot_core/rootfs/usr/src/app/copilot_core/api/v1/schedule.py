@@ -9,7 +9,12 @@ def get_schedules_list():
     return jsonify({"ok": True, "schedules": []})
 @bp.post("/schedules/create")
 def create_schedule():
-    return jsonify({"ok": True})
+    data = request.get_json() or {}
+    return jsonify({"ok": True, "id": data.get("name")})
 @bp.delete("/schedules/delete")
 def delete_schedule():
-    return jsonify({"ok": True})
+    data = request.get_json() or {}
+    return jsonify({"ok": True, "deleted": data.get("id")})
+@bp.get("/schedules/status")
+def get_schedule_status():
+    return jsonify({"ok": True, "status": {}})
