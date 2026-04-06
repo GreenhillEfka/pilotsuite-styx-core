@@ -419,3 +419,58 @@ class BatteryStrategyOptimizer:
     def add_lifetime_cycles(self, cycles: float) -> None:
         """Add accumulated lifetime cycles (loaded from persistent storage)."""
         self._total_cycles = max(0.0, cycles)
+
+
+# Slice 70: Battery Management Predictive API (P2-011)
+# Predictive battery management with SoH estimation
+
+class PredictiveBatteryAPI:
+    """Predictive Battery Management REST API contract."""
+
+    # GET  /api/v1/battery/status          → current battery status
+    # POST /api/v1/battery/optimize        → generate optimized schedule
+    # GET  /api/v1/battery/schedule        → get current schedule
+    # GET  /api/v1/battery/soh            → state of health estimation
+    # POST /api/v1/battery/charge-target  → set target charge level
+
+    @staticmethod
+    def format_status(status: "BatteryStatus", config: "BatteryConfig") -> dict:
+        return {
+            "soc_pct": status.soc_pct,
+            "capacity_kwh_actual": round(config.capacity_kwh * (config.max_soc_pct - config.min_soc_pct) / 100 * status.soc_pct / 100, 2),
+            "health_pct": getattr(status, 'health_pct', 100.0),
+            "cycles_today": getattr(status, 'cycles_today', 0),
+            "charge_power_kw": getattr(status, 'charge_power_kw', 0),
+            "discharge_power_kw": getattr(status, 'discharge_power_kw', 0),
+            "temperature_c": getattr(status, 'temperature_c', 25),
+            "estimated_remaining_kwh": round(config.capacity_kwh * status.soc_pct / 100, 2),
+        }
+
+    @staticmethod
+    def format_soh_report(config: "BatteryConfig", cycles_total: float, calendar_age_days: int) -> dict:
+        # Calendar aging: ~2% per year; Cycle aging: ~0.01% per cycle
+        calendar_pct = 100 - (calendar_age_days / 365 * 2)
+        cycle_pct = max(0, 100 - cycles_total * 0.01)
+        soh_pct = min(calendar_pct, cycle_pct)
+        return {
+            "soh_pct": round(soh_pct, 1),
+            "calendar_age_days": calendar_age_days,
+            "cycles_total": cycles_total,
+            "calendar_loss_pct": round(100 - calendar_pct, 2),
+            "cycle_loss_pct": round(100 - cycle_pct, 2),
+            "replacement_recommendation": "near" if soh_pct < 75 else "none",
+            "capacity_kwh_effective": round(config.capacity_kwh * soh_pct / 100, 2),
+        }
+
+    @staticmethod
+    def format_optimize_response(schedule: "BatterySchedule") -> dict:
+        return {
+            "schedule_id": f"sched_{id(schedule)}",
+            "hours": schedule.hours,
+            "strategy": schedule.strategy,
+            "estimated_savings_eur": schedule.estimated_savings_eur,
+            "estimated_cycles": schedule.estimated_cycles,
+            "avg_charge_price_ct": schedule.avg_charge_price_ct,
+            "avg_discharge_price_ct": schedule.avg_discharge_price_ct,
+            "generated_at": schedule.generated_at,
+        }
