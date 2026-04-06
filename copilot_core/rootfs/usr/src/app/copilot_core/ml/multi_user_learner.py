@@ -591,3 +591,57 @@ class ContextAwareMultiUserLearner(MultiUserLearner):
         c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
         return R * c
+
+
+# Slice 70: Learning Progress Visualization API (P3-004)
+def get_learning_progress(self, user_id: Optional[str] = None) -> Dict[str, Any]:
+    """Get learning progress for a user or all users.
+    
+    Returns metrics on how well the model knows each user's preferences.
+    """
+    def user_stats(uid: str) -> Dict[str, Any]:
+        prefs = self.user_preferences.get(uid, {})
+        events = self.user_behavior.get(uid, [])
+        clusters = [k for k, v in self.user_clusters.items() if uid in v]
+        learned_devices = len([k for k, v in prefs.items() if v.get('count', 0) >= self.min_samples_per_user])
+        total_devices = len(prefs)
+        confidence = learned_devices / max(total_devices, 1)
+        
+        # Decay factor
+        last_ts = max((e.get('timestamp', 0) for e in events), default=0)
+        age_hours = (time.time() - last_ts) / 3600 if last_ts else self.preference_decay_hours
+        freshness = max(0.0, 1.0 - age_hours / self.preference_decay_hours)
+        
+        return {
+            "user_id": uid,
+            "total_events": len(events),
+            "learned_devices": learned_devices,
+            "total_devices": total_devices,
+            "confidence_score": round(confidence, 3),
+            "preference_freshness": round(freshness, 3),
+            "clusters": clusters,
+            "last_activity_hours_ago": round(age_hours, 1),
+        }
+    
+    if user_id:
+        return user_stats(user_id)
+    return {uid: user_stats(uid) for uid in self.user_preferences}
+
+
+def get_learning_history(self, user_id: str, days: int = 7) -> List[Dict[str, Any]]:
+    """Get learning history for a user over N days."""
+    cutoff = time.time() - days * 86400
+    events = [
+        e for e in self.user_behavior.get(user_id, [])
+        if e.get('timestamp', 0) >= cutoff
+    ]
+    # Group by day
+    by_day = defaultdict(list)
+    for e in events:
+        import datetime
+        day = datetime.datetime.fromtimestamp(e.get('timestamp', 0)).strftime('%Y-%m-%d')
+        by_day[day].append(e)
+    return [
+        {"date": day, "events": len(evs), "types": list(set(e.get('event_type', '') for e in evs))}
+        for day, evs in sorted(by_day.items())
+    ]
