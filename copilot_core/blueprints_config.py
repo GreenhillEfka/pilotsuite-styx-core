@@ -51,6 +51,7 @@ CORE_API_BLUEPRINTS: List[Tuple[str, str, Optional[str]]] = [
     
     # Brain & Knowledge
     ("copilot_core.api.v1.habitus", "bp", None),
+    ("copilot_core.api.v1.habitus_zones", "habitus_zones_bp", "/api/v1/habitus"),
     ("copilot_core.api.v1.habitus_dashboard_cards", "bp", None),
     ("copilot_core.api.v1.graph", "bp", None),
     ("copilot_core.api.v1.graph_ops", "bp", None),
