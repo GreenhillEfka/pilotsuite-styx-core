@@ -18,3 +18,6 @@ def delete_calendar_event():
 @bp.get("/calendar/today")
 def get_todays_events():
     return jsonify({"ok": True, "events": []})
+-e 
+# Backwards compatibility alias
+calendar_bp = bp
