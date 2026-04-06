@@ -510,3 +510,74 @@ class LoadShiftingEngine:
             text += f"{best.savings_eur:.2f}€ sparen!"
         
         return text
+
+
+# Slice 70: OR-Tools-inspired Scheduling Optimizer (P2-002)
+# Simple greedy heuristic — OR-Tools constraint solver pattern
+from typing import List, Tuple, Optional
+from dataclasses import dataclass
+
+
+@dataclass
+class SchedulingWindow:
+    """Time window for scheduling a device."""
+    start_hour: float
+    end_hour: float
+    cost_per_kwh: float
+
+
+def greedy_schedule_optimize(
+    devices: List[ShiftableDevice],
+    windows: List[SchedulingWindow],
+    energy_kwh_target: float,
+    battery_charge_kwh: float = 0.0,
+) -> List[Tuple[str, Optional[float]]]:
+    """Greedy scheduling: assigns cheapest windows to highest-priority devices.
+    
+    Args:
+        devices: List of shiftable devices, sorted by priority (1=highest)
+        windows: Available time windows with cost info
+        energy_kwh_target: Target energy budget
+        battery_charge_kwh: Battery buffer in kWh
+    
+    Returns:
+        List of (device_id, optimal_start_hour) — None if unschedulable
+    """
+    if not devices or not windows:
+        return []
+    
+    # Sort windows by cost ascending (cheapest first)
+    sorted_windows = sorted(windows, key=lambda w: w.cost_per_kwh)
+    
+    assignments = []
+    remaining_budget = energy_kwh_target + battery_charge_kwh
+    
+    for dev in sorted(devices, key=lambda d: d.priority):
+        if remaining_budget < dev.energy_kwh:
+            assignments.append((dev.device_id, None))  # Cannot fit
+            continue
+        
+        # Find cheapest window that fits this device
+        best_start: Optional[float] = None
+        best_cost = float("inf")
+        
+        for win in sorted_windows:
+            available_hours = win.end_hour - win.start_hour
+            if available_hours < dev.duration_hours:
+                continue
+            if dev.min_start_hour > win.start_hour:
+                continue
+            if dev.max_start_hour < win.end_hour:
+                continue
+            
+            if win.cost_per_kwh < best_cost:
+                best_cost = win.cost_per_kwh
+                # Schedule at the cheapest feasible point
+                best_start = max(win.start_hour, dev.min_start_hour)
+        
+        if best_start is not None:
+            remaining_budget -= dev.energy_kwh
+        
+        assignments.append((dev.device_id, best_start))
+    
+    return assignments
