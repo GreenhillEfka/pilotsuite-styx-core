@@ -26,6 +26,7 @@ from typing import Any, Dict, List, Optional
 
 import aiohttp
 import psutil
+from copilot_core.connection_pool import get_ha_session, get_ollama_session
 
 logger = logging.getLogger(__name__)
 
@@ -179,11 +180,25 @@ class HealthChecker:
         
         try:
             start = time.time()
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url, timeout=aiohttp.ClientTimeout(total=timeout)) as response:
-                    result["reachable"] = response.status < 500
-                    result["status_code"] = response.status
-                    result["response_time_ms"] = round((time.time() - start) * 1000, 2)
+            # Use pooled session for HA or Ollama, fallback for others
+            if "supervisor" in url or "homeassistant" in url or self.ha_url in url:
+                async with get_ha_session() as session:
+                    async with session.get(url, timeout=aiohttp.ClientTimeout(total=timeout)) as response:
+                        result["reachable"] = response.status < 500
+                        result["status_code"] = response.status
+                        result["response_time_ms"] = round((time.time() - start) * 1000, 2)
+            elif "ollama" in url or self.ollama_url in url:
+                async with get_ollama_session() as session:
+                    async with session.get(url, timeout=aiohttp.ClientTimeout(total=timeout)) as response:
+                        result["reachable"] = response.status < 500
+                        result["status_code"] = response.status
+                        result["response_time_ms"] = round((time.time() - start) * 1000, 2)
+            else:
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(url, timeout=aiohttp.ClientTimeout(total=timeout)) as response:
+                        result["reachable"] = response.status < 500
+                        result["status_code"] = response.status
+                        result["response_time_ms"] = round((time.time() - start) * 1000, 2)
         except asyncio.TimeoutError:
             result["error"] = f"Timeout after {timeout}s"
         except aiohttp.ClientError as e:

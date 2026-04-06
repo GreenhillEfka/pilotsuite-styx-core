@@ -20,6 +20,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Optional
 
+from copilot_core.connection_pool import get_ollama_session
+
 _LOGGER = logging.getLogger(__name__)
 
 # Embedding dimension (must match across all usages)
@@ -407,10 +409,9 @@ class EmbeddingEngine:
     
     async def _embed_ollama(self, text: str) -> EmbeddingResult:
         """Generate embedding using Ollama."""
-        import aiohttp
         
         try:
-            async with aiohttp.ClientSession() as session:
+            async with get_ollama_session() as session:
                 payload = {
                     "model": self.config.ollama_model,
                     "prompt": text,

@@ -1,6 +1,7 @@
 """SearXNG Client for Web Search.
 
 Async client for SearXNG meta-search engine integration.
+Uses connection pooling for efficient HTTP requests.
 """
 
 from __future__ import annotations
@@ -10,6 +11,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 import aiohttp
+from copilot_core.connection_pool import get_ollama_session
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -103,7 +105,8 @@ class SearXNGClient:
             params["categories"] = ",".join(cats)
         
         try:
-            async with aiohttp.ClientSession() as session:
+            # Use pooled session for efficient connection reuse
+            async with get_ollama_session() as session:
                 async with session.get(url, params=params, timeout=self.timeout) as response:
                     if response.status != 200:
                         _LOGGER.warning(
@@ -190,7 +193,7 @@ class SearXNGClient:
             True if SearXNG is reachable and responding
         """
         try:
-            async with aiohttp.ClientSession() as session:
+            async with get_ollama_session() as session:
                 # Try to access the SearXNG instance
                 async with session.get(
                     f"{self.base_url.rstrip('/')}/search",
