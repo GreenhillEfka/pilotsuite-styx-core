@@ -135,3 +135,5 @@ def health_alerts():
         "active_only": active_only,
         "timestamp": datetime.now(timezone.utc).isoformat()
     })
+# Backwards compatibility alias
+health_bp = bp

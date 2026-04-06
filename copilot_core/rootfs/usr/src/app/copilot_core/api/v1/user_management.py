@@ -19,3 +19,5 @@ def delete_user():
 def get_user_info():
     data = request.get_json() or {}
     return jsonify({"ok": True, "info": {}})
+# Backwards compatibility alias
+user_management_bp = bp

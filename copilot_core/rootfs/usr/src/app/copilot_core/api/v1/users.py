@@ -471,3 +471,5 @@ def users_activity_analytics():
         "days": days,
         "timestamp": datetime.now(timezone.utc).isoformat()
     })
+# Backwards compatibility alias
+users_bp = bp
