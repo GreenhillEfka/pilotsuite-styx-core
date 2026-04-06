@@ -1361,3 +1361,31 @@ def discovery_assign():
         return jsonify({"success": True, "message": "Assignments scheduled", "count": len(assignments)})
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
+
+# =============================================================================
+# Slice 166: RAG Trace Timeline Extension (Append to Backend-UI)
+# =============================================================================
+
+@backend_ui_bp.route("/rag/traces", methods=["GET"])
+def get_rag_traces():
+    """Returns recent RAG traces for the timeline UI."""
+    try:
+        from copilot_core.api.v1.rag_trace_api import _traces
+        traces = []
+        for trace_id, trace_obj in list(_traces.items())[-10:]:
+            traces.append({
+                "id": trace_obj.trace_id,
+                "query": trace_obj.query,
+                "total_ms": trace_obj.stages[-1]["ts_ms"] if trace_obj.stages else 0,
+                "stages": trace_obj.stages
+            })
+        return jsonify({"ok": True, "traces": traces, "count": len(traces)})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+@backend_ui_bp.route("/rag/trace-mock", methods=["POST"])
+def create_mock_rag_trace():
+    """Creates a mock RAG trace for testing."""
+    from copilot_core.api.v1.rag_trace_api import create_mock_trace
+    trace_id = create_mock_trace("test query")
+    return jsonify({"ok": True, "trace_id": trace_id})
