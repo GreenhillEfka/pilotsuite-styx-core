@@ -5,8 +5,11 @@ Combines lexical (BM25) and semantic search results using RRF for optimal rankin
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Dict, List, Optional, Sequence, Tuple
+import hashlib
+import threading
+import time
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 
 @dataclass(frozen=True)
@@ -126,14 +129,16 @@ class HybridSearchEngine:
     using Reciprocal Rank Fusion for optimal ranking.
     
     Args:
-        bm25_index: BM25 index for lexical search
-        semantic_backend: Vector store for semantic search
+        bm25_index: BM25 index for lexical search (BM25SqliteIndex instance)
+        semantic_backend: Semantic backend callable (rag_semantic_search style)
+        namespace: Default document namespace to search
         cache_ttl_seconds: TTL for cached results (default: 60s)
         rrf_k: RRF constant k (default: 60)
     """
     
     bm25_index: BM25Index
-    semantic_backend: SemanticBackend
+    semantic_backend: Any  # Callable matching rag_semantic_search signature
+    namespace: str = "default"
     cache_ttl_seconds: float = 60.0
     rrf_k: int = 60
     _cache: Dict[str, tuple] = field(default_factory=dict, repr=False)
@@ -142,14 +147,16 @@ class HybridSearchEngine:
     def search(
         self,
         query: str,
+        namespace: Optional[str] = None,
         top_k: int = 10,
         min_score: float = 0.0,
         include_debug: bool = False,
     ) -> Dict[str, Any]:
-        """Execute hybrid search combining BM25 + semantic results.
+        """Execute hybrid search combining BM25 + semantic results via RRF.
         
         Args:
             query: Search query string
+            namespace: Document namespace to search in (uses default if None)
             top_k: Maximum results to return
             min_score: Minimum fused score threshold (0.0 = no filter)
             include_debug: Include per-source scores in response
@@ -160,9 +167,11 @@ class HybridSearchEngine:
             - count: Number of results
             - query: Original query
             - timing_ms: Time taken for search
+            - bm25_count, semantic_count: Per-source result counts
             - debug (optional): BM25 and semantic scores per result
         """
         start = time.monotonic()
+        ns = namespace or self.namespace
         
         if not query or not query.strip():
             return {
@@ -173,7 +182,7 @@ class HybridSearchEngine:
             }
         
         # Check cache
-        cache_key = self._make_cache_key(query, top_k, min_score)
+        cache_key = self._make_cache_key(query, ns, top_k, min_score)
         cached, cached_at = self._get_cached(cache_key)
         if cached is not None:
             elapsed_ms = (time.monotonic() - start) * 1000
@@ -183,9 +192,9 @@ class HybridSearchEngine:
             result["_cached_at"] = cached_at
             return result
         
-        # Execute both searches in parallel-ish (lexical first, then semantic)
-        bm25_results = self._search_bm25(query, top_k * 2)
-        semantic_results = self._search_semantic(query, top_k * 2)
+        # Execute both searches
+        bm25_results = self._search_bm25(query, ns, top_k * 2)
+        semantic_results = self._search_semantic(query, ns, top_k * 2)
         
         # Fuse with RRF
         fused = reciprocal_rank_fusion(
@@ -219,6 +228,7 @@ class HybridSearchEngine:
             "items": items,
             "count": len(items),
             "query": query,
+            "namespace": ns,
             "timing_ms": round(elapsed_ms, 2),
             "bm25_count": len(bm25_results),
             "semantic_count": len(semantic_results),
@@ -230,14 +240,15 @@ class HybridSearchEngine:
     def _search_bm25(
         self,
         query: str,
+        namespace: str,
         top_k: int,
     ) -> Sequence[RankedHit]:
-        """Execute BM25 search."""
+        """Execute BM25 search against the configured index."""
         try:
-            raw = self.bm25_index.search(query, top_k=top_k)
+            hits = self.bm25_index.search(namespace=namespace, query=query, top_k=top_k)
             return [
-                RankedHit(doc_id=r["doc_id"], score=r["score"], rank=r.get("rank", i + 1))
-                for i, r in enumerate(raw)
+                RankedHit(doc_id=hit.doc_id, score=hit.score, rank=hit.rank)
+                for hit in hits
             ]
         except Exception:
             return []
@@ -245,21 +256,22 @@ class HybridSearchEngine:
     def _search_semantic(
         self,
         query: str,
+        namespace: str,
         top_k: int,
     ) -> Sequence[RankedHit]:
-        """Execute semantic search."""
+        """Execute semantic search via the configured backend."""
         try:
-            raw = self.semantic_backend.search(query, top_k=top_k)
+            raw = self.semantic_backend(namespace=namespace, query=query, top_k=top_k)
             return [
-                RankedHit(doc_id=r["doc_id"], score=r["score"], rank=r.get("rank", i + 1))
-                for i, r in enumerate(raw)
+                RankedHit(doc_id=str(h["id"]), score=float(h.get("score", 0.0)), rank=i + 1)
+                for i, h in enumerate(raw)
             ]
         except Exception:
             return []
     
-    def _make_cache_key(self, query: str, top_k: int, min_score: float) -> str:
+    def _make_cache_key(self, query: str, namespace: str, top_k: int, min_score: float) -> str:
         """Build a deterministic cache key."""
-        content = f"{query}|{top_k}|{min_score}"
+        content = f"{query}|{namespace}|{top_k}|{min_score}"
         return hashlib.sha256(content.encode()).hexdigest()[:32]
     
     def _get_cached(self, key: str) -> tuple:
@@ -290,26 +302,29 @@ class HybridSearchEngine:
 
 
 def get_hybrid_search_engine(
+    namespace: str = "default",
     cache_ttl_seconds: float = 60.0,
     rrf_k: int = 60,
 ) -> HybridSearchEngine:
     """Create a HybridSearchEngine from default backends.
     
-    Returns a fully wired engine using the installed BM25 and semantic backends.
+    Returns a fully wired engine using the installed BM25 index
+    and rag_semantic_search function.
     """
     try:
         bm25 = BM25Index()
     except Exception:
-        bm25 = BM25Index._stub()
+        from .bm25 import BM25SqliteIndex
+        bm25 = BM25SqliteIndex()
     
-    try:
-        sem = SemanticBackend()
-    except Exception:
-        sem = SemanticBackend._stub()
+    # Use the module-level rag_semantic_search as the semantic backend
+    from . import semantic_backend as _sb
+    sem_backend = _sb.rag_semantic_search
     
     return HybridSearchEngine(
         bm25_index=bm25,
-        semantic_backend=sem,
+        semantic_backend=sem_backend,
+        namespace=namespace,
         cache_ttl_seconds=cache_ttl_seconds,
         rrf_k=rrf_k,
     )
