@@ -27,16 +27,43 @@ class SymbioticRuleEngine:
         return rule_id
 
     def evaluate_zone(self, zone_data: dict, current_events: List[dict]) -> List[dict]:
-        """Evaluates all rules for a specific zone."""
-        _LOGGER.info(f"Evaluating rules for zone {zone_data.get('zone_id')}")
+        """Evaluates all rules for a specific zone with logical operator support."""
+        _LOGGER.debug(f"Evaluating rules for zone {zone_data.get('zone_id')}")
         triggered_actions = []
         for rule_id, rule in self.rules.items():
             if not rule["enabled"] or rule["zone_id"] != zone_data.get("zone_id"):
                 continue
-            # Simple condition check
-            if rule["type"] == "presence" and any(e.get("event_type") == "presence" for e in current_events):
+            
+            condition = rule.get("condition", {})
+            logic = condition.get("logic", "AND")
+            checks = condition.get("checks", [])
+            
+            match = False
+            if not checks:
+                # Legacy support for simple presence check
+                if rule["type"] == "presence" and any(e.get("event_type") == "presence" for e in current_events):
+                    match = True
+            else:
+                results = []
+                for check in checks:
+                    # Check if event exists that matches criteria
+                    found = any(
+                        e.get("event_type") == check.get("type") and 
+                        all(e.get("payload", {}).get(k) == v for k, v in check.get("payload", {}).items())
+                        for e in current_events
+                    )
+                    results.append(found)
+                
+                if logic == "AND":
+                    match = all(results)
+                else:
+                    match = any(results)
+            
+            if match:
                 rule["triggered_count"] += 1
                 triggered_actions.append(rule["action"])
+                _LOGGER.info(f"Rule {rule_id} triggered in zone {rule['zone_id']}")
+        
         return triggered_actions
 
     def enable_rule(self, rule_id: str) -> bool:
