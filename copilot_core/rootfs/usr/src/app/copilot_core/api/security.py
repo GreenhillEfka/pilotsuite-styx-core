@@ -138,8 +138,9 @@ def _validate_ha_user_token(candidate: str) -> bool:
         return False
 
     # Use a hash as cache key (avoid storing full tokens in memory)
+    # P1: Increase hash length to full SHA256 for better collision resistance
     import hashlib
-    token_key = hashlib.sha256(candidate.encode()).hexdigest()[:16]
+    token_key = hashlib.sha256(candidate.encode()).hexdigest()  # Full 64 chars
 
     now = time.monotonic()
     with _ha_token_lock:
