@@ -563,6 +563,8 @@ async def init_services(hass=None, config: dict = None):
         "wecker": None,
         # Multi-user conflict resolution
         "conflict_resolver": None,
+        # State consistency manager (P2-006)
+        "state_consistency_manager": None,
         # ML Pipeline (inference + training)
         "inference_engine": None,
         "training_pipeline": None,
@@ -914,6 +916,17 @@ async def init_services(hass=None, config: dict = None):
         _LOGGER.info("ConflictResolver initialized")
     except Exception:
         _LOGGER.exception("Failed to init ConflictResolver")
+
+    # Initialize State Consistency Manager (P2-006)
+    try:
+        from copilot_core.state.consistency import StateConsistencyManager, ConsistencyLevel, ConflictStrategy
+        services["state_consistency_manager"] = StateConsistencyManager(
+            consistency_level=ConsistencyLevel.EVENTUAL,
+            default_strategy=ConflictStrategy.LAST_WRITE_WINS,
+        )
+        _LOGGER.info("StateConsistencyManager initialized (node=%s)", services["state_consistency_manager"].node_id)
+    except Exception:
+        _LOGGER.exception("Failed to init StateConsistencyManager")
 
     # Initialize ML Pipeline (Inference + Training)
     try:
@@ -1986,6 +1999,8 @@ def register_blueprints(app: Flask, services: dict) -> None:
         ("copilot_core.api.v1.module_router_api",  "module_router_bp",     None),
         # Multi-user conflict resolution
         ("copilot_core.api.v1.conflict_resolution", "bp",                   None),
+        # State Consistency API (P2-006)
+        ("copilot_core.api.v1.state_consistency",   "bp",                   None),
         # ML Pipeline API (training, inference, model management)
         ("copilot_core.api.v1.ml_pipeline",         "bp",                   None),
         # Character API (Styx personality management)
