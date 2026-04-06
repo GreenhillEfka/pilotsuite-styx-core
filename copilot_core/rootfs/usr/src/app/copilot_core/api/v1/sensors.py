@@ -4,6 +4,7 @@ import logging
 from flask import Blueprint, jsonify
 _LOGGER = logging.getLogger(__name__)
 bp = Blueprint("sensors", __name__, url_prefix="/api/v1")
+sensors_bp = bp
 @bp.get("/sensors/list")
 def get_sensors_list():
     return jsonify({"ok": True, "sensors": []})
