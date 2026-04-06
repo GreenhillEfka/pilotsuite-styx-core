@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional, Set, Tuple
 from enum import Enum
+import math
 import threading
 import uuid
 
@@ -303,6 +304,9 @@ class PresenceModule:
         weighted_confidence = 0.0
         total_weight = 0
         
+        # Build sensor readings for Bayesian inference
+        sensor_readings = {}
+        
         for sensor_id in zone_sensors:
             sensor = self._sensors.get(sensor_id)
             
@@ -310,6 +314,7 @@ class PresenceModule:
                 continue
             
             is_present = self._sensor_states.get(sensor_id, False)
+            sensor_readings[sensor_id] = (is_present, sensor.sensor_type.value if hasattr(sensor.sensor_type, 'value') else sensor.sensor_type, sensor.confidence)
             
             if is_present:
                 active_sensors.append(sensor_id)
@@ -319,11 +324,12 @@ class PresenceModule:
             
             total_weight += sensor.priority
         
-        # Normalize confidence
-        if total_weight > 0:
+        # Bayesian presence probability (P1-001)
+        confidence, evidence_strength = bayesian_presence_probability(sensor_readings)
+        
+        # Fallback if Bayesian returns 0
+        if confidence == 0.0 and total_weight > 0:
             confidence = weighted_confidence / total_weight
-        else:
-            confidence = 0.0
         
         # Get previous state
         previous_state = self._zone_states[zone_id].state if zone_id in self._zone_states else PresenceState.ABSENT
@@ -878,3 +884,49 @@ class ZonePresenceEngine:
         self._publish("light_cleanup", {**payload, "action": "turn_off"})
         self._publish("climate_eco", {**payload, "mode": "eco"})
         self._publish("energy_optimization", {**payload, "profile": "away"})
+
+
+SENSOR_TYPE_PRIORS = {
+    "mmwave": (8.0, 2.0), "pir": (3.0, 4.0), "device_tracker": (4.0, 5.0),
+    "person": (6.0, 2.0), "camera": (5.0, 3.0), "custom": (2.0, 3.0),
+}
+
+def bayesian_presence_probability(sensor_readings):
+    """Bayesian P(present) via Beta-Binomial conjugate model.
+    
+    Prior: historical base rate per sensor type (Beta distribution).
+    Likelihood: sensor triggered/confirmed.
+    Confidence: scales alpha of prior (reliability weight).
+    """
+    if not sensor_readings: return 0.0, "none"
+    total_log_odds = 0.0; total_weight = 0.0
+    for sid, (triggered, stype, reliability) in sensor_readings.items():
+        base_a, base_b = SENSOR_TYPE_PRIORS.get(stype, (2.0, 3.0))
+        # Scale prior by sensor confidence (reliability prior modifier)
+        a = base_a * reliability
+        b = base_b * reliability
+        # Posterior after observing evidence
+        if triggered:
+            post_a = a + 1.0; post_b = b
+        else:
+            post_a = a; post_b = b + 1.0
+        # Posterior mean
+        eps = 1e-9
+        pm = (post_a + eps) / (post_a + post_b + 2*eps)
+        # Weight = informativeness of prior (sqrt of sample size)
+        weight = math.sqrt(a + b)
+        odds = (pm + eps) / (1 - pm + eps)
+        total_log_odds += weight * math.log(odds)
+        total_weight += weight
+    if total_weight == 0: return 0.0, "none"
+    prob = 1 / (1 + math.exp(-total_log_odds / total_weight))
+    strength = "strong" if total_weight > 15 else "moderate" if total_weight > 8 else "weak" if total_weight > 2 else "none"
+    return min(1.0, max(0.0, prob)), strength
+    
+def wilson_confidence(n_present, n_total):
+    if n_total == 0: return 0.0
+    p_hat = n_present / n_total; z = 1.645
+    denom = 1 + z*z / n_total
+    center = (p_hat + z*z/(2*n_total)) / denom
+    margin = z * math.sqrt((p_hat*(1-p_hat) + z*z/(4*n_total)) / n_total) / denom
+    return max(0.0, center - margin)
