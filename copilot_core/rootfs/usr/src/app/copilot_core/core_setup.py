@@ -1969,6 +1969,45 @@ def register_blueprints(app: Flask, services: dict) -> None:
     except Exception:
         _LOGGER.exception("Failed to register hub_bp")
 
+    # ── SYMBIOSIS LANE — All 9 Vertical Slices (2026-04-06) ──────────────────
+    # Register Symbiosis Admin UI (tabbed dashboard at /admin)
+    try:
+        from copilot_core.api.v1.backend_ui_v2 import bp as admin_ui_bp
+        app.register_blueprint(admin_ui_bp)
+        _LOGGER.info("Symbiosis Admin UI registered at /admin")
+    except Exception:
+        _LOGGER.exception("Failed to register admin_ui_bp")
+
+    # Register Symbiosis Rule Engine + Context Manager as services
+    try:
+        from copilot_core.symbiosis.rule_engine import SymbioticRuleEngine, ContextManager
+        services["symbiosis_rules"] = SymbioticRuleEngine()
+        services["context_manager"] = ContextManager()
+        _LOGGER.info("Symbiosis Rule Engine + Context Manager initialized")
+    except Exception:
+        _LOGGER.exception("Failed to init Symbiosis engines")
+
+    # Register all 9 Symbiosis Admin APIs (data-driven)
+    _SYMBIOSIS_BLUEPRINTS = [
+        ("copilot_core.api.v1.habitus_admin", "bp", None),
+        ("copilot_core.api.v1.room_context_admin", "bp", None),
+        ("copilot_core.api.v1.device_link_admin", "bp", None),
+        ("copilot_core.api.v1.presence_entity_admin", "bp", None),
+        ("copilot_core.api.v1.intent_manager_admin", "bp", None),
+        ("copilot_core.api.v1.action_executor_admin", "bp", None),
+        ("copilot_core.api.v1.state_bridge_admin", "bp", None),
+        ("copilot_core.api.v1.event_bus_admin", "bp", None),
+        ("copilot_core.api.v1.learning_memory_admin", "bp", None),
+    ]
+    for module_path, bp_attr, prefix in _SYMBIOSIS_BLUEPRINTS:
+        try:
+            mod = importlib.import_module(module_path)
+            bp = getattr(mod, bp_attr)
+            app.register_blueprint(bp)
+        except Exception:
+            _LOGGER.exception("Failed to register symbiosis bp %s", module_path)
+    _LOGGER.info("All 9 Symbiosis Admin APIs registered")
+
     # NOTE: sharing_bp and federated_bp are already nested in api_v1
     # (via blueprint.py lines 79-80). No standalone registration needed.
 

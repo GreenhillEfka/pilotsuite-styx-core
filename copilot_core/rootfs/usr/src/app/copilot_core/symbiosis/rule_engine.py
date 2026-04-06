@@ -3,7 +3,10 @@ Implements the actual logic for Habitus Rules and Context transitions.
 """
 import logging
 from typing import List, Dict
+<<<<<<< HEAD
 from .rule_cache import get_rule_cache
+=======
+>>>>>>> v1.0.0-rc2
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -11,7 +14,10 @@ class SymbioticRuleEngine:
     def __init__(self):
         self.rules = {}
         self.rule_counter = 0
+<<<<<<< HEAD
         self.cache = get_rule_cache()
+=======
+>>>>>>> v1.0.0-rc2
 
     def register_rule(self, zone_id: str, rule_type: str, condition: dict, action: dict) -> str:
         """Register a new rule for a zone."""
@@ -28,6 +34,7 @@ class SymbioticRuleEngine:
         _LOGGER.info(f"Registered rule {rule_id} for zone {zone_id}")
         return rule_id
 
+<<<<<<< HEAD
     async def evaluate_zone(self, zone_data: dict, current_events: List[dict]) -> List[dict]:
         """Evaluates all rules for a specific zone. Uses cache to reduce latency."""
         zone_id = zone_data.get("zone_id")
@@ -50,6 +57,45 @@ class SymbioticRuleEngine:
         
         # Cache the result
         await self.cache.set_evaluation(zone_id, current_events, triggered_actions)
+=======
+    def evaluate_zone(self, zone_data: dict, current_events: List[dict]) -> List[dict]:
+        """Evaluates all rules for a specific zone with logical operator support."""
+        _LOGGER.debug(f"Evaluating rules for zone {zone_data.get('zone_id')}")
+        triggered_actions = []
+        for rule_id, rule in self.rules.items():
+            if not rule["enabled"] or rule["zone_id"] != zone_data.get("zone_id"):
+                continue
+            
+            condition = rule.get("condition", {})
+            logic = condition.get("logic", "AND")
+            checks = condition.get("checks", [])
+            
+            match = False
+            if not checks:
+                # Legacy support for simple presence check
+                if rule["type"] == "presence" and any(e.get("event_type") == "presence" for e in current_events):
+                    match = True
+            else:
+                results = []
+                for check in checks:
+                    # Check if event exists that matches criteria
+                    found = any(
+                        e.get("event_type") == check.get("type") and 
+                        all(e.get("payload", {}).get(k) == v for k, v in check.get("payload", {}).items())
+                        for e in current_events
+                    )
+                    results.append(found)
+                
+                if logic == "AND":
+                    match = all(results)
+                else:
+                    match = any(results)
+            
+            if match:
+                rule["triggered_count"] += 1
+                triggered_actions.append(rule["action"])
+                _LOGGER.info(f"Rule {rule_id} triggered in zone {rule['zone_id']}")
+>>>>>>> v1.0.0-rc2
         
         return triggered_actions
 
