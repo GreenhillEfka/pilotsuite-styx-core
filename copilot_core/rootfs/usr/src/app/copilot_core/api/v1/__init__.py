@@ -17,6 +17,8 @@ from . import event_bus
 from . import event_bus_admin
 from . import learning_memory
 from . import learning_memory_admin
+from . import scenes_api
+from . import sync_api
 
 __all__ = [
     'backend_ui_v2', 'backend_ui',
@@ -27,5 +29,7 @@ __all__ = [
     'intent_manager', 'intent_manager_admin',
     'action_executor', 'action_executor_admin',
     'event_bus', 'event_bus_admin',
-    'learning_memory', 'learning_memory_admin'
+    'learning_memory', 'learning_memory_admin',
+    'scenes_api',
+    'sync_api',
 ]
