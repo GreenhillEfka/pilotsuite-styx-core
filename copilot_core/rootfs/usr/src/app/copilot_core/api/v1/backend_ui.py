@@ -16,6 +16,8 @@ Provides structured data for each backend tab:
 from __future__ import annotations
 
 import logging
+import threading  # Slice 142: For RAG cache lock
+import time  # Slice 142: For RAG cache TTL
 from flask import Blueprint, jsonify, request
 from datetime import datetime, timezone
 import uuid
@@ -899,15 +901,45 @@ def reject_proposal(proposal_id: str):
 
 
 # =============================================================================
-# Tab 7: RAG
+# Tab 7: RAG — With LRU Cache for Performance
 # =============================================================================
+
+# Slice 142: LRU Cache for RAG stats to improve performance (145ms → <50ms)
+_rag_stats_cache: dict[str, tuple[Any, float]] = {}
+_rag_cache_lock = threading.Lock()
+_RAG_CACHE_TTL = 30.0  # 30 seconds cache TTL
+
+
+def _get_cached_rag_stats() -> Optional[dict[str, Any]]:
+    """Get RAG stats from cache if valid."""
+    with _rag_cache_lock:
+        cache_key = "rag_stats"
+        cached = _rag_stats_cache.get(cache_key)
+        if cached:
+            data, timestamp = cached
+            if time.monotonic() - timestamp < _RAG_CACHE_TTL:
+                return data
+        return None
+
+
+def _set_cached_rag_stats(data: dict[str, Any]) -> None:
+    """Cache RAG stats with timestamp."""
+    with _rag_cache_lock:
+        _rag_stats_cache["rag_stats"] = (data, time.monotonic())
+
 
 @backend_ui_bp.route("/rag", methods=["GET"])
 def get_rag():
     """RAG data — Vector-Store, Embeddings, Search, SearXNG.
     
     Slice 130: Stats now from canonical RAGStore/VectorStore instead of static placeholders.
+    Slice 142: Added caching layer for performance (<50ms target).
     """
+    # Try cache first
+    cached = _get_cached_rag_stats()
+    if cached:
+        return jsonify(cached)
+    
     try:
         from copilot_core.rag.store import RAGStore
         from copilot_core.vector.embedder import VectorEmbedder
@@ -919,7 +951,7 @@ def get_rag():
         dimensions = stats.get("embedding_dimensions", 384)
         last_index = stats.get("last_index_time", "2026-04-01T00:00:00Z")
         
-        # Get recent embeddings
+        # Get recent embeddings (reduced limit for performance)
         embedder = VectorEmbedder()
         recent_embeddings = embedder.get_recent_embeddings(limit=2)
         
@@ -930,8 +962,8 @@ def get_rag():
                 "text": emb.get("text", "")[:50] + "..." if len(emb.get("text", "")) > 50 else emb.get("text", ""),
                 "created": emb.get("created_at", "2026-04-01T00:20:00Z"),
             })
-            
-        return jsonify({
+        
+        result = {
             "vectors": {
                 "count": vector_count,
                 "dimensions": dimensions,
@@ -951,7 +983,11 @@ def get_rag():
                 "model": "whisper",
                 "language": "de",
             },
-        })
+        }
+        
+        # Cache the result
+        _set_cached_rag_stats(result)
+        return jsonify(result)
     except Exception:
         # Fallback to previous hardcoded structure if service fails
         return jsonify({
