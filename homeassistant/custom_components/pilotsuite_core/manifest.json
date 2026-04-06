@@ -1,1 +1,9 @@
-{'domain': 'pilotsuite_core'}
+{
+  "domain": "pilotsuite_core",
+  "name": "PilotSuite Core",
+  "version": "100.0.0-rc2",
+  "documentation": "https://github.com/GreenhillEfka/pilotsuite-styx-core",
+  "dependencies": [],
+  "codeowners": ["@GreenhillEfka"],
+  "iot_class": "local_polling"
+}
