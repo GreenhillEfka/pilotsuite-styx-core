@@ -31,6 +31,23 @@ from typing import Any, Callable, Dict, List, Optional
 
 _LOGGER = logging.getLogger(__name__)
 
+
+def _append_wal_entry(event):
+    """Mirror semantic events into WAL in best-effort mode."""
+    try:
+        from copilot_core.events.wal import log_semantic_event
+        log_semantic_event(
+            event_type=event.event_type,
+            event_id=event.event_id,
+            source=event.source,
+            data={
+                "payload": event.data,
+            },
+        )
+    except Exception:
+        _LOGGER.debug("Failed to write semantic event to WAL", exc_info=True)
+
+
 # Valid event types (extensible — unknown types are allowed but logged)
 KNOWN_EVENT_TYPES = frozenset({
     "neuron.evaluated",
@@ -168,6 +185,7 @@ class IntegrationBus:
 
         event = BusEvent(event_type=event_type, data=data, source=source)
         self._events_published += 1
+        _append_wal_entry(event)
 
         with self._lock:
             subscribers = list(self._subscribers.get(event_type, []))

@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import React, { useEffect, useRef, useState } from 'react';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ExternalLink } from 'lucide-react';
 
@@ -13,23 +13,87 @@ interface TraceStep {
   model?: string;
 }
 
+interface StreamPayload {
+  ok: boolean;
+  trace_id: string | null;
+  query: string;
+  events: Array<{
+    type: 'query_start' | 'trace_step';
+    query?: string;
+    step?: TraceStep;
+  }>;
+}
+
 const IntelligenceView: React.FC = () => {
   const [traces, setTraces] = useState<TraceStep[]>([]);
   const [activeQuery, setActiveQuery] = useState('');
+  const seenTraceRef = useRef<string | null>(null);
 
-  // WebSocket for RAG trace stream (Slice 140)
   useEffect(() => {
-    const ws = new WebSocket('ws://localhost:8000/api/v1/backend/rag/trace/stream');
-    ws.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      if (data.type === 'query_start') {
-        setActiveQuery(data.query);
-        setTraces([]);
-      } else if (data.type === 'trace_step') {
-        setTraces((prev) => [...prev, data.step]);
+    let cancelled = false;
+
+    const hydrateFromStream = async () => {
+      try {
+        const response = await fetch('/api/v1/backend/rag/trace/stream', {
+          headers: { 'Accept': 'application/json' },
+          cache: 'no-store',
+        });
+
+        if (!response.ok || cancelled) {
+          return;
+        }
+
+        const payload = (await response.json()) as StreamPayload;
+        if (!payload.ok) {
+          return;
+        }
+
+        const incomingQuery = payload.query || '';
+        const incomingSteps = payload.events
+          .filter((evt) => evt.type === 'trace_step' && Boolean(evt.step))
+          .map((evt) => evt.step as TraceStep)
+          .filter(Boolean);
+
+        if (payload.trace_id) {
+          const sameTrace = seenTraceRef.current === payload.trace_id;
+
+          setActiveQuery(incomingQuery);
+
+          if (!sameTrace) {
+            seenTraceRef.current = payload.trace_id;
+            setTraces(incomingSteps);
+          } else {
+            setTraces((prev) => {
+              const byId = new Set(prev.map((step) => step.id));
+              const merged = [...prev];
+              incomingSteps.forEach((step) => {
+                if (!byId.has(step.id)) {
+                  merged.push(step);
+                  byId.add(step.id);
+                }
+              });
+              return merged.slice(-30);
+            });
+          }
+        } else if (seenTraceRef.current !== null) {
+          seenTraceRef.current = null;
+          setActiveQuery("");
+          setTraces([]);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.debug('RAG trace stream fetch failed', error);
+        }
       }
     };
-    return () => ws.close();
+
+    void hydrateFromStream();
+    const timer = window.setInterval(hydrateFromStream, 2000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
   }, []);
 
   const getStageColor = (stage: string) => {
@@ -68,10 +132,10 @@ const IntelligenceView: React.FC = () => {
       </div>
 
       <div className="space-y-3">
-        {traces.map((step, idx) => (
+        {traces.map((step) => (
           <Card
-            key={step.id}
             className={`border-l-4 ${getStageColor(step.stage)} bg-ps-card-dark border-zinc-800 transition-all hover:translate-x-1`}
+            key={step.id}
           >
             <CardContent className="p-4">
               <div className="flex gap-4 items-start">
@@ -91,7 +155,7 @@ const IntelligenceView: React.FC = () => {
                 <div className="flex-1 space-y-2">
                   <p className="text-sm text-zinc-200">{step.content}</p>
 
-                  {step.tokens && (
+                  {step.tokens !== undefined && (
                     <span className="text-[10px] text-ps-text-dim">
                       Tokens: {step.tokens}
                     </span>

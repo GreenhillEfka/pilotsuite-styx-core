@@ -409,6 +409,37 @@ def get_dashboard():
     })
 
 
+
+@backend_ui_bp.route("/dashboard/stream", methods=["GET"])
+def get_dashboard_stream():
+    """SOTA dashboard live stream payload for UI charts."""
+    try:
+        from copilot_core.dashboard.metrics_provider import get_metrics_provider
+        metrics = get_metrics_provider().get_dashboard_metrics()
+    except Exception as exc:
+        _LOGGER.warning("Dashboard stream metrics provider failed: %s", exc)
+        metrics = {}
+
+    gauges = metrics.get("gauges", {}) or {}
+    system = metrics.get("system", {}) or {}
+    p95_latency = gauges.get("p95_latency_ms", gauges.get("avg_latency_ms", 0) or 0)
+    events_per_sec = gauges.get("events_per_sec", 0) or 0
+    anomaly_score = float((gauges.get("error_rate_pct", 0) or 0) * 100) + float(system.get("cpu_usage_pct", 0) or 0)
+
+    return jsonify({
+        "ok": True,
+        "time": metrics.get("ts", datetime.now(timezone.utc).isoformat()),
+        "ops": round(float(events_per_sec) * 60, 2),
+        "latency_ms": round(float(p95_latency), 2),
+        "anomaly_score": max(0.0, min(100.0, round(anomaly_score, 4))),
+        "health": {
+            "system_cpu_pct": system.get("cpu_usage_pct", 0),
+            "memory_mb": system.get("mem_usage_mb", 0),
+            "error_rate_pct": gauges.get("error_rate_pct", 0),
+        },
+        "raw": metrics,
+    })
+
 # =============================================================================
 # Tab 2: Zonen
 # =============================================================================
@@ -1365,6 +1396,60 @@ def discovery_assign():
 # =============================================================================
 # Slice 166: RAG Trace Timeline Extension (Append to Backend-UI)
 # =============================================================================
+
+@backend_ui_bp.route("/rag/trace/stream", methods=["GET"])
+def get_rag_trace_stream():
+    """Returns latest RAG trace as frontend stream events."""
+    try:
+        from copilot_core.api.v1.rag_trace_api import _traces
+
+        stage_to_step = {
+            "query_parsing": "ingest",
+            "query_parsed": "ingest",
+            "query": "ingest",
+            "vector_search": "retrieval",
+            "web_search": "retrieval",
+            "web_search_searxng": "retrieval",
+            "embedding_search": "retrieval",
+            "rerank": "retrieval",
+            "llm_generation": "reasoning",
+            "post_processing": "execution",
+            "execution": "execution",
+        }
+
+        if not _traces:
+            return jsonify({"ok": True, "trace_id": None, "query": "", "events": []})
+
+        trace_id, trace_obj = list(_traces.items())[-1]
+        events = [{"type": "query_start", "trace_id": trace_obj.trace_id, "query": trace_obj.query}]
+
+        for idx, stage in enumerate(trace_obj.stages):
+            stage_name = str(stage.get("stage", "")).strip().lower()
+            step_stage = stage_to_step.get(stage_name, "execution")
+            events.append({
+                "type": "trace_step",
+                "trace_id": trace_obj.trace_id,
+                "step": {
+                    "id": f"{trace_obj.trace_id}-{idx}",
+                    "stage": step_stage,
+                    "timestamp": int(stage.get("ts_ms", 0) or 0),
+                    "content": f"{stage_name.replace('_', ' ').title()} ({stage.get('status', 'ok')})",
+                    "source": stage.get("source"),
+                    "tokens": stage.get("tokens"),
+                    "model": stage.get("model"),
+                },
+            })
+
+        return jsonify({
+            "ok": True,
+            "trace_id": trace_obj.trace_id,
+            "query": trace_obj.query,
+            "events": events,
+            "event_count": len(events),
+        })
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
 
 @backend_ui_bp.route("/rag/traces", methods=["GET"])
 def get_rag_traces():

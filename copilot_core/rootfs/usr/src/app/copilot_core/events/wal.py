@@ -49,6 +49,39 @@ SEMANTIC_EVENT_TYPES = {
     "feedback_received",
 }
 
+_SEMANTIC_EVENT_ALIASES: dict[str, str] = {
+    # Canonical aliases from service/event buses
+    "anomaly_detected": "anomaly_detected",
+    "anomaly.detected": "anomaly_detected",
+    "module.state_changed": "zone_transition",
+    "module_state_changed": "zone_transition",
+    "state_changed": "zone_transition",
+    "mood.changed": "habitus_context_change",
+    "mood_changed": "habitus_context_change",
+    "rules_activate": "rule_evaluated",
+    "rule.triggered": "rule_evaluated",
+    "neuron.evaluated": "learning_update",
+    "neuron_dynamic_created": "learning_update",
+    "pattern.discovered": "learning_update",
+    "learning.updated": "learning_update",
+    "autonomy.executed": "automation_decision",
+    "scene.applied": "automation_decision",
+    "scene.captured": "automation_decision",
+    "scene_captured": "automation_decision",
+    "presence.changed": "zone_transition",
+    "presence_changed": "zone_transition",
+    "presence.update": "presence_confidence_update",
+    "presence_update": "presence_confidence_update",
+    "proposal_generated": "proposal_generated",
+    "proposal.generated": "proposal_generated",
+    "suggestion.created": "proposal_generated",
+    "feedback.received": "feedback_received",
+    "feedback_received": "feedback_received",
+    "suggestion.accepted": "feedback_received",
+    "suggestion.rejected": "feedback_received",
+    "autonomy.failed": "automation_decision",
+}
+
 
 class WALEntry:
     """Single WAL entry."""
@@ -219,6 +252,69 @@ def get_wal() -> WriteAheadLog:
     if _wal is None:
         _wal = WriteAheadLog()
     return _wal
+
+
+def _resolve_semantic_event_type(event_type: str) -> str | None:
+    """Resolve raw event type to a WAL semantic event type.
+
+    Supports canonical underscore names and dotted/legacy names.
+    Returns ``None`` for non-semantic events.
+    """
+
+    if not event_type:
+        return None
+
+    normalized = str(event_type).strip().lower().replace("-", "_")
+    if normalized in SEMANTIC_EVENT_TYPES:
+        return normalized
+
+    return _SEMANTIC_EVENT_ALIASES.get(normalized)
+
+
+def log_semantic_event(
+    event_type: str,
+    event_id: str,
+    source: str,
+    data: Dict[str, Any],
+    version: int = 1,
+) -> None:
+    """Best-effort async write of semantic events.
+
+    This is intentionally non-blocking for hot paths. Errors are logged and
+    dropped to avoid impacting request/event throughput.
+    """
+
+    semantic_type = _resolve_semantic_event_type(event_type)
+    if semantic_type is None:
+        return
+
+    async def _write() -> None:
+        await wal_write(
+            event_type=semantic_type,
+            event_id=event_id,
+            source=source,
+            data={
+                "source_event_type": event_type,
+                **(data or {}),
+            },
+            version=version,
+        )
+
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        try:
+            asyncio.run(_write())
+        except Exception:
+            _LOGGER.debug("Failed to write WAL event synchronously", exc_info=True)
+    else:
+        try:
+            loop.create_task(_write())
+        except Exception:
+            try:
+                asyncio.run(_write())
+            except Exception:
+                _LOGGER.debug("Failed to dispatch WAL write task", exc_info=True)
 
 
 async def wal_write(

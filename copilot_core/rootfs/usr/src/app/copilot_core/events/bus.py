@@ -24,6 +24,24 @@ import uuid
 logger = logging.getLogger(__name__)
 
 
+def _append_wal_entry(event):
+    """Mirror semantic events into WAL in best-effort mode."""
+    try:
+        from copilot_core.events.wal import log_semantic_event
+        log_semantic_event(
+            event_type=event.event_type,
+            event_id=event.event_id,
+            source=event.source,
+            data={
+                "payload": event.payload,
+                "priority": event.priority.value,
+                "headers": event.headers,
+            },
+        )
+    except Exception:
+        logger.debug("Failed to write semantic event to WAL", exc_info=True)
+
+
 class EventPriority(Enum):
     """Event priority levels."""
     LOW = "low"
@@ -144,6 +162,8 @@ class EventBusEngine:
             self._event_history = self._event_history[-self._max_history_size:]
         
         self._stats["published"] += 1
+        
+        _append_wal_entry(event)
         
         logger.debug("Event published: %s (%s)", event_type, event.event_id)
         
