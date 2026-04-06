@@ -13,3 +13,5 @@ def check_updates():
 @bp.post("/version/update")
 def trigger_update():
     return jsonify({"ok": True, "status": "started"})
+# Backwards compatibility alias
+version_bp = bp
