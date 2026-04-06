@@ -680,3 +680,44 @@ def get_graph_store() -> GraphStore:
         if _graph_store is None:
             _graph_store = GraphStore()
         return _graph_store
+
+# Slice 70: NetworkX Integration for Graph Analysis (P3-006)
+def to_networkx(nodes: List["Node"], edges: List["Edge"]) -> "networkx.Graph":
+    """Convert KG nodes/edges to NetworkX graph for analysis."""
+    try:
+        import networkx as nx
+    except ImportError:
+        _LOGGER.warning("networkx not available, returning None")
+        return None
+    
+    G = nx.Graph()
+    for node in nodes:
+        G.add_node(node.node_id, label=node.label, node_type=node.node_type.value if hasattr(node.node_type, 'value') else node.node_type)
+    for edge in edges:
+        G.add_edge(edge.source_id, edge.target_id, edge_type=edge.edge_type.value if hasattr(edge.edge_type, 'value') else edge.edge_type, weight=getattr(edge, 'weight', 1.0))
+    return G
+
+
+def kg_shortest_path(nodes: List["Node"], edges: List["Edge"], source: str, target: str) -> Optional[List[str]]:
+    """Find shortest path between two nodes."""
+    G = to_networkx(nodes, edges)
+    if G is None:
+        return None
+    try:
+        import networkx as nx
+        path = nx.shortest_path(G, source, target)
+        return path
+    except Exception:
+        return None
+
+
+def kg_connected_components(nodes: List["Node"], edges: List["Edge"]) -> List[List[str]]:
+    """Find connected components in the knowledge graph."""
+    G = to_networkx(nodes, edges)
+    if G is None:
+        return []
+    try:
+        import networkx as nx
+        return [list(c) for c in nx.connected_components(G)]
+    except Exception:
+        return []
