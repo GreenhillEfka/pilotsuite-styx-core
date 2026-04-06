@@ -117,7 +117,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Sequence
 
-from .bm25 import BM25Index
+from .bm25 import BM25SqliteIndex
 from .semantic_backend import SemanticBackend
 
 
@@ -136,7 +136,7 @@ class HybridSearchEngine:
         rrf_k: RRF constant k (default: 60)
     """
     
-    bm25_index: BM25Index
+    bm25_index: BM25SqliteIndex
     semantic_backend: Any  # Callable matching rag_semantic_search signature
     namespace: str = "default"
     cache_ttl_seconds: float = 60.0
@@ -312,9 +312,8 @@ def get_hybrid_search_engine(
     and rag_semantic_search function.
     """
     try:
-        bm25 = BM25Index()
+        bm25 = BM25SqliteIndex()
     except Exception:
-        from .bm25 import BM25SqliteIndex
         bm25 = BM25SqliteIndex()
     
     # Use the module-level rag_semantic_search as the semantic backend
