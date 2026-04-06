@@ -118,7 +118,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Sequence
 
 from .bm25 import BM25SqliteIndex
-from .semantic_backend import SemanticBackend
+# semantic_backend provides rag_semantic_search() function, not a class
 
 
 @dataclass
