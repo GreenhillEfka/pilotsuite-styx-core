@@ -614,10 +614,6 @@ def _bm25_term_score(
     if denom <= 0.0:
         return 0.0
     return float(idf) * (float(tf) * (k1 + 1.0)) / denom
-<<<<<<< HEAD
 
 # Alias for backwards compatibility with tests
-=======
-# Backwards compatibility alias
->>>>>>> ed83058e (fix(rag): BM25Index alias + remove spurious -e in bm25.py)
 BM25Index = BM25SqliteIndex
