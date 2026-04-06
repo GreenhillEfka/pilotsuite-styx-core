@@ -113,10 +113,10 @@ def _create_user_preference_embedding(user_id: str, data: dict[str, Any]):
     """Create embedding for user preferences."""
     preferences = data.get("preferences", {})
     if not preferences:
-        return jsonify({
-            "ok": False,
-            "error": "Missing required field: preferences",
-        }), 400
+        return bad_request(
+            "Missing required field: preferences",
+            req=request,
+        )
 
     entry = _run_async(
         _store().store_user_preference_embedding(
@@ -141,10 +141,10 @@ def _create_pattern_embedding(pattern_id: str, data: dict[str, Any]):
     """Create embedding for a pattern."""
     entities = data.get("entities", [])
     if not entities:
-        return jsonify({
-            "ok": False,
-            "error": "Missing required field: entities",
-        }), 400
+        return bad_request(
+            "Missing required field: entities",
+            req=request,
+        )
 
     entry = _run_async(
         _store().store_pattern_embedding(
@@ -504,10 +504,10 @@ def compute_similarity(body: SimilarityRequest):
 
         # Compute cosine similarity
         if len(vec1) != len(vec2):
-            return jsonify({
-                "ok": False,
-                "error": f"Vector dimensions don't match: {len(vec1)} vs {len(vec2)}",
-            }), 400
+            return bad_request(
+                f"Vector dimensions don't match: {len(vec1)} vs {len(vec2)}",
+                req=request,
+            )
 
         dot_product = sum(a * b for a, b in zip(vec1, vec2))
         magnitude1 = math.sqrt(sum(a * a for a in vec1))
@@ -635,16 +635,16 @@ def vector_batch_upsert():
     documents = data.get("documents", [])
     
     if not collection:
-        return jsonify({
-            "ok": False,
-            "error": "Missing collection name"
-        }), 400
+        return bad_request(
+            "Missing collection name",
+            req=request,
+        )
     
     if not documents or len(documents) > 1000:
-        return jsonify({
-            "ok": False,
-            "error": "Documents required (max 1000 per batch)"
-        }), 400
+        return bad_request(
+            "Documents required (max 1000 per batch)",
+            req=request,
+        )
     
     from copilot_core.vector.store import get_vector_store
     
