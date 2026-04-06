@@ -41,6 +41,15 @@ class SyncMode(str, Enum):
     STATE_ONLY = "state_only"    # Entity states only
 
 
+class SyncStatus(str, Enum):
+    """Sync job/operation status."""
+    PENDING = "pending"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CONFLICT = "conflict"
+
+
 class SyncScope(str, Enum):
     """What to synchronize."""
     CONFIG = "config"
