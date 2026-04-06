@@ -290,8 +290,8 @@ def validate_websocket_token(request) -> bool:
     """Validate token for WebSocket connections.
 
     Checks (in order):
-    1. Query parameter ``?token=xxx``
-    2. ``X-Auth-Token`` header
+    1. ``X-Auth-Token`` header (preferred)
+    2. Query parameter ``?token=xxx`` (deprecated, will be removed)
 
     Returns True when the token is valid.
     Returns False when no token is configured or token doesn't match.
@@ -300,12 +300,23 @@ def validate_websocket_token(request) -> bool:
     if not token:
         return False
 
-    # 1. Query parameter
+    # 1. Header token (preferred method)
+    header_token = (request.headers.get("X-Auth-Token") or "").strip()
+    if header_token and hmac.compare_digest(header_token, token):
+        return True
+
+    # 2. Query parameter (deprecated - may leak to server logs)
+    # P1: Deprecated in favor of header-based auth to prevent token exposure
     query_token = ""
     if hasattr(request, "args"):
         query_token = (request.args.get("token") or "").strip()
-    if query_token and hmac.compare_digest(query_token, token):
-        return True
+    if query_token:
+        _LOGGER.warning(
+            "DEPRECATED: Query parameter 'token=' is deprecated and will be removed. "
+            "Use 'X-Auth-Token' header instead."
+        )
+        if hmac.compare_digest(query_token, token):
+            return True
 
     # 2. X-Auth-Token header
     header_token = ""
