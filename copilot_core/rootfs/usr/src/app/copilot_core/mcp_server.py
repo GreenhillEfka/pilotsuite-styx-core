@@ -134,6 +134,165 @@ MCP_TOOLS = [
             },
         },
     },
+    {
+        "name": "pilotsuite.zones_list",
+        "description": "List all Habitus zones with current occupancy, mode, and neuron state.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "filter": {"type": "string", "description": "Optional zone name filter"},
+            },
+        },
+    },
+    {
+        "name": "pilotsuite.lights_control",
+        "description": "Control lights in a zone (on/off, brightness, color temperature).",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "zone": {"type": "string", "description": "Zone name"},
+                "action": {"type": "string", "enum": ["on", "off", "dim", "brighten"], "description": "Action to perform"},
+                "brightness": {"type": "integer", "description": "Brightness 0-100 (for dim)"},
+            },
+            "required": ["zone", "action"],
+        },
+    },
+    {
+        "name": "pilotsuite.climate_control",
+        "description": "Set climate/temperature for a zone.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "zone": {"type": "string", "description": "Zone name"},
+                "temperature": {"type": "number", "description": "Target temperature in °C"},
+                "action": {"type": "string", "enum": ["set", "up", "down"], "description": "Temperature action"},
+            },
+            "required": ["zone"],
+        },
+    },
+    {
+        "name": "pilotsuite.presence_status",
+        "description": "Get current presence status for all zones (who is where, confidence).",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "zone": {"type": "string", "description": "Optional zone name"},
+            },
+        },
+    },
+    {
+        "name": "pilotsuite.habits_get",
+        "description": "Get discovered habits/routines (time-based, device-based, mood-based).",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "type": {"type": "string", "description": "Filter by type: time, device, mood"},
+                "limit": {"type": "integer", "default": 10},
+            },
+        },
+    },
+    {
+        "name": "pilotsuite.energy_detailed",
+        "description": "Get detailed energy breakdown: consumption by device, solar, battery, cost forecast.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "period": {"type": "string", "description": "Period: day, week, month"},
+                "zone": {"type": "string", "description": "Optional zone filter"},
+            },
+        },
+    },
+    {
+        "name": "pilotsuite.rag_search",
+        "description": "Search the RAG knowledge base for relevant documents.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Search query"},
+                "limit": {"type": "integer", "default": 5},
+                "rerank": {"type": "boolean", "default": True},
+            },
+            "required": ["query"],
+        },
+    },
+    {
+        "name": "pilotsuite.voice_command",
+        "description": "Execute a voice command (text-based, returns intent + response).",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "text": {"type": "string", "description": "Voice command text (German or English)"},
+                "language": {"type": "string", "default": "de"},
+            },
+            "required": ["text"],
+        },
+    },
+    {
+        "name": "pilotsuite.automation_rules",
+        "description": "List active automation rules, their triggers, and last evaluation.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "zone": {"type": "string", "description": "Optional zone filter"},
+                "status": {"type": "string", "description": "Filter by status: active, disabled, error"},
+            },
+        },
+    },
+    {
+        "name": "pilotsuite.media_control",
+        "description": "Control media playback (play, pause, stop, volume, transfer between zones).",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "zone": {"type": "string", "description": "Zone name"},
+                "action": {"type": "string", "enum": ["play", "pause", "stop", "transfer"], "description": "Media action"},
+                "target_zone": {"type": "string", "description": "Target zone for transfer action"},
+                "volume": {"type": "integer", "description": "Volume 0-100"},
+            },
+            "required": ["zone", "action"],
+        },
+    },
+    {
+        "name": "pilotsuite.events_query",
+        "description": "Query recent events from the WAL (zone transitions, intents, rule evaluations).",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "type": {"type": "string", "description": "Event type filter: zone_transition, intent_completion, rule_evaluation, learning_update"},
+                "limit": {"type": "integer", "default": 50},
+            },
+        },
+    },
+    {
+        "name": "pilotsuite.brain_query",
+        "description": "Query the Brain Graph for entity relationships and co-occurrence patterns.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "entity_id": {"type": "string", "description": "Entity ID to query neighbors for"},
+                "relation_type": {"type": "string", "description": "Filter by relation type"},
+                "limit": {"type": "integer", "default": 20},
+            },
+        },
+    },
+    {
+        "name": "pilotsuite.anomaly_status",
+        "description": "Get current anomaly detection summary (critical, warning, info alerts).",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "sensor_type": {"type": "string", "description": "Filter by type: maintenance, media, gas, habit"},
+            },
+        },
+    },
+    {
+        "name": "pilotsuite.system_status",
+        "description": "Get PilotSuite Core system status (uptime, version, health, API latency).",
+        "inputSchema": {
+            "type": "object",
+            "properties": {},
+        },
+    },
 ]
 
 # MCP Prompts
@@ -235,7 +394,6 @@ def _execute_mcp_tool(name: str, arguments: dict) -> dict:
             zone_name = arguments.get("zone")
             all_metrics = store.get_all()
             if zone_name:
-                # Filter by zone name
                 filtered = {
                     zid: m for zid, m in all_metrics.items()
                     if zone_name.lower() in m.zone_name.lower()
@@ -243,14 +401,14 @@ def _execute_mcp_tool(name: str, arguments: dict) -> dict:
                 result_zones = filtered
             else:
                 result_zones = all_metrics
-            
+
             if not result_zones:
                 return {
                     "zones": 0,
                     "average_health_score": store.get_average_score(),
                     "message": "No zone health data available yet. Data arrives via HA→Core sync when HA is online."
                 }
-            
+
             return {
                 "zones": len(result_zones),
                 "average_health_score": round(store.get_average_score(), 1),
@@ -269,6 +427,172 @@ def _execute_mcp_tool(name: str, arguments: dict) -> dict:
                     }
                     for zid, m in result_zones.items()
                 },
+            }
+
+        elif name == "pilotsuite.zones_list":
+            zones_svc = services.get("habitus_service")
+            if not zones_svc:
+                return {"error": "HabitusService not available"}
+            filter_zone = arguments.get("filter", "")
+            zones = zones_svc.list_zones()
+            if filter_zone:
+                zones = [z for z in zones if filter_zone.lower() in str(z.get("name", "")).lower()]
+            return {"zones": zones, "count": len(zones)}
+
+        elif name == "pilotsuite.lights_control":
+            zone = arguments.get("zone", "")
+            action = arguments.get("action", "")
+            brightness = arguments.get("brightness", 50)
+            hs = services.get("habitus_service")
+            if not hs:
+                return {"error": "HabitusService not available"}
+            if action == "on":
+                hs.set_light(zone, True)
+            elif action == "off":
+                hs.set_light(zone, False)
+            elif action == "dim":
+                hs.set_light_brightness(zone, brightness)
+            elif action == "brighten":
+                hs.set_light_brightness(zone, min(100, brightness + 20))
+            else:
+                return {"error": f"Unknown action: {action}"}
+            return {"ok": True, "zone": zone, "action": action, "brightness": brightness}
+
+        elif name == "pilotsuite.climate_control":
+            zone = arguments.get("zone", "")
+            temperature = arguments.get("temperature")
+            action = arguments.get("action", "set")
+            hs = services.get("habitus_service")
+            if not hs:
+                return {"error": "HabitusService not available"}
+            hs.set_climate(zone, temperature, action)
+            return {"ok": True, "zone": zone, "temperature": temperature, "action": action}
+
+        elif name == "pilotsuite.presence_status":
+            presence_svc = services.get("presence_service")
+            if not presence_svc:
+                return {"error": "PresenceService not available"}
+            zone = arguments.get("zone")
+            if zone:
+                status = presence_svc.get_zone_status(zone)
+                return {"zone": zone, "status": status}
+            return presence_svc.get_all_zones_status()
+
+        elif name == "pilotsuite.habits_get":
+            habitus_svc = services.get("habitus_service")
+            if not habitus_svc:
+                return {"error": "HabitusService not available"}
+            habit_type = arguments.get("type")
+            limit = arguments.get("limit", 10)
+            habits = habitus_svc.get_habits(habit_type=habit_type, limit=limit)
+            return {"habits": habits, "count": len(habits)}
+
+        elif name == "pilotsuite.energy_detailed":
+            energy_svc = services.get("energy_service")
+            if not energy_svc:
+                return {"error": "EnergyService not available"}
+            period = arguments.get("period", "day")
+            zone = arguments.get("zone")
+            stats = energy_svc.get_detailed_stats(period=period, zone=zone)
+            return stats
+
+        elif name == "pilotsuite.rag_search":
+            from ..rag.ollama_client import OllamaRAGClient
+            query = arguments.get("query", "")
+            limit = arguments.get("limit", 5)
+            rerank = arguments.get("rerank", True)
+            try:
+                client = OllamaRAGClient()
+                results = client.search(query, top_k=limit, rerank=rerank)
+                return {"results": results, "query": query, "count": len(results)}
+            except Exception as exc:
+                return {"error": str(exc), "results": []}
+
+        elif name == "pilotsuite.voice_command":
+            from ..voice.voice_handler import VoiceIntentHandler
+            text = arguments.get("text", "")
+            language = arguments.get("language", "de")
+            handler = services.get("voice_handler") or VoiceIntentHandler()
+            result = handler.process_voice_command(text, language=language)
+            return {"ok": True, **result}
+
+        elif name == "pilotsuite.automation_rules":
+            rules_svc = services.get("automation_service")
+            if not rules_svc:
+                return {"error": "AutomationService not available"}
+            zone = arguments.get("zone")
+            status = arguments.get("status")
+            rules = rules_svc.list_rules(zone=zone, status=status)
+            return {"rules": rules, "count": len(rules)}
+
+        elif name == "pilotsuite.media_control":
+            zone = arguments.get("zone", "")
+            action = arguments.get("action", "")
+            target_zone = arguments.get("target_zone")
+            volume = arguments.get("volume")
+            mw_svc = services.get("music_wolke_engine")
+            if not mw_svc:
+                return {"error": "MusicWolkeEngine not available"}
+            if action == "play":
+                sid = mw_svc.start_session(zone_id=zone, source_entity=f"sonos.{zone}", media_type="music", follow_enabled=False)
+                return {"ok": True, "session_id": sid}
+            elif action == "stop":
+                stopped = mw_svc.stop_zone(zone)
+                return {"ok": True, "stopped": stopped}
+            elif action == "transfer":
+                if not target_zone:
+                    return {"error": "target_zone required for transfer"}
+                transfers = mw_svc.on_zone_entry("user", target_zone)
+                return {"ok": True, "transfers": transfers}
+            elif volume is not None:
+                mw_svc.set_volume(zone, volume)
+                return {"ok": True, "volume": volume}
+            return {"error": f"Unknown action: {action}"}
+
+        elif name == "pilotsuite.events_query":
+            from ..events.wal import WALReader
+            event_type = arguments.get("type")
+            limit = arguments.get("limit", 50)
+            try:
+                reader = WALReader()
+                events = reader.read_events(event_type=event_type, limit=limit)
+                return {"events": events, "count": len(events)}
+            except Exception as exc:
+                return {"error": str(exc), "events": []}
+
+        elif name == "pilotsuite.brain_query":
+            bg_svc = services.get("brain_graph_service")
+            if not bg_svc:
+                return {"error": "BrainGraphService not available"}
+            entity_id = arguments.get("entity_id")
+            relation_type = arguments.get("relation_type")
+            limit = arguments.get("limit", 20)
+            if entity_id:
+                neighbors = bg_svc.get_neighbors(entity_id, limit=limit, relation_type=relation_type)
+                return {"entity_id": entity_id, "neighbors": neighbors}
+            return {"error": "entity_id required"}
+
+        elif name == "pilotsuite.anomaly_status":
+            sensor_type = arguments.get("sensor_type")
+            from ..anomaly.detection_engine import AnomalyDetectionEngine
+            engine = services.get("anomaly_engine") or AnomalyDetectionEngine.get_instance()
+            summary = engine.get_summary()
+            if sensor_type:
+                filtered = [a for a in summary.get("alerts", []) if a.get("sensor_type") == sensor_type]
+                summary["alerts"] = filtered
+            return summary
+
+        elif name == "pilotsuite.system_status":
+            import psutil
+            from datetime import datetime
+            uptime_seconds = psutil.boot_time()
+            now = datetime.now().timestamp()
+            return {
+                "uptime_seconds": int(now - uptime_seconds),
+                "version": COPILOT_VERSION,
+                "cpu_percent": psutil.cpu_percent(),
+                "memory_percent": psutil.virtual_memory().percent,
+                "disk_percent": psutil.disk_usage("/").percent,
             }
 
         else:

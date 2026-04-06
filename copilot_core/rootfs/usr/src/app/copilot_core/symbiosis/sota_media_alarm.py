@@ -34,11 +34,8 @@ class HabitusMediaService:
         """Sonnenwecker → Musikwolke verdrahten."""
 
         def on_sleep_lock(zone_id: str) -> None:
-            stopped = self._music_wolke.stop_zone(zone_id)
-            _LOGGER.info(
-                "Sleep lock on %s: stopped %d MusicWolke sessions",
-                zone_id, stopped,
-            )
+            # Musikwolke-Behandlung ist in der Sonnenwecker-Engine selbst (Fade-Out + Stop).
+            _LOGGER.debug("Sleep lock on %s handled by Sonnenwecker-Engine", zone_id)
 
         self._sonnenwecker.on_sleep_lock(on_sleep_lock)
 
@@ -55,6 +52,9 @@ class HabitusMediaService:
             color_temp_end=kwargs.get("color_temp_end", 5000),
             music_on_wake=kwargs.get("music_on_wake", False),
             music_volume_start=kwargs.get("music_volume_start", 0.15),
+            suppress_music_cloud_during_sleep=kwargs.get(
+                "suppress_music_cloud_during_sleep", True
+            ),
         )
         return self._sonnenwecker.configure(zone_id, config)
 

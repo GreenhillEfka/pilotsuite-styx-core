@@ -12,12 +12,17 @@ Verhalten:
 from __future__ import annotations
 
 import logging
+import threading
+import time
 from dataclasses import dataclass, field, asdict
-from datetime import datetime, timezone, time as dt_time
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Callable
 import uuid
 
 _LOGGER = logging.getLogger(__name__)
+
+_MUSIC_FADE_STEPS = 10
+_MUSIC_FADE_STEP_DELAY_S = 0.3
 
 
 @dataclass
@@ -33,7 +38,8 @@ class SunlightAlarmConfig:
     sound_enabled: bool = False       # Musik nach Aufwachsequenz
     sound_source: str = ""            # entity_id für TTS/Musik
     music_on_wake: bool = False       # Musikwolke nach Aufwachsequenz starten
-    music_volume_start: float = 0.15  #sanft starten
+    music_volume_start: float = 0.15  # sanft starten
+    suppress_music_cloud_during_sleep: bool = True
 
 
 @dataclass
@@ -79,6 +85,8 @@ class SonnenweckerEngine:
         self._callbacks: Dict[str, Callable] = {}  # event → callback
         self._lock_callbacks: List[Callable] = []  # called on sleep/presence gone
         self._wake_callbacks: List[Callable] = []   # called on alarm complete
+        self._music_fade_threads: Dict[str, threading.Thread] = {}
+        self._music_fade_cancel: Dict[str, threading.Event] = {}
 
     # ─── Konfiguration ───────────────────────────────────────────────────────
 
@@ -173,7 +181,7 @@ class SonnenweckerEngine:
                          run.run_id, run.zone_id)
             # Musikwolke starten wenn konfiguriert
             if run.config.music_on_wake:
-                self._trigger_music_wake(run.zone_id, run.config.music_volume_start)
+                self._trigger_music_wake(run)
 
     def tick_step(self, run_id: str) -> Optional[AlarmStep]:
         """Einen Step weiter (wird von Cron/Scheduler aufgerufen)."""
@@ -224,10 +232,15 @@ class SonnenweckerEngine:
                 self.cancel_alarm(run_id)
                 triggered.append(f"alarm_cancelled:{run_id}")
 
-        # Musikwolke stoppen wenn aktiv
-        if config.sound_enabled or config.music_on_wake:
+        # Musikwolke stoppen wenn konfiguriert
+        if config.suppress_music_cloud_during_sleep:
+            stopped = self._stop_music_for_zone(zone_id)
+            if stopped:
+                triggered.append("music_stopped")
+                triggered.append(f"music_stopped:{stopped}")
             self._trigger_sleep_lock_callbacks(zone_id)
-            triggered.append("music_stopped")
+            if not stopped:
+                _LOGGER.debug("Sleep lock for %s: no active MusicWolke sessions", zone_id)
 
         _LOGGER.info("Sleep detected for %s: %s", zone_id, triggered)
         return triggered
@@ -244,7 +257,7 @@ class SonnenweckerEngine:
 
         # Sanfte Musik starten wenn enabled
         if config.music_on_wake:
-            return self._start_music_wolke(zone_id, config.music_volume_start)
+            return self._start_music_wolke(zone_id, config)
 
         return None
 
@@ -276,29 +289,136 @@ class SonnenweckerEngine:
             except Exception as e:
                 _LOGGER.warning("Wake complete callback failed: %s", e)
 
-    def _trigger_music_wake(self, zone_id: str, volume: float) -> None:
+    def _trigger_music_wake(self, run: AlarmRun) -> None:
         """Musikwolke bei Aufwachsequenz-Ende starten."""
-        self._start_music_wolke(zone_id, volume)
+        self._start_music_wolke(run.zone_id, run.config)
 
-    def _start_music_wolke(self, zone_id: str, volume: float) -> str:
+    def _start_music_wolke(self, zone_id: str, config: SunlightAlarmConfig) -> str:
         """Wrapper: startet Musikwolke (ruft MusicWolke-Engine oder API auf)."""
         # Direkter Import um zirkuläre Abhängigkeit zu vermeiden
         try:
             from copilot_core.modules.music_wolke.engine import MusicWolkeEngine
             engine = MusicWolkeEngine.get_instance()
+            start_volume = self._normalize_music_volume(0.0)
+            target_volume = self._normalize_music_volume(config.music_volume_start)
             session_id = engine.start_session(
                 zone_id=zone_id,
                 source_entity="sonnenwecker",
                 media_type="music",
                 follow_enabled=False,
+                volume_pct=start_volume,
             )
             if session_id:
-                # Sanfte Lautstärke setzen
-                _LOGGER.info("Musikwolke gestartet für %s (Vol: %.0f%%)", zone_id, volume * 100)
+                self._fade_music_session_volume(
+                    engine,
+                    session_id,
+                    start_volume,
+                    target_volume,
+                    stop_on_complete=False,
+                )
+                _LOGGER.info(
+                    "Musikwolke gestartet für %s (Wake-Ziel: %d%%)",
+                    zone_id,
+                    target_volume,
+                )
             return session_id or ""
         except Exception as e:
             _LOGGER.warning("Musikwolke nicht verfügbar: %s", e)
             return ""
+
+    def _stop_music_for_zone(self, zone_id: str) -> int:
+        """Startet Audio-Fade-Out + Stop für alle Musikwolken einer Zone."""
+        # Direkter Import um zirkuläre Abhängigkeit zu vermeiden
+        try:
+            from copilot_core.modules.music_wolke.engine import MusicWolkeEngine
+            engine = MusicWolkeEngine.get_instance()
+        except Exception as e:
+            _LOGGER.warning("Musikwolke nicht verfügbar: %s", e)
+            return 0
+
+        sessions = [
+            s for s in engine.get_all_sessions()
+            if s.get("zone_id") == zone_id
+        ]
+        for session in sessions:
+            session_id = session.get("session_id")
+            if session_id:
+                self._fade_music_session_volume(
+                    engine,
+                    session_id,
+                    self._normalize_music_volume(session.get("volume_pct", 0)),
+                    0,
+                    stop_on_complete=True,
+                )
+
+        return len(sessions)
+
+    def _fade_music_session_volume(
+        self,
+        engine,
+        session_id: str,
+        from_volume: int,
+        to_volume: int,
+        stop_on_complete: bool = False,
+    ) -> None:
+        """Soft-Fade für eine einzelne Musikwolke-Session."""
+        from_volume = max(0, min(100, int(from_volume)))
+        to_volume = max(0, min(100, int(to_volume)))
+
+        if from_volume == to_volume:
+            if stop_on_complete and to_volume == 0:
+                engine.stop_session(session_id)
+            else:
+                engine.set_volume(session_id, to_volume)
+            return
+
+        self._cancel_music_fade(session_id)
+        cancel_event = threading.Event()
+        self._music_fade_cancel[session_id] = cancel_event
+
+        def _worker() -> None:
+            try:
+                delta = to_volume - from_volume
+                for step in range(1, _MUSIC_FADE_STEPS + 1):
+                    if cancel_event.is_set():
+                        return
+                    progress = step / _MUSIC_FADE_STEPS
+                    current = int(round(from_volume + delta * progress))
+                    if not engine.set_volume(session_id, current):
+                        return
+                    if step < _MUSIC_FADE_STEPS:
+                        time.sleep(_MUSIC_FADE_STEP_DELAY_S)
+
+                if stop_on_complete and not cancel_event.is_set():
+                    engine.stop_session(session_id)
+            except Exception:
+                _LOGGER.exception("Music fade failed for session %s", session_id)
+            finally:
+                self._music_fade_threads.pop(session_id, None)
+                self._music_fade_cancel.pop(session_id, None)
+
+        t = threading.Thread(
+            target=_worker,
+            name=f"sonnenwecker-music-fade-{session_id}",
+            daemon=True,
+        )
+        self._music_fade_threads[session_id] = t
+        t.start()
+
+    def _cancel_music_fade(self, session_id: str) -> None:
+        """Abbruch laufender Musik-Fade-Jobs für eine Session."""
+        stop = self._music_fade_cancel.get(session_id)
+        if stop:
+            stop.set()
+        self._music_fade_cancel.pop(session_id, None)
+        self._music_fade_threads.pop(session_id, None)
+
+    @staticmethod
+    def _normalize_music_volume(volume: float) -> int:
+        """Normalisiert Lautstärke auf Prozent-Bereich 0..100."""
+        if volume <= 1:
+            return max(0, min(100, int(round(volume * 100))))
+        return max(0, min(100, int(round(volume))))
 
     # ─── Status ─────────────────────────────────────────────────────────────
 
