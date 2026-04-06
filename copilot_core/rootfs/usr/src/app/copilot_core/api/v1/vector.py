@@ -198,10 +198,7 @@ def find_similar(entry_id: str):
         entry = _run_async(_store().get(lookup_id))
 
         if not entry:
-            return jsonify({
-                "ok": False,
-                "error": f"Entry not found: {entry_id}",
-            }), 404
+            return not_found(f"vector entry {entry_id}")
 
         # Search for similar
         results = _run_async(
@@ -294,10 +291,7 @@ def get_vector(entry_id: str):
             entry = _run_async(_store().get(entry_id))
 
         if not entry:
-            return jsonify({
-                "ok": False,
-                "error": f"Entry not found: {entry_id}",
-            }), 404
+            return not_found(f"vector entry {entry_id}")
 
         return jsonify({
             "ok": True,
@@ -327,17 +321,11 @@ def delete_vector(entry_id: str):
                 deleted = _run_async(_store().delete(f"{prefix}{entry_id}"))
                 if deleted:
                     return jsonify({"ok": True, "deleted": f"{prefix}{entry_id}"})
-            return jsonify({
-                "ok": False,
-                "error": f"Entry not found: {entry_id}",
-            }), 404
+            return not_found(f"vector entry {entry_id}")
         else:
             deleted = _run_async(_store().delete(entry_id))
             if not deleted:
-                return jsonify({
-                    "ok": False,
-                    "error": f"Entry not found: {entry_id}",
-                }), 404
+                return not_found(f"vector entry {entry_id}")
 
         return jsonify({"ok": True, "deleted": entry_id})
 
@@ -507,9 +495,9 @@ def compute_similarity(body: SimilarityRequest):
             entry2 = _run_async(_store().get(normalize_id(id2)))
 
             if not entry1:
-                return jsonify({"ok": False, "error": f"Entry not found: {id1}"}), 404
+                return not_found(f"vector entry {id1}")
             if not entry2:
-                return jsonify({"ok": False, "error": f"Entry not found: {id2}"}), 404
+                return not_found(f"vector entry {id2}")
 
             vec1 = entry1.vector
             vec2 = entry2.vector
