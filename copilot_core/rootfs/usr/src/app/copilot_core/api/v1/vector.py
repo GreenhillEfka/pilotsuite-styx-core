@@ -81,7 +81,7 @@ def create_embedding(body: EmbeddingRequest):
 
     except Exception as e:
         _LOGGER.exception("Failed to create embedding")
-        return jsonify({"ok": False, "error": str(e)}), 500
+        return internal_error("Failed to create embedding", str(e))
 
 
 def _create_entity_embedding(entity_id: str, data: dict[str, Any]):
@@ -231,10 +231,10 @@ def find_similar(entry_id: str):
         })
 
     except ValueError as e:
-        return jsonify({"ok": False, "error": str(e)}), 400
+        return bad_request("Validation failed", details={"detail": str(e)})
     except Exception as e:
         _LOGGER.exception("Failed to find similar entries")
-        return jsonify({"ok": False, "error": str(e)}), 500
+        return internal_error("Failed to find similar entries", str(e))
 
 
 # ==================== Vector Management ====================
@@ -276,7 +276,7 @@ def list_vectors():
 
     except Exception as e:
         _LOGGER.exception("Failed to list vectors")
-        return jsonify({"ok": False, "error": str(e)}), 500
+        return internal_error("Failed to list vectors", str(e))
 
 
 @bp.get("/vectors/<path:entry_id>")
@@ -314,7 +314,7 @@ def get_vector(entry_id: str):
 
     except Exception as e:
         _LOGGER.exception("Failed to get vector")
-        return jsonify({"ok": False, "error": str(e)}), 500
+        return internal_error("Failed to get vector", str(e))
 
 
 @bp.delete("/vectors/<path:entry_id>")
@@ -343,7 +343,7 @@ def delete_vector(entry_id: str):
 
     except Exception as e:
         _LOGGER.exception("Failed to delete vector")
-        return jsonify({"ok": False, "error": str(e)}), 500
+        return internal_error("Failed to delete vector", str(e))
 
 
 # ==================== Stats ====================
@@ -361,7 +361,7 @@ def vector_stats():
 
     except Exception as e:
         _LOGGER.exception("Failed to get vector stats")
-        return jsonify({"ok": False, "error": str(e)}), 500
+        return internal_error("Failed to get vector stats", str(e))
 
 
 @bp.delete("/vectors")
@@ -383,7 +383,7 @@ def clear_vectors():
 
     except Exception as e:
         _LOGGER.exception("Failed to clear vectors")
-        return jsonify({"ok": False, "error": str(e)}), 500
+        return internal_error("Failed to clear vectors", str(e))
 
 
 # ==================== Bulk Operations ====================
@@ -479,7 +479,7 @@ def create_embeddings_bulk(body: BulkEmbeddingRequest):
 
     except Exception as e:
         _LOGGER.exception("Failed to create bulk embeddings")
-        return jsonify({"ok": False, "error": str(e)}), 500
+        return internal_error("Failed to create bulk embeddings", str(e))
 
 
 # ==================== Similarity Between Two ====================
@@ -538,7 +538,7 @@ def compute_similarity(body: SimilarityRequest):
 
     except Exception as e:
         _LOGGER.exception("Failed to compute similarity")
-        return jsonify({"ok": False, "error": str(e)}), 500
+        return internal_error("Failed to compute similarity", str(e))
 
 
 # ── SLICE 143: Vector API Expansion ─────────────────────────────────
