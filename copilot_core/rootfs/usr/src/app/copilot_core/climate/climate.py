@@ -586,6 +586,46 @@ class ClimateModule:
             "overheat_protection_active": len([s for s in self._states.values() if s.overheat_protection_active]),
         }
     
+    def get_summary(self) -> Dict[str, Any]:
+        """Slice 136: Return module summary for Backend-UI read model.
+        
+        Design Contract: summary, detailed_states, active_features, anomalies
+        """
+        now = datetime.now(timezone.utc)
+        
+        # Build detailed states for all zones
+        detailed_states = []
+        for zone_id, state in self._states.items():
+            config = self._configs.get(zone_id)
+            
+            detailed_states.append({
+                "entity_id": f"climate.{zone_id}",
+                "state": state.hvac_mode.value,
+                "attributes": {
+                    "current_temp": state.current_temp,
+                    "target_temp": state.target_temp,
+                    "humidity": state.humidity,
+                    "is_heating": state.is_heating,
+                    "is_cooling": state.is_cooling,
+                    "window_open": state.window_open,
+                    "eco_mode_active": state.eco_mode_active,
+                    "last_changed": state.last_changed.isoformat() if state.last_changed else None,
+                }
+            })
+        
+        # Count active zones
+        zones_active = sum(
+            1 for s in self._states.values()
+            if s.hvac_mode not in (HVACMode.OFF, HVACMode.FAN_ONLY)
+        )
+        
+        return {
+            "summary": f"{zones_active}/{len(self._states)} zones active",
+            "detailed_states": detailed_states,
+            "active_features": ["Temperature Control", "Window Detection", "Eco Mode", "Schedule Support", "Frost Protection"],
+            "anomalies": [],  # Could be populated with frost/overheat events
+        }
+    
     def _lock(self):
         """Simple context manager for thread safety."""
         import threading
