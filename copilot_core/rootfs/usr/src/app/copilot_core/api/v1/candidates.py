@@ -4,6 +4,8 @@ from flask import Blueprint, current_app, jsonify, request
 
 from copilot_core.brain_graph.provider import get_graph_service
 from copilot_core.storage.candidates import CandidateStore, rank_score, generate_explanation
+from copilot_core.api.api_errors import unauthorized, bad_request
+from copilot_core.api.pagination import cursor_page
 
 bp = Blueprint("candidates", __name__, url_prefix="/api/v1/candidates")
 
@@ -17,7 +19,7 @@ _LOGGER = logging.getLogger(__name__)
 @bp.before_request
 def _require_auth():
     if not _validate_token(request):
-        return jsonify({"error": "unauthorized", "message": "Valid X-Auth-Token or Bearer token required"}), 401
+        return unauthorized("Valid X-Auth-Token or Bearer token required")
 
 
 _STORE: CandidateStore | None = None
@@ -41,7 +43,7 @@ def _store() -> CandidateStore:
 def upsert_candidate():
     payload = request.get_json(silent=True) or {}
     if not isinstance(payload, dict):
-        return jsonify({"ok": False, "error": "expected JSON object"}), 400
+        return bad_request("Expected JSON object", req=request)
 
     cand = _store().upsert(payload)
     return jsonify({"ok": True, "candidate": cand})
@@ -49,27 +51,79 @@ def upsert_candidate():
 
 @bp.get("")
 def list_candidates():
+    """List candidates with cursor-based pagination.
+
+    Query params:
+    - limit: Page size 1-100 (default 50)
+    - after: Opaque cursor — items after this rank_score+id
+    - before: Opaque cursor — items before this rank_score+id
+    - kind: Filter by candidate kind (optional)
+    - ranked: Sort by rank_score descending (default true)
+
+    Response includes:
+    - items: Current page of candidates
+    - count: Number of items in this response
+    - page_info: has_next_page, has_previous_page, next_cursor, previous_cursor
+    - pagination: limit, direction
+    """
     try:
         limit = int(request.args.get("limit", "50"))
     except Exception:
         limit = 50
+    limit = max(1, min(limit, 100))
 
     kind = request.args.get("kind")
-
-    # Use ranked listing when ?ranked=true (default: true for better UX)
     ranked = request.args.get("ranked", "true").lower() in ("true", "1", "yes")
+    after = request.args.get("after")
+    before = request.args.get("before")
+
+    # Fetch limit+1 to detect has_next/has_prev
+    fetch_limit = limit + 1
+
     if ranked:
-        items = _store().list_ranked(limit=limit, kind=kind, with_explanation=True)
+        all_items = _store().list_ranked(limit=fetch_limit, kind=kind, with_explanation=True)
     else:
-        items = _store().list(limit=limit, kind=kind)
-    return jsonify({"ok": True, "count": len(items), "items": items})
+        all_items = _store().list(limit=fetch_limit, kind=kind)
+
+    # Apply cursor filters
+    if after:
+        from copilot_core.api.pagination import _decode_cursor
+        cur = _decode_cursor(after)
+        if cur and "id" in cur:
+            after_id = cur["id"]
+            all_items = [i for i in all_items if i.get("id") != after_id]
+    if before:
+        from copilot_core.api.pagination import _decode_cursor
+        cur = _decode_cursor(before)
+        if cur and "id" in cur:
+            before_id = cur["id"]
+            all_items = [i for i in all_items if i.get("id") != before_id]
+
+    # Determine has_next / has_prev
+    has_next = len(all_items) > limit
+    has_prev = bool(after or before)
+    items = all_items[:limit]
+
+    page = cursor_page(
+        items=items,
+        before=before,
+        after=after,
+        has_next=has_next,
+        has_prev=has_prev,
+        limit=limit,
+        total=None,  # CandidateStore is unbounded in this implementation
+        build_next=lambda item: item.get("rank_score"),
+        build_prev=lambda item: item.get("rank_score"),
+        item_to_dict=True,
+    )
+    return jsonify(page)
 
 
 @bp.get("/<candidate_id>")
 def get_candidate(candidate_id: str):
     it = _store().get(candidate_id)
     if not it:
-        return jsonify({"ok": False, "error": "not_found"}), 404
+        return bad_request(f"Candidate '{candidate_id}' not found", req=request)
     # Enrich with score and explanation
     enriched = dict(it)
     try:
