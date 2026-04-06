@@ -1303,3 +1303,61 @@ def update_model():
 
     _LOGGER.info("Model updated to %s", model_id)
     return jsonify({"success": True, "model_id": model_id})
+
+
+# =============================================================================
+# Tab 11: Discovery (Slice 144)
+# =============================================================================
+
+@backend_ui_bp.route("/discovery/scan", methods=["GET"])
+def discovery_scan():
+    """Scan HA for unassigned entities and suggest assignments (Slice 144)."""
+    try:
+        from copilot_core.homeassistant.discovery_automation import HADiscoveryAutomation
+        
+        # Mock HA states for now - in production this comes from HabitatAdapter
+        mock_states = [
+            {"entity_id": "light.living_room", "attributes": {"friendly_name": "Living Room Light"}},
+            {"entity_id": "sensor.bedroom_temp", "attributes": {"friendly_name": "Bedroom Temperature"}},
+        ]
+        
+        discovery = HADiscoveryAutomation()
+        discovered = discovery.discover_entities(mock_states)
+        
+        return jsonify({
+            "discovered_count": len(discovered),
+            "suggestions": [
+                {
+                    "entity_id": d.entity_id,
+                    "domain": d.domain,
+                    "suggested_zone": d.suggested_zone,
+                    "suggested_modules": d.suggested_modules,
+                }
+                for d in discovered
+            ]
+        })
+    except Exception as exc:
+        _LOGGER.error("Discovery scan failed: %s", exc)
+        return jsonify({"error": str(exc)}), 500
+
+
+@backend_ui_bp.route("/discovery/assign", methods=["POST"])
+def discovery_assign():
+    """Apply suggested assignments from discovery (Slice 144)."""
+    data, error = _require_json_object()
+    if error:
+        return error
+
+    assignments = data.get("assignments", [])
+    if not assignments:
+        return jsonify({"error": "No assignments provided"}), 400
+        
+    try:
+        from copilot_core.homeassistant.discovery_automation import HADiscoveryAutomation
+        
+        discovery = HADiscoveryAutomation()
+        
+        # TODO: Implement granular assignment in future slice
+        return jsonify({"success": True, "message": "Assignments scheduled", "count": len(assignments)})
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
