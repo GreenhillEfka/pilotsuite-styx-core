@@ -1,5 +1,5 @@
 name: PilotSuite Core
-version: 1.0.0
+version: 1.0.1
 slug: pilotsuite_core
 description: AI-Powered Smart Home Automation Engine
 url: https://github.com/GreenhillEfka/pilotsuite-styx-core
@@ -18,6 +18,7 @@ ports:
 ports_description:
   8909/tcp: REST API Server
   8909/udp: WebSocket Server
+web_ui: http://[HOST]:[PORT:8909]
 map:
   - config:rw
   - ssl
