@@ -1,6 +1,6 @@
 name: "PilotSuite Core"
-description: "The Platinum AI Engine for your Smart Home"
-version: "16.0.3"
+description: "The Platinum AI Engine"
+version: "16.0.4"
 slug: "pilotsuite"
 panel_icon: "mdi:brain"
 startup: "system"
