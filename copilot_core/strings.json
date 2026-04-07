@@ -1,0 +1,43 @@
+PilotSuite Core — AI-Powered Smart Home Automation
+
+## Installation
+
+### Via HACS
+
+1. Add custom repository in HACS
+2. Install "PilotSuite Core"
+3. Restart Home Assistant
+4. Configure via Settings → Devices & Services
+
+### Manual
+
+1. Clone to `/config/custom_components/pilotsuite`
+2. Add to configuration.yaml:
+   ```
+   pilotsuite:
+     debug: false
+   ```
+3. Restart Home Assistant
+
+## Features
+
+- RAG System (Vector Search, Embeddings)
+- ML Engine (Pattern Detection, Habit Learning)
+- Presence Detection (Multi-Sensor, Bayesian)
+- Energy Optimization (Forecasting, OR-Tools)
+- Knowledge Graph (Neo4j, NetworkX)
+- Voice Pipeline (Whisper, NLU, Piper)
+- REST API (FastAPI, JWT, 25+ endpoints)
+- Admin Dashboard + Lovelace Cards
+
+## Documentation
+
+See docs/ folder for:
+- INSTALL.md — Detailed installation
+- API_REFERENCE.md — API documentation
+- TROUBLESHOOTING.md — Common issues
+
+## Support
+
+GitHub Issues: https://github.com/GreenhillEfka/pilotsuite-styx-ha/issues
+Discussions: https://github.com/GreenhillEfka/pilotsuite-styx-ha/discussions
