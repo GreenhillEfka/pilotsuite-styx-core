@@ -1,9 +1,13 @@
-ARG BUILD_FROM
-FROM ${BUILD_FROM}
+# PilotSuite Core Add-on (v15.5.0 Gold)
+FROM python:3.11-slim
 
 WORKDIR /app
-COPY rootfs /app
 
-EXPOSE 8909
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-CMD ["/app/run.sh"]
+COPY copilot_core/ ./copilot_core/
+
+EXPOSE 5000
+
+CMD ["python3", "-m", "copilot_core.api.gateway"]
