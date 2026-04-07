@@ -1,1 +1,4 @@
-import time; print('PilotSuite Core v1.0.0 Platinum is live.'); time.sleep(3600)
+from flask import Flask, render_template; app = Flask(__name__);
+@app.route('/')
+def index(): return '<h1>Styx Dashboard v1.0.0 Platinum</h1>'
+if __name__ == '__main__': app.run(host='0.0.0.0', port=8000)
