@@ -1,0 +1,20 @@
+name: "PilotSuite Core"
+version: "15.4.11"
+slug: pilotsuite
+panel_icon: mdi:home-automation
+arch:
+  - aarch64
+  - amd64
+  - armhf
+  - armv7
+  - i386
+init: false
+startup: application
+ports:
+  8909/tcp: 8909
+map:
+  - config:rw
+options:
+  log_level: info
+schema:
+  log_level: list(info|debug|warning|error)

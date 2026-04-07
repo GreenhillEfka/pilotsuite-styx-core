@@ -1,5 +1,5 @@
 name: "PilotSuite Core"
-version: "15.5.0"
+version: "15.4.11"
 slug: "pilotsuite_core"
 description: "Autonomous, self-healing smart home core with SOTA AI."
 arch:
