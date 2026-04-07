@@ -1,16 +1,5 @@
-ARG BUILD_FROM
-FROM ${BUILD_FROM}
-
-ENV INFRA_VERSION=1.0.0
-
-RUN apk add --no-cache python3
-
+FROM python:3.11-slim
+COPY rootfs /
 WORKDIR /usr/src/app
-COPY rootfs/usr/src/app/ /usr/src/app/
-COPY rootfs/run.sh /usr/src/app/run.sh
-
-RUN chmod +x /usr/src/app/run.sh
-
-EXPOSE 8909
-
-CMD ["/usr/src/app/run.sh"]
+RUN pip install --no-cache-dir -r requirements.txt
+CMD ["python3", "main.py"]

@@ -1,6 +1,6 @@
 name: "PilotSuite Core"
 description: "The Platinum AI Engine for your Smart Home"
-version: "16.0.2"
+version: "16.0.3"
 slug: "pilotsuite"
 panel_icon: "mdi:brain"
 startup: "system"
@@ -8,18 +8,7 @@ boot: "auto"
 arch:
   - aarch64
   - amd64
-  - armhf
-  - armv7
-  - i386
 host_network: true
 privileged:
   - SYS_RAWIO
   - SYS_ADMIN
-map:
-  - config:rw
-  - share:rw
-  - ssl:ro
-options:
-  log_level: "info"
-schema:
-  log_level: "str(debug|info|warning|error|fatal)"

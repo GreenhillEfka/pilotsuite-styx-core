@@ -1,1 +1,1 @@
-# Minimal requirements
+requests
