@@ -1,16 +1,16 @@
 ARG BUILD_FROM
 FROM ${BUILD_FROM}
 
-# Installiere Python und Abhängigkeiten
-RUN apk add --no-cache python3 py3-pip
+ENV INFRA_VERSION=1.0.0
 
-WORKDIR /app
-COPY rootfs /app/
+RUN apk add --no-cache python3
 
-# Port für PilotSuite Core
+WORKDIR /usr/src/app
+COPY rootfs/usr/src/app/ /usr/src/app/
+COPY rootfs/run.sh /usr/src/app/run.sh
+
+RUN chmod +x /usr/src/app/run.sh
+
 EXPOSE 8909
 
-# Start-Skript ausführbar machen
-RUN chmod +x /app/run.sh
-
-CMD ["/app/run.sh"]
+CMD ["/usr/src/app/run.sh"]
