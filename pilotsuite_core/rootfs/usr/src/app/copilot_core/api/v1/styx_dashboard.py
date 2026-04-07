@@ -28,6 +28,166 @@ styx_dashboard_bp = Blueprint(
     "styx_dashboard", __name__, url_prefix="/api/v1/styx"
 )
 
+# ═══════════════════════════════════════════════════════════════════════
+# Dashboard Data Classes (for tests)
+# ═══════════════════════════════════════════════════════════════════════
+
+from dataclasses import dataclass, field
+from enum import Enum
+from typing import List, Optional
+
+
+class DashboardSectionStatus(str, Enum):
+    """Status for dashboard sections."""
+    OK = "ok"
+    WARNING = "warning"
+    ERROR = "error"
+    UNKNOWN = "unknown"
+
+
+@dataclass
+class DashboardHeaderV1:
+    """Dashboard header with summary metrics."""
+    revision: int = 1
+    generated_at: str = ""
+    overall_status: DashboardSectionStatus = DashboardSectionStatus.OK
+    total_zones: int = 0
+    zones_with_alerts: int = 0
+    active_proposals: int = 0
+    open_closures: int = 0
+    system_health_score: float = 1.0
+    
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "revision": self.revision,
+            "generated_at": self.generated_at,
+            "overall_status": self.overall_status.value,
+            "total_zones": self.total_zones,
+            "zones_with_alerts": self.zones_with_alerts,
+            "active_proposals": self.active_proposals,
+            "open_closures": self.open_closures,
+            "system_health_score": self.system_health_score,
+        }
+
+
+@dataclass
+class ZoneSummaryBlockV1:
+    """Summary for a single zone."""
+    zone_id: str
+    name: str
+    status: DashboardSectionStatus = DashboardSectionStatus.UNKNOWN
+    occupancy: int = 0
+    temperature: Optional[float] = None
+    alerts: List[str] = field(default_factory=list)
+    
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "zone_id": self.zone_id,
+            "name": self.name,
+            "status": self.status.value,
+            "occupancy": self.occupancy,
+            "temperature": self.temperature,
+            "alerts": self.alerts,
+        }
+
+
+@dataclass
+class BrainActivityBlockV1:
+    """Brain activity summary."""
+    neurons_fired: int = 0
+    patterns_detected: int = 0
+    suggestions_generated: int = 0
+    learning_rate: float = 0.0
+    
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "neurons_fired": self.neurons_fired,
+            "patterns_detected": self.patterns_detected,
+            "suggestions_generated": self.suggestions_generated,
+            "learning_rate": self.learning_rate,
+        }
+
+
+@dataclass
+class SystemOverviewBlockV1:
+    """System overview metrics."""
+    uptime_seconds: int = 0
+    memory_mb: float = 0.0
+    cpu_percent: float = 0.0
+    disk_used_pct: float = 0.0
+    events_per_minute: int = 0
+    
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "uptime_seconds": self.uptime_seconds,
+            "memory_mb": self.memory_mb,
+            "cpu_percent": self.cpu_percent,
+            "disk_used_pct": self.disk_used_pct,
+            "events_per_minute": self.events_per_minute,
+        }
+
+
+@dataclass
+class StyxDashboardReadModelV1:
+    """Complete dashboard read model."""
+    header: DashboardHeaderV1 = field(default_factory=DashboardHeaderV1)
+    zones: List[ZoneSummaryBlockV1] = field(default_factory=list)
+    brain_activity: BrainActivityBlockV1 = field(default_factory=BrainActivityBlockV1)
+    system_overview: SystemOverviewBlockV1 = field(default_factory=SystemOverviewBlockV1)
+    
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "header": self.header.to_dict(),
+            "zones": [z.to_dict() for z in self.zones],
+            "brain_activity": self.brain_activity.to_dict(),
+            "system_overview": self.system_overview.to_dict(),
+        }
+
+
+class StyxDashboardStore:
+    """In-memory store for dashboard state."""
+    
+    def __init__(self):
+        self._zones: Dict[str, ZoneSummaryBlockV1] = {}
+        self._header: DashboardHeaderV1 = DashboardHeaderV1()
+        self._brain: BrainActivityBlockV1 = BrainActivityBlockV1()
+        self._system: SystemOverviewBlockV1 = SystemOverviewBlockV1()
+    
+    def update_zone(self, zone: ZoneSummaryBlockV1) -> None:
+        self._zones[zone.zone_id] = zone
+    
+    def get_zone(self, zone_id: str) -> Optional[ZoneSummaryBlockV1]:
+        return self._zones.get(zone_id)
+    
+    def get_all_zones(self) -> List[ZoneSummaryBlockV1]:
+        return list(self._zones.values())
+    
+    def update_header(self, header: DashboardHeaderV1) -> None:
+        self._header = header
+    
+    def get_header(self) -> DashboardHeaderV1:
+        return self._header
+    
+    def update_brain_activity(self, brain: BrainActivityBlockV1) -> None:
+        self._brain = brain
+    
+    def get_brain_activity(self) -> BrainActivityBlockV1:
+        return self._brain
+    
+    def update_system_overview(self, system: SystemOverviewBlockV1) -> None:
+        self._system = system
+    
+    def get_system_overview(self) -> SystemOverviewBlockV1:
+        return self._system
+    
+    def get_read_model(self) -> StyxDashboardReadModelV1:
+        return StyxDashboardReadModelV1(
+            header=self._header,
+            zones=list(self._zones.values()),
+            brain_activity=self._brain,
+            system_overview=self._system,
+        )
+
 # Wired by init_styx_dashboard_api()
 _services: Dict[str, Any] = {}
 

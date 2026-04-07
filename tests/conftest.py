@@ -13,6 +13,12 @@ repo_root_str = str(REPO_ROOT)
 if repo_root_str not in sys.path:
     sys.path.insert(0, repo_root_str)
 
+# Add copilot_core source path for imports
+COPILOT_CORE_PATH = REPO_ROOT / "copilot_core" / "rootfs" / "usr" / "src" / "app"
+copilot_core_path_str = str(COPILOT_CORE_PATH)
+if copilot_core_path_str not in sys.path:
+    sys.path.insert(0, copilot_core_path_str)
+
 
 @pytest.fixture
 def client():

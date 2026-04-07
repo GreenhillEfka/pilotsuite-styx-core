@@ -24,6 +24,20 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
+# Stub classes for when torch is not available
+class _StubDataset:
+    pass
+
+class _StubDataLoader:
+    pass
+
+class _StubNN:
+    Module = object
+    LSTM = object
+    Linear = object
+    Dropout = object
+    MSELoss = object
+
 try:
     import torch
     import torch.nn as nn
@@ -32,6 +46,9 @@ try:
 except ImportError:
     TORCH_AVAILABLE = False
     logger.warning("PyTorch not available - LSTM forecasting disabled")
+    nn = _StubNN
+    Dataset = _StubDataset
+    DataLoader = _StubDataLoader
 
 
 class TimeSeriesDataset(Dataset):

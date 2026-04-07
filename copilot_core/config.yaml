@@ -20,7 +20,7 @@ map:
 panel_icon: mdi:brain
 panel_title: Styx
 ports:
-  8909/tcp: 8909
+  8909/tcp: null
 ports_description:
   8909/tcp: PilotSuite Core HTTP API
 webui: "http://[HOST]:[PORT:8909]/"
