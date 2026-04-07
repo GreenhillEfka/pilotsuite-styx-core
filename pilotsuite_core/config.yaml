@@ -1,6 +1,6 @@
 name: "PilotSuite Core"
 description: "Platinum AI Engine"
-version: 15.5.0
+version: "16.0.0"
 slug: "pilotsuite_core"
 panel_icon: "mdi:brain"
 arch: ["aarch64", "amd64"]
