@@ -1,0 +1,43 @@
+configuration:
+  log_level:
+    name: Log-Level
+    description: Protokollierungsstufe festlegen (trace, debug, info, warning, error)
+  auth_token:
+    name: Auth-Token
+    description: Optionales Authentifizierungs-Token fuer API-Zugriff. Leer lassen zum Deaktivieren.
+  conversation_ollama_url:
+    name: Ollama URL
+    description: URL des Ollama-Servers fuer lokale LLM-Inferenz
+  conversation_ollama_model:
+    name: Ollama Modell
+    description: Welches Ollama-Modell verwendet werden soll (z.B. qwen3:0.6b, qwen3:4b, llama3:8b)
+  conversation_cloud_api_url:
+    name: Cloud API URL (Fallback)
+    description: Optionaler OpenAI-kompatibler Endpunkt fuer Cloud-Fallback (z.B. https://ollama.com/v1)
+  conversation_cloud_api_key:
+    name: Cloud API Key (Fallback)
+    description: API-Schluessel fuer den Cloud-Fallback-Endpunkt
+  conversation_cloud_model:
+    name: Cloud Modell (Fallback)
+    description: Modellname fuer den Cloud-Fallback-Endpunkt (z.B. gpt-oss:20b)
+  conversation_prefer_local:
+    name: Lokal bevorzugen
+    description: Zuerst lokales Ollama versuchen, Cloud nur als Fallback nutzen
+  conversation_assistant_name:
+    name: Assistenten-Name
+    description: Name des KI-Assistenten in Konversationen
+  conversation_enabled:
+    name: Konversation aktiviert
+    description: Chat-/Konversationsfunktion aktivieren oder deaktivieren
+  searxng_enabled:
+    name: SearXNG aktiviert
+    description: SearXNG Web-Suche Integration aktivieren oder deaktivieren
+  searxng_base_url:
+    name: SearXNG URL
+    description: URL des SearXNG-Servers fuer Web-Suchanfragen
+  sonos_enabled:
+    name: Sonos aktiviert
+    description: Sonos-Lautsprechersteuerung via node-sonos-http-api aktivieren oder deaktivieren
+  sonos_port:
+    name: Sonos API Port
+    description: Port fuer den node-sonos-http-api Service (Standard 5005)
