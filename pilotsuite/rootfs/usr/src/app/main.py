@@ -1,1 +1,6 @@
-import time; print('PilotSuite Core v16.0.4 running...'); time.sleep(3600)
+import http.server
+import socketserver
+PORT = 8909
+Handler = http.server.SimpleHTTPRequestHandler
+with socketserver.TCPServer(("", PORT), Handler) as httpd:
+    httpd.serve_forever()
