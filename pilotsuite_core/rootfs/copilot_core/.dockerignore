@@ -1,8 +1,0 @@
-**/__pycache__
-**/*.pyc
-**/.pytest_cache
-**/tests
-**/.coverage
-**/.mypy_cache
-CHANGELOG.md
-DOCS.md
