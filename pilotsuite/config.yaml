@@ -1,12 +1,6 @@
 name: "PilotSuite Core"
-description: "Local AI for Smart Homes"
+description: "Platinum AI Engine"
 version: "100.0.0"
 slug: pilotsuite
-panel_icon: mdi:home-automation
-arch:
-  - aarch64
-  - amd64
-init: false
-startup: application
-ports:
-  8909/tcp: 8909
+panel_icon: mdi:brain
+arch: ["aarch64", "amd64"]
