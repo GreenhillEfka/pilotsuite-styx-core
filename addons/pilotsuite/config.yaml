@@ -21,3 +21,33 @@ ports_description:
 map:
   - config:rw
   - ssl
+env:
+  PILOTSUITE_VERSION: "16.0.0"
+  PILOTSUITE_PORT: "8909"
+  PILOTSUITE_HOST: "localhost"
+options:
+  auth:
+    secret: "change-me-in-production"
+    token_expiry_hours: 24
+  database:
+    path: "pilotsuite.db"
+    wal_mode: true
+  api:
+    host: "0.0.0.0"
+    port: 8909
+    rate_limit: 100
+  logging:
+    level: "INFO"
+schema:
+  auth:
+    secret: str
+    token_expiry_hours: int?
+  database:
+    path: str?
+    wal_mode: bool?
+  api:
+    host: str?
+    port: port?
+    rate_limit: int?
+  logging:
+    level: list(debug|info|warning|error)?
