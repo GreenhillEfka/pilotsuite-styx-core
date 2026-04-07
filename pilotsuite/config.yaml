@@ -1,19 +1,12 @@
 name: "PilotSuite Core"
-version: "15.4.11"
-slug: "pilotsuite_core"
-description: "Autonomous, self-healing smart home core with SOTA AI."
+description: "Local AI for Smart Homes"
+version: "100.0.0"
+slug: pilotsuite
+panel_icon: mdi:home-automation
 arch:
   - aarch64
   - amd64
-  - armhf
-  - armv7
-  - i386
-startup: system
-boot: auto
-webui: "http://[HOST]:[PORT:5000]/admin"
-ingress: true
-panel_icon: "mdi:brain"
-options:
-  log_level: info
-schema:
-  log_level: "list(none|fatal|error|warning|info|debug|trace)?"
+init: false
+startup: application
+ports:
+  8909/tcp: 8909
