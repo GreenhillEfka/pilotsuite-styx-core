@@ -11,9 +11,10 @@ from copilot_core.api.v1.habitus_dashboard_cards import bp as dashboard_cards_bp
 from copilot_core.api.v1.graph_ops import bp as graph_ops_bp
 from copilot_core.api.v1.vector import bp as vector_bp
 from copilot_core.api.v1.neurons import bp as neurons_bp
+from copilot_core.api.v1.neurons_visualization import bp as neurons_viz_bp
 from copilot_core.api.v1.weather import bp as weather_bp
 from copilot_core.api.v1.voice_context_bp import bp as voice_context_bp
-from copilot_core.api.v1.swagger_ui import bp as swagger_ui_bp
+from copilot_core.api.v1.swagger_ui import bp as swagger_ui_bp, openapi_bp
 from copilot_core.api.v1.user_preferences import bp as user_preferences_bp
 from copilot_core.api.v1.dashboard import bp as dashboard_bp
 from copilot_core.knowledge_graph.api import bp as knowledge_graph_bp
@@ -27,6 +28,15 @@ from copilot_core.api.v1.conversation import conversation_bp
 # Phase 5: Cross-Home Sync and Collective Intelligence
 from copilot_core.sharing.api import sharing_bp
 from copilot_core.collective_intelligence.api import federated_bp
+
+# Rate Limiting API
+from copilot_core.api.v1.rate_limit import rate_limit_bp
+
+# HomeAssistant Discovery API
+from copilot_core.homeassistant.api import ha_discovery_bp
+
+# Metrics API (Flask)
+from copilot_core.api.v1.metrics import metrics_bp
 
 api_v1 = Blueprint("api_v1", __name__, url_prefix="/api/v1")
 
@@ -42,9 +52,11 @@ api_v1.register_blueprint(dashboard_cards_bp)
 api_v1.register_blueprint(graph_ops_bp)
 api_v1.register_blueprint(vector_bp)
 api_v1.register_blueprint(neurons_bp)
+api_v1.register_blueprint(neurons_viz_bp)
 api_v1.register_blueprint(weather_bp)
 api_v1.register_blueprint(voice_context_bp)
 api_v1.register_blueprint(swagger_ui_bp)
+api_v1.register_blueprint(openapi_bp)
 api_v1.register_blueprint(user_preferences_bp)
 api_v1.register_blueprint(dashboard_bp)
 api_v1.register_blueprint(knowledge_graph_bp)
@@ -61,8 +73,16 @@ api_v1.register_blueprint(conversation_bp)
 api_v1.register_blueprint(sharing_bp)
 api_v1.register_blueprint(federated_bp)
 
-# Note: Standalone blueprints with absolute prefixes (/api/v1/...)
-# are registered directly on the app via core_setup.register_blueprints():
-# - energy_bp, unifi_bp, system_health_bp, tags_bp,
-#   brain_graph_bp, habitus_bp, candidates_bp, mood_bp, dev_surface_bp
-# They must NOT be nested under api_v1 to avoid double /api/v1/api/v1/ prefixes.
+# Register Rate Limiting API
+api_v1.register_blueprint(rate_limit_bp)
+
+# Register HomeAssistant Discovery API
+api_v1.register_blueprint(ha_discovery_bp)
+
+# Register Metrics API (Flask)
+api_v1.register_blueprint(metrics_bp)
+
+# Note: Additional standalone blueprints (habitus_zones, mcp, rag, styx_chat,
+# sonos, zone_automation, etc.) are registered directly on the Flask app via
+# core_setup.register_blueprints(). They must NOT be nested here to avoid
+# double /api/v1/api/v1/ prefixes.

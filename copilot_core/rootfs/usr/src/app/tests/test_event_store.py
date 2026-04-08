@@ -224,7 +224,8 @@ class TestEventStoreNormalization(unittest.TestCase):
         self.assertEqual(stored["kind"], "state_changed")
         self.assertEqual(stored["new"]["state"], "on")
         self.assertEqual(stored["new"]["attrs"]["brightness"], 180)
-        # Context ID truncated to 12 chars
+        # Context ID truncated to 12 chars per N3 spec
+        self.assertEqual(len(stored["context_id"]), 12)
         self.assertEqual(stored["context_id"], "abcdef123456")
         self.assertEqual(stored["trigger"], "user")
 

@@ -7,6 +7,7 @@ import logging
 import queue
 import threading
 import time
+from collections import defaultdict
 from typing import Dict, List, Optional, Any, Tuple, Iterable
 
 from .model import GraphNode, GraphEdge, NodeKind, EdgeType
@@ -860,6 +861,114 @@ class BrainGraphService:
                         evidence={"kind": "spatial_inference", "ref": f"via {entity_id}"}
                     )
     
+    def detect_sequences(
+        self, time_window_s: float = 30.0, min_occurrences: int = 3
+    ) -> list[dict]:
+        """Detect temporal event sequences (A->B->C within time_window).
+
+        Analyzes recent entity nodes to find multi-step patterns that recur
+        at least *min_occurrences* times.  Returns up to 20 sequences sorted
+        by confidence (frequency * consistency).
+
+        Args:
+            time_window_s: Maximum gap between consecutive events in a sequence.
+            min_occurrences: Minimum times a sequence must appear to be reported.
+
+        Returns:
+            List of dicts with keys: sequence, count, avg_gap_s, confidence.
+        """
+        try:
+            # Get recent entity nodes ordered by updated_at_ms
+            nodes = self.store.get_nodes(kinds=["entity"], limit=1000)
+            if len(nodes) < 3:
+                return []
+
+            # Sort by updated_at_ms ascending (oldest first)
+            nodes.sort(key=lambda n: n.updated_at_ms)
+
+            window_ms = time_window_s * 1000
+
+            # Group into temporal clusters (events within time_window of each other)
+            clusters: list[list] = []
+            current_cluster: list = [nodes[0]]
+
+            for node in nodes[1:]:
+                gap_ms = node.updated_at_ms - current_cluster[-1].updated_at_ms
+                if gap_ms <= window_ms:
+                    current_cluster.append(node)
+                else:
+                    if len(current_cluster) >= 2:
+                        clusters.append(current_cluster)
+                    current_cluster = [node]
+            if len(current_cluster) >= 2:
+                clusters.append(current_cluster)
+
+            if not clusters:
+                return []
+
+            # Extract ordered entity-id tuples from each cluster
+            seq_counts: dict[tuple, list[float]] = defaultdict(list)
+
+            for cluster in clusters:
+                # Build sequence of entity IDs (deduplicate consecutive same-entity)
+                seq: list[str] = []
+                gaps: list[float] = []
+                for i, node in enumerate(cluster):
+                    eid = node.id  # e.g. "ha.entity:light.kitchen"
+                    if not seq or seq[-1] != eid:
+                        seq.append(eid)
+                        if i > 0:
+                            gap_s = (node.updated_at_ms - cluster[i - 1].updated_at_ms) / 1000
+                            gaps.append(gap_s)
+
+                if len(seq) < 2:
+                    continue
+
+                # Record all sub-sequences of length 2..min(5, len)
+                max_subseq = min(5, len(seq))
+                for length in range(2, max_subseq + 1):
+                    for start in range(len(seq) - length + 1):
+                        sub = tuple(seq[start : start + length])
+                        avg_gap = 0.0
+                        if gaps:
+                            relevant_gaps = gaps[start : start + length - 1]
+                            avg_gap = sum(relevant_gaps) / len(relevant_gaps) if relevant_gaps else 0.0
+                        seq_counts[sub].append(avg_gap)
+
+            # Filter by min_occurrences
+            results: list[dict] = []
+            for seq_tuple, gap_list in seq_counts.items():
+                count = len(gap_list)
+                if count < min_occurrences:
+                    continue
+
+                avg_gap = sum(gap_list) / len(gap_list) if gap_list else 0.0
+                # Consistency: lower std-dev of gaps = more consistent
+                if len(gap_list) > 1:
+                    mean_g = avg_gap
+                    variance = sum((g - mean_g) ** 2 for g in gap_list) / len(gap_list)
+                    consistency = 1.0 / (1.0 + variance ** 0.5)
+                else:
+                    consistency = 0.5
+
+                confidence = round(min(1.0, (count / 10.0) * consistency), 3)
+
+                results.append({
+                    "sequence": list(seq_tuple),
+                    "count": count,
+                    "avg_gap_s": round(avg_gap, 2),
+                    "consistency": round(consistency, 3),
+                    "confidence": confidence,
+                })
+
+            # Sort by confidence descending, return top 20
+            results.sort(key=lambda r: r["confidence"], reverse=True)
+            return results[:20]
+
+        except Exception:
+            logger.exception("detect_sequences failed")
+            return []
+
     def _extract_target_entities(self, service_data: Dict[str, Any]) -> List[str]:
         """Extract target entity IDs from service call data."""
         targets = []

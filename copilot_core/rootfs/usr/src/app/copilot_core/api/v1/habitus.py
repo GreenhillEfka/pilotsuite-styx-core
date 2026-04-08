@@ -1,7 +1,9 @@
 """Habitus Miner API endpoints for A→B rule discovery."""
 
+import hashlib
 import logging
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -9,6 +11,12 @@ from flask import Blueprint, current_app, jsonify, request
 
 from copilot_core.habitus_miner.service import HabitusMinerService
 from copilot_core.habitus_miner.model import MiningConfig
+from copilot_core.homeassistant.habitus_zones import (
+    ZoneType,
+    evaluate_action_policy,
+    infer_module_id_for_action,
+    resolve_module_override_for_action,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -32,9 +40,14 @@ def _get_service() -> HabitusMinerService:
         # Create default config (can be overridden via API)
         mining_config = MiningConfig()
         
+        # Pass RAG and bus services for pattern embedding + event publishing
+        copilot_services = current_app.config.get("COPILOT_SERVICES", {})
         current_app._habitus_service = HabitusMinerService(
             storage_dir=storage_dir,
-            config=mining_config
+            config=mining_config,
+            vector_store=copilot_services.get("vector_store") if isinstance(copilot_services, dict) else None,
+            embedding_engine=copilot_services.get("embedding_engine") if isinstance(copilot_services, dict) else None,
+            integration_bus=copilot_services.get("integration_bus") if isinstance(copilot_services, dict) else None,
         )
     
     return current_app._habitus_service
@@ -240,6 +253,173 @@ def mine_rules():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
+def _normalize_zone_type(value: Any) -> ZoneType | None:
+    if value in (None, ""):
+        return None
+    try:
+        return ZoneType(str(value))
+    except ValueError as exc:
+        raise ValueError(f"Invalid zone_type: {value}") from exc
+
+
+def _build_service_call_preview(action: dict[str, Any]) -> dict[str, Any]:
+    target = action.get("target") if isinstance(action.get("target"), dict) else {}
+    entity_id = str(action.get("entity_id") or target.get("entity_id") or "").strip()
+    if entity_id and "entity_id" not in target:
+        target = {**target, "entity_id": entity_id}
+
+    return {
+        "domain": str(action.get("domain") or "").strip().lower(),
+        "service": str(action.get("suggested_service") or action.get("service") or "").strip().lower(),
+        "target": target,
+        "expected_state": action.get("state"),
+    }
+
+
+@bp.route("/zone-proposals", methods=["GET", "POST"])
+def get_zone_proposals():
+    """Get explainable automation proposals for habitus zones.
+
+    Uses cached normalized events by default. POST may provide raw HA events via
+    ``{"events": [...]}`` to generate proposals on demand.
+    """
+    try:
+        payload = request.get_json(silent=True) if request.method == "POST" else None
+        payload = payload or {}
+
+        limit = payload.get("limit", request.args.get("limit", type=int) or 10)
+        min_confidence = payload.get("min_confidence", request.args.get("min_confidence", type=float) or 0.55)
+        zone_id = payload.get("zone_id") or request.args.get("zone_id")
+
+        service = _get_service()
+        copilot_services = current_app.config.get("COPILOT_SERVICES", {})
+        tag_zone_integration = (
+            copilot_services.get("tag_zone_integration")
+            if isinstance(copilot_services, dict)
+            else None
+        )
+        if tag_zone_integration is None:
+            return jsonify({
+                "status": "error",
+                "message": "TagZoneIntegration unavailable; cannot build zone proposals",
+            }), 503
+
+        events = None
+        if isinstance(payload.get("events"), list):
+            events = service.process_ha_events(payload["events"])
+
+        result = service.get_zone_proposals(
+            tag_zone_integration=tag_zone_integration,
+            events=events,
+            zone_id=zone_id,
+            limit=int(limit),
+            min_confidence=float(min_confidence),
+        )
+        return jsonify(result)
+
+    except Exception as e:
+        _LOGGER.error("Failed to get zone proposals: %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@bp.route("/zone-proposals/accept", methods=["POST"])
+def accept_zone_proposal():
+    """Turn an accepted proposal into an action intent without forcing execution."""
+    try:
+        data = request.get_json(silent=True) or {}
+        proposal = data.get("proposal") if isinstance(data.get("proposal"), dict) else data
+
+        if not isinstance(proposal, dict):
+            return jsonify({"status": "error", "message": "Missing proposal payload"}), 400
+
+        proposal_id = str(proposal.get("proposal_id") or proposal.get("id") or "").strip()
+        zone_id = str(proposal.get("zone_id") or data.get("zone_id") or "").strip()
+        action = proposal.get("action") if isinstance(proposal.get("action"), dict) else {}
+
+        if not proposal_id or not zone_id or not action:
+            return jsonify({
+                "status": "error",
+                "message": "proposal_id, zone_id, and action are required",
+            }), 400
+
+        try:
+            zone_type = _normalize_zone_type(data.get("zone_type") or proposal.get("zone_type"))
+        except ValueError as exc:
+            return jsonify({"status": "error", "message": str(exc)}), 400
+
+        module_id = str(
+            data.get("module_id")
+            or proposal.get("module_id")
+            or infer_module_id_for_action(action)
+            or ""
+        ).strip() or None
+
+        module_overrides = data.get("module_overrides") if isinstance(data.get("module_overrides"), dict) else proposal.get("module_overrides")
+        module_override = (
+            data.get("module_override")
+            if isinstance(data.get("module_override"), dict)
+            else resolve_module_override_for_action(zone_type, module_id, module_overrides)
+        )
+        explicit_styx_instruction = bool(data.get("styx_instruction") or data.get("execute_now"))
+        policy_gate = evaluate_action_policy(
+            module_id,
+            module_override,
+            explicit_styx_instruction=explicit_styx_instruction,
+        )
+
+        accepted_at = datetime.now(timezone.utc).isoformat()
+        action_preview = _build_service_call_preview(action)
+        action_seed = f"{proposal_id}|{zone_id}|{module_id or 'unknown'}"
+        action_intent_id = f"action:{hashlib.sha1(action_seed.encode('utf-8')).hexdigest()[:12]}"
+
+        proposal_intent = {
+            "contract": "ProposalIntentV1",
+            "proposal_id": proposal_id,
+            "zone_id": zone_id,
+            "module_id": module_id,
+            "state": "accepted",
+            "accepted_at": accepted_at,
+            "title": proposal.get("title"),
+            "summary": proposal.get("summary"),
+            "confidence": proposal.get("confidence"),
+        }
+        action_intent = {
+            "contract": "ActionIntentV1",
+            "action_intent_id": action_intent_id,
+            "proposal_id": proposal_id,
+            "zone_id": zone_id,
+            "module_id": module_id,
+            "source": "proposal.accepted",
+            "execution_state": policy_gate["execution_state"],
+            "eligible_for_execution": policy_gate["eligible_for_execution"],
+            "needs_explicit_styx_instruction": policy_gate["needs_explicit_styx_instruction"],
+            "blocked_reasons": policy_gate["blocked_reasons"],
+            "accepted_at": accepted_at,
+            "action": action_preview,
+            "policy": policy_gate,
+        }
+        habitat_module_command = {
+            "contract": "HabitatModuleCommandV1",
+            "module_id": module_id,
+            "output_adapter": str(module_override.get("output_adapter") or "homeassistant") if isinstance(module_override, dict) else "homeassistant",
+            "command_mode": "service_call_ready" if policy_gate["eligible_for_execution"] else "preview_only",
+            "service_call": action_preview,
+            "blocked_reasons": policy_gate["blocked_reasons"],
+        }
+
+        return jsonify({
+            "status": "ok",
+            "proposal_intent": proposal_intent,
+            "action_intent": action_intent,
+            "habitat_module_command": habitat_module_command,
+            "policy_gate": policy_gate,
+        })
+
+    except Exception as e:
+        _LOGGER.error("Failed to accept zone proposal: %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
 @bp.route("/config", methods=["GET"])
 def get_config():
     """Get current mining configuration."""
@@ -291,6 +471,55 @@ def update_config():
     
     except Exception as e:
         _LOGGER.error("Failed to update config: %s", e)
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@bp.route("/feedback", methods=["POST"])
+def rule_feedback():
+    """Apply user feedback (accepted/rejected/snoozed) to a rule.
+
+    Body: {"rule_a": "...", "rule_b": "...", "accepted": true/false}
+      or: {"rule_a": "...", "rule_b": "...", "action": "accepted"|"rejected"|"snoozed"}
+    """
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"status": "error", "message": "Missing request body"}), 400
+
+        rule_a = data.get("rule_a", "")
+        rule_b = data.get("rule_b", "")
+
+        # Support both legacy "accepted" bool and new "action" string
+        action = data.get("action")
+        accepted = data.get("accepted")
+
+        if action == "snoozed":
+            # Snoozed: record in feedback store only, don't adjust rule counts
+            if not rule_a or not rule_b:
+                return jsonify({"status": "error", "message": "Missing rule_a or rule_b"}), 400
+            service = _get_service()
+            pattern_key = f"{rule_a}->{rule_b}"
+            service.feedback_store.record_feedback(pattern_key, "snoozed")
+            return jsonify({"status": "ok", "message": "Feedback recorded (snoozed)"})
+
+        if action is not None:
+            accepted = action == "accepted"
+        elif accepted is None:
+            return jsonify({"status": "error", "message": "Missing accepted or action"}), 400
+
+        if not rule_a or not rule_b:
+            return jsonify({"status": "error", "message": "Missing rule_a or rule_b"}), 400
+
+        service = _get_service()
+        updated = service.apply_feedback(rule_a, rule_b, bool(accepted))
+
+        if not updated:
+            return jsonify({"status": "error", "message": "Rule not found"}), 404
+
+        return jsonify({"status": "ok", "message": "Feedback applied"})
+
+    except Exception as e:
+        _LOGGER.error("Failed to apply feedback: %s", e)
         return jsonify({"status": "error", "message": str(e)}), 500
 
 

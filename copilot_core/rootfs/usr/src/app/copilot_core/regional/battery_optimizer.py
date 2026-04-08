@@ -109,6 +109,7 @@ class BatteryStrategyOptimizer:
         self._hourly_pv: dict[int, float] = {}
         self._hourly_consumption: dict[int, float] = {}
         self._cycles_today: float = 0.0
+        self._total_cycles: float = 0.0  # Lifetime accumulated full-equivalent cycles
         self._last_schedule: BatterySchedule | None = None
 
     @property
@@ -383,5 +384,38 @@ class BatteryStrategyOptimizer:
             next_charge_at=next_charge,
             next_discharge_at=next_discharge,
             strategy=self._last_schedule.strategy if self._last_schedule else "none",
-            health_pct=100.0,  # placeholder for degradation model
+            health_pct=round(self._estimate_health_pct(), 1),
         )
+
+    def _estimate_health_pct(self) -> float:
+        """Estimate battery health based on cycle-counting degradation model.
+
+        Uses a simple linear degradation model:
+        - Typical Li-ion: ~6000 full-equivalent cycles to 80% capacity
+        - Each cycle degrades capacity by ~0.0033%
+        - Accounts for both today's cycles and lifetime accumulated cycles
+        - Deep discharge penalty: cycles at <20% SoC degrade 1.5x faster
+        """
+        # Rated cycle life to 80% capacity (typical LFP/Li-ion home battery)
+        rated_cycles_to_80pct = 6000.0
+
+        # Degradation per full-equivalent cycle (percentage points lost)
+        degradation_per_cycle = 20.0 / rated_cycles_to_80pct  # 20% loss over rated life
+
+        # Total lifetime cycles (accumulated + today)
+        total_cycles = self._total_cycles + self._cycles_today
+
+        # Deep-discharge penalty: if SoC is frequently low, degrade faster
+        soc = self._config.current_soc_pct
+        depth_factor = 1.0
+        if soc < 20:
+            depth_factor = 1.5  # Deep discharge stress
+        elif soc < 30:
+            depth_factor = 1.2
+
+        health_loss = total_cycles * degradation_per_cycle * depth_factor
+        return max(0.0, min(100.0, 100.0 - health_loss))
+
+    def add_lifetime_cycles(self, cycles: float) -> None:
+        """Add accumulated lifetime cycles (loaded from persistent storage)."""
+        self._total_cycles = max(0.0, cycles)

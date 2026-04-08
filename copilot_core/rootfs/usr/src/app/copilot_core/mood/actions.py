@@ -121,6 +121,18 @@ class ActionEngine:
                     transition=2
                 )
             ),
+            MoodState.STRESS: MoodActionConfig(
+                lights=LightAction(
+                    action="turn_on",
+                    brightness_pct=50,
+                    color_temp=370,  # warm/neutral
+                    transition=8
+                ),
+                media=MediaAction(
+                    action="volume_set",
+                    volume_level=0.12
+                )
+            ),
             MoodState.NEUTRAL: MoodActionConfig(
                 lights=LightAction(
                     action="turn_on",
@@ -388,7 +400,9 @@ class ActionEngine:
         # Fill in missing moods with defaults
         for mood_state in MoodState:
             if mood_state not in moods:
-                moods[mood_state] = self._default_mood_actions[mood_state]
+                moods[mood_state] = self._default_mood_actions.get(
+                    mood_state, self._default_mood_actions.get(MoodState.NEUTRAL)
+                )
         
         return ZoneActionConfig(
             name=zone_name,

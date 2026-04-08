@@ -24,6 +24,7 @@ _candidate_store = None
 _habitus_service = None
 _mood_service = None
 _event_processor = None
+_federated_service = None
 
 
 def set_system_health_service(service):
@@ -46,3 +47,14 @@ def set_unifi_service(service):
 def get_unifi_service():
     """Get the global UniFi service instance."""
     return _unifi_service
+
+
+def set_federated_service(service):
+    """Set the global Federated Learning service instance."""
+    global _federated_service
+    _federated_service = service
+
+
+def get_federated_service():
+    """Get the global Federated Learning service instance."""
+    return _federated_service

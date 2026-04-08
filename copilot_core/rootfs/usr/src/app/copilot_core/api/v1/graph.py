@@ -39,17 +39,17 @@ def graph_state():
 
     try:
         hops = int(request.args.get("hops", "1"))
-    except Exception:
+    except (ValueError, TypeError):
         hops = 1
 
     try:
         limit_nodes = int(request.args.get("limitNodes", request.args.get("limit_nodes", "200")))
-    except Exception:
+    except (ValueError, TypeError):
         limit_nodes = 200
 
     try:
         limit_edges = int(request.args.get("limitEdges", request.args.get("limit_edges", "400")))
-    except Exception:
+    except (ValueError, TypeError):
         limit_edges = 400
 
     # Server-side caps: tighter than storage maxima by default.
@@ -212,6 +212,40 @@ def graph_snapshot_svg():
     resp = make_response("\n".join(parts), 200)
     resp.headers["Content-Type"] = "image/svg+xml; charset=utf-8"
     return resp
+
+
+@bp.get("/sequences")
+def graph_sequences():
+    """Detect recurring temporal event sequences in the brain graph."""
+    try:
+        time_window = float(request.args.get("time_window_s", "30.0"))
+    except (ValueError, TypeError):
+        time_window = 30.0
+
+    try:
+        min_occ = int(request.args.get("min_occurrences", "3"))
+    except (ValueError, TypeError):
+        min_occ = 3
+
+    # Clamp parameters to safe ranges
+    time_window = max(1.0, min(time_window, 300.0))
+    min_occ = max(1, min(min_occ, 50))
+
+    try:
+        sequences = _svc().detect_sequences(
+            time_window_s=time_window,
+            min_occurrences=min_occ,
+        )
+    except Exception:
+        return jsonify({"ok": False, "error": "sequence detection failed"}), 500
+
+    return jsonify({
+        "ok": True,
+        "generated_at_ms": int(time.time() * 1000),
+        "params": {"time_window_s": time_window, "min_occurrences": min_occ},
+        "sequences": sequences,
+        "count": len(sequences),
+    })
 
 
 @bp.post("/cache/clear")

@@ -12,17 +12,38 @@ All modifying endpoints require a valid auth token (Bearer or X-Auth-Token).
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any, Optional
 
 from flask import Blueprint, jsonify, request
 
 from copilot_core.api.security import require_token
+from copilot_core.api.rate_limit import rate_limit
 
 _LOGGER = logging.getLogger(__name__)
 
 media_zones_bp = Blueprint(
     "media_zones", __name__, url_prefix="/api/v1/media"
 )
+
+# Zone ID validation: alphanumeric, underscore, hyphen only
+ZONE_ID_PATTERN = re.compile(r'^[a-zA-Z0-9_-]+$')
+ZONE_ID_MAX_LENGTH = 50
+
+
+def validate_zone_id(zone_id: str) -> bool:
+    """Validate zone ID format.
+    
+    Args:
+        zone_id: Zone identifier to validate
+        
+    Returns:
+        True if valid, False otherwise
+    """
+    if not zone_id or len(zone_id) > ZONE_ID_MAX_LENGTH:
+        return False
+    return bool(ZONE_ID_PATTERN.match(zone_id))
+
 
 # Module-level service references, set by init_media_zones_api()
 _media_mgr: Optional[Any] = None
@@ -111,6 +132,13 @@ def get_zone_players(zone_id: str):
             "players": [...]
         }
     """
+    # Validate zone ID format
+    if not validate_zone_id(zone_id):
+        return jsonify({
+            "ok": False,
+            "error": "Invalid zone_id format. Must be alphanumeric, max 50 chars."
+        }), 400
+    
     mgr, err = _require_media_mgr()
     if err:
         return err
@@ -126,6 +154,7 @@ def get_zone_players(zone_id: str):
 
 @media_zones_bp.route("/zones/<zone_id>/assign", methods=["POST"])
 @require_token
+@rate_limit(requests=30)
 def assign_player(zone_id: str):
     """Assign a media player entity to a zone.
 
@@ -140,6 +169,13 @@ def assign_player(zone_id: str):
 
         {"ok": true, "zone_id": "living_room", "entity_id": "media_player.living_room_speaker"}
     """
+    # Validate zone ID format
+    if not validate_zone_id(zone_id):
+        return jsonify({
+            "ok": False,
+            "error": "Invalid zone_id format. Must be alphanumeric, max 50 chars."
+        }), 400
+    
     mgr, err = _require_media_mgr()
     if err:
         return err
@@ -180,6 +216,13 @@ def unassign_player(zone_id: str, entity_id: str):
 
         {"ok": true, "zone_id": "living_room", "entity_id": "media_player.living_room_speaker"}
     """
+    # Validate zone ID format
+    if not validate_zone_id(zone_id):
+        return jsonify({
+            "ok": False,
+            "error": "Invalid zone_id format. Must be alphanumeric, max 50 chars."
+        }), 400
+    
     mgr, err = _require_media_mgr()
     if err:
         return err
@@ -203,6 +246,7 @@ def unassign_player(zone_id: str, entity_id: str):
 
 @media_zones_bp.route("/zones/<zone_id>/play", methods=["POST"])
 @require_token
+@rate_limit(requests=30)
 def play_zone(zone_id: str):
     """Resume playback for all players in a zone.
 
@@ -210,6 +254,13 @@ def play_zone(zone_id: str):
 
         {"ok": true, "zone_id": "living_room", "action": "play"}
     """
+    # Validate zone ID format
+    if not validate_zone_id(zone_id):
+        return jsonify({
+            "ok": False,
+            "error": "Invalid zone_id format. Must be alphanumeric, max 50 chars."
+        }), 400
+    
     mgr, err = _require_media_mgr()
     if err:
         return err
@@ -225,6 +276,7 @@ def play_zone(zone_id: str):
 
 @media_zones_bp.route("/zones/<zone_id>/pause", methods=["POST"])
 @require_token
+@rate_limit(requests=30)
 def pause_zone(zone_id: str):
     """Pause playback for all players in a zone.
 
@@ -232,6 +284,13 @@ def pause_zone(zone_id: str):
 
         {"ok": true, "zone_id": "living_room", "action": "pause"}
     """
+    # Validate zone ID format
+    if not validate_zone_id(zone_id):
+        return jsonify({
+            "ok": False,
+            "error": "Invalid zone_id format. Must be alphanumeric, max 50 chars."
+        }), 400
+    
     mgr, err = _require_media_mgr()
     if err:
         return err
@@ -247,6 +306,7 @@ def pause_zone(zone_id: str):
 
 @media_zones_bp.route("/zones/<zone_id>/volume", methods=["POST"])
 @require_token
+@rate_limit(requests=30)
 def set_zone_volume(zone_id: str):
     """Set the volume for all players in a zone.
 
@@ -258,6 +318,13 @@ def set_zone_volume(zone_id: str):
 
         {"ok": true, "zone_id": "living_room", "volume": 0.65}
     """
+    # Validate zone ID format
+    if not validate_zone_id(zone_id):
+        return jsonify({
+            "ok": False,
+            "error": "Invalid zone_id format. Must be alphanumeric, max 50 chars."
+        }), 400
+    
     mgr, err = _require_media_mgr()
     if err:
         return err
@@ -296,6 +363,7 @@ def set_zone_volume(zone_id: str):
 
 @media_zones_bp.route("/zones/<zone_id>/play-media", methods=["POST"])
 @require_token
+@rate_limit(requests=30)
 def play_media_in_zone(zone_id: str):
     """Play specific media content in a zone.
 
@@ -314,6 +382,13 @@ def play_media_in_zone(zone_id: str):
             "media_content_id": "spotify:track:abc123"
         }
     """
+    # Validate zone ID format
+    if not validate_zone_id(zone_id):
+        return jsonify({
+            "ok": False,
+            "error": "Invalid zone_id format. Must be alphanumeric, max 50 chars."
+        }), 400
+    
     mgr, err = _require_media_mgr()
     if err:
         return err
@@ -363,6 +438,13 @@ def get_zone_media_state(zone_id: str):
             "state": { ... }
         }
     """
+    # Validate zone ID format
+    if not validate_zone_id(zone_id):
+        return jsonify({
+            "ok": False,
+            "error": "Invalid zone_id format. Must be alphanumeric, max 50 chars."
+        }), 400
+    
     mgr, err = _require_media_mgr()
     if err:
         return err
@@ -380,8 +462,127 @@ def get_zone_media_state(zone_id: str):
 # Musikwolke (Smart Audio Follow)
 # ===================================================================
 
+@media_zones_bp.route("/zones/group", methods=["POST"])
+@require_token
+@rate_limit(requests=20)
+def group_zone():
+    """Group all speakers in a zone (Sonos join).
+
+    Request body::
+
+        {"zone_id": "living"}
+
+    Response::
+
+        {"ok": true, "zone_id": "living", "action": "group"}
+    """
+    mgr, err = _require_media_mgr()
+    if err:
+        return err
+
+    data = request.get_json(silent=True) or {}
+    zone_id = data.get("zone_id", "").strip()
+
+    if not zone_id or not validate_zone_id(zone_id):
+        return jsonify({"ok": False, "error": "Invalid or missing zone_id"}), 400
+
+    try:
+        mgr.group_zone_players(zone_id)
+    except Exception as exc:
+        _LOGGER.exception("Failed to group zone %s", zone_id)
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+    return jsonify({"ok": True, "zone_id": zone_id, "action": "group"})
+
+
+@media_zones_bp.route("/zones/ungroup", methods=["POST"])
+@require_token
+@rate_limit(requests=20)
+def ungroup_zone():
+    """Ungroup all speakers in a zone (Sonos unjoin).
+
+    Request body::
+
+        {"zone_id": "living"}
+
+    Response::
+
+        {"ok": true, "zone_id": "living", "action": "ungroup"}
+    """
+    mgr, err = _require_media_mgr()
+    if err:
+        return err
+
+    data = request.get_json(silent=True) or {}
+    zone_id = data.get("zone_id", "").strip()
+
+    if not zone_id or not validate_zone_id(zone_id):
+        return jsonify({"ok": False, "error": "Invalid or missing zone_id"}), 400
+
+    try:
+        mgr.ungroup_zone_players(zone_id)
+    except Exception as exc:
+        _LOGGER.exception("Failed to ungroup zone %s", zone_id)
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+    return jsonify({"ok": True, "zone_id": zone_id, "action": "ungroup"})
+
+
+@media_zones_bp.route("/zones/group-all", methods=["POST"])
+@require_token
+@rate_limit(requests=5)
+def group_all_zones():
+    """Group all speakers across all zones into one Musikwolke group.
+
+    Response::
+
+        {"ok": true, "action": "group-all"}
+    """
+    mgr, err = _require_media_mgr()
+    if err:
+        return err
+
+    try:
+        all_zones = list(mgr.get_all_assignments().keys())
+        if all_zones:
+            mgr.group_multi_zone(all_zones)
+    except Exception as exc:
+        _LOGGER.exception("Failed to group all zones")
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+    return jsonify({"ok": True, "action": "group-all"})
+
+
+@media_zones_bp.route("/zones/ungroup-all", methods=["POST"])
+@require_token
+@rate_limit(requests=5)
+def ungroup_all_zones():
+    """Ungroup all speakers across all zones.
+
+    Response::
+
+        {"ok": true, "action": "ungroup-all"}
+    """
+    mgr, err = _require_media_mgr()
+    if err:
+        return err
+
+    try:
+        for zone_id in list(mgr.get_all_assignments().keys()):
+            try:
+                mgr.ungroup_zone_players(zone_id)
+            except Exception:
+                _LOGGER.debug("Failed to ungroup zone %s", zone_id, exc_info=True)
+    except Exception as exc:
+        _LOGGER.exception("Failed to ungroup all zones")
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+    return jsonify({"ok": True, "action": "ungroup-all"})
+
+
 @media_zones_bp.route("/musikwolke/start", methods=["POST"])
 @require_token
+@rate_limit(requests=10)
 def start_musikwolke():
     """Start a Musikwolke session -- audio follows a person between zones.
 
@@ -421,6 +622,13 @@ def start_musikwolke():
             "error": "Missing required field 'source_zone'",
         }), 400
 
+    # Validate source_zone format
+    if not validate_zone_id(source_zone):
+        return jsonify({
+            "ok": False,
+            "error": "Invalid source_zone format. Must be alphanumeric, max 50 chars."
+        }), 400
+
     try:
         result = mgr.start_musikwolke(person_id=person_id, source_zone=source_zone)
     except Exception as exc:
@@ -437,6 +645,7 @@ def start_musikwolke():
 
 @media_zones_bp.route("/musikwolke/<session_id>/update", methods=["POST"])
 @require_token
+@rate_limit(requests=20)
 def update_musikwolke(session_id: str):
     """Notify that the tracked person entered a new zone.
 
@@ -448,6 +657,13 @@ def update_musikwolke(session_id: str):
 
         {"ok": true, "session_id": "mw_abc123", "entered_zone": "bedroom"}
     """
+    # Validate session_id format
+    if not session_id or len(session_id) > ZONE_ID_MAX_LENGTH or not validate_zone_id(session_id):
+        return jsonify({
+            "ok": False,
+            "error": "Invalid session_id format. Must be alphanumeric, max 50 chars."
+        }), 400
+    
     mgr, err = _require_media_mgr()
     if err:
         return err
@@ -459,6 +675,13 @@ def update_musikwolke(session_id: str):
         return jsonify({
             "ok": False,
             "error": "Missing required field 'entered_zone'",
+        }), 400
+
+    # Validate entered_zone format
+    if not validate_zone_id(entered_zone):
+        return jsonify({
+            "ok": False,
+            "error": "Invalid entered_zone format. Must be alphanumeric, max 50 chars."
         }), 400
 
     try:
@@ -483,6 +706,13 @@ def stop_musikwolke(session_id: str):
 
         {"ok": true, "session_id": "mw_abc123", "stopped": true}
     """
+    # Validate session_id format
+    if not session_id or len(session_id) > ZONE_ID_MAX_LENGTH or not validate_zone_id(session_id):
+        return jsonify({
+            "ok": False,
+            "error": "Invalid session_id format. Must be alphanumeric, max 50 chars."
+        }), 400
+    
     mgr, err = _require_media_mgr()
     if err:
         return err
@@ -530,6 +760,7 @@ def list_musikwolke_sessions():
 
 @media_zones_bp.route("/proactive/zone-entry", methods=["POST"])
 @require_token
+@rate_limit(requests=15)
 def proactive_zone_entry():
     """Trigger proactive suggestions when a person enters a zone.
 
@@ -568,6 +799,13 @@ def proactive_zone_entry():
         return jsonify({
             "ok": False,
             "error": "Missing required field 'zone_id'",
+        }), 400
+
+    # Validate zone_id format
+    if not validate_zone_id(zone_id):
+        return jsonify({
+            "ok": False,
+            "error": "Invalid zone_id format. Must be alphanumeric, max 50 chars."
         }), 400
 
     context = data.get("context")
@@ -610,6 +848,7 @@ def proactive_zone_entry():
 
 @media_zones_bp.route("/proactive/deliver", methods=["POST"])
 @require_token
+@rate_limit(requests=15)
 def proactive_deliver():
     """Deliver a proactive suggestion to the user.
 
@@ -657,6 +896,7 @@ def proactive_deliver():
 
 @media_zones_bp.route("/proactive/dismiss", methods=["POST"])
 @require_token
+@rate_limit(requests=15)
 def proactive_dismiss():
     """Dismiss a specific suggestion type for a person.
 
@@ -706,6 +946,7 @@ def proactive_dismiss():
 
 @media_zones_bp.route("/proactive/reset-dismissals", methods=["POST"])
 @require_token
+@rate_limit(requests=15)
 def proactive_reset_dismissals():
     """Reset all dismissals for a person.
 
@@ -741,3 +982,54 @@ def proactive_reset_dismissals():
         "person_id": person_id,
         "reset": True,
     })
+
+
+@media_zones_bp.route("/zones/<zone_id>/favorites", methods=["GET"])
+@require_token
+def get_zone_favorites(zone_id: str):
+    """Get Sonos favorites / source list for a zone's media players.
+
+    Queries HA ``source_list`` attribute from each player.
+    Returns the union of all available sources.
+
+    Response::
+
+        {
+            "ok": true,
+            "zone_id": "living",
+            "favorites": ["Spotify", "TuneIn", "Line In", ...],
+            "players": [{"entity_id": "...", "source_list": [...], "current_source": "..."}]
+        }
+    """
+    mgr, err = _require_media_mgr()
+    if err:
+        return err
+
+    result = mgr.get_zone_favorites(zone_id)
+    return jsonify({"ok": True, **result})
+
+
+@media_zones_bp.route("/zones/<zone_id>/select-source", methods=["POST"])
+@require_token
+def select_zone_source(zone_id: str):
+    """Select a source/favorite on all players in a zone.
+
+    Request body::
+
+        {"source": "Spotify"}
+
+    Response::
+
+        {"ok": true, "zone_id": "living", "source": "Spotify"}
+    """
+    mgr, err = _require_media_mgr()
+    if err:
+        return err
+
+    data = request.get_json(silent=True) or {}
+    source = data.get("source", "").strip()
+    if not source:
+        return jsonify({"ok": False, "error": "Missing required field 'source'"}), 400
+
+    result = mgr.select_source(zone_id, source)
+    return jsonify(result)

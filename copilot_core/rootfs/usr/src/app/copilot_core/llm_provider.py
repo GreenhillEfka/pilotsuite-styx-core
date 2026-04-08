@@ -47,11 +47,14 @@ _CLOUD_MODEL_PREFIXES = (
 _PROVIDER_OFFLINE = "offline"
 _PROVIDER_CLOUD = "cloud"
 
-_DEFAULT_OLLAMA_MODEL = "qwen3:0.6b"
-_DEFAULT_CLOUD_MODEL = "gpt-4o-mini"
+_DEFAULT_OLLAMA_MODEL = "qwen3:4b"
+_DEFAULT_CLOUD_MODEL = "gpt-4.1-nano"
 _DEFAULT_OLLAMA_CLOUD_MODEL = "gpt-oss:20b"
 _DEFAULT_OLLAMA_CLOUD_MODELS = ("gpt-oss:120b", "gpt-oss:20b")
-_DEFAULT_OFFLINE_MODELS = ("qwen3:0.6b", "qwen3:4b", "llama3.2:3b", "mistral:7b")
+_DEFAULT_OFFLINE_MODELS = (
+    "qwen3:4b", "qwen3:1.7b", "qwen3:0.6b", "gemma3:4b",
+    "fixt/home-3b-v3", "llama3.2:3b", "mistral:7b", "phi4-mini",
+)
 _RUNTIME_SETTINGS_PATH = "/data/llm_runtime_settings.json"
 _CATALOG_CACHE_TTL_S = 45.0
 
@@ -71,6 +74,7 @@ class LLMProvider:
             _PROVIDER_CLOUD: {"models": [], "ts": 0.0},
         }
         self._load_config()
+        self.session = http_requests.Session()  # Added for connection pooling
 
     def _load_config(self):
         """Load config from env + runtime routing overrides."""
@@ -88,6 +92,13 @@ class LLMProvider:
         self.ollama_model_overridden = False
 
         runtime = self._load_runtime_overrides()
+        # Apply cloud config from runtime overrides (dashboard-editable)
+        runtime_cloud_url = str(runtime.get("cloud_api_url", "") or "").strip()
+        runtime_cloud_key = str(runtime.get("cloud_api_key", "") or "").strip()
+        if runtime_cloud_url:
+            self.cloud_api_url = runtime_cloud_url
+        if runtime_cloud_key:
+            self.cloud_api_key = runtime_cloud_key
         runtime_offline_model = str(runtime.get("offline_model", "") or "").strip()
         runtime_cloud_model = str(runtime.get("cloud_model", "") or "").strip()
 
@@ -163,6 +174,8 @@ class LLMProvider:
         secondary_provider: str | None = None,
         offline_model: str | None = None,
         cloud_model: str | None = None,
+        cloud_api_url: str | None = None,
+        cloud_api_key: str | None = None,
         persist: bool = True,
     ) -> dict:
         """Update routing/model config at runtime, optionally persisted on disk."""
@@ -186,6 +199,24 @@ class LLMProvider:
                 runtime["cloud_model"] = value
             else:
                 runtime.pop("cloud_model", None)
+
+        if cloud_api_url is not None:
+            value = str(cloud_api_url or "").strip()
+            if value:
+                runtime["cloud_api_url"] = value
+                os.environ["CLOUD_API_URL"] = value
+            else:
+                runtime.pop("cloud_api_url", None)
+                os.environ.pop("CLOUD_API_URL", None)
+
+        if cloud_api_key is not None:
+            value = str(cloud_api_key or "").strip()
+            if value:
+                runtime["cloud_api_key"] = value
+                os.environ["CLOUD_API_KEY"] = value
+            else:
+                runtime.pop("cloud_api_key", None)
+                os.environ.pop("CLOUD_API_KEY", None)
 
         os.environ["PREFER_LOCAL"] = "true" if runtime.get("primary_provider", self.primary_provider) == _PROVIDER_OFFLINE else "false"
         if "offline_model" in runtime:
@@ -363,7 +394,7 @@ class LLMProvider:
 
         models: list[str] = []
         try:
-            resp = http_requests.get(f"{self.ollama_url}/api/tags", timeout=5)
+            resp = self.session.get(f"{self.ollama_url}/api/tags", timeout=5)
             if resp.status_code == 200:
                 for model in resp.json().get("models", []):
                     name = str(model.get("name", "")).strip()
@@ -409,7 +440,7 @@ class LLMProvider:
         url = models_base if models_base.endswith("/models") else f"{models_base}/models"
         headers = {"Authorization": f"Bearer {self.cloud_api_key}"}
         try:
-            resp = http_requests.get(url, headers=headers, timeout=8)
+            resp = self.session.get(url, headers=headers, timeout=8)
             if resp.status_code != 200:
                 return []
             payload = resp.json()
@@ -450,7 +481,7 @@ class LLMProvider:
 
     def _ping_ollama(self) -> bool:
         try:
-            resp = http_requests.get(f"{self.ollama_url}/api/tags", timeout=3)
+            resp = self.session.get(f"{self.ollama_url}/api/tags", timeout=3)
             return resp.status_code == 200
         except Exception:
             return False
@@ -499,7 +530,7 @@ class LLMProvider:
 
             for attempt in range(_MAX_RETRIES + 1):
                 try:
-                    resp = http_requests.post(
+                    resp = self.session.post(
                         f"{self.ollama_url}/api/chat", json=payload, timeout=self.timeout,
                     )
                     if resp.status_code == 200:
@@ -643,7 +674,7 @@ class LLMProvider:
             url = f"{url}/chat/completions"
 
         try:
-            resp = http_requests.post(url, json=payload, headers=headers, timeout=self.timeout)
+            resp = self.session.post(url, json=payload, headers=headers, timeout=self.timeout)
             if resp.status_code != 200:
                 # Sanitize: don't log full response which might echo the API key.
                 logger.warning("Cloud API %s (model=%s)", resp.status_code, selected_model)

@@ -1,9 +1,15 @@
 """
 Performance API endpoints for monitoring and cache management.
+
+Includes:
+- Cache statistics and management
+- Connection pool metrics (SQL, HA, Ollama)
+- Async executor status
+- Performance metrics recording
 """
 
 import time
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, request
 from typing import Dict, Any
 
 from ..performance import (
@@ -17,6 +23,15 @@ from ..performance import (
     reset_performance_stats,
 )
 from .security import require_api_key
+
+# Try to import connection pool metrics (optional, for async pooling)
+try:
+    from ..connection_pool import get_pool_metrics as get_async_pool_metrics
+    HAS_ASYNC_POOL = True
+except ImportError:
+    HAS_ASYNC_POOL = False
+    def get_async_pool_metrics():
+        return {"error": "Async pool not available"}
 
 # Create blueprint
 performance_bp = Blueprint('performance', __name__, url_prefix='/api/v1/performance')
@@ -148,7 +163,14 @@ def cleanup_expired_caches() -> Dict[str, Any]:
 @performance_bp.route('/pool/status', methods=['GET'])
 @require_api_key
 def get_pool_status() -> Dict[str, Any]:
-    """Get connection pool status."""
+    """
+    Get SQL connection pool status.
+    
+    Returns:
+    - Pool size (active, idle, max)
+    - Connection reuse rate
+    - Query performance metrics
+    """
     return jsonify({
         "version": 1,
         "timestamp_ms": int(time.time() * 1000),
@@ -166,6 +188,111 @@ def cleanup_pool() -> Dict[str, Any]:
         "message": f"Removed {removed} idle connections",
         "removed": removed,
         "timestamp_ms": int(time.time() * 1000),
+    })
+
+
+@performance_bp.route('/pool/metrics', methods=['GET'])
+@require_api_key
+def get_pool_metrics() -> Dict[str, Any]:
+    """
+    Get comprehensive connection pool metrics.
+    
+    Returns metrics for:
+    - SQL connection pool (sync)
+    - HA async connection pool
+    - Ollama async connection pool
+    
+    Query parameters:
+    - pool: sql, ha, ollama, or all (default: all)
+    """
+    pool_type = request.args.get("pool", "all")
+    
+    metrics = {
+        "version": 1,
+        "timestamp_ms": int(time.time() * 1000),
+    }
+    
+    if pool_type in ["all", "sql"]:
+        metrics["sql_pool"] = sql_pool.get_stats()
+    
+    if pool_type in ["all", "ha", "ollama"] and HAS_ASYNC_POOL:
+        async_metrics = get_async_pool_metrics()
+        if "error" not in async_metrics:
+            if pool_type == "all":
+                metrics["async_pools"] = async_metrics
+            elif pool_type == "ha":
+                metrics["ha_pool"] = async_metrics.get("ha_pool", {})
+            elif pool_type == "ollama":
+                metrics["ollama_pool"] = async_metrics.get("ollama_pool", {})
+        else:
+            metrics["async_pools"] = async_metrics
+    elif not HAS_ASYNC_POOL:
+        metrics["async_pools"] = {"status": "not_available", "reason": "connection_pool module not found"}
+    
+    return jsonify(metrics)
+
+
+@performance_bp.route('/pool/metrics/summary', methods=['GET'])
+@require_api_key
+def get_pool_metrics_summary() -> Dict[str, Any]:
+    """
+    Get summarized connection pool health status.
+    
+    Returns a quick health check for dashboard integration:
+    - Overall pool health (healthy/degraded/unhealthy)
+    - Key metrics (reuse rates, active connections)
+    - Recommendations if issues detected
+    """
+    sql_stats = sql_pool.get_stats()
+    
+    # Determine health status
+    health_status = "healthy"
+    recommendations = []
+    
+    # Check SQL pool health
+    sql_active = sql_stats.get("active_connections", 0)
+    sql_max = sql_stats.get("max_connections", 100)
+    sql_usage_pct = (sql_active / max(sql_max, 1)) * 100
+    
+    if sql_usage_pct > 90:
+        health_status = "unhealthy"
+        recommendations.append("SQL pool near capacity - consider increasing max_connections")
+    elif sql_usage_pct > 75:
+        health_status = "degraded"
+        recommendations.append("SQL pool usage high - monitor closely")
+    
+    # Check async pool health if available
+    if HAS_ASYNC_POOL:
+        async_metrics = get_async_pool_metrics()
+        if "error" not in async_metrics:
+            ha_pool = async_metrics.get("ha_pool", {})
+            ollama_pool = async_metrics.get("ollama_pool", {})
+            
+            ha_reuse = ha_pool.get("reuse_rate_pct", 0)
+            ollama_reuse = ollama_pool.get("reuse_rate_pct", 0)
+            
+            if ha_reuse < 50:
+                if health_status == "healthy":
+                    health_status = "degraded"
+                recommendations.append(f"HA connection reuse low ({ha_reuse}%) - check for connection leaks")
+            
+            if ollama_reuse < 50:
+                if health_status == "healthy":
+                    health_status = "degraded"
+                recommendations.append(f"Ollama connection reuse low ({ollama_reuse}%) - check for connection leaks")
+    
+    return jsonify({
+        "version": 1,
+        "timestamp_ms": int(time.time() * 1000),
+        "health": {
+            "status": health_status,
+            "sql_pool": {
+                "active": sql_active,
+                "max": sql_max,
+                "usage_pct": round(sql_usage_pct, 1),
+            },
+            "recommendations": recommendations,
+        }
     })
 
 

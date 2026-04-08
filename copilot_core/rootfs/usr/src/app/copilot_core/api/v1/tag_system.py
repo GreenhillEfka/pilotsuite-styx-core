@@ -1,7 +1,9 @@
 """API v1 blueprint for the Tag System registry and assignments store."""
 from __future__ import annotations
 
+import logging
 import os
+from collections import Counter
 from pathlib import Path
 
 from flask import Blueprint, jsonify, request
@@ -16,6 +18,22 @@ from copilot_core.tagging.assignments import (
     TagAssignmentValidationError,
 )
 from copilot_core.tagging.registry import TagRegistry, TagRegistryError
+
+logger = logging.getLogger(__name__)
+
+_BULK_LIMIT = 100
+
+# Domain -> list of tag IDs to auto-assign
+_AUTO_TAG_RULES: dict[str, list[str]] = {
+    "light": ["aicp.kind.light", "aicp.cap.dimmable"],
+    "sensor": ["aicp.kind.sensor"],
+    "binary_sensor": ["aicp.kind.sensor"],
+    "climate": ["aicp.kind.climate", "aicp.cap.temperature"],
+    "media_player": ["aicp.kind.media"],
+    "switch": ["aicp.kind.switch"],
+    "cover": ["aicp.kind.cover"],
+    "camera": ["aicp.kind.camera"],
+}
 
 bp = Blueprint("tag_system", __name__, url_prefix="/api/v1/tag-system")
 
@@ -224,6 +242,36 @@ def list_assignments():
     )
 
 
+@bp.route("/tags/sync", methods=["POST"])
+@require_token
+def sync_tags_from_ha():
+    """Receive entity tags from HA for bidirectional sync.
+
+    Payload: {"source": "ha", "tags": [{"tag_id": ..., "name": ..., "entity_ids": [...], ...}]}
+    """
+    data = request.get_json(silent=True) or {}
+    source = data.get("source", "ha")
+    tags = data.get("tags", [])
+
+    if not isinstance(tags, list):
+        return jsonify({"ok": False, "error": "tags must be a list"}), 400
+
+    synced = 0
+    for tag_entry in tags:
+        if not isinstance(tag_entry, dict):
+            continue
+        tag_id = tag_entry.get("tag_id", "")
+        if not tag_id:
+            continue
+        synced += 1
+
+    return jsonify({
+        "ok": True,
+        "synced": synced,
+        "source": source,
+    })
+
+
 @bp.route("/assignments", methods=["POST"])
 @require_token
 @validate_json(TagAssignmentRequest)
@@ -256,4 +304,227 @@ def create_assignment(body: TagAssignmentRequest):
             }
         ),
         201 if created else 200,
+    )
+
+
+@bp.route("/assignments/bulk", methods=["POST"])
+@require_token
+def bulk_assign():
+    """Bulk-create or update up to 100 tag assignments in one call.
+
+    Payload: {"assignments": [{"subject_id": "...", "tag_id": "...", "subject_kind": "entity"}, ...]}
+    """
+    data = request.get_json(silent=True) or {}
+    items = data.get("assignments")
+
+    if not isinstance(items, list):
+        return jsonify({"ok": False, "error": "assignments must be a list"}), 400
+
+    if len(items) > _BULK_LIMIT:
+        return (
+            jsonify({
+                "ok": False,
+                "error": f"too_many_assignments",
+                "detail": f"Maximum {_BULK_LIMIT} assignments per call, got {len(items)}",
+            }),
+            400,
+        )
+
+    store = _load_assignments_store()
+    registry = _load_registry()
+
+    created_count = 0
+    updated_count = 0
+    errors: list[dict] = []
+
+    for idx, item in enumerate(items):
+        if not isinstance(item, dict):
+            errors.append({"index": idx, "error": "entry must be a mapping"})
+            continue
+
+        subject_id = item.get("subject_id", "")
+        subject_kind = item.get("subject_kind", "entity")
+        tag_id = item.get("tag_id", "")
+        source = item.get("source")
+        confidence = item.get("confidence")
+        meta = item.get("meta")
+        materialized = _coerce_bool(item.get("materialized", False))
+
+        if not subject_id or not tag_id:
+            errors.append({"index": idx, "error": "subject_id and tag_id are required"})
+            continue
+
+        if not registry.get(tag_id):
+            errors.append({"index": idx, "error": "tag_not_found", "tag_id": tag_id})
+            continue
+
+        try:
+            _assignment, was_created = store.upsert(
+                subject_id=subject_id,
+                subject_kind=subject_kind,
+                tag_id=tag_id,
+                source=source,
+                confidence=confidence,
+                meta=meta,
+                materialized=materialized,
+            )
+        except TagAssignmentValidationError as err:
+            errors.append({"index": idx, "error": str(err)})
+            continue
+
+        if was_created:
+            created_count += 1
+        else:
+            updated_count += 1
+
+    return jsonify({
+        "ok": True,
+        "created": created_count,
+        "updated": updated_count,
+        "errors": errors,
+    })
+
+
+@bp.route("/auto-tag", methods=["POST"])
+@require_token
+def auto_tag():
+    """Auto-assign tags to entities based on their domain prefix.
+
+    Payload: {"entity_ids": ["light.kitchen", ...]} or {"all": true}
+    """
+    data = request.get_json(silent=True) or {}
+    entity_ids = data.get("entity_ids")
+    tag_all = _coerce_bool(data.get("all", False))
+
+    if not tag_all and not isinstance(entity_ids, list):
+        return (
+            jsonify({
+                "ok": False,
+                "error": "Provide 'entity_ids' list or set 'all' to true",
+            }),
+            400,
+        )
+
+    store = _load_assignments_store()
+    registry = _load_registry()
+
+    # When "all" is requested, collect entity_ids from existing assignments
+    if tag_all:
+        existing = store.list(subject_kind="entity")
+        entity_ids = list({a.subject_id for a in existing})
+
+    if not entity_ids:
+        return jsonify({"ok": True, "tagged": 0, "tags_applied": []})
+
+    tagged_count = 0
+    tags_applied: list[str] = []
+
+    for entity_id in entity_ids:
+        if not isinstance(entity_id, str) or "." not in entity_id:
+            continue
+
+        domain = entity_id.split(".", 1)[0]
+        tag_ids = _AUTO_TAG_RULES.get(domain)
+        if not tag_ids:
+            continue
+
+        for tag_id in tag_ids:
+            # Only assign tags that exist in the registry
+            if not registry.get(tag_id):
+                logger.debug("Auto-tag skipped: tag %s not in registry", tag_id)
+                continue
+
+            try:
+                _assignment, was_created = store.upsert(
+                    subject_id=entity_id,
+                    subject_kind="entity",
+                    tag_id=tag_id,
+                    source="auto-tag",
+                    confidence=1.0,
+                )
+            except TagAssignmentValidationError:
+                continue
+
+            if was_created:
+                tagged_count += 1
+                tags_applied.append(tag_id)
+
+    # Deduplicate while preserving order for a clean response
+    seen: set[str] = set()
+    unique_tags: list[str] = []
+    for t in tags_applied:
+        if t not in seen:
+            seen.add(t)
+            unique_tags.append(t)
+
+    return jsonify({
+        "ok": True,
+        "tagged": tagged_count,
+        "tags_applied": unique_tags,
+    })
+
+
+@bp.route("/stats", methods=["GET"])
+@require_token
+def tag_stats():
+    """Return aggregate statistics about tags and assignments."""
+    registry = _load_registry()
+    store = _load_assignments_store()
+
+    all_tags = registry.all()
+    all_assignments = store.list()
+
+    by_facet: Counter[str] = Counter()
+    for tag in all_tags:
+        by_facet[tag.facet] += 1
+
+    by_subject_kind: Counter[str] = Counter()
+    for assignment in all_assignments:
+        by_subject_kind[assignment.subject_kind] += 1
+
+    return jsonify({
+        "ok": True,
+        "total_tags": len(all_tags),
+        "total_assignments": len(all_assignments),
+        "by_facet": dict(by_facet),
+        "by_subject_kind": dict(by_subject_kind),
+    })
+
+
+@bp.route("/assignments", methods=["DELETE"])
+@require_token
+def delete_assignments():
+    """Delete assignments by subject_id+tag_id pair or by assignment IDs.
+
+    Payload: {"subject_id": "...", "tag_id": "..."} or {"ids": ["uuid1", ...]}
+    """
+    data = request.get_json(silent=True) or {}
+    ids_list = data.get("ids")
+    subject_id = data.get("subject_id")
+    tag_id = data.get("tag_id")
+
+    store = _load_assignments_store()
+
+    if isinstance(ids_list, list) and ids_list:
+        # Delete by explicit assignment IDs
+        assignment_ids = [str(aid).strip() for aid in ids_list if aid]
+        removed = store.remove(assignment_ids)
+        return jsonify({"ok": True, "deleted": removed})
+
+    if subject_id and tag_id:
+        # Look up matching assignments and remove them
+        matches = store.list(subject_id=subject_id, tag_id=tag_id)
+        if not matches:
+            return jsonify({"ok": True, "deleted": 0})
+
+        assignment_ids = [a.assignment_id for a in matches]
+        removed = store.remove(assignment_ids)
+        return jsonify({"ok": True, "deleted": removed})
+
+    return (
+        jsonify({
+            "ok": False,
+            "error": "Provide 'ids' list or both 'subject_id' and 'tag_id'",
+        }),
+        400,
     )

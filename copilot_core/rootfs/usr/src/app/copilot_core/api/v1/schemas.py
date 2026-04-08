@@ -129,3 +129,41 @@ class BulkEmbeddingRequest(BaseModel):
         if not values.get("entities") and not values.get("user_preferences") and not v:
             raise ValueError("No entries provided")
         return v
+
+
+# ── Chat ────────────────────────────────────────────────────────────
+
+class ChatRequestSchema(BaseModel):
+    """POST /api/styx/chat body."""
+    query: str = Field(..., min_length=1, max_length=10000)
+    user_id: str = Field(default="anonymous", max_length=200)
+    use_web: bool = False
+    model: str = Field(default="qwen3.5:397b-cloud", max_length=100)
+    conversation_id: str = Field(default="", max_length=200)
+
+    @field_validator("query")
+    @classmethod
+    def strip_query(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("query must not be empty after stripping whitespace")
+        return v
+
+
+# ── Integration Feedback ────────────────────────────────────────────
+
+class FeedbackRequestSchema(BaseModel):
+    """POST /api/v1/integration/feedback body."""
+    suggestion_id: str = Field(default="", max_length=200)
+    accepted: bool
+    related_entities: list[str] = Field(default_factory=list, max_length=50)
+    pattern_key: str | None = Field(default=None, max_length=500)
+
+
+# ── Automation ──────────────────────────────────────────────────────
+
+class AutomationCreateSchema(BaseModel):
+    """POST /api/v1/automations/create body."""
+    antecedent: str = Field(..., min_length=1, max_length=2000)
+    consequent: str = Field(..., min_length=1, max_length=2000)
+    alias: str | None = Field(default=None, max_length=200)

@@ -86,6 +86,279 @@
       "ha": {
         "materialize_as_label": false
       }
+    },
+    {
+      "id": "aicp.role.licht",
+      "type": "role",
+      "icon": "mdi:lightbulb",
+      "color": "#fbbf24",
+      "display": {
+        "de": "Licht",
+        "en": "Light"
+      },
+      "description": {
+        "de": "Zonenrolle: Lichtquellen (Deckenlampen, Spots, LED-Strips).",
+        "en": "Zone role: lighting entities (ceiling, spots, LED strips)."
+      },
+      "governance": {
+        "visibility": "public",
+        "source": "system"
+      },
+      "ha": {
+        "materialize_as_label": true
+      }
+    },
+    {
+      "id": "aicp.role.praesenz",
+      "type": "role",
+      "icon": "mdi:motion-sensor",
+      "color": "#a78bfa",
+      "display": {
+        "de": "Präsenz",
+        "en": "Presence"
+      },
+      "description": {
+        "de": "Zonenrolle: Präsenzsensoren (mmWave, PIR, Radar).",
+        "en": "Zone role: presence sensors (mmWave, PIR, radar)."
+      },
+      "governance": {
+        "visibility": "public",
+        "source": "system"
+      },
+      "ha": {
+        "materialize_as_label": true
+      }
+    },
+    {
+      "id": "aicp.role.bewegung",
+      "type": "role",
+      "icon": "mdi:run",
+      "color": "#c084fc",
+      "display": {
+        "de": "Bewegung",
+        "en": "Motion"
+      },
+      "description": {
+        "de": "Zonenrolle: Bewegungsmelder (PIR, klassisch).",
+        "en": "Zone role: motion detectors (PIR, classic)."
+      },
+      "governance": {
+        "visibility": "public",
+        "source": "system"
+      },
+      "ha": {
+        "materialize_as_label": true
+      }
+    },
+    {
+      "id": "aicp.role.medien",
+      "type": "role",
+      "icon": "mdi:speaker",
+      "color": "#60a5fa",
+      "display": {
+        "de": "Medien",
+        "en": "Media"
+      },
+      "description": {
+        "de": "Zonenrolle: Medienwiedergabe (Sonos, Chromecast, TV).",
+        "en": "Zone role: media playback (Sonos, Chromecast, TV)."
+      },
+      "governance": {
+        "visibility": "public",
+        "source": "system"
+      },
+      "ha": {
+        "materialize_as_label": true
+      }
+    },
+    {
+      "id": "aicp.role.klima",
+      "type": "role",
+      "icon": "mdi:thermometer",
+      "color": "#34d399",
+      "display": {
+        "de": "Klima",
+        "en": "Climate"
+      },
+      "description": {
+        "de": "Zonenrolle: Klimageräte (Heizung, Lüftung, Klimaanlage).",
+        "en": "Zone role: climate devices (heating, ventilation, AC)."
+      },
+      "governance": {
+        "visibility": "public",
+        "source": "system"
+      },
+      "ha": {
+        "materialize_as_label": true
+      }
+    },
+    {
+      "id": "aicp.role.sensor",
+      "type": "role",
+      "icon": "mdi:chip",
+      "color": "#f472b6",
+      "display": {
+        "de": "Sensor",
+        "en": "Sensor"
+      },
+      "description": {
+        "de": "Zonenrolle: Allgemeine Sensoren (Helligkeit, CO2, Luftfeuchte).",
+        "en": "Zone role: general sensors (illuminance, CO2, humidity)."
+      },
+      "governance": {
+        "visibility": "public",
+        "source": "system"
+      },
+      "ha": {
+        "materialize_as_label": true
+      }
+    },
+    {
+      "id": "aicp.role.rollladen",
+      "type": "role",
+      "icon": "mdi:blinds",
+      "color": "#fb923c",
+      "display": {
+        "de": "Rollladen",
+        "en": "Cover"
+      },
+      "description": {
+        "de": "Zonenrolle: Rollläden, Jalousien, Markisen.",
+        "en": "Zone role: covers, blinds, awnings."
+      },
+      "governance": {
+        "visibility": "public",
+        "source": "system"
+      },
+      "ha": {
+        "materialize_as_label": true
+      }
+    },
+    {
+      "id": "aicp.role.schloss",
+      "type": "role",
+      "icon": "mdi:lock",
+      "color": "#f87171",
+      "display": {
+        "de": "Schloss",
+        "en": "Lock"
+      },
+      "description": {
+        "de": "Zonenrolle: Schlösser (Haustür, Garagentor, Tresor).",
+        "en": "Zone role: locks (front door, garage, safe)."
+      },
+      "governance": {
+        "visibility": "public",
+        "source": "system"
+      },
+      "ha": {
+        "materialize_as_label": true
+      }
+    },
+    {
+      "id": "aicp.role.tuer",
+      "type": "role",
+      "icon": "mdi:door",
+      "color": "#fbbf24",
+      "display": {
+        "de": "Tür",
+        "en": "Door"
+      },
+      "description": {
+        "de": "Zonenrolle: Türsensoren (Kontakt, Klingel).",
+        "en": "Zone role: door sensors (contact, doorbell)."
+      },
+      "governance": {
+        "visibility": "public",
+        "source": "system"
+      },
+      "ha": {
+        "materialize_as_label": true
+      }
+    },
+    {
+      "id": "aicp.role.fenster",
+      "type": "role",
+      "icon": "mdi:window-open",
+      "color": "#22d3ee",
+      "display": {
+        "de": "Fenster",
+        "en": "Window"
+      },
+      "description": {
+        "de": "Zonenrolle: Fenstersensoren (Kontakt, Neigung).",
+        "en": "Zone role: window sensors (contact, tilt)."
+      },
+      "governance": {
+        "visibility": "public",
+        "source": "system"
+      },
+      "ha": {
+        "materialize_as_label": true
+      }
+    },
+    {
+      "id": "aicp.role.energie",
+      "type": "role",
+      "icon": "mdi:flash",
+      "color": "#4ade80",
+      "display": {
+        "de": "Energie",
+        "en": "Energy"
+      },
+      "description": {
+        "de": "Zonenrolle: Energiemessung (Verbrauch, Leistung, Solar).",
+        "en": "Zone role: energy monitoring (consumption, power, solar)."
+      },
+      "governance": {
+        "visibility": "public",
+        "source": "system"
+      },
+      "ha": {
+        "materialize_as_label": true
+      }
+    },
+    {
+      "id": "aicp.role.sicherheit",
+      "type": "role",
+      "icon": "mdi:shield",
+      "color": "#ef4444",
+      "display": {
+        "de": "Sicherheit",
+        "en": "Security"
+      },
+      "description": {
+        "de": "Zonenrolle: Sicherheitsgeräte (Alarm, Kamera, Rauchmelder).",
+        "en": "Zone role: security devices (alarm, camera, smoke detector)."
+      },
+      "governance": {
+        "visibility": "public",
+        "source": "system"
+      },
+      "ha": {
+        "materialize_as_label": true
+      }
+    },
+    {
+      "id": "aicp.role.styx",
+      "type": "role",
+      "icon": "mdi:robot",
+      "color": "#8b5cf6",
+      "display": {
+        "de": "Styx",
+        "en": "Styx"
+      },
+      "description": {
+        "de": "Von Styx verwaltete Entitäten (Auto-Tag).",
+        "en": "Entities managed by Styx (auto-tag)."
+      },
+      "governance": {
+        "visibility": "public",
+        "source": "system"
+      },
+      "ha": {
+        "materialize_as_label": true
+      }
     }
   ]
 }

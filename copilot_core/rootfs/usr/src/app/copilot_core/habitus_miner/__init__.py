@@ -10,6 +10,7 @@ from .mining import mine_ab_rules, mine_with_context_stratification
 from .model import NormEvent, Rule, MiningConfig, EventStreamType, RulesType
 from .service import HabitusMinerService
 from .store import HabitusMinerStore
+from .feedback_store import HabitusFeedbackStore
 from .zone_mining import (
     ZoneBasedMiner,
     ZoneMiningConfig,
@@ -27,6 +28,7 @@ __all__ = [
     "RulesType",
     "HabitusMinerService",
     "HabitusMinerStore",
+    "HabitusFeedbackStore",
     # v0.2 API
     "ZoneBasedMiner",
     "ZoneMiningConfig",

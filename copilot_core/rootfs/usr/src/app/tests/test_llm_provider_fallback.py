@@ -28,7 +28,7 @@ def test_requested_model_falls_back_to_configured_ollama_model(monkeypatch: pyte
 
     calls: list[str] = []
 
-    def _fake_post(url: str, json: dict[str, Any], timeout: int):  # noqa: A002
+    def _fake_post(self, url: str, json: dict[str, Any], timeout: int):  # noqa: A002
         calls.append(str(json.get("model")))
         model = json.get("model")
         if model == "gpt-4o-mini":
@@ -37,7 +37,7 @@ def test_requested_model_falls_back_to_configured_ollama_model(monkeypatch: pyte
             return _Resp(200, "", {"message": {"content": "ok from qwen"}})
         return _Resp(500, "unexpected")
 
-    monkeypatch.setattr("copilot_core.llm_provider.http_requests.post", _fake_post)
+    monkeypatch.setattr("copilot_core.llm_provider.http_requests.Session.post", _fake_post)
 
     provider = LLMProvider()
     result = provider.chat(messages=[{"role": "user", "content": "hi"}], model="gpt-4o-mini")
@@ -53,11 +53,11 @@ def test_offline_message_reports_missing_model(monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.delenv("CLOUD_API_URL", raising=False)
     monkeypatch.delenv("CLOUD_API_KEY", raising=False)
 
-    def _fake_post(url: str, json: dict[str, Any], timeout: int):  # noqa: A002
+    def _fake_post(self, url: str, json: dict[str, Any], timeout: int):  # noqa: A002
         model = json.get("model")
         return _Resp(404, f'{{"error":"model \\"{model}\\" not found"}}')
 
-    monkeypatch.setattr("copilot_core.llm_provider.http_requests.post", _fake_post)
+    monkeypatch.setattr("copilot_core.llm_provider.http_requests.Session.post", _fake_post)
 
     provider = LLMProvider()
     result = provider.chat(messages=[{"role": "user", "content": "hi"}], model="gpt-4o-mini")
@@ -79,7 +79,7 @@ def test_cloud_used_for_explicit_external_model_when_configured(
     ollama_models: list[str] = []
     cloud_calls: list[str] = []
 
-    def _fake_post(url: str, json: dict[str, Any], timeout: int, headers=None):  # noqa: A002
+    def _fake_post(self, url: str, json: dict[str, Any], timeout: int, headers=None):  # noqa: A002
         if url.endswith("/api/chat"):
             model = str(json.get("model", ""))
             ollama_models.append(model)
@@ -89,7 +89,7 @@ def test_cloud_used_for_explicit_external_model_when_configured(
             return _Resp(200, "", {"choices": [{"message": {"content": "ok from cloud"}}]})
         return _Resp(500, "unexpected")
 
-    monkeypatch.setattr("copilot_core.llm_provider.http_requests.post", _fake_post)
+    monkeypatch.setattr("copilot_core.llm_provider.http_requests.Session.post", _fake_post)
 
     provider = LLMProvider()
     result = provider.chat(messages=[{"role": "user", "content": "hi"}], model="gpt-4o-mini")
@@ -110,12 +110,12 @@ def test_ollama_cloud_url_is_normalized_to_v1(monkeypatch: pytest.MonkeyPatch) -
     cloud_urls: list[str] = []
     cloud_models: list[str] = []
 
-    def _fake_post(url: str, json: dict[str, Any], timeout: int, headers=None):  # noqa: A002
+    def _fake_post(self, url: str, json: dict[str, Any], timeout: int, headers=None):  # noqa: A002
         cloud_urls.append(url)
         cloud_models.append(str(json.get("model", "")))
         return _Resp(200, "", {"choices": [{"message": {"content": "ok from cloud"}}]})
 
-    monkeypatch.setattr("copilot_core.llm_provider.http_requests.post", _fake_post)
+    monkeypatch.setattr("copilot_core.llm_provider.http_requests.Session.post", _fake_post)
 
     provider = LLMProvider()
     result = provider.chat(messages=[{"role": "user", "content": "hi"}])
@@ -135,11 +135,11 @@ def test_ollama_cloud_coerces_openai_model_name(monkeypatch: pytest.MonkeyPatch)
 
     cloud_models: list[str] = []
 
-    def _fake_post(url: str, json: dict[str, Any], timeout: int, headers=None):  # noqa: A002
+    def _fake_post(self, url: str, json: dict[str, Any], timeout: int, headers=None):  # noqa: A002
         cloud_models.append(str(json.get("model", "")))
         return _Resp(200, "", {"choices": [{"message": {"content": "ok from cloud"}}]})
 
-    monkeypatch.setattr("copilot_core.llm_provider.http_requests.post", _fake_post)
+    monkeypatch.setattr("copilot_core.llm_provider.http_requests.Session.post", _fake_post)
 
     provider = LLMProvider()
     result = provider.chat(messages=[{"role": "user", "content": "hi"}], model="gpt-4o-mini")
@@ -158,18 +158,18 @@ def test_non_ollama_cloud_keeps_generic_default_model(monkeypatch: pytest.Monkey
 
     cloud_models: list[str] = []
 
-    def _fake_post(url: str, json: dict[str, Any], timeout: int, headers=None):  # noqa: A002
+    def _fake_post(self, url: str, json: dict[str, Any], timeout: int, headers=None):  # noqa: A002
         cloud_models.append(str(json.get("model", "")))
         return _Resp(200, "", {"choices": [{"message": {"content": "ok from cloud"}}]})
 
-    monkeypatch.setattr("copilot_core.llm_provider.http_requests.post", _fake_post)
+    monkeypatch.setattr("copilot_core.llm_provider.http_requests.Session.post", _fake_post)
 
     provider = LLMProvider()
     result = provider.chat(messages=[{"role": "user", "content": "hi"}])
 
     assert result["provider"] == "cloud"
     assert result["content"] == "ok from cloud"
-    assert cloud_models == ["gpt-4o-mini"]
+    assert cloud_models == ["gpt-4.1-nano"]
 
 
 def test_cloud_url_with_chat_completions_suffix_is_normalized(
@@ -182,11 +182,11 @@ def test_cloud_url_with_chat_completions_suffix_is_normalized(
 
     cloud_urls: list[str] = []
 
-    def _fake_post(url: str, json: dict[str, Any], timeout: int, headers=None):  # noqa: A002
+    def _fake_post(self, url: str, json: dict[str, Any], timeout: int, headers=None):  # noqa: A002
         cloud_urls.append(url)
         return _Resp(200, "", {"choices": [{"message": {"content": "ok from cloud"}}]})
 
-    monkeypatch.setattr("copilot_core.llm_provider.http_requests.post", _fake_post)
+    monkeypatch.setattr("copilot_core.llm_provider.http_requests.Session.post", _fake_post)
 
     provider = LLMProvider()
     result = provider.chat(messages=[{"role": "user", "content": "hi"}])
@@ -202,10 +202,10 @@ def test_cloud_url_without_key_returns_offline_dict(monkeypatch: pytest.MonkeyPa
     monkeypatch.delenv("CLOUD_API_KEY", raising=False)
     monkeypatch.setenv("PREFER_LOCAL", "true")
 
-    def _fake_post(url: str, json: dict[str, Any], timeout: int):  # noqa: A002
+    def _fake_post(self, url: str, json: dict[str, Any], timeout: int):  # noqa: A002
         raise http_requests.exceptions.ConnectionError("down")
 
-    monkeypatch.setattr("copilot_core.llm_provider.http_requests.post", _fake_post)
+    monkeypatch.setattr("copilot_core.llm_provider.http_requests.Session.post", _fake_post)
 
     provider = LLMProvider()
     result = provider.chat(messages=[{"role": "user", "content": "hi"}], model="pilotsuite")
@@ -223,11 +223,11 @@ def test_alias_model_maps_to_local_configured_model(monkeypatch: pytest.MonkeyPa
 
     calls: list[str] = []
 
-    def _fake_post(url: str, json: dict[str, Any], timeout: int):  # noqa: A002
+    def _fake_post(self, url: str, json: dict[str, Any], timeout: int):  # noqa: A002
         calls.append(str(json.get("model")))
         return _Resp(200, "", {"message": {"content": "ok"}})
 
-    monkeypatch.setattr("copilot_core.llm_provider.http_requests.post", _fake_post)
+    monkeypatch.setattr("copilot_core.llm_provider.http_requests.Session.post", _fake_post)
 
     provider = LLMProvider()
     result = provider.chat(messages=[{"role": "user", "content": "hi"}], model="pilotsuite")
@@ -247,14 +247,14 @@ def test_cloud_like_ollama_config_is_forced_to_local_fallback(
 
     calls: list[str] = []
 
-    def _fake_post(url: str, json: dict[str, Any], timeout: int):  # noqa: A002
+    def _fake_post(self, url: str, json: dict[str, Any], timeout: int):  # noqa: A002
         calls.append(str(json.get("model")))
         model = str(json.get("model"))
-        if model == "qwen3:0.6b":
+        if model == "qwen3:4b":
             return _Resp(200, "", {"message": {"content": "ok fallback"}})
         return _Resp(404, f'{{"error":"model \\"{model}\\" not found"}}')
 
-    monkeypatch.setattr("copilot_core.llm_provider.http_requests.post", _fake_post)
+    monkeypatch.setattr("copilot_core.llm_provider.http_requests.Session.post", _fake_post)
 
     provider = LLMProvider()
     result = provider.chat(messages=[{"role": "user", "content": "hi"}], model="pilotsuite")
@@ -262,8 +262,8 @@ def test_cloud_like_ollama_config_is_forced_to_local_fallback(
 
     assert result["provider"] == "ollama"
     assert result["content"] == "ok fallback"
-    assert calls == ["qwen3:0.6b"]
-    assert status["ollama_model"] == "qwen3:0.6b"
+    assert calls == ["qwen3:4b"]
+    assert status["ollama_model"] == "qwen3:4b"
     assert status["ollama_model_configured"] == "gpt-4o-mini"
     assert status["ollama_model_overridden"] is True
 

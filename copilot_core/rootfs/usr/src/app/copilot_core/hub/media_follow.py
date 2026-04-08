@@ -386,6 +386,18 @@ class MediaFollowEngine:
             recent_transfers=list(reversed(recent)),
         )
 
+    def health_check(self) -> dict[str, Any]:
+        """Return health status for backend health endpoint."""
+        playing = sum(1 for s in self._sessions.values() if s.state == "playing")
+        return {
+            "status": "ok",
+            "total_sources": len(self._sources),
+            "active_sessions": len(self._sessions),
+            "playing": playing,
+            "follow_zones": len(self._follow_zones),
+            "global_follow": self._global_follow,
+        }
+
     def get_sources(self) -> list[dict[str, Any]]:
         """Get all registered media sources."""
         return [

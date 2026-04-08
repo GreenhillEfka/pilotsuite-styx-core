@@ -3,6 +3,89 @@
 This file exists so Home Assistant can show an add-on changelog.
 For full history, see the repository-level `CHANGELOG.md`.
 
+## 14.6.1 (2026-03-16)
+- **Dashboard Modul-Config**: Expandierbare per-Modul Config-Panels mit typisierten Feldern
+- **16 Module konfigurierbar**: toggle, range, number, select pro Modul
+- **Styx Gehirn Kategorie**: Character, Attribution, Hints, Konflikte, ML Pipeline
+
+## 14.6.0 (2026-03-16)
+- **Backend Dashboard**: Komplett neues 7-Tab-Dashboard mit Brain Canvas
+- **4 Netzwerk-Module**: ZWave, Zigbee, Thread, HomeAssistant
+- **Modul-Migration**: ML Pipeline, Character, Attribution, Hints, PII von HA nach Core
+
+## 14.3.17 (2026-03-15)
+- **Ingress Detection**: `detectIngressBasePath()` fuer korrekte API-Aufrufe im Ingress-Modus
+- **Auth Header Fix**: `X-Auth-Token` statt `Authorization: Bearer` (Ingress Proxy Kompatibilitaet)
+- **System Health**: Dashboard zeigt CPU%, RAM, Disk, Uptime
+- **Cloud API Config**: URL + Key im Dashboard konfigurierbar
+- **Blueprint-Registrierung**: automations_bp + onboarding_bp verdrahtet
+- **Null-Safety**: postJSON(), fetchJSON() abgesichert
+
+## 13.6.0 (2026-03-11)
+- **Musikwolke Bridge**: End-to-End Sonos-Integration mit Zone-Speaker-Mapping und Follow-Mode
+- **Automation-Modus**: 3-Stufen off/learning/autonomy pro Zone
+- **Tag-System**: 13 neue Zonen-Rollen-Tags, bidirektionale HA↔Core Synchronisierung
+- **Zone Dashboard**: Echtdaten statt Mockups (Mood, Occupancy, Brightness)
+- **Versions-Sync**: Alle VERSION-Dateien auf 13.6.0 vereinheitlicht
+
+## 12.8.1 (2026-03-02)
+- **Connection Pooling für HA-Supervisor und Ollama**: Wiederverwendbare aiohttp.ClientSession-Connections statt Neuverbindung pro Request
+  - `copilot_core/connection_pool.py`: Zentraler ConnectionPoolManager mit konfigurierbarer Pool-Größe (default: 10 Connections)
+  - `copilot_core/connections.py`: High-Level Connection Wrapper (HAConnection, OllamaConnection) mit bequemer API
+  - **Performance**: >90% Connection-Pool-Effizienz (Last-Test: 1000 Requests mit 100% Reuse-Rate)
+  - **Features**: Session-Reuse, Health-Checks, Timeout-Handling, automatische Cleanup on Shutdown
+  - **APIs**: 
+    - Low-Level: `get_ha_session()`, `get_ollama_session()` als Context-Manager
+    - High-Level: `get_ha_connection()`, `get_ollama_connection()` mit Connect/Get/Post-Methoden
+  - **Metriken**: Echtzeit-Monitoring via `get_pool_metrics()`, `get_connection_metrics()` (Requests total, Reuse-Rate, Health-Status)
+  - **Tests**: 51 Tests bestanden (22 Unit-Tests connections + 23 Unit-Tests pool + 6 Last-Tests)
+    - test_connections.py: 22 Tests ✅
+    - test_connection_pool.py: 23 Tests ✅
+    - test_connection_pool_load.py: 6 Last-Tests ✅ (1000 Requests, 100% Reuse-Rate)
+  - **Migration**: Bestehende Code-Stellen können direkt auf Pooling umstellen (siehe examples/connection_pooling_examples.py)
+  - **Dokumentation**: CONNECTION_POOLING_SUMMARY.md, POOL_PERFORMANCE.md
+
+## 12.8.0 (2026-03-02)
+- **HomeAssistant Auto-Discovery**: Neues Modul fuer automatische Entity-Erkennung und Zone-Mapping
+- **Habitus Dashboard**: 10-Tab Dashboard mit Echtzeit Zone-Daten und WebSocket-Integration
+- **Zone Matching**: Intelligentes Entity-zu-Zone-Mapping basierend auf Attributen
+- **aiohttp Dependency**: Async HTTP Client fuer HA Supervisor API
+- **Versionskonsistenz**: Alle Versions-Dateien synchronisiert auf 12.8.0
+
+## 7.12.6 (2026-03-01)
+- **Notifications API Type Hints**: Alle 12 Endpoints mit vollständigen Return-Type-Annotationen (`-> tuple[dict[str, Any], int]`)
+  - `send_notification()`, `handle_notifications()`, `mark_notification_read()`, `dismiss_notification()`
+  - `clear_notifications()`, `subscribe_device()`, `unsubscribe_device()`, `get_subscriptions()`
+  - `update_subscription()`, `get_notification_stats()`, `get_pending_notifications()`, `get_notification_digest()`
+- **Docstrings**: Alle Endpoints mit Returns-Sektionen ergänzt
+- **Test-Suite**: 2088 Tests bestanden (99.5% Pass Rate)
+  - Notification API: 57 Tests ✅ (test_notifications_api.py, test_notifications_flask_integration.py)
+  - Blueprint-Registrierung: Korrekt in `api/v1/blueprint.py` und `core_setup.py`
+- **Known Issues**: 11 Tests in test_unifi.py und test_swagger_ui.py benötigen pytest-asyncio (async-Fixtures)
+- **Status**: Notifications API vollständig typisiert und dokumentiert ✅
+
+## 7.12.2 (2026-03-01)
+- **Phase 5 Completion Verification**: Alle Phase-5-APIs verifiziert und voll funktionsfähig
+- **Notifications API** (`/api/v1/notifications/*`): 9 Endpoints, 36 Tests ✅
+  - Send, list, mark read, dismiss, clear notifications
+  - Device subscription management with preferences
+  - Full error handling (400/401/404/500)
+- **Sharing API** (`/api/v1/sharing/*`): 7 Endpoints, 28 Tests ✅
+  - Entity registry for cross-home sharing
+  - Sync service with peer management
+  - mDNS discovery for local peers
+- **Collective Intelligence API** (`/api/v1/federated/*`): 15 Endpoints, 30 Tests ✅
+  - Federated learning round management
+  - Knowledge extraction and transfer
+  - Model aggregation and statistics
+- **Test Coverage**: 94 Integrationstests laufen grün (1.22s)
+  - `test_notifications_flask_integration.py`: 36 passed
+  - `test_collective_intelligence_flask_integration.py`: 30 passed
+  - `test_sharing_api.py`: 28 passed
+- **Blueprint Registration**: Alle 3 APIs korrekt in `core_setup.py` registriert
+- **Type Hints**: Comprehensive type annotations in notifications.py und collective_intelligence/api.py
+- **Status**: Phase 5 ✅ COMPLETE — Ready for Phase 6 (Advanced ML)
+
 ## 7.8.8
 - LLM-Routing erweitert: Primary/Secondary Provider (`offline`/`cloud`) mit robustem Fallback.
 - Neue API-Endpunkte fuer Routing/Katalog:

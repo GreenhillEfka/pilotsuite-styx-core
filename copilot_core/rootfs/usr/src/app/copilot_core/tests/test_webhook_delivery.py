@@ -1,0 +1,571 @@
+"""Tests fuer die WebhookDeliveryQueue (PS-P0-009..PS-P0-013 + PS-HEPH-023)."""
+from __future__ import annotations
+
+import threading
+import time
+import urllib.error
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+from copilot_core.webhook_delivery import WebhookDeliveryQueue
+
+
+class TestWebhookDeliveryQueueConfig:
+    def test_invalid_policy_raises(self) -> None:
+        with pytest.raises(ValueError, match="unsupported backpressure_policy"):
+            WebhookDeliveryQueue(
+                send_func=lambda _envelope: None,
+                backpressure_policy="unsupported-policy",
+            )
+
+    def test_invalid_max_retries_raises(self) -> None:
+        with pytest.raises(ValueError, match="max_retries must be >= 0"):
+            WebhookDeliveryQueue(
+                send_func=lambda _envelope: None,
+                max_retries=-1,
+            )
+
+    def test_invalid_delivery_deadline_raises(self) -> None:
+        with pytest.raises(ValueError, match="delivery_deadline_seconds must be"):
+            WebhookDeliveryQueue(
+                send_func=lambda _envelope: None,
+                delivery_deadline_seconds=-0.1,
+            )
+
+    def test_invalid_destination_max_concurrency_raises(self) -> None:
+        with pytest.raises(ValueError, match="destination_max_concurrency must be"):
+            WebhookDeliveryQueue(
+                send_func=lambda _envelope: None,
+                destination_max_concurrency=0,
+            )
+
+    def test_invalid_destination_rate_limit_raises(self) -> None:
+        with pytest.raises(ValueError, match="destination_rate_limit_per_second"):
+            WebhookDeliveryQueue(
+                send_func=lambda _envelope: None,
+                destination_rate_limit_per_second=0,
+            )
+
+        with pytest.raises(ValueError, match="destination_rate_limit_burst"):
+            WebhookDeliveryQueue(
+                send_func=lambda _envelope: None,
+                destination_rate_limit_per_second=1.0,
+                destination_rate_limit_burst=0,
+            )
+
+
+class TestWebhookDeliveryQueueWorkers:
+    @patch("copilot_core.webhook_delivery.threading.Thread")
+    def test_fixed_worker_count_no_thread_per_event(self, mock_thread_cls) -> None:
+        """start() erstellt genau worker_count Threads; enqueue() startet keine neuen."""
+        mock_worker = MagicMock()
+        mock_thread_cls.return_value = mock_worker
+
+        queue = WebhookDeliveryQueue(
+            send_func=lambda _envelope: None,
+            worker_count=3,
+            max_queue_size=16,
+            backpressure_policy="drop_newest",
+        )
+
+        queue.start()
+        assert mock_thread_cls.call_count == 3
+
+        assert queue.enqueue({"type": "a", "data": {}}) is True
+        assert queue.enqueue({"type": "b", "data": {}}) is True
+
+        # Kein Thread-pro-Event Muster
+        assert mock_thread_cls.call_count == 3
+
+
+class TestWebhookDeliveryQueueBehavior:
+    def test_enqueue_is_delivered_single_attempt(self) -> None:
+        delivered: list[dict] = []
+        delivered_event = threading.Event()
+
+        def _send(envelope: dict) -> None:
+            delivered.append(envelope)
+            delivered_event.set()
+
+        queue = WebhookDeliveryQueue(
+            send_func=_send,
+            worker_count=1,
+            max_queue_size=8,
+        )
+        queue.start()
+
+        envelope = {"type": "mood", "data": {"mood": "focus"}}
+        assert queue.enqueue(envelope) is True
+
+        assert delivered_event.wait(timeout=1.0), "delivery worker did not process envelope"
+        queue.stop(drain_timeout=1.0)
+
+        assert delivered == [envelope]
+
+    @patch("copilot_core.webhook_delivery.threading.Thread")
+    def test_drop_newest_policy_when_full(self, mock_thread_cls) -> None:
+        """Bei voller Queue wird das neueste Event verworfen (drop_newest)."""
+        mock_worker = MagicMock()
+        mock_thread_cls.return_value = mock_worker
+
+        queue = WebhookDeliveryQueue(
+            send_func=lambda _envelope: None,
+            worker_count=1,
+            max_queue_size=1,
+            backpressure_policy="drop_newest",
+        )
+
+        assert queue.enqueue({"type": "first", "data": {}}) is True
+        assert queue.enqueue({"type": "second", "data": {}}) is False
+
+        stats = queue._get_stats_snapshot()
+        assert stats["enqueued_total"] == 1
+        assert stats["dropped_total"] == 1
+        assert stats["delivered_total"] == 0
+        assert stats["failed_total"] == 0
+        assert stats["retry_total"] == 0
+
+    @patch("copilot_core.webhook_delivery.threading.Thread")
+    def test_drop_oldest_policy_drops_oldest_and_accepts_new(self, mock_thread_cls) -> None:
+        """Bei voller Queue verwirft drop_oldest den aeltesten Eintrag und nimmt neuen an."""
+        mock_worker = MagicMock()
+        mock_thread_cls.return_value = mock_worker
+
+        queue = WebhookDeliveryQueue(
+            send_func=lambda _envelope: None,
+            worker_count=1,
+            max_queue_size=2,
+            backpressure_policy="drop_oldest",
+        )
+
+        assert queue.enqueue({"type": "first", "data": {}}) is True
+        assert queue.enqueue({"type": "second", "data": {}}) is True
+        assert queue.enqueue({"type": "third", "data": {}}) is True
+
+        buffered = list(queue._queue.queue)  # noqa: SLF001
+        assert [item["type"] for item in buffered] == ["second", "third"]
+        assert queue._queue.unfinished_tasks == 2  # noqa: SLF001
+
+        stats = queue._get_stats_snapshot()
+        assert stats["enqueued_total"] == 3
+        assert stats["dropped_total"] == 1
+        assert stats["retry_total"] == 0
+
+    @patch("copilot_core.webhook_delivery.threading.Thread")
+    def test_block_timeout_policy_drops_after_timeout(self, mock_thread_cls) -> None:
+        """block_timeout blockiert kurz und verwirft danach korrekt."""
+        mock_worker = MagicMock()
+        mock_thread_cls.return_value = mock_worker
+
+        queue = WebhookDeliveryQueue(
+            send_func=lambda _envelope: None,
+            worker_count=1,
+            max_queue_size=1,
+            backpressure_policy="block_timeout",
+            block_timeout_seconds=0.01,
+        )
+
+        assert queue.enqueue({"type": "first", "data": {}}) is True
+        assert queue.enqueue({"type": "second", "data": {}}) is False
+
+        stats = queue._get_stats_snapshot()
+        assert stats["enqueued_total"] == 1
+        assert stats["dropped_total"] == 1
+        assert stats["retry_total"] == 0
+
+    @patch("copilot_core.webhook_delivery.threading.Thread")
+    def test_get_stats_and_stats_property(self, mock_thread_cls) -> None:
+        mock_worker = MagicMock()
+        mock_worker.is_alive.return_value = True
+        mock_thread_cls.return_value = mock_worker
+
+        queue = WebhookDeliveryQueue(
+            send_func=lambda _envelope: None,
+            worker_count=1,
+            max_queue_size=4,
+        )
+
+        assert queue.enqueue({"type": "queued", "data": {}}) is True
+
+        stats = queue.get_stats()
+        assert stats["enqueued_total"] == 1
+        assert stats["queue_size"] == 1
+        assert stats["worker_count"] == 1
+        assert stats["workers_alive"] == 1
+        assert stats["started"] == 1
+
+        assert queue.stats["enqueued_total"] == 1
+
+    def test_stop_respects_drain_deadline(self) -> None:
+        started = threading.Event()
+        release = threading.Event()
+
+        def _slow_send(_envelope: dict) -> None:
+            started.set()
+            release.wait(timeout=1.0)
+
+        queue = WebhookDeliveryQueue(
+            send_func=_slow_send,
+            worker_count=1,
+            max_queue_size=4,
+        )
+        queue.start()
+
+        assert queue.enqueue({"type": "slow", "data": {}}) is True
+        assert started.wait(timeout=1.0)
+
+        t0 = time.monotonic()
+        queue.stop(drain_timeout=0.01)
+        elapsed = time.monotonic() - t0
+
+        release.set()
+
+        assert elapsed < 0.15
+
+    def test_stats_track_delivered_and_failed(self) -> None:
+        calls = {"count": 0}
+
+        def _send(_envelope: dict) -> None:
+            calls["count"] += 1
+            if calls["count"] == 2:
+                raise RuntimeError("boom")
+
+        queue = WebhookDeliveryQueue(
+            send_func=_send,
+            worker_count=1,
+            max_queue_size=4,
+            backpressure_policy="drop_newest",
+        )
+        queue.start()
+
+        assert queue.enqueue({"type": "ok", "data": {}}) is True
+        assert queue.enqueue({"type": "fail", "data": {}}) is True
+
+        queue.stop(drain_timeout=1.0)
+
+        stats = queue._get_stats_snapshot()
+        assert stats["enqueued_total"] == 2
+        assert stats["dropped_total"] == 0
+        assert stats["delivered_total"] == 1
+        assert stats["failed_total"] == 1
+        assert stats["retry_total"] == 0
+
+
+class TestWebhookDeliveryQueueRetries:
+    def test_http_5xx_is_retried_and_then_delivered(self) -> None:
+        calls = {"count": 0}
+
+        def _send(_envelope: dict) -> None:
+            calls["count"] += 1
+            if calls["count"] == 1:
+                raise urllib.error.HTTPError(
+                    url="http://example.test/hook",
+                    code=503,
+                    msg="service unavailable",
+                    hdrs=None,
+                    fp=None,
+                )
+
+        queue = WebhookDeliveryQueue(
+            send_func=_send,
+            worker_count=1,
+            max_queue_size=4,
+            max_retries=2,
+            retry_base_delay_seconds=0.0,
+            retry_jitter_seconds=0.0,
+        )
+        queue.start()
+
+        assert queue.enqueue({"type": "mood", "data": {}}) is True
+        queue.stop(drain_timeout=1.0)
+
+        stats = queue._get_stats_snapshot()
+        assert calls["count"] == 2
+        assert stats["delivered_total"] == 1
+        assert stats["failed_total"] == 0
+        assert stats["retry_total"] == 1
+
+    def test_http_4xx_fails_fast_without_retry(self) -> None:
+        calls = {"count": 0}
+
+        def _send(_envelope: dict) -> None:
+            calls["count"] += 1
+            raise urllib.error.HTTPError(
+                url="http://example.test/hook",
+                code=401,
+                msg="unauthorized",
+                hdrs=None,
+                fp=None,
+            )
+
+        queue = WebhookDeliveryQueue(
+            send_func=_send,
+            worker_count=1,
+            max_queue_size=4,
+            max_retries=3,
+            retry_base_delay_seconds=0.0,
+            retry_jitter_seconds=0.0,
+        )
+        queue.start()
+
+        assert queue.enqueue({"type": "suggestion", "data": {}}) is True
+        queue.stop(drain_timeout=1.0)
+
+        stats = queue._get_stats_snapshot()
+        assert calls["count"] == 1
+        assert stats["delivered_total"] == 0
+        assert stats["failed_total"] == 1
+        assert stats["retry_total"] == 0
+
+    def test_timeout_retried_until_retry_budget_exhausted(self) -> None:
+        calls = {"count": 0}
+
+        def _send(_envelope: dict) -> None:
+            calls["count"] += 1
+            raise TimeoutError("socket timeout")
+
+        queue = WebhookDeliveryQueue(
+            send_func=_send,
+            worker_count=1,
+            max_queue_size=4,
+            max_retries=2,
+            retry_base_delay_seconds=0.0,
+            retry_jitter_seconds=0.0,
+        )
+        queue.start()
+
+        assert queue.enqueue({"type": "neuron", "data": {}}) is True
+        queue.stop(drain_timeout=1.0)
+
+        stats = queue._get_stats_snapshot()
+        assert calls["count"] == 3  # 1 initial + 2 retries
+        assert stats["delivered_total"] == 0
+        assert stats["failed_total"] == 1
+        assert stats["retry_total"] == 2
+
+    def test_delivery_deadline_prevents_retry_even_with_budget(self) -> None:
+        calls = {"count": 0}
+
+        def _send(_envelope: dict) -> None:
+            calls["count"] += 1
+            raise TimeoutError("socket timeout")
+
+        queue = WebhookDeliveryQueue(
+            send_func=_send,
+            worker_count=1,
+            max_queue_size=4,
+            max_retries=5,
+            retry_base_delay_seconds=0.0,
+            retry_jitter_seconds=0.0,
+            delivery_deadline_seconds=0.0,
+        )
+        queue.start()
+
+        assert queue.enqueue({"type": "neuron", "data": {}}) is True
+        queue.stop(drain_timeout=1.0)
+
+        stats = queue._get_stats_snapshot()
+        assert calls["count"] == 1
+        assert stats["delivered_total"] == 0
+        assert stats["failed_total"] == 1
+        assert stats["retry_total"] == 0
+        assert stats["deadline_exceeded_total"] == 1
+
+    def test_retry_delay_uses_exponential_backoff_plus_jitter(self) -> None:
+        queue = WebhookDeliveryQueue(
+            send_func=lambda _envelope: None,
+            retry_base_delay_seconds=0.2,
+            retry_max_delay_seconds=1.0,
+            retry_jitter_seconds=0.1,
+        )
+
+        with patch("copilot_core.webhook_delivery.random.uniform", return_value=0.05):
+            delay_1 = queue._compute_retry_delay_seconds(1)
+            delay_2 = queue._compute_retry_delay_seconds(2)
+            delay_5 = queue._compute_retry_delay_seconds(5)
+
+        assert delay_1 == pytest.approx(0.25)  # 0.2 + 0.05
+        assert delay_2 == pytest.approx(0.45)  # 0.4 + 0.05
+        assert delay_5 == pytest.approx(1.05)  # capped to 1.0 + 0.05
+
+
+class TestWebhookDeliveryQueueRetryEdgecases:
+    def test_transient_then_nontransient_final_fail_stops_without_extra_retry(self) -> None:
+        """Wenn ein transienter Fehler in einen nicht-transienten Fehler muendet,
+        darf der letzte Fehler nicht mehr geretryt werden.
+
+        PS-QA-024: non-transient final fail.
+        """
+        calls = {"count": 0}
+
+        def _send(_envelope: dict) -> None:
+            calls["count"] += 1
+            if calls["count"] == 1:
+                raise TimeoutError("timeout")
+            raise urllib.error.HTTPError(
+                url="http://example.test/hook",
+                code=404,
+                msg="not found",
+                hdrs=None,
+                fp=None,
+            )
+
+        queue = WebhookDeliveryQueue(
+            send_func=_send,
+            worker_count=1,
+            max_queue_size=4,
+            max_retries=3,
+            retry_base_delay_seconds=0.0,
+            retry_jitter_seconds=0.0,
+        )
+        queue.start()
+
+        assert queue.enqueue({"type": "status", "data": {}}) is True
+        queue.stop(drain_timeout=1.0)
+
+        stats = queue._get_stats_snapshot()
+        assert calls["count"] == 2
+        assert stats["delivered_total"] == 0
+        assert stats["failed_total"] == 1
+        assert stats["retry_total"] == 1
+
+    def test_retry_total_stops_at_max_retries_without_off_by_one(self) -> None:
+        """retry_total darf bei ausgeschöpftem Retry-Budget nicht ueberlaufen."""
+        calls = {"count": 0}
+
+        def _send(_envelope: dict) -> None:
+            calls["count"] += 1
+            raise TimeoutError("timeout")
+
+        queue = WebhookDeliveryQueue(
+            send_func=_send,
+            worker_count=1,
+            max_queue_size=4,
+            max_retries=2,
+            retry_base_delay_seconds=0.0,
+            retry_jitter_seconds=0.0,
+        )
+        queue.start()
+
+        assert queue.enqueue({"type": "neuron", "data": {}}) is True
+        queue.stop(drain_timeout=1.0)
+
+        stats = queue._get_stats_snapshot()
+        assert calls["count"] == 3  # 1 initial + 2 retries
+        assert stats["delivered_total"] == 0
+        assert stats["failed_total"] == 1
+        assert stats["retry_total"] == 2
+
+    def test_http_4xx_fails_fast_even_with_retry_budget(self) -> None:
+        """4xx-Fehler sind non-transient und duerfen nie geretryt werden."""
+        calls = {"count": 0}
+
+        def _send(_envelope: dict) -> None:
+            calls["count"] += 1
+            raise urllib.error.HTTPError(
+                url="http://example.test/hook",
+                code=429,
+                msg="too many requests",
+                hdrs=None,
+                fp=None,
+            )
+
+        queue = WebhookDeliveryQueue(
+            send_func=_send,
+            worker_count=1,
+            max_queue_size=4,
+            max_retries=5,
+            retry_base_delay_seconds=0.0,
+            retry_jitter_seconds=0.0,
+        )
+        queue.start()
+
+        assert queue.enqueue({"type": "suggestion", "data": {}}) is True
+        queue.stop(drain_timeout=1.0)
+
+        stats = queue._get_stats_snapshot()
+        assert calls["count"] == 1
+        assert stats["delivered_total"] == 0
+        assert stats["failed_total"] == 1
+        assert stats["retry_total"] == 0
+
+
+class TestWebhookDeliveryQueuePerDestinationLimits:
+    def test_destination_max_concurrency_limits_parallel_delivery(self) -> None:
+        """PS-HEPH-023: pro destination max 1 inflight."""
+        started = threading.Event()
+        release = threading.Event()
+        lock = threading.Lock()
+        inflight = {"current": 0, "max": 0}
+
+        def _send(_envelope: dict) -> None:
+            with lock:
+                inflight["current"] += 1
+                inflight["max"] = max(inflight["max"], inflight["current"])
+                started.set()
+            release.wait(timeout=1.0)
+            with lock:
+                inflight["current"] -= 1
+
+        queue = WebhookDeliveryQueue(
+            send_func=_send,
+            worker_count=2,
+            max_queue_size=8,
+            destination_key_func=lambda _env: "dest-1",
+            destination_max_concurrency=1,
+        )
+        queue.start()
+
+        assert queue.enqueue({"type": "a", "data": {}}) is True
+        assert queue.enqueue({"type": "b", "data": {}}) is True
+
+        assert started.wait(timeout=1.0)
+        # Allow the second worker to contend.
+        time.sleep(0.05)
+        with lock:
+            assert inflight["max"] == 1
+
+        release.set()
+        queue.stop(drain_timeout=1.0)
+
+        stats = queue._get_stats_snapshot()
+        assert stats["delivered_total"] == 2
+        assert stats["destination_concurrency_wait_total"] >= 1
+
+    def test_destination_rate_limit_delays_second_send_and_counts_metric(self) -> None:
+        """PS-HEPH-023: token bucket erzwingt Delay und zaehlt rate_limited_total."""
+        sent_at: list[float] = []
+        fake_clock = {"now": 0.0}
+
+        def _send(_envelope: dict) -> None:
+            sent_at.append(fake_clock["now"])
+
+        def _monotonic() -> float:
+            return fake_clock["now"]
+
+        def _sleep(dt: float) -> None:
+            fake_clock["now"] += dt
+
+        with patch("copilot_core.webhook_delivery.time.monotonic", side_effect=_monotonic):
+            with patch("copilot_core.webhook_delivery.time.sleep", side_effect=_sleep):
+                queue = WebhookDeliveryQueue(
+                    send_func=_send,
+                    worker_count=1,
+                    max_queue_size=8,
+                    destination_key_func=lambda _env: "dest-1",
+                    destination_rate_limit_per_second=10.0,
+                    destination_rate_limit_burst=1,
+                )
+                queue.start()
+
+                assert queue.enqueue({"type": "a", "data": {}}) is True
+                assert queue.enqueue({"type": "b", "data": {}}) is True
+
+                queue.stop(drain_timeout=1.0)
+
+                assert len(sent_at) == 2
+                assert sent_at[1] > sent_at[0]
+
+                stats = queue._get_stats_snapshot()
+                assert stats["rate_limited_total"] >= 1

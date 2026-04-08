@@ -33,6 +33,15 @@ QUIET_START = int(os.environ.get("QUIET_HOUR_START", "23"))
 QUIET_END = int(os.environ.get("QUIET_HOUR_END", "7"))
 
 
+def _safe_tz_offset() -> int:
+    """Get TZ_OFFSET from env with bounds check (-12..+14)."""
+    try:
+        offset = int(os.environ.get("TZ_OFFSET", "1"))
+    except (ValueError, TypeError):
+        offset = 1
+    return max(-12, min(14, offset))
+
+
 class ProactiveContextEngine:
     """Generate context-aware suggestions on zone entry.
 
@@ -40,6 +49,9 @@ class ProactiveContextEngine:
     dismissals, and household context.  Suggestions are templates
     that can be delivered via TTS, persistent notification, or chat.
     """
+
+    # Context entries expire after this many seconds
+    CONTEXT_TTL_SECONDS = 1800  # 30 min
 
     def __init__(self, media_zone_manager=None, mood_service=None,
                  household_profile=None, conversation_memory=None,
@@ -59,7 +71,47 @@ class ProactiveContextEngine:
         self._dismissed: Dict[str, set] = {}
         # Cooldown for presence triggers per person (prevent rapid-fire)
         self._presence_cooldowns: Dict[str, float] = {}
+        # Contextual signals from other subsystems (anomaly, pattern, etc.)
+        self._context_store: Dict[str, List[Dict[str, Any]]] = {}
         _LOGGER.info("ProactiveContextEngine initialized")
+
+    # ------------------------------------------------------------------
+    # Context ingestion (v14.1.0)
+    # ------------------------------------------------------------------
+
+    def add_context(self, context_type: str, data: Dict[str, Any]) -> None:
+        """Ingest a contextual signal from another subsystem.
+
+        Signals are stored with a timestamp and expire after
+        ``CONTEXT_TTL_SECONDS``.  They are consumed by suggestion
+        generators to produce more relevant recommendations.
+
+        Parameters
+        ----------
+        context_type : str
+            Category of context, e.g. ``"anomaly"``, ``"pattern"``.
+        data : dict
+            Arbitrary payload describing the signal.
+        """
+        now = time.time()
+        entry = {"ts": now, **data}
+        with self._lock:
+            bucket = self._context_store.setdefault(context_type, [])
+            bucket.append(entry)
+            # Evict expired entries
+            cutoff = now - self.CONTEXT_TTL_SECONDS
+            self._context_store[context_type] = [
+                e for e in bucket if e["ts"] >= cutoff
+            ]
+        _LOGGER.debug("Context added: %s (%s)", context_type, data.get("entity_id", "?"))
+
+    def get_active_context(self, context_type: str) -> List[Dict[str, Any]]:
+        """Return non-expired context entries of the given type."""
+        now = time.time()
+        cutoff = now - self.CONTEXT_TTL_SECONDS
+        with self._lock:
+            bucket = self._context_store.get(context_type, [])
+            return [e for e in bucket if e["ts"] >= cutoff]
 
     # ------------------------------------------------------------------
     # Main entry point
@@ -87,7 +139,7 @@ class ProactiveContextEngine:
         # Check quiet hours
         from datetime import datetime, timezone
         now = datetime.now(timezone.utc)
-        local_hour = (now.hour + int(os.environ.get("TZ_OFFSET", "1"))) % 24
+        local_hour = (now.hour + _safe_tz_offset()) % 24
         if QUIET_START <= 23 and (local_hour >= QUIET_START or local_hour < QUIET_END):
             return []
 
@@ -113,7 +165,7 @@ class ProactiveContextEngine:
                 media_state = self._media_mgr.get_zone_media_state(zone_id)
                 ctx["media_state"] = media_state
             except Exception:
-                pass
+                _LOGGER.debug("Failed to get media state for zone %s", zone_id, exc_info=True)
 
         # Get mood for zone
         if self._mood_svc:
@@ -121,7 +173,7 @@ class ProactiveContextEngine:
                 mood = self._mood_svc.get_zone_mood(zone_id)
                 ctx["mood"] = mood
             except Exception:
-                pass
+                _LOGGER.debug("Failed to get mood for zone %s", zone_id, exc_info=True)
 
         # Get household context
         if self._household:
@@ -129,19 +181,103 @@ class ProactiveContextEngine:
                 ctx["household"] = self._household.to_dict()
                 ctx["children_home"] = self._household.is_any_child_home()
             except Exception:
-                pass
+                _LOGGER.debug("Failed to get household context", exc_info=True)
 
         # Generate suggestions
         suggestions = []
         suggestions.extend(self._media_suggestions(ctx))
         suggestions.extend(self._comfort_suggestions(ctx))
         suggestions.extend(self._routine_suggestions(ctx))
+        suggestions.extend(self._anomaly_suggestions(ctx))
 
         # Filter dismissed types
         person_dismissed = self._dismissed.get(person_id, set())
         suggestions = [s for s in suggestions
                        if s.get("type") not in person_dismissed]
 
+        return suggestions
+
+    # ------------------------------------------------------------------
+    # Mood-triggered suggestions  (v10.5.0)
+    # ------------------------------------------------------------------
+
+    # Minimum confidence delta to trigger mood-based suggestions
+    MOOD_DELTA_THRESHOLD = 0.15
+
+    def evaluate_mood_trigger(
+        self, new_mood: str, confidence: float,
+        previous_mood: str = "", previous_confidence: float = 0.0,
+        zone_id: str = "",
+    ) -> List[Dict[str, Any]]:
+        """Generate suggestions when the dominant mood changes significantly.
+
+        Only triggers when the confidence delta exceeds
+        ``MOOD_DELTA_THRESHOLD`` to avoid noisy transitions.
+
+        Returns a list of suggestion dicts (may be empty).
+        """
+        delta = abs(confidence - previous_confidence)
+        if delta < self.MOOD_DELTA_THRESHOLD and new_mood == previous_mood:
+            return []
+
+        # Check quiet hours
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc)
+        local_hour = (now.hour + _safe_tz_offset()) % 24
+        if QUIET_START <= 23 and (local_hour >= QUIET_START or local_hour < QUIET_END):
+            return []
+
+        suggestions: List[Dict[str, Any]] = []
+
+        # Comfort drop → suggest adjustment
+        if new_mood in ("alert", "recovery") and previous_mood in ("relax", "social"):
+            suggestions.append({
+                "type": "proactive_mood",
+                "subtype": "comfort_recovery",
+                "priority": "medium",
+                "message": (
+                    f"Die Stimmung hat sich von '{previous_mood}' zu '{new_mood}' "
+                    f"veraendert. Soll ich den Komfort anpassen?"
+                ),
+                "mood_from": previous_mood,
+                "mood_to": new_mood,
+                "confidence": confidence,
+                "zone_id": zone_id,
+                "dismissible": True,
+            })
+
+        # Sleep transition → suggest bedtime routine
+        if new_mood == "sleep" and previous_mood != "sleep":
+            suggestions.append({
+                "type": "proactive_mood",
+                "subtype": "bedtime_transition",
+                "priority": "low",
+                "message": "Die Stimmung wechselt zu Schlaf. Soll ich die Schlafenszeit-Routine starten?",
+                "mood_from": previous_mood,
+                "mood_to": new_mood,
+                "confidence": confidence,
+                "zone_id": zone_id,
+                "dismissible": True,
+            })
+
+        # Focus mode → reduce distractions
+        if new_mood == "focus" and previous_mood != "focus":
+            suggestions.append({
+                "type": "proactive_mood",
+                "subtype": "focus_mode",
+                "priority": "low",
+                "message": "Konzentrationsmodus erkannt. Soll ich Benachrichtigungen stummschalten?",
+                "mood_from": previous_mood,
+                "mood_to": new_mood,
+                "confidence": confidence,
+                "zone_id": zone_id,
+                "dismissible": True,
+            })
+
+        _LOGGER.info(
+            "Mood trigger: %s→%s (delta=%.2f), %d suggestions",
+            previous_mood, new_mood, delta, len(suggestions),
+        )
         return suggestions
 
     # ------------------------------------------------------------------
@@ -226,6 +362,57 @@ class ProactiveContextEngine:
                 "message": "Guten Morgen! Soll ich die Morgenroutine starten?",
                 "action": {"scene": "scene.morning_routine"},
                 "zone_id": zone,
+                "dismissible": True,
+            })
+
+        return suggestions
+
+    # ------------------------------------------------------------------
+    # Anomaly-based suggestions  (v14.1.0)
+    # ------------------------------------------------------------------
+
+    def _anomaly_suggestions(self, ctx: dict) -> List[Dict[str, Any]]:
+        """Generate suggestions based on recent anomaly context."""
+        suggestions: List[Dict[str, Any]] = []
+        anomalies = self.get_active_context("anomaly")
+        if not anomalies:
+            return suggestions
+
+        zone = ctx.get("zone_id", "")
+
+        # Group by severity
+        warnings = [a for a in anomalies if a.get("severity") == "warning"]
+        criticals = [a for a in anomalies if a.get("severity") == "critical"]
+
+        if criticals:
+            entities = ", ".join(
+                a.get("entity_id", "?").split(".")[-1] for a in criticals[:3]
+            )
+            suggestions.append({
+                "type": "anomaly_alert",
+                "priority": "high",
+                "message": (
+                    f"Kritische Anomalien erkannt bei: {entities}. "
+                    f"Soll ich die betroffenen Geraete pruefen?"
+                ),
+                "zone_id": zone,
+                "anomaly_count": len(criticals),
+                "dismissible": True,
+            })
+
+        if warnings and not criticals:
+            entities = ", ".join(
+                a.get("entity_id", "?").split(".")[-1] for a in warnings[:3]
+            )
+            suggestions.append({
+                "type": "anomaly_notice",
+                "priority": "low",
+                "message": (
+                    f"Ungewoehnliches Verhalten bei: {entities}. "
+                    f"Moechtest du Details sehen?"
+                ),
+                "zone_id": zone,
+                "anomaly_count": len(warnings),
                 "dismissible": True,
             })
 
@@ -345,7 +532,7 @@ class ProactiveContextEngine:
         # --- Quiet-hours gate ------------------------------------------------
         from datetime import datetime, timezone
         now = datetime.now(timezone.utc)
-        local_hour = (now.hour + int(os.environ.get("TZ_OFFSET", "1"))) % 24
+        local_hour = (now.hour + _safe_tz_offset()) % 24
         if QUIET_START <= 23 and (local_hour >= QUIET_START or local_hour < QUIET_END):
             return []
 
@@ -406,7 +593,7 @@ class ProactiveContextEngine:
                 if member:
                     name = member.name
             except Exception:
-                pass
+                _LOGGER.debug("Failed to resolve member name for %s", person_id, exc_info=True)
 
         # Gather contextual nuggets
         context_parts: List[str] = []
@@ -420,7 +607,7 @@ class ProactiveContextEngine:
                     types_str = ", ".join(today_waste)
                     context_parts.append(f"Heute ist Muellabfuhr ({types_str}).")
             except Exception:
-                pass
+                _LOGGER.debug("Failed to get waste status for greeting", exc_info=True)
 
         # Birthday today?
         if self._birthday_svc:
@@ -431,7 +618,7 @@ class ProactiveContextEngine:
                     bday_name = bday.get("name", "jemand")
                     context_parts.append(f"{bday_name} hat heute Geburtstag!")
             except Exception:
-                pass
+                _LOGGER.debug("Failed to get birthday status for greeting", exc_info=True)
 
         # Time-of-day flavour
         if 6 <= local_hour <= 10:

@@ -53,8 +53,14 @@ class ModuleRegistry:
     def __init__(self, db_path: str | None = None) -> None:
         self._db_path = db_path or DB_PATH
         self._lock = threading.Lock()
+        self._bus = None  # IntegrationBus (optional, wired via set_bus)
         self._init_db()
         _LOGGER.info("ModuleRegistry initialized at %s", self._db_path)
+
+    def set_bus(self, bus) -> None:
+        """Wire the integration bus for state-change events."""
+        self._bus = bus
+        _LOGGER.info("IntegrationBus wired to ModuleRegistry")
 
     # ------------------------------------------------------------------
     # Singleton access
@@ -83,7 +89,7 @@ class ModuleRegistry:
     # ------------------------------------------------------------------
 
     def _init_db(self) -> None:
-        """Create the module_states table if it does not exist."""
+        """Create the module_states and zone_module_states tables."""
         with self._lock:
             conn = sqlite3.connect(self._db_path)
             try:
@@ -92,6 +98,15 @@ class ModuleRegistry:
                         module_id   TEXT PRIMARY KEY,
                         state       TEXT NOT NULL DEFAULT 'active',
                         updated_at  TEXT NOT NULL
+                    )
+                """)
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS zone_module_states (
+                        zone_id     TEXT NOT NULL,
+                        module_id   TEXT NOT NULL,
+                        state       TEXT NOT NULL DEFAULT 'active',
+                        updated_at  TEXT NOT NULL,
+                        PRIMARY KEY (zone_id, module_id)
                     )
                 """)
                 conn.commit()
@@ -165,6 +180,15 @@ class ModuleRegistry:
                 )
                 conn.commit()
                 _LOGGER.info("Module %s -> %s", module_id, state)
+                # Publish state change to integration bus
+                if self._bus:
+                    try:
+                        self._bus.publish("module.state_changed", {
+                            "module_id": module_id,
+                            "new_state": state,
+                        }, source="module_registry")
+                    except Exception:
+                        _LOGGER.exception("Failed to publish module.state_changed")
                 return True
             except sqlite3.Error:
                 _LOGGER.exception("Failed to persist state for %s", module_id)
@@ -254,3 +278,121 @@ class ModuleRegistry:
         if src_state == "active" and tgt_state == "active":
             return "auto_apply"
         return "manual"
+
+    # ------------------------------------------------------------------
+    # Per-zone module state management (v14.2.0)
+    # ------------------------------------------------------------------
+
+    def get_zone_state(self, zone_id: str, module_id: str) -> str:
+        """Return per-zone module state, falling back to global state.
+
+        A zone can override the global module state. If no zone-level
+        override exists, the global state is returned.
+        """
+        with self._lock:
+            conn = self._get_connection()
+            try:
+                row = conn.execute(
+                    "SELECT state FROM zone_module_states WHERE zone_id = ? AND module_id = ?",
+                    (zone_id, module_id),
+                ).fetchone()
+                if row:
+                    return row[0]
+            finally:
+                conn.close()
+        # Fall back to global state
+        return self.get_state(module_id)
+
+    def set_zone_state(self, zone_id: str, module_id: str, state: str) -> bool:
+        """Set per-zone module state override.
+
+        Args:
+            zone_id: Zone identifier.
+            module_id: Module identifier (e.g. "licht", "musik").
+            state: One of "active", "learning", "off".
+
+        Returns:
+            True if persisted, False if state is invalid.
+        """
+        if state not in VALID_STATES:
+            _LOGGER.warning(
+                "Rejected invalid zone state %r for %s/%s",
+                state, zone_id, module_id,
+            )
+            return False
+
+        now = self._now_iso()
+        with self._lock:
+            conn = self._get_connection()
+            try:
+                conn.execute(
+                    """
+                    INSERT INTO zone_module_states (zone_id, module_id, state, updated_at)
+                    VALUES (?, ?, ?, ?)
+                    ON CONFLICT(zone_id, module_id) DO UPDATE
+                        SET state = excluded.state,
+                            updated_at = excluded.updated_at
+                    """,
+                    (zone_id, module_id, state, now),
+                )
+                conn.commit()
+                _LOGGER.info("Zone %s module %s -> %s", zone_id, module_id, state)
+                if self._bus:
+                    try:
+                        self._bus.publish("module.zone_state_changed", {
+                            "zone_id": zone_id,
+                            "module_id": module_id,
+                            "new_state": state,
+                        }, source="module_registry")
+                    except Exception:
+                        _LOGGER.exception("Failed to publish module.zone_state_changed")
+                return True
+            except sqlite3.Error:
+                _LOGGER.exception(
+                    "Failed to persist zone state for %s/%s", zone_id, module_id,
+                )
+                return False
+            finally:
+                conn.close()
+
+    def get_zone_states(self, zone_id: str) -> Dict[str, str]:
+        """Return all per-zone module state overrides for a zone."""
+        with self._lock:
+            conn = self._get_connection()
+            try:
+                rows = conn.execute(
+                    "SELECT module_id, state FROM zone_module_states WHERE zone_id = ? ORDER BY module_id",
+                    (zone_id,),
+                ).fetchall()
+                return {module_id: state for module_id, state in rows}
+            finally:
+                conn.close()
+
+    def get_all_zone_states(self) -> Dict[str, Dict[str, str]]:
+        """Return all zone-module state overrides grouped by zone."""
+        with self._lock:
+            conn = self._get_connection()
+            try:
+                rows = conn.execute(
+                    "SELECT zone_id, module_id, state FROM zone_module_states ORDER BY zone_id, module_id"
+                ).fetchall()
+                result: Dict[str, Dict[str, str]] = {}
+                for zone_id, module_id, state in rows:
+                    if zone_id not in result:
+                        result[zone_id] = {}
+                    result[zone_id][module_id] = state
+                return result
+            finally:
+                conn.close()
+
+    def should_auto_apply_zone(
+        self, zone_id: str, source_module: str, target_module: str,
+    ) -> bool:
+        """Double-safety check at zone level.
+
+        Returns True only if BOTH source and target modules are "active"
+        in the specified zone (using per-zone state with global fallback).
+        """
+        src = self.get_zone_state(zone_id, source_module)
+        tgt = self.get_zone_state(zone_id, target_module)
+        return src == "active" and tgt == "active"

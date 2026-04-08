@@ -10,6 +10,21 @@ Used to contextualize automation suggestions and improve relevance.
 """
 
 from .service import MoodService
-from .api import mood_bp, init_mood_api
+from .live_engine import (
+    LiveMoodEngine,
+    LiveMoodState,
+    MoodScore3D,
+    MoodDimension,
+    MoodTransition,
+    get_live_mood_engine
+)
 
-__all__ = ["MoodService", "mood_bp", "init_mood_api"]
+__all__ = [
+    "MoodService",
+    "LiveMoodEngine",
+    "LiveMoodState",
+    "MoodScore3D",
+    "MoodDimension",
+    "MoodTransition",
+    "get_live_mood_engine"
+]

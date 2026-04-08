@@ -311,33 +311,39 @@ def mine_ab_rules(
     for dt_sec in config.windows:
         _LOGGER.debug("Mining rules for time window: %d seconds", dt_sec)
         dt_ms = dt_sec * 1000
-        
+
+        # Pre-calculate baseline P(B) for all B candidates (depends only on
+        # b_key and dt_sec, not on a_key — avoids redundant recalculation).
+        baseline_cache: dict[str, float] = {}
+        for b_key in b_candidates:
+            baseline_cache[b_key] = _calculate_baseline_pb(b_key, events, dt_sec)
+
         for a_key in a_candidates:
             for b_key in b_candidates:
                 # Apply self-rule filters
                 if config.exclude_self_rules and a_key == b_key:
                     continue
-                
+
                 if config.exclude_same_entity:
                     a_entity = a_key.split(':')[0] if ':' in a_key else a_key
                     b_entity = b_key.split(':')[0] if ':' in b_key else b_key
                     if a_entity == b_entity:
                         continue
-                
+
                 # Count hits and evidence
                 n_ab, hit_examples, miss_examples = _count_ab_hits(
                     a_key, b_key, dt_ms, indices
                 )
-                
+
                 n_a = len(indices.get(a_key, []))
                 n_b = len(indices.get(b_key, []))
-                
+
                 # Apply minimum thresholds
                 if n_ab < config.min_hits:
                     continue
-                
+
                 # Calculate quality metrics
-                baseline_p_b = _calculate_baseline_pb(b_key, events, dt_sec)
+                baseline_p_b = baseline_cache[b_key]
                 quality = _calculate_rule_quality(n_a, n_ab, baseline_p_b)
                 
                 # Apply quality filters
@@ -396,15 +402,19 @@ def mine_with_context_stratification(
     
     _LOGGER.info("Mining with context stratification: %s", config.context_features)
     
-    # Group events by context
+    # Group events by context — events WITH context go to their bucket,
+    # events WITHOUT context go to the global pool.  Previously all events
+    # went to global which contaminated global rules with context-specific
+    # data and inflated the baseline.
     context_groups: dict[str, EventStreamType] = defaultdict(list)
     global_events = []
-    
+
     for event in events:
         context_bucket = _extract_context(event, config.context_features)
         if context_bucket:
             context_groups[context_bucket].append(event)
-        global_events.append(event)  # Also include in global
+        else:
+            global_events.append(event)
     
     # Mine global rules
     global_rules = mine_ab_rules(global_events, config)
@@ -416,14 +426,26 @@ def mine_with_context_stratification(
         
         _LOGGER.debug("Mining context '%s' with %d events", context, len(ctx_events))
         ctx_rules = mine_ab_rules(ctx_events, config)
-        
-        # TODO: Attach context variants to global rules in v0.2
-        # For v0.1, we just mine separately
-        for rule in ctx_rules:
-            rule.A = f"{rule.A}@{context}"
-            rule.B = f"{rule.B}@{context}"
-        
-        global_rules.extend(ctx_rules)
+
+        # Attach context rules as variants of matching global rules.
+        # If a global rule A→B exists and a context-specific A→B was mined,
+        # store it as a context_variant on the global rule instead of
+        # creating a separate top-level rule.
+        # Unmatched context rules are added as standalone with @context suffix.
+        global_rule_map = {(r.A, r.B): r for r in global_rules}
+
+        for ctx_rule in ctx_rules:
+            global_match = global_rule_map.get((ctx_rule.A, ctx_rule.B))
+            if global_match is not None:
+                # Attach as context variant on the matching global rule
+                if global_match.context_variants is None:
+                    global_match.context_variants = {}
+                global_match.context_variants[context] = ctx_rule
+            else:
+                # No matching global rule — add as standalone with context tag
+                ctx_rule.A = f"{ctx_rule.A}@{context}"
+                ctx_rule.B = f"{ctx_rule.B}@{context}"
+                global_rules.append(ctx_rule)
     
     # Re-sort and limit
     global_rules.sort(key=lambda r: r.score(), reverse=True)

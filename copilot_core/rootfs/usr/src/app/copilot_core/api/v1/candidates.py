@@ -3,11 +3,15 @@ from hashlib import sha256
 from flask import Blueprint, current_app, jsonify, request
 
 from copilot_core.brain_graph.provider import get_graph_service
-from copilot_core.storage.candidates import CandidateStore
+from copilot_core.storage.candidates import CandidateStore, rank_score, generate_explanation
 
 bp = Blueprint("candidates", __name__, url_prefix="/candidates")
 
 from copilot_core.api.security import validate_token as _validate_token
+
+import logging
+
+_LOGGER = logging.getLogger(__name__)
 
 
 @bp.before_request
@@ -51,7 +55,13 @@ def list_candidates():
         limit = 50
 
     kind = request.args.get("kind")
-    items = _store().list(limit=limit, kind=kind)
+
+    # Use ranked listing when ?ranked=true (default: true for better UX)
+    ranked = request.args.get("ranked", "true").lower() in ("true", "1", "yes")
+    if ranked:
+        items = _store().list_ranked(limit=limit, kind=kind, with_explanation=True)
+    else:
+        items = _store().list(limit=limit, kind=kind)
     return jsonify({"ok": True, "count": len(items), "items": items})
 
 
@@ -60,13 +70,89 @@ def get_candidate(candidate_id: str):
     it = _store().get(candidate_id)
     if not it:
         return jsonify({"ok": False, "error": "not_found"}), 404
-    return jsonify({"ok": True, "candidate": it})
+    # Enrich with score and explanation
+    enriched = dict(it)
+    try:
+        enriched["rank_score"] = rank_score(enriched)
+        enriched["explanation"] = generate_explanation(enriched)
+    except Exception:
+        pass
+    return jsonify({"ok": True, "candidate": enriched})
 
 
 @bp.delete("/<candidate_id>")
 def delete_candidate(candidate_id: str):
     ok = _store().delete(candidate_id)
     return jsonify({"ok": ok})
+
+
+@bp.post("/<candidate_id>/feedback")
+def candidate_feedback(candidate_id: str):
+    """Record accept/reject/snooze feedback for a candidate.
+
+    Body: {"action": "accepted"|"rejected"|"snoozed"}
+
+    If the candidate has ``data.from`` and ``data.to`` fields (habitus rule
+    candidates), the feedback is forwarded to the HabitusFeedbackStore so
+    future mining runs reinforce or suppress the pattern.
+    """
+    payload = request.get_json(silent=True) or {}
+    action = payload.get("action", "")
+    if action not in ("accepted", "rejected", "snoozed"):
+        return jsonify({"ok": False, "error": "action must be accepted, rejected, or snoozed"}), 400
+
+    candidate = _store().get(candidate_id)
+    if not candidate:
+        return jsonify({"ok": False, "error": "not_found"}), 404
+
+    # Update candidate status in store
+    candidate["attributes"] = candidate.get("attributes") or {}
+    candidate["attributes"]["feedback_action"] = action
+    _store().upsert(candidate)
+
+    # Forward to habitus feedback store if this is a rule-based candidate
+    _forward_habitus_feedback(candidate, action)
+
+    return jsonify({"ok": True, "action": action, "candidate_id": candidate_id})
+
+
+def _forward_habitus_feedback(candidate: dict, action: str) -> None:
+    """Forward candidate feedback to the habitus miner feedback store."""
+    try:
+        attrs = candidate.get("attributes") or {}
+        data = attrs if isinstance(attrs, dict) else {}
+
+        # Try to derive pattern key from candidate data
+        # Candidates from graph_candidates have data.from / data.to
+        from_id = data.get("from", "")
+        to_id = data.get("to", "")
+
+        # Also check nested 'data' key (graph_edge_candidate format)
+        if not from_id and isinstance(candidate.get("attributes"), dict):
+            nested = candidate["attributes"]
+            from_id = nested.get("from", "")
+            to_id = nested.get("to", "")
+
+        if not from_id or not to_id:
+            # Not a rule-based candidate — skip silently
+            return
+
+        pattern_key = f"{from_id}->{to_id}"
+
+        # Lazy-import to avoid circular dependency
+        from copilot_core.habitus_miner.feedback_store import HabitusFeedbackStore
+        from pathlib import Path
+
+        cfg = current_app.config.get("COPILOT_CFG")
+        if not cfg:
+            return
+
+        storage_dir = Path(cfg.data_dir) / "habitus_miner"
+        store = HabitusFeedbackStore(storage_dir)
+        store.record_feedback(pattern_key, action)
+        _LOGGER.info("Forwarded candidate feedback to habitus: %s -> %s", pattern_key, action)
+    except Exception:
+        _LOGGER.debug("Failed to forward candidate feedback to habitus", exc_info=True)
 
 
 @bp.get("/stats")
@@ -160,5 +246,18 @@ def graph_candidates():
                 },
             }
         )
+
+    # Enrich with ranking scores and explanations, then sort
+    for item in items:
+        try:
+            # Map graph data into attributes format for rank_score compatibility
+            data = item.get("data") or {}
+            item["attributes"] = data
+            item["rank_score"] = rank_score(item, all_candidates=items)
+            item["explanation"] = generate_explanation(item)
+        except Exception:
+            item["rank_score"] = 0.0
+            item["explanation"] = ""
+    items.sort(key=lambda c: c.get("rank_score", 0.0), reverse=True)
 
     return jsonify({"ok": True, "count": len(items), "items": items, "types": sorted(list(allow_types))})

@@ -72,7 +72,7 @@ def test_mining_config_defaults():
     assert config.windows == [30, 120, 600, 3600]
     assert config.min_support_A == 20
     assert config.min_hits == 10
-    assert config.min_confidence == 0.5
+    assert config.min_confidence == 0.7
     assert config.exclude_self_rules is True
 
 
@@ -127,7 +127,7 @@ def test_service_ha_event_normalization():
         assert norm_event is not None
         assert norm_event.entity_id == "light.bedroom"
         assert norm_event.domain == "light"
-        assert norm_event.transition == ":on"
+        assert norm_event.transition == "on"
         assert norm_event.key == "light.bedroom:on"
         assert norm_event.context["source"] == "manual"
 

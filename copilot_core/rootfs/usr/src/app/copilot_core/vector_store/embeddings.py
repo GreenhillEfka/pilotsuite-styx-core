@@ -17,7 +17,7 @@ import logging
 import math
 import os
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Optional
 
 _LOGGER = logging.getLogger(__name__)
@@ -86,7 +86,7 @@ class EmbeddingResult:
     source: str  # "local" or "ollama"
     model: str
     cached: bool = False
-    generated_at: str = field(default_factory=lambda: datetime.utcnow().isoformat())
+    generated_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 
 class EmbeddingEngine:

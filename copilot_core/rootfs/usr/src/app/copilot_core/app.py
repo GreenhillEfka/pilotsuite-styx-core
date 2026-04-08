@@ -9,6 +9,7 @@ from flask import Flask, jsonify, request
 
 from copilot_core.api.v1.blueprint import api_v1
 from copilot_core.api.security import validate_token, is_auth_required
+from copilot_core.api.middleware.security import init_security_middleware
 from copilot_core.versioning import get_runtime_version
 
 
@@ -142,6 +143,9 @@ def create_app() -> Flask:
     # Attach config to app (simple, explicit)
     app.config["COPILOT_CFG"] = cfg
 
+    # Initialize security middleware (rate limiting, security headers, logging)
+    init_security_middleware(app)
+
     # Register API modules
     app.register_blueprint(api_v1)
 
@@ -151,6 +155,85 @@ def create_app() -> Flask:
         app.register_blueprint(onyx_bridge_bp)
     except Exception:
         logging.getLogger(__name__).exception("Failed to register Onyx bridge blueprint")
+
+    # Anomaly Detection API endpoints (/api/v1/anomaly/*)
+    try:
+        from copilot_core.api.v1.anomaly import anomaly_bp
+        app.register_blueprint(anomaly_bp, url_prefix="/api/v1")
+        logging.getLogger(__name__).info("Anomaly Detection API registered")
+    except Exception:
+        logging.getLogger(__name__).exception("Failed to register Anomaly Detection API blueprint")
+
+    # Multi-Home Synchronization API endpoints (/api/v1/multihome/*)
+    try:
+        from copilot_core.api.v1.multihome import bp as multihome_bp
+        app.register_blueprint(multihome_bp, url_prefix="/api/v1/multihome")
+        logging.getLogger(__name__).info("Multi-Home Synchronization API registered")
+    except Exception:
+        logging.getLogger(__name__).exception("Failed to register Multi-Home Synchronization API blueprint")
+
+    # Module Control API endpoints (/api/v1/modules/*)
+    try:
+        from copilot_core.api.v1.module_control import module_control_bp
+        app.register_blueprint(module_control_bp)
+        logging.getLogger(__name__).info("Module Control API registered")
+    except Exception:
+        logging.getLogger(__name__).exception("Failed to register Module Control API blueprint")
+
+    # Security Configuration API endpoints (/api/v1/security/*)
+    try:
+        from copilot_core.api.v1.security import bp as security_bp
+        app.register_blueprint(security_bp)
+        logging.getLogger(__name__).info("Security Configuration API registered")
+    except Exception:
+        logging.getLogger(__name__).exception("Failed to register Security Configuration API blueprint")
+
+    # Predictive Automation API endpoints (/api/v1/predictive/*)
+    try:
+        from copilot_core.api.v1.predictive import predictive_bp
+        app.register_blueprint(predictive_bp)
+        logging.getLogger(__name__).info("Predictive Automation API registered")
+    except Exception:
+        logging.getLogger(__name__).exception("Failed to register Predictive Automation API blueprint")
+
+    # Rate Limit Configuration API is registered via api_v1 blueprint
+
+    # MCP REST API endpoints (/api/v1/mcp/*)
+    try:
+        from copilot_core.api.v1.mcp import bp as mcp_bp
+        app.register_blueprint(mcp_bp)
+        logging.getLogger(__name__).info("MCP REST API registered")
+    except Exception:
+        logging.getLogger(__name__).exception("Failed to register MCP REST API blueprint")
+    # Endpoints: /api/v1/rate-limit/*
+
+    # Metrics API endpoints (/api/v1/metrics/*)
+    # Registered via copilot_core.api.v1.blueprint (metrics_bp)
+    logging.getLogger(__name__).info("Metrics API registered (via api_v1 blueprint)")
+
+    # RAG Search API endpoints (/api/v1/rag/*)
+    try:
+        from copilot_core.api.v1.rag import bp as rag_bp
+        app.register_blueprint(rag_bp)
+        logging.getLogger(__name__).info("RAG Search API registered (v1 Flask blueprint)")
+    except Exception:
+        logging.getLogger(__name__).exception("Failed to register RAG Search API blueprint")
+    
+    # RAG Search aiohttp-based endpoints (register Flask wrappers)
+    try:
+        from copilot_core.api.rag_search import register_rag_search_flask
+        register_rag_search_flask(app)
+        logging.getLogger(__name__).info("RAG Search API registered (aiohttp Flask wrappers)")
+    except Exception:
+        logging.getLogger(__name__).exception("Failed to register RAG Search Flask wrappers")
+
+    # Styx Chat API endpoints (/api/styx/*)
+    try:
+        from copilot_core.api.v1.styx_chat import bp as styx_chat_bp
+        app.register_blueprint(styx_chat_bp)
+        logging.getLogger(__name__).info("Styx Chat API registered")
+    except Exception:
+        logging.getLogger(__name__).exception("Failed to register Styx Chat API blueprint")
 
     # Initialize Tags API v2 (FIX: Flask Blueprint rewrite)
     from copilot_core.tags.api import init_tags_api
@@ -274,6 +357,57 @@ def create_app() -> Flask:
                             "/api/v1/voice_context"
                         ]
                     },
+                    "anomaly_detection": {
+                        "enabled": True,
+                        "version": "1.0.0",
+                        "description": "ML-based anomaly detection for sensor patterns using Isolation Forest",
+                        "endpoints": [
+                            "/api/v1/anomaly/detect",
+                            "/api/v1/anomaly/history",
+                            "/api/v1/anomaly/sensor/:sensor_id/health",
+                            "/api/v1/anomaly/train",
+                            "/api/v1/anomaly/model/status",
+                            "/api/v1/anomaly/model/save",
+                            "/api/v1/anomaly/model/load",
+                            "/api/v1/anomaly/model/versions",
+                            "/api/v1/anomaly/compare",
+                            "/api/v1/anomaly/store/stats"
+                        ],
+                        "features": [
+                            "Isolation Forest anomaly detection",
+                            "Incremental learning (partial_fit)",
+                            "Per-sensor anomaly scoring",
+                            "Critical alert integration",
+                            "Model persistence and versioning"
+                        ]
+                    },
+                    "multihome": {
+                        "enabled": True,
+                        "version": "1.0.0",
+                        "description": "Multi-home synchronization for multiple locations (Hauptwohnung, Ferienhaus, Büro)",
+                        "endpoints": [
+                            "/api/v1/multihome/homes",
+                            "/api/v1/multihome/homes/<home_id>",
+                            "/api/v1/multihome/config/diff/<source>/<target>",
+                            "/api/v1/multihome/config/sync",
+                            "/api/v1/multihome/state/diff/<home1>/<home2>",
+                            "/api/v1/multihome/state/sync",
+                            "/api/v1/multihome/location/sync",
+                            "/api/v1/multihome/climate/preheat",
+                            "/api/v1/multihome/conflicts",
+                            "/api/v1/multihome/conflicts/<id>/resolve",
+                            "/api/v1/multihome/status",
+                            "/api/v1/multihome/operations"
+                        ],
+                        "features": [
+                            "Secure synchronization between multiple homes",
+                            "Location-aware automations (e.g., Ferienhaus vorheizen)",
+                            "Encrypted communication between instances",
+                            "Conflict resolution (last_write_wins, primary_wins, merge, manual)",
+                            "Configuration and state synchronization",
+                            "Climate and lighting scene sync"
+                        ]
+                    },
                 },
             }
         )
@@ -294,5 +428,57 @@ def create_app() -> Flask:
             }), 401
 
         return None
+
+    return app
+
+
+def create_full_app(config: dict | None = None) -> Flask:
+    """Create a Flask app with ALL blueprints registered (like production).
+
+    Unlike ``create_app()`` which only registers the nested ``api_v1`` plus a
+    handful of standalone blueprints, this factory mirrors ``main.py`` by
+    calling ``init_services()`` and ``register_blueprints()`` from
+    ``core_setup.py``.  This ensures integration tests cover the full
+    production endpoint surface.
+
+    Args:
+        config: Optional configuration dict (forwarded to ``init_services``).
+
+    Returns:
+        Flask application with all services and blueprints wired.
+    """
+    import asyncio
+    from copilot_core.core_setup import init_services, register_blueprints
+
+    cfg = _build_config()
+    _setup_logging(cfg.log_level)
+
+    app = Flask(__name__)
+    app.config["COPILOT_CFG"] = cfg
+    app.config["TESTING"] = True
+
+    # Initialize security middleware
+    init_security_middleware(app)
+
+    # Initialize services (async → sync bridge)
+    try:
+        services = asyncio.run(init_services(config=config or {}))
+    except Exception:
+        logging.getLogger(__name__).exception("init_services failed in full test app")
+        services = {}
+
+    # Register all production blueprints
+    try:
+        register_blueprints(app, services)
+    except Exception:
+        logging.getLogger(__name__).exception("register_blueprints failed in full test app")
+
+    @app.get("/health")
+    def health():
+        return jsonify({"ok": True, "time": _now_iso()})
+
+    @app.get("/version")
+    def version():
+        return jsonify({"version": cfg.version, "time": _now_iso()})
 
     return app

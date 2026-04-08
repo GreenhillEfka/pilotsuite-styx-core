@@ -13,19 +13,46 @@ Endpoints:
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 from flask import Blueprint, jsonify, request
 
 from copilot_core.neurons.manager import get_neuron_manager, NeuronManager, NeuralPipelineResult
+from copilot_core.neurons.mood_history import get_mood_history_store
 
 _LOGGER = logging.getLogger(__name__)
 
 # Create blueprint
 bp = Blueprint("neurons", __name__, url_prefix="/neurons")
 
-from copilot_core.api.security import validate_token as _validate_token
+from copilot_core.api.security import validate_token as _validate_token, require_admin_token
+from copilot_core.api.v1 import neuron_graph as neuron_graph_module
+from copilot_core.api.v1.websocket_neuron import get_neuron_ws_handler
+from copilot_core.api.v1.neuron_graph import get_neuron_connections, find_paths
+
+# Neuron ID validation: lowercase letters, underscores, dots only
+# Format: prefix.name (e.g., "context.presence", "mood.focus")
+NEURON_ID_PATTERN = re.compile(r'^[a-z_]+(\.[a-z_]+)?$')
+NEURON_ID_MAX_LENGTH = 100
+
+# Server-side cap for mood history queries
+MOOD_HISTORY_MAX_LIMIT = 100
+
+
+def validate_neuron_id(neuron_id: str) -> bool:
+    """Validate neuron ID format.
+    
+    Args:
+        neuron_id: Neuron identifier to validate
+        
+    Returns:
+        True if valid, False otherwise
+    """
+    if not neuron_id or len(neuron_id) > NEURON_ID_MAX_LENGTH:
+        return False
+    return bool(NEURON_ID_PATTERN.match(neuron_id))
 
 
 @bp.before_request
@@ -87,6 +114,13 @@ def get_neuron(neuron_id: str):
             }
         }
     """
+    # Validate neuron ID format
+    if not validate_neuron_id(neuron_id):
+        return jsonify({
+            "success": False,
+            "error": "Invalid neuron_id format. Must be lowercase letters, underscores, or dots."
+        }), 400
+    
     try:
         manager = get_neuron_manager()
         
@@ -124,6 +158,8 @@ def evaluate_neurons():
             "trigger": "manual"     # Trigger source
         }
     
+    State/context overrides require admin-level authentication.
+    
     Returns:
         {
             "success": true,
@@ -144,12 +180,26 @@ def evaluate_neurons():
         # Get optional overrides from request body
         body = request.get_json(silent=True) or {}
         
-        # Apply state overrides
+        # Apply state overrides - requires admin token for state manipulation
         if "states" in body:
+            _LOGGER.info("Evaluate state override attempted from %s", request.remote_addr)
+            if not require_admin_token(request):
+                _LOGGER.warning("Unauthorized evaluate state override attempt from %s", request.remote_addr)
+                return jsonify({
+                    "success": False,
+                    "error": "Admin token required for state overrides"
+                }), 403
             manager.update_states(body["states"])
-        
-        # Apply context overrides
+
+        # Apply context overrides - requires admin token
         if "context" in body:
+            _LOGGER.info("Evaluate context override attempted from %s", request.remote_addr)
+            if not require_admin_token(request):
+                _LOGGER.warning("Unauthorized evaluate context override attempt from %s", request.remote_addr)
+                return jsonify({
+                    "success": False,
+                    "error": "Admin token required for context overrides"
+                }), 403
             manager.set_context(body["context"])
         
         # Run evaluation
@@ -180,6 +230,8 @@ def evaluate_neurons():
 def update_neuron_states():
     """Update HA states without full evaluation.
     
+    Requires admin-level authentication for state manipulation.
+    
     JSON body:
         {
             "states": {...}  # Entity ID -> state dict
@@ -189,6 +241,15 @@ def update_neuron_states():
         {"success": true, "data": {"updated": int}}
     """
     try:
+        # Require admin-level authentication for state manipulation
+        _LOGGER.info("Neuron state update attempted from %s", request.remote_addr)
+        if not require_admin_token(request):
+            _LOGGER.warning("Unauthorized neuron state update attempt from %s", request.remote_addr)
+            return jsonify({
+                "success": False,
+                "error": "Admin token required for state updates"
+            }), 403
+        
         body = request.get_json()
         if not body:
             return jsonify({
@@ -299,24 +360,43 @@ def get_mood():
 @bp.route("/mood/evaluate", methods=["POST"])
 def evaluate_mood():
     """Force mood evaluation.
-    
+
     Optional JSON body:
         {
             "states": {...},
             "context": {...}
         }
-    
+
+    State/context overrides require admin-level authentication.
+
     Returns:
         Full evaluation result with dominant mood
     """
     try:
         manager = get_neuron_manager()
-        
+
         body = request.get_json(silent=True) or {}
-        
+
+        # Apply state overrides - requires admin token for state manipulation
         if "states" in body:
+            _LOGGER.info("Mood evaluate state override attempted from %s", request.remote_addr)
+            if not require_admin_token(request):
+                _LOGGER.warning("Unauthorized mood state override attempt from %s", request.remote_addr)
+                return jsonify({
+                    "success": False,
+                    "error": "Admin token required for state overrides"
+                }), 403
             manager.update_states(body["states"])
+
+        # Apply context overrides - requires admin token
         if "context" in body:
+            _LOGGER.info("Mood evaluate context override attempted from %s", request.remote_addr)
+            if not require_admin_token(request):
+                _LOGGER.warning("Unauthorized mood context override attempt from %s", request.remote_addr)
+                return jsonify({
+                    "success": False,
+                    "error": "Admin token required for context overrides"
+                }), 403
             manager.set_context(body["context"])
         
         result = manager.evaluate()
@@ -341,35 +421,92 @@ def evaluate_mood():
 
 @bp.route("/mood/history", methods=["GET"])
 def get_mood_history():
-    """Get mood history.
-    
+    """Get mood history from persistent SQLite store.
+
     Query params:
-        limit: Number of entries (default 10)
-    
+        hours: Look-back window in hours (default 24, max 168 = 7 days)
+
     Returns:
         {
             "success": true,
             "data": {
                 "history": [...],
-                "count": int
+                "count": int,
+                "hours": int
             }
         }
     """
     try:
-        manager = get_neuron_manager()
-        limit = int(request.args.get("limit", "10"))
-        
-        history = manager._mood_history[-limit:]
-        
+        try:
+            hours = int(request.args.get("hours", "24"))
+        except (ValueError, TypeError):
+            return jsonify({
+                "success": False,
+                "error": "Invalid 'hours' parameter. Must be a positive integer."
+            }), 400
+        if hours < 1:
+            hours = 1
+        hours = min(hours, 168)  # Cap at 7 days
+
+        store = get_mood_history_store()
+        history = store.get_recent(hours=hours)
+
         return jsonify({
             "success": True,
             "data": {
                 "history": history,
-                "count": len(history)
+                "count": len(history),
+                "hours": hours,
             }
         })
     except Exception as e:
         _LOGGER.error("Error getting mood history: %s", e)
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+
+@bp.route("/mood/trend", methods=["GET"])
+def get_mood_trend():
+    """Get mood distribution/trend over a time period.
+
+    Query params:
+        hours: Look-back window in hours (default 24, max 168 = 7 days)
+
+    Returns:
+        {
+            "success": true,
+            "data": {
+                "count": int,
+                "distribution": {"relax": 5, "focus": 3, ...},
+                "dominant_mood": str,
+                "avg_confidence": float,
+                "period_hours": int
+            }
+        }
+    """
+    try:
+        try:
+            hours = int(request.args.get("hours", "24"))
+        except (ValueError, TypeError):
+            return jsonify({
+                "success": False,
+                "error": "Invalid 'hours' parameter. Must be a positive integer."
+            }), 400
+        if hours < 1:
+            hours = 1
+        hours = min(hours, 168)
+
+        store = get_mood_history_store()
+        trend = store.get_trend(hours=hours)
+
+        return jsonify({
+            "success": True,
+            "data": trend,
+        })
+    except Exception as e:
+        _LOGGER.error("Error getting mood trend: %s", e)
         return jsonify({
             "success": False,
             "error": str(e)
@@ -404,6 +541,451 @@ def get_suggestions():
             "success": False,
             "error": str(e)
         }), 500
+
+
+# =============================================================================
+# Neuron Graph Endpoints (NEW)
+# =============================================================================
+
+@bp.route("/graph", methods=["GET"])
+def get_neuron_graph_endpoint():
+    """Get complete neuron graph (nodes + edges).
+    
+    Returns:
+        {
+            "success": true,
+            "data": {
+                "nodes": [...],
+                "edges": [...],
+                "metadata": {...}
+            }
+        }
+    """
+    try:
+        graph = neuron_graph_module.get_neuron_graph()
+        
+        return jsonify({
+            "success": True,
+            "data": graph.to_dict()
+        })
+    except Exception as e:
+        _LOGGER.error("Error getting neuron graph: %s", e)
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+
+@bp.route("/<neuron_id>/stats", methods=["GET"])
+def get_neuron_stats(neuron_id: str):
+    """Get neuron statistics (fire-rate, confidence, metrics).
+    
+    Args:
+        neuron_id: Neuron ID (e.g., "context.presence", "mood.focus")
+    
+    Returns:
+        {
+            "success": true,
+            "data": {
+                "neuron_id": str,
+                "name": str,
+                "type": str,
+                "layer": int,
+                "active": bool,
+                "value": float,
+                "metrics": {
+                    "fire_rate": float,
+                    "confidence": float,
+                    "avg_value": float,
+                    "trend": str,
+                    "last_fire_time": str
+                },
+                "connections": {
+                    "incoming": int,
+                    "outgoing": int
+                }
+            }
+        }
+    """
+    # Validate neuron ID format
+    if not validate_neuron_id(neuron_id):
+        return jsonify({
+            "success": False,
+            "error": "Invalid neuron_id format. Must be lowercase letters, underscores, or dots."
+        }), 400
+    
+    try:
+        graph = neuron_graph_module.get_neuron_graph()
+        node = graph.get_node(neuron_id)
+        
+        if not node:
+            # Try without prefix
+            for prefix in ["context", "state", "mood"]:
+                full_id = f"{prefix}.{neuron_id}"
+                node = graph.get_node(full_id)
+                if node:
+                    neuron_id = full_id
+                    break
+        
+        if not node:
+            return jsonify({
+                "success": False,
+                "error": f"Neuron not found: {neuron_id}"
+            }), 404
+        
+        # Get connection counts
+        incoming = len(graph.get_incoming_edges(neuron_id))
+        outgoing = len(graph.get_outgoing_edges(neuron_id))
+        
+        return jsonify({
+            "success": True,
+            "data": {
+                "neuron_id": neuron_id,
+                "name": node.name,
+                "type": node.neuron_type,
+                "layer": node.layer,
+                "active": node.active,
+                "value": round(node.value, 3),
+                "metrics": node.metrics.to_dict(),
+                "connections": {
+                    "incoming": incoming,
+                    "outgoing": outgoing
+                }
+            }
+        })
+    except Exception as e:
+        _LOGGER.error("Error getting neuron stats for %s: %s", neuron_id, e)
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+
+@bp.route("/graph/stats", methods=["GET"])
+def get_graph_stats():
+    """Get overall graph statistics.
+    
+    Returns:
+        {
+            "success": true,
+            "data": {
+                "total_nodes": int,
+                "active_nodes": int,
+                "total_edges": int,
+                "avg_fire_rate": float,
+                "avg_confidence": float,
+                "layers": {...}
+            }
+        }
+    """
+    try:
+        graph = neuron_graph_module.get_neuron_graph()
+        
+        return jsonify({
+            "success": True,
+            "data": graph.get_stats()
+        })
+    except Exception as e:
+        _LOGGER.error("Error getting graph stats: %s", e)
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+
+@bp.route("/connections", methods=["GET"])
+def get_connections():
+    """Get connections between neurons.
+    
+    Query params:
+        node_id: Optional node ID to filter connections for a specific node
+    
+    Returns:
+        {
+            "success": true,
+            "data": {
+                "node_id": str (if filtered),
+                "node_name": str (if filtered),
+                "incoming": [...],
+                "outgoing": [...],
+                "total_connections": int
+            }
+        }
+    """
+    try:
+        node_id = request.args.get("node_id")
+        
+        result = get_neuron_connections(node_id)
+        
+        if "error" in result:
+            return jsonify({
+                "success": False,
+                "error": result["error"]
+            }), 404
+        
+        return jsonify({
+            "success": True,
+            "data": result
+        })
+    except Exception as e:
+        _LOGGER.error("Error getting connections: %s", e)
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+
+@bp.route("/paths", methods=["GET"])
+def get_paths():
+    """Find paths between two neurons.
+    
+    Query params:
+        from: Starting node ID (required)
+        to: Ending node ID (required)
+        max_depth: Maximum path length (default: 5, max: 10)
+    
+    Returns:
+        {
+            "success": true,
+            "data": {
+                "from": str,
+                "to": str,
+                "paths": [
+                    {
+                        "path": [...],
+                        "length": int,
+                        "nodes": [...]
+                    }
+                ],
+                "path_count": int
+            }
+        }
+    """
+    try:
+        from_id = request.args.get("from")
+        to_id = request.args.get("to")
+        
+        if not from_id or not to_id:
+            return jsonify({
+                "success": False,
+                "error": "Missing required parameters: 'from' and 'to'"
+            }), 400
+        
+        try:
+            max_depth = int(request.args.get("max_depth", "5"))
+        except (ValueError, TypeError):
+            return jsonify({
+                "success": False,
+                "error": "Invalid 'max_depth' parameter. Must be a positive integer."
+            }), 400
+        
+        # Cap max_depth to prevent excessive computation
+        max_depth = max(1, min(max_depth, 10))
+        
+        paths = find_paths(from_id, to_id, max_depth)
+        
+        return jsonify({
+            "success": True,
+            "data": {
+                "from": from_id,
+                "to": to_id,
+                "paths": paths,
+                "path_count": len(paths),
+                "max_depth": max_depth
+            }
+        })
+    except ValueError as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 404
+    except Exception as e:
+        _LOGGER.error("Error finding paths: %s", e)
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+
+# =============================================================================
+# Neuron Configuration Editing Endpoints (Iteration 2)
+# =============================================================================
+
+@bp.route("/<neuron_id>/config", methods=["PATCH"])
+def update_neuron_config(neuron_id: str):
+    """Update a neuron's configuration parameters.
+
+    JSON body (all fields optional):
+        {
+            "threshold": 0.6,          # 0.0-1.0
+            "decay_rate": 0.15,        # 0.0-1.0
+            "smoothing_factor": 0.25,  # 0.0-1.0
+            "weights": {"energy": 0.5},
+            "enabled": true
+        }
+    """
+    if not validate_neuron_id(neuron_id):
+        return jsonify({"success": False, "error": "Invalid neuron_id format"}), 400
+
+    body = request.get_json(silent=True) or {}
+    if not body:
+        return jsonify({"success": False, "error": "Empty body"}), 400
+
+    try:
+        manager = get_neuron_manager()
+        # Try full ID, then short name
+        neuron = manager.get_neuron(neuron_id) or manager.get_neuron(
+            neuron_id.split(".")[-1] if "." in neuron_id else neuron_id
+        )
+        if not neuron:
+            return jsonify({"success": False, "error": f"Neuron not found: {neuron_id}"}), 404
+
+        config = neuron.config
+        changed = []
+
+        for key in ("threshold", "decay_rate", "smoothing_factor"):
+            if key in body:
+                val = float(body[key])
+                if not 0.0 <= val <= 1.0:
+                    return jsonify({"success": False, "error": f"{key} must be between 0.0 and 1.0"}), 400
+                setattr(config, key, val)
+                changed.append(key)
+
+        if "weights" in body and isinstance(body["weights"], dict):
+            config.weights.update({str(k): float(v) for k, v in body["weights"].items()})
+            changed.append("weights")
+
+        if "enabled" in body:
+            config.enabled = bool(body["enabled"])
+            changed.append("enabled")
+
+        # Persist if manager supports it
+        if hasattr(manager, "persist_neuron_config"):
+            manager.persist_neuron_config(neuron_id)
+
+        _LOGGER.info("Updated neuron %s config: %s", neuron_id, changed)
+
+        return jsonify({
+            "success": True,
+            "data": {
+                "neuron_id": neuron_id,
+                "changed": changed,
+                "config": config.to_dict(),
+            },
+        })
+    except (ValueError, TypeError) as e:
+        return jsonify({"success": False, "error": f"Invalid value: {e}"}), 400
+    except Exception as e:
+        _LOGGER.error("Error updating neuron %s config: %s", neuron_id, e)
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@bp.route("/<neuron_id>/enable", methods=["POST"])
+def enable_neuron(neuron_id: str):
+    """Enable a neuron."""
+    if not validate_neuron_id(neuron_id):
+        return jsonify({"success": False, "error": "Invalid neuron_id format"}), 400
+
+    try:
+        manager = get_neuron_manager()
+        neuron = manager.get_neuron(neuron_id) or manager.get_neuron(
+            neuron_id.split(".")[-1] if "." in neuron_id else neuron_id
+        )
+        if not neuron:
+            return jsonify({"success": False, "error": f"Neuron not found: {neuron_id}"}), 404
+
+        neuron.config.enabled = True
+        if hasattr(manager, "persist_neuron_config"):
+            manager.persist_neuron_config(neuron_id)
+
+        return jsonify({"success": True, "data": {"neuron_id": neuron_id, "enabled": True}})
+    except Exception as e:
+        _LOGGER.error("Error enabling neuron %s: %s", neuron_id, e)
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@bp.route("/<neuron_id>/disable", methods=["POST"])
+def disable_neuron(neuron_id: str):
+    """Disable a neuron."""
+    if not validate_neuron_id(neuron_id):
+        return jsonify({"success": False, "error": "Invalid neuron_id format"}), 400
+
+    try:
+        manager = get_neuron_manager()
+        neuron = manager.get_neuron(neuron_id) or manager.get_neuron(
+            neuron_id.split(".")[-1] if "." in neuron_id else neuron_id
+        )
+        if not neuron:
+            return jsonify({"success": False, "error": f"Neuron not found: {neuron_id}"}), 404
+
+        neuron.config.enabled = False
+        if hasattr(manager, "persist_neuron_config"):
+            manager.persist_neuron_config(neuron_id)
+
+        return jsonify({"success": True, "data": {"neuron_id": neuron_id, "enabled": False}})
+    except Exception as e:
+        _LOGGER.error("Error disabling neuron %s: %s", neuron_id, e)
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@bp.route("/batch-configure", methods=["POST"])
+def batch_configure_neurons():
+    """Configure multiple neurons in one request.
+
+    JSON body:
+        {
+            "neurons": {
+                "context.presence": {"threshold": 0.7},
+                "mood.focus": {"enabled": false, "decay_rate": 0.2}
+            }
+        }
+    """
+    body = request.get_json(silent=True) or {}
+    configs = body.get("neurons", {})
+    if not configs or not isinstance(configs, dict):
+        return jsonify({"success": False, "error": "Missing 'neurons' dict"}), 400
+
+    manager = get_neuron_manager()
+    results = {}
+    errors = {}
+
+    for nid, patch in configs.items():
+        if not validate_neuron_id(nid):
+            errors[nid] = "Invalid neuron_id format"
+            continue
+
+        neuron = manager.get_neuron(nid) or manager.get_neuron(
+            nid.split(".")[-1] if "." in nid else nid
+        )
+        if not neuron:
+            errors[nid] = "Neuron not found"
+            continue
+
+        try:
+            cfg = neuron.config
+            for key in ("threshold", "decay_rate", "smoothing_factor"):
+                if key in patch:
+                    val = float(patch[key])
+                    if not 0.0 <= val <= 1.0:
+                        errors[nid] = f"{key} must be 0.0-1.0"
+                        continue
+                    setattr(cfg, key, val)
+            if "weights" in patch and isinstance(patch["weights"], dict):
+                cfg.weights.update({str(k): float(v) for k, v in patch["weights"].items()})
+            if "enabled" in patch:
+                cfg.enabled = bool(patch["enabled"])
+
+            results[nid] = cfg.to_dict()
+        except (ValueError, TypeError) as e:
+            errors[nid] = str(e)
+
+    if hasattr(manager, "persist_all_neuron_configs"):
+        manager.persist_all_neuron_configs()
+
+    return jsonify({
+        "success": len(errors) == 0,
+        "data": {"updated": results, "errors": errors},
+    })
 
 
 __all__ = ["bp"]

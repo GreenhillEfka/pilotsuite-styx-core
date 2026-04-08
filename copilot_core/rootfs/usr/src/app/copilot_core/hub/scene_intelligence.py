@@ -501,6 +501,16 @@ class SceneIntelligenceEngine:
             for s in scenes[:limit]
         ]
 
+    def health_check(self) -> dict[str, Any]:
+        """Return health status for backend health endpoint."""
+        return {
+            "status": "ok",
+            "total_scenes": len(self._scenes),
+            "active_scene": self._active_scene,
+            "learned_patterns": len(self._patterns),
+            "cloud_connected": self._cloud.connected,
+        }
+
     def get_dashboard(self) -> SceneIntelligenceDashboard:
         """Get scene intelligence dashboard."""
         categories: dict[str, int] = {}

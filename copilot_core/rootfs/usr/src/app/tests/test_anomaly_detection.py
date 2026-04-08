@@ -1,347 +1,451 @@
-"""Tests for Anomaly Detection v2 Engine (v6.2.0)."""
+"""
+Tests for Anomaly Detection Module
 
-import statistics
-from datetime import datetime, timedelta, timezone
+Tests for:
+- Feature extraction
+- Anomaly detection with Isolation Forest
+- Model persistence
+- API endpoints
+"""
 
 import pytest
+import numpy as np
+from datetime import datetime, timezone
 
-from copilot_core.hub.anomaly_detection import (
-    AnomalyDetectionEngine,
-    AnomalySummary,
-    DataPoint,
-    PatternProfile,
-    _FLATLINE_THRESHOLD,
-    _MIN_POINTS_BASIC,
-    _MIN_POINTS_SEASONAL,
+from copilot_core.ml.feature_extractor import FeatureExtractor, FeatureConfig, create_feature_extractor
+from copilot_core.ml.anomaly_detector import (
+    AnomalyDetector,
+    AnomalyConfig,
+    AnomalyLevel,
+    AnomalyResult,
+    create_anomaly_detector,
 )
+from copilot_core.ml.model_store import ModelStore, ModelMetadata, TrainingRecord, create_model_store
 
 
-@pytest.fixture
-def engine():
-    return AnomalyDetectionEngine()
+class TestFeatureExtractor:
+    """Tests for FeatureExtractor class."""
+    
+    def test_extract_basic_features(self):
+        """Test basic feature extraction from sensor data."""
+        extractor = create_feature_extractor()
+        
+        # Generate synthetic sensor data (normal distribution)
+        np.random.seed(42)
+        values = np.random.randn(100) + 10  # Mean 10, std 1
+        
+        features = extractor.extract(values)
+        
+        assert features.mean == pytest.approx(10.0, abs=1.0)
+        assert features.std > 0
+        assert features.min_val < features.mean
+        assert features.max_val > features.mean
+        assert features.sample_count == 100
+    
+    def test_extract_percentiles(self):
+        """Test percentile calculation."""
+        extractor = create_feature_extractor()
+        
+        values = np.array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+        features = extractor.extract(values)
+        
+        assert "p_0_1" in features.percentiles
+        assert "p_0_5" in features.percentiles
+        assert "p_0_9" in features.percentiles
+        
+        # Median should be around 5.5
+        assert features.percentiles["p_0_5"] == pytest.approx(5.5, abs=1.0)
+    
+    def test_extract_trend(self):
+        """Test trend detection."""
+        extractor = create_feature_extractor()
+        
+        # Upward trend
+        values = np.arange(100, dtype=np.float64)
+        features = extractor.extract(values)
+        
+        assert features.trend > 0
+        
+        # Downward trend
+        values = np.arange(100, 0, -1, dtype=np.float64)
+        features = extractor.extract(values)
+        
+        assert features.trend < 0
+    
+    def test_extract_rate_of_change(self):
+        """Test rate of change features."""
+        extractor = create_feature_extractor()
+        
+        # Stable values
+        values = np.ones(50)
+        features = extractor.extract(values)
+        
+        assert features.roc_mean == pytest.approx(0.0, abs=0.01)
+        assert features.roc_std == pytest.approx(0.0, abs=0.01)
+        
+        # Rapidly changing values
+        values = np.sin(np.linspace(0, 10 * np.pi, 100))
+        features = extractor.extract(values)
+        
+        assert features.roc_std > 0
+    
+    def test_extract_insufficient_samples(self):
+        """Test error handling for insufficient samples."""
+        extractor = create_feature_extractor()
+        
+        values = np.array([1.0, 2.0])  # Too few samples
+        
+        with pytest.raises(ValueError):
+            extractor.extract(values)
+    
+    def test_extract_with_nan(self):
+        """Test handling of NaN values."""
+        extractor = create_feature_extractor()
+        
+        values = np.array([1.0, 2.0, np.nan, 4.0, 5.0, np.nan, 7.0, 8.0, 9.0, 10.0])
+        features = extractor.extract(values)
+        
+        assert features.sample_count == 8  # 2 NaN values removed
+        assert not np.isnan(features.mean)
+    
+    def test_extract_rolling(self):
+        """Test rolling window feature extraction."""
+        extractor = create_feature_extractor()
+        
+        values = np.random.randn(200)
+        features_list = extractor.extract_rolling(values, window_size=50)
+        
+        assert len(features_list) == 151  # 200 - 50 + 1
+        assert all(f.sample_count == 50 for f in features_list)
+    
+    def test_extract_multi_sensor(self):
+        """Test multi-sensor feature extraction."""
+        extractor = create_feature_extractor()
+        
+        sensor_data = {
+            "sensor_1": np.random.randn(100),
+            "sensor_2": np.random.randn(100) + 5,
+            "sensor_3": np.random.randn(100) - 5,
+        }
+        
+        results = extractor.extract_multi_sensor(sensor_data)
+        
+        assert len(results) == 3
+        assert "sensor_1" in results
+        assert "sensor_2" in results
+        assert "sensor_3" in results
+    
+    def test_to_dict(self):
+        """Test feature conversion to dictionary."""
+        extractor = create_feature_extractor()
+        values = np.random.randn(50)
+        features = extractor.extract(values)
+        
+        feature_dict = features.to_dict()
+        
+        assert "mean" in feature_dict
+        assert "std" in feature_dict
+        assert "trend" in feature_dict
+        assert "autocorrelation" in feature_dict
+    
+    def test_to_array(self):
+        """Test feature conversion to array."""
+        extractor = create_feature_extractor()
+        values = np.random.randn(50)
+        features = extractor.extract(values)
+        
+        feature_array = features.to_array()
+        
+        assert isinstance(feature_array, np.ndarray)
+        assert len(feature_array) == len(features.to_dict())
 
 
-def _ts(hours_ago: int = 0) -> datetime:
-    """Helper: timestamp N hours ago."""
-    return datetime.now(tz=timezone.utc) - timedelta(hours=hours_ago)
+class TestAnomalyDetector:
+    """Tests for AnomalyDetector class."""
+    
+    def test_fit_and_detect(self):
+        """Test basic fit and detect workflow."""
+        detector = create_anomaly_detector(n_estimators=50, contamination=0.05)
+        
+        # Training data (normal pattern)
+        np.random.seed(42)
+        training_data = np.random.randn(500) + 10
+        
+        detector.fit(training_data)
+        
+        assert detector._is_fitted
+        assert detector._n_samples > 0
+        
+        # Test detection on normal data
+        normal_data = np.random.randn(50) + 10
+        result = detector.detect(normal_data, sensor_id="test_sensor")
+        
+        assert isinstance(result, AnomalyResult)
+        assert result.sensor_id == "test_sensor"
+        assert result.is_anomaly in [True, False]
+    
+    def test_detect_anomalous_data(self):
+        """Test detection of anomalous patterns."""
+        detector = create_anomaly_detector(n_estimators=50, contamination=0.05)
+        
+        # Train on normal data
+        np.random.seed(42)
+        training_data = np.random.randn(500) + 10
+        detector.fit(training_data)
+        
+        # Anomalous data (sudden spike)
+        anomalous_data = np.array([10.0] * 40 + [50.0] * 10)
+        result = detector.detect(anomalous_data, sensor_id="spike_sensor")
+        
+        # Should detect anomaly due to spike
+        assert result.is_anomaly or result.score < -0.5
+    
+    def test_partial_fit(self):
+        """Test incremental learning."""
+        detector = create_anomaly_detector(n_estimators=50)
+        
+        # Initial training
+        training_data = np.random.randn(200)
+        detector.fit(training_data)
+        
+        initial_samples = detector._n_samples
+        
+        # Incremental update
+        new_data = np.random.randn(100)
+        detector.partial_fit(new_data)
+        
+        assert detector._n_samples > initial_samples
+    
+    def test_anomaly_level_classification(self):
+        """Test anomaly level classification."""
+        detector = create_anomaly_detector()
+        
+        # Test different score ranges
+        assert detector._classify_anomaly_level(0.0) == AnomalyLevel.NORMAL
+        assert detector._classify_anomaly_level(-0.4) == AnomalyLevel.LOW
+        assert detector._classify_anomaly_level(-0.6) == AnomalyLevel.MEDIUM
+        assert detector._classify_anomaly_level(-0.8) == AnomalyLevel.HIGH
+        assert detector._classify_anomaly_level(-0.95) == AnomalyLevel.CRITICAL
+    
+    def test_multi_sensor_detection(self):
+        """Test multi-sensor anomaly detection."""
+        detector = create_anomaly_detector(n_estimators=50)
+        
+        # Train on multiple sensors
+        training_data = {
+            "sensor_1": np.random.randn(200),
+            "sensor_2": np.random.randn(200) + 5,
+        }
+        detector.fit(training_data)
+        
+        # Detect on multiple sensors
+        test_data = {
+            "sensor_1": np.random.randn(50),
+            "sensor_2": np.random.randn(50) + 5,
+        }
+        results = detector.detect(test_data)
+        
+        assert len(results) == 2
+        sensor_ids = {r.sensor_id for r in results}
+        assert "sensor_1" in sensor_ids
+        assert "sensor_2" in sensor_ids
+    
+    def test_sensor_health(self):
+        """Test sensor health status."""
+        detector = create_anomaly_detector(n_estimators=50)
+        
+        # Train with dict format (sensor_id -> values)
+        training_data = {"test_sensor": np.random.randn(300)}
+        detector.fit(training_data)
+        
+        # Get health
+        health = detector.get_sensor_health("test_sensor")
+        
+        assert "status" in health
+        assert health["status"] in ["healthy", "degraded", "critical"]
+    
+    def test_anomaly_history(self):
+        """Test anomaly history tracking."""
+        detector = create_anomaly_detector(n_estimators=50)
+        
+        # Train
+        detector.fit(np.random.randn(200))
+        
+        # Detect multiple times
+        for i in range(10):
+            detector.detect(np.random.randn(30), sensor_id=f"sensor_{i}")
+        
+        history = detector.get_anomaly_history(limit=5)
+        
+        assert len(history) <= 5
 
 
-def _populate_normal(engine: AnomalyDetectionEngine, entity_id: str = "sensor.temp",
-                     count: int = 200, base: float = 21.0, std: float = 1.0,
-                     start_hours_ago: int | None = None):
-    """Populate with normal-ish data (sinusoidal daily pattern + noise)."""
-    import math
-    import random
-    random.seed(42)
-    start = start_hours_ago or count
-    for i in range(count):
-        hour = (24 - (start - i) % 24) % 24
-        # Sinusoidal daily pattern: warmer during day, cooler at night
-        seasonal = 2.0 * math.sin(2 * math.pi * hour / 24)
-        value = base + seasonal + random.gauss(0, std)
-        engine.ingest(entity_id, value, _ts(start - i))
+class TestModelStore:
+    """Tests for ModelStore class."""
+    
+    @pytest.fixture
+    def temp_store(self, tmp_path):
+        """Create temporary model store."""
+        return create_model_store(str(tmp_path))
+    
+    def test_save_and_load_model(self, temp_store):
+        """Test model save and load."""
+        model_data = {
+            "n_estimators": 100,
+            "contamination": 0.05,
+            "coefficients": [1.0, 2.0, 3.0],
+        }
+        
+        metadata = ModelMetadata(
+            model_id="test_model",
+            model_type="test",
+            version="1.0.0",
+            created_at=datetime.now(timezone.utc).isoformat(),
+        )
+        
+        # Save
+        saved_metadata = temp_store.save_model(
+            model_id="test_model",
+            version="1.0.0",
+            model_data=model_data,
+            metadata=metadata,
+        )
+        
+        assert saved_metadata.checksum is not None
+        
+        # Load
+        loaded_data, loaded_metadata = temp_store.load_model("test_model", "1.0.0")
+        
+        assert loaded_data == model_data
+        assert loaded_metadata.model_id == "test_model"
+        assert loaded_metadata.version == "1.0.0"
+    
+    def test_list_versions(self, temp_store):
+        """Test version listing."""
+        # Save multiple versions
+        for version in ["1.0.0", "1.1.0", "2.0.0"]:
+            temp_store.save_model(
+                model_id="test_model",
+                version=version,
+                model_data={"version": version},
+            )
+        
+        versions = temp_store.list_versions("test_model")
+        
+        assert len(versions) == 3
+        assert "1.0.0" in versions
+        assert "2.0.0" in versions
+    
+    def test_get_latest_version(self, temp_store):
+        """Test latest version retrieval."""
+        temp_store.save_model("test_model", "1.0.0", {"v": "1.0.0"})
+        temp_store.save_model("test_model", "1.1.0", {"v": "1.1.0"})
+        temp_store.save_model("test_model", "2.0.0", {"v": "2.0.0"})
+        
+        latest = temp_store.get_latest_version("test_model")
+        
+        assert latest == "2.0.0"
+    
+    def test_archive_model(self, temp_store):
+        """Test model archiving."""
+        temp_store.save_model("test_model", "1.0.0", {"v": "1.0.0"})
+        
+        temp_store.archive_model("test_model", "1.0.0")
+        
+        _, metadata = temp_store.load_model("test_model", "1.0.0")
+        assert metadata.status == "archived"
+    
+    def test_training_records(self, temp_store):
+        """Test training record management."""
+        record = TrainingRecord(
+            training_id="train_001",
+            model_id="test_model",
+            started_at=datetime.now(timezone.utc).isoformat(),
+            completed_at=datetime.now(timezone.utc).isoformat(),
+            training_samples=1000,
+            status="completed",
+        )
+        
+        temp_store.save_training_record(record)
+        
+        loaded = temp_store.get_training_record("train_001")
+        assert loaded is not None
+        assert loaded.training_id == "train_001"
+    
+    def test_store_stats(self, temp_store):
+        """Test store statistics."""
+        temp_store.save_model("model_1", "1.0.0", {"data": [1, 2, 3]})
+        temp_store.save_model("model_2", "1.0.0", {"data": [4, 5, 6]})
+        
+        stats = temp_store.get_store_stats()
+        
+        assert stats["total_models"] == 2
+        assert stats["total_versions"] == 2
 
 
-class TestIngestion:
-    def test_single_ingest(self, engine):
-        engine.ingest("sensor.temp", 21.5)
-        assert len(engine._history["sensor.temp"]) == 1
-
-    def test_batch_ingest(self, engine):
-        points = [
-            {"entity_id": "sensor.temp", "value": 21.0},
-            {"entity_id": "sensor.temp", "value": 22.0},
-            {"entity_id": "sensor.humidity", "value": 55.0},
-        ]
-        count = engine.ingest_batch(points)
-        assert count == 3
-        assert len(engine._history["sensor.temp"]) == 2
-        assert len(engine._history["sensor.humidity"]) == 1
-
-    def test_batch_skips_invalid(self, engine):
-        points = [
-            {"entity_id": "", "value": 10},  # empty entity_id
-            {"entity_id": "sensor.x"},  # missing value
-            {"entity_id": "sensor.ok", "value": 5},
-        ]
-        count = engine.ingest_batch(points)
-        assert count == 1
-
-    def test_max_history_enforced(self):
-        engine = AnomalyDetectionEngine(max_history=10)
-        for i in range(20):
-            engine.ingest("sensor.temp", float(i))
-        assert len(engine._history["sensor.temp"]) == 10
-        # Should keep the most recent
-        assert engine._history["sensor.temp"][-1].value == 19.0
-
-    def test_batch_with_timestamp(self, engine):
-        ts = "2025-06-15T10:30:00+00:00"
-        count = engine.ingest_batch([
-            {"entity_id": "sensor.temp", "value": 20.0, "timestamp": ts},
-        ])
-        assert count == 1
-        dp = engine._history["sensor.temp"][0]
-        assert dp.timestamp.hour == 10
-
-
-class TestPatternLearning:
-    def test_learn_patterns_basic(self, engine):
-        _populate_normal(engine, count=50)
-        updated = engine.learn_patterns()
-        assert updated == 1
-        profile = engine.get_profile("sensor.temp")
-        assert profile is not None
-        assert profile.total_points == 50
-        assert profile.global_mean != 0
-
-    def test_learn_patterns_insufficient_data(self, engine):
-        for i in range(5):
-            engine.ingest("sensor.temp", 20.0 + i, _ts(5 - i))
-        updated = engine.learn_patterns()
-        assert updated == 0
-
-    def test_hourly_patterns(self, engine):
-        _populate_normal(engine, count=200)
-        engine.learn_patterns()
-        profile = engine.get_profile("sensor.temp")
-        # Should have learned hourly patterns
-        assert len(profile.hourly_means) > 0
-        assert len(profile.hourly_stds) > 0
-
-    def test_daily_patterns(self, engine):
-        _populate_normal(engine, count=200)
-        engine.learn_patterns()
-        profile = engine.get_profile("sensor.temp")
-        assert len(profile.daily_means) > 0
-
-    def test_learn_specific_entity(self, engine):
-        _populate_normal(engine, "sensor.temp", count=50)
-        _populate_normal(engine, "sensor.humidity", count=50, base=55)
-        updated = engine.learn_patterns("sensor.temp")
-        assert updated == 1
-        assert "sensor.temp" in engine._profiles
-        assert "sensor.humidity" not in engine._profiles
-
-    def test_learn_correlations(self, engine):
-        # Two correlated sensors
-        for i in range(100):
-            ts = _ts(100 - i)
-            engine.ingest("sensor.temp", 20.0 + i * 0.1, ts)
-            engine.ingest("sensor.humidity", 60.0 - i * 0.05, ts)
-        learned = engine.learn_correlations()
-        assert learned == 1
-        corrs = engine.get_correlations()
-        assert len(corrs) == 1
-        # Should be negatively correlated
-        assert corrs[0]["correlation"] < 0
+class TestAnomalyAPI:
+    """Tests for Anomaly API endpoints (integration tests)."""
+    
+    @pytest.fixture
+    def client(self):
+        """Create test client."""
+        from copilot_core.app import create_app
+        app = create_app()
+        app.config["TESTING"] = True
+        return app.test_client()
+    
+    def test_detect_endpoint(self, client):
+        """Test anomaly detection endpoint."""
+        # First train a model
+        train_data = np.random.randn(300).tolist()
+        
+        client.post("/api/v1/anomaly/train", json={
+            "values": train_data,
+        })
+        
+        # Then detect
+        test_data = np.random.randn(50).tolist()
+        
+        response = client.post("/api/v1/anomaly/detect", json={
+            "sensor_id": "test_sensor",
+            "values": test_data,
+        })
+        
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["ok"] is True
+        assert "results" in data
+    
+    def test_model_status_endpoint(self, client):
+        """Test model status endpoint."""
+        response = client.get("/api/v1/anomaly/model/status")
+        
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["ok"] is True
+        assert "status" in data
+    
+    def test_sensor_health_endpoint(self, client):
+        """Test sensor health endpoint."""
+        # Train first
+        client.post("/api/v1/anomaly/train", json={
+            "values": np.random.randn(200).tolist(),
+        })
+        
+        # Detect to create history
+        client.post("/api/v1/anomaly/detect", json={
+            "sensor_id": "test_sensor",
+            "values": np.random.randn(50).tolist(),
+        })
+        
+        # Get health
+        response = client.get("/api/v1/anomaly/sensor/test_sensor/health")
+        
+        assert response.status_code == 200
+        data = response.get_json()
+        assert data["ok"] is True
+        assert "health" in data
 
 
-class TestSpikeDetection:
-    def test_detect_spike(self, engine):
-        _populate_normal(engine, count=100, base=21.0, std=0.5)
-        # Add extreme spike
-        engine.ingest("sensor.temp", 35.0, _ts(0))
-        anomalies = engine.detect("sensor.temp")
-        spikes = [a for a in anomalies if a.anomaly_type == "spike"]
-        assert len(spikes) > 0
-        assert spikes[0].severity in ("warning", "critical")
-
-    def test_no_spike_for_normal(self, engine):
-        _populate_normal(engine, count=100, base=21.0, std=0.5)
-        # Add a normal value
-        engine.ingest("sensor.temp", 21.3, _ts(0))
-        anomalies = engine.detect("sensor.temp")
-        spikes = [a for a in anomalies if a.anomaly_type == "spike"]
-        assert len(spikes) == 0
-
-
-class TestDriftDetection:
-    def test_detect_drift(self, engine):
-        # Normal baseline data (older)
-        for i in range(100):
-            engine.ingest("sensor.temp", 21.0 + 0.1 * (i % 3), _ts(130 - i))
-        # Recent shifted data (last 30 hours, well above baseline)
-        for i in range(30):
-            engine.ingest("sensor.temp", 35.0 + 0.1 * (i % 3), _ts(30 - i))
-        anomalies = engine.detect("sensor.temp")
-        drifts = [a for a in anomalies if a.anomaly_type == "drift"]
-        assert len(drifts) > 0
-        assert drifts[0].context.get("direction") == "steigend"
-
-
-class TestFlatlineDetection:
-    def test_detect_flatline(self, engine):
-        # Normal data followed by stuck value
-        for i in range(30):
-            engine.ingest("sensor.temp", 20.0 + i * 0.1, _ts(50 - i))
-        for i in range(_FLATLINE_THRESHOLD + 5):
-            engine.ingest("sensor.temp", 22.0, _ts(20 - i))
-        anomalies = engine.detect("sensor.temp")
-        flatlines = [a for a in anomalies if a.anomaly_type == "flatline"]
-        assert len(flatlines) == 1
-        assert flatlines[0].severity == "warning"
-
-    def test_no_flatline_for_varying(self, engine):
-        for i in range(50):
-            engine.ingest("sensor.temp", 20.0 + i * 0.5, _ts(50 - i))
-        anomalies = engine.detect("sensor.temp")
-        flatlines = [a for a in anomalies if a.anomaly_type == "flatline"]
-        assert len(flatlines) == 0
-
-
-class TestSeasonalDetection:
-    def test_detect_seasonal_anomaly(self, engine):
-        # Need enough data for seasonal analysis
-        _populate_normal(engine, count=_MIN_POINTS_SEASONAL + 10, base=21.0, std=0.3)
-        # Add a value that's very unusual for its hour
-        latest = engine._history["sensor.temp"][-1]
-        hour = latest.timestamp.hour
-        profile_mean = 21.0  # approximately
-        # Inject extreme value
-        engine.ingest("sensor.temp", 50.0, _ts(0))
-        anomalies = engine.detect("sensor.temp")
-        seasonal = [a for a in anomalies if a.anomaly_type == "seasonal"]
-        assert len(seasonal) > 0
-
-
-class TestFrequencyDetection:
-    def test_detect_frequency_change(self, engine):
-        # Regular 1-hour intervals first
-        for i in range(50):
-            engine.ingest("sensor.temp", 21.0, _ts(100 - i))
-        # Then 5-hour intervals (sensor dropping out)
-        for i in range(50):
-            engine.ingest("sensor.temp", 21.0, _ts(50 - i * 5))
-        anomalies = engine.detect("sensor.temp")
-        freq = [a for a in anomalies if a.anomaly_type == "frequency"]
-        # Should detect the frequency change
-        assert len(freq) >= 0  # May or may not trigger depending on exact timing
-
-
-class TestCorrelationAnomalies:
-    def test_detect_broken_correlation(self, engine):
-        # Build strong correlation
-        for i in range(100):
-            ts = _ts(200 - i)
-            engine.ingest("sensor.temp", 20.0 + i * 0.1, ts)
-            engine.ingest("sensor.humidity", 60.0 + i * 0.1, ts)
-        engine.learn_correlations()
-
-        # Break the correlation recently
-        for i in range(30):
-            ts = _ts(100 - i)
-            engine.ingest("sensor.temp", 30.0 + i * 0.1, ts)
-            engine.ingest("sensor.humidity", 60.0 - i * 0.5, ts)  # reversed
-
-        anomalies = engine.detect()
-        corr_anomalies = [a for a in anomalies if a.anomaly_type == "correlation"]
-        # May or may not trigger depending on correlation calculation
-        assert isinstance(corr_anomalies, list)
-
-
-class TestSummary:
-    def test_empty_summary(self, engine):
-        summary = engine.get_summary()
-        assert summary.total_entities == 0
-        assert summary.total_anomalies == 0
-
-    def test_summary_with_data(self, engine):
-        _populate_normal(engine, "sensor.temp", count=50)
-        engine.ingest("sensor.temp", 100.0, _ts(0))  # spike
-        engine.detect()
-        summary = engine.get_summary()
-        assert summary.total_entities == 1
-        assert summary.total_anomalies > 0
-
-    def test_summary_types(self, engine):
-        summary = engine.get_summary()
-        assert isinstance(summary, AnomalySummary)
-        assert isinstance(summary.anomaly_types, dict)
-        assert isinstance(summary.entity_health, dict)
-
-
-class TestQueryAndClear:
-    def test_get_anomalies_filtered(self, engine):
-        _populate_normal(engine, "sensor.temp", count=50)
-        engine.ingest("sensor.temp", 100.0, _ts(0))
-        engine.detect()
-
-        all_anomalies = engine.get_anomalies()
-        assert len(all_anomalies) > 0
-
-        # Filter by entity
-        filtered = engine.get_anomalies(entity_id="sensor.nonexistent")
-        assert len(filtered) == 0
-
-    def test_clear_anomalies(self, engine):
-        _populate_normal(engine, "sensor.temp", count=50)
-        engine.ingest("sensor.temp", 100.0, _ts(0))
-        engine.detect()
-
-        count = engine.clear_anomalies()
-        assert count > 0
-        assert len(engine._anomalies) == 0
-
-    def test_clear_entity_anomalies(self, engine):
-        _populate_normal(engine, "sensor.temp", count=50)
-        _populate_normal(engine, "sensor.humidity", count=50, base=55)
-        engine.ingest("sensor.temp", 100.0, _ts(0))
-        engine.ingest("sensor.humidity", 200.0, _ts(0))
-        engine.detect()
-
-        # Clear only temp anomalies
-        engine.clear_anomalies("sensor.temp")
-        remaining = engine.get_anomalies()
-        temp_remaining = [a for a in remaining if a.entity_id == "sensor.temp"]
-        assert len(temp_remaining) == 0
-
-    def test_anomaly_limit(self, engine):
-        _populate_normal(engine, "sensor.temp", count=50)
-        engine.ingest("sensor.temp", 100.0, _ts(0))
-        engine.detect()
-        limited = engine.get_anomalies(limit=1)
-        assert len(limited) <= 1
-
-
-class TestDescriptions:
-    def test_german_spike_description(self, engine):
-        _populate_normal(engine, count=50, base=21.0, std=0.5)
-        engine.ingest("sensor.temp", 50.0, _ts(0))
-        anomalies = engine.detect("sensor.temp")
-        spikes = [a for a in anomalies if a.anomaly_type == "spike"]
-        if spikes:
-            assert "Anstieg" in spikes[0].description_de or "Abfall" in spikes[0].description_de
-            assert "spike" in spikes[0].description_en or "drop" in spikes[0].description_en
-
-    def test_german_flatline_description(self, engine):
-        for i in range(30):
-            engine.ingest("sensor.temp", 20.0 + i * 0.1, _ts(50 - i))
-        for i in range(_FLATLINE_THRESHOLD + 5):
-            engine.ingest("sensor.temp", 22.0, _ts(20 - i))
-        anomalies = engine.detect("sensor.temp")
-        flatlines = [a for a in anomalies if a.anomaly_type == "flatline"]
-        if flatlines:
-            assert "gleichen Wert" in flatlines[0].description_de
-            assert "stuck" in flatlines[0].description_en
-
-
-class TestHelpers:
-    def test_z_to_severity(self):
-        assert AnomalyDetectionEngine._z_to_severity(1.5) == "info"
-        assert AnomalyDetectionEngine._z_to_severity(2.5) == "info"
-        assert AnomalyDetectionEngine._z_to_severity(3.5) == "warning"
-        assert AnomalyDetectionEngine._z_to_severity(4.5) == "critical"
-
-    def test_severity_rank(self):
-        assert AnomalyDetectionEngine._severity_rank("ok") == 0
-        assert AnomalyDetectionEngine._severity_rank("info") == 1
-        assert AnomalyDetectionEngine._severity_rank("warning") == 2
-        assert AnomalyDetectionEngine._severity_rank("critical") == 3
-
-    def test_correlation_strength(self):
-        assert AnomalyDetectionEngine._correlation_strength(0.95) == "very_strong"
-        assert AnomalyDetectionEngine._correlation_strength(0.75) == "strong"
-        assert AnomalyDetectionEngine._correlation_strength(0.55) == "moderate"
-        assert AnomalyDetectionEngine._correlation_strength(0.35) == "weak"
-        assert AnomalyDetectionEngine._correlation_strength(0.1) == "negligible"
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])

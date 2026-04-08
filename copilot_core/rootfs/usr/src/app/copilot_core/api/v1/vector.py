@@ -10,7 +10,9 @@ Provides REST API for:
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import math
 from typing import Any, Optional
 
 from flask import Blueprint, jsonify, request
@@ -25,6 +27,22 @@ _LOGGER = logging.getLogger(__name__)
 bp = Blueprint("vector", __name__, url_prefix="/vector")
 
 from copilot_core.api.security import validate_token as _validate_token
+
+
+def _run_async(coro, timeout: int = 10):
+    """Run async coroutine from sync Flask context."""
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+
+    if loop and loop.is_running():
+        import concurrent.futures
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            future = pool.submit(asyncio.run, asyncio.wait_for(coro, timeout=timeout))
+            return future.result(timeout=timeout + 2)
+
+    return asyncio.run(asyncio.wait_for(coro, timeout=timeout))
 
 
 @bp.before_request
@@ -67,113 +85,86 @@ def create_embedding(body: EmbeddingRequest):
 
 def _create_entity_embedding(entity_id: str, data: dict[str, Any]):
     """Create embedding for an entity."""
-    import asyncio
-    
-    try:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        
-        entry = loop.run_until_complete(
-            _store().store_entity_embedding(
-                entity_id=entity_id,
-                domain=data.get("domain"),
-                area=data.get("area"),
-                capabilities=data.get("capabilities"),
-                tags=data.get("tags"),
-                state=data.get("state"),
-                metadata=data.get("metadata"),
-            )
+    entry = _run_async(
+        _store().store_entity_embedding(
+            entity_id=entity_id,
+            domain=data.get("domain"),
+            area=data.get("area"),
+            capabilities=data.get("capabilities"),
+            tags=data.get("tags"),
+            state=data.get("state"),
+            metadata=data.get("metadata"),
         )
-        
-        return jsonify({
-            "ok": True,
-            "entry": {
-                "id": entry.id,
-                "type": entry.entry_type,
-                "created_at": entry.created_at,
-                "metadata": entry.metadata,
-            },
-        }), 201
-        
-    finally:
-        loop.close()
+    )
+
+    return jsonify({
+        "ok": True,
+        "entry": {
+            "id": entry.id,
+            "type": entry.entry_type,
+            "created_at": entry.created_at,
+            "metadata": entry.metadata,
+        },
+    }), 201
 
 
 def _create_user_preference_embedding(user_id: str, data: dict[str, Any]):
     """Create embedding for user preferences."""
-    import asyncio
-    
     preferences = data.get("preferences", {})
     if not preferences:
         return jsonify({
             "ok": False,
             "error": "Missing required field: preferences",
         }), 400
-    
-    try:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        
-        entry = loop.run_until_complete(
-            _store().store_user_preference_embedding(
-                user_id=user_id,
-                preferences=preferences,
-                metadata=data.get("metadata"),
-            )
+
+    entry = _run_async(
+        _store().store_user_preference_embedding(
+            user_id=user_id,
+            preferences=preferences,
+            metadata=data.get("metadata"),
         )
-        
-        return jsonify({
-            "ok": True,
-            "entry": {
-                "id": entry.id,
-                "type": entry.entry_type,
-                "created_at": entry.created_at,
-                "metadata": entry.metadata,
-            },
-        }), 201
-        
-    finally:
-        loop.close()
+    )
+
+    return jsonify({
+        "ok": True,
+        "entry": {
+            "id": entry.id,
+            "type": entry.entry_type,
+            "created_at": entry.created_at,
+            "metadata": entry.metadata,
+        },
+    }), 201
 
 
 def _create_pattern_embedding(pattern_id: str, data: dict[str, Any]):
     """Create embedding for a pattern."""
-    import asyncio
-    
     entities = data.get("entities", [])
     if not entities:
         return jsonify({
             "ok": False,
             "error": "Missing required field: entities",
         }), 400
-    
-    try:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        
-        entry = loop.run_until_complete(
-            _store().store_pattern_embedding(
-                pattern_id=pattern_id,
-                pattern_type=data.get("pattern_type", "learned"),
-                entities=entities,
-                conditions=data.get("conditions"),
-                confidence=data.get("confidence", 0.0),
-                metadata=data.get("metadata"),
-            )
+
+    entry = _run_async(
+        _store().store_pattern_embedding(
+            pattern_id=pattern_id,
+            pattern_type=data.get("pattern_type", "learned"),
+            entities=entities,
+            conditions=data.get("conditions"),
+            confidence=data.get("confidence", 0.0),
+            metadata=data.get("metadata"),
         )
-        
-        return jsonify({
-            "ok": True,
-            "entry": {
-                "id": entry.id,
-                "type": entry.entry_type,
-                "created_at": entry.created_at,
-                "metadata": entry.metadata,
-            },
-        }), 201
-        
-    finally:
-        loop.close()
+    )
+
+    return jsonify({
+        "ok": True,
+        "entry": {
+            "id": entry.id,
+            "type": entry.entry_type,
+            "created_at": entry.created_at,
+            "metadata": entry.metadata,
+        },
+    }), 201
 
 
 # ==================== Similarity Search ====================
@@ -181,26 +172,19 @@ def _create_pattern_embedding(pattern_id: str, data: dict[str, Any]):
 @bp.get("/similar/<path:entry_id>")
 def find_similar(entry_id: str):
     """Find similar entities.
-    
+
     Query params:
     - type: Filter by type (entity, user_preference, pattern)
     - limit: Max results (default 10)
     - threshold: Min similarity threshold (default 0.7)
     """
-    import asyncio
-    
     try:
         entry_type = request.args.get("type")
         limit = min(int(request.args.get("limit", "10")), 100)
         threshold = float(request.args.get("threshold", "0.7"))
-        
-        # Get the entry's vector
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        
+
         # Normalize entry_id (add prefix if needed)
         if not entry_id.startswith(("entity:", "user_pref:", "pattern:")):
-            # Try to find by type or default to entity
             if entry_type == "user_preference":
                 lookup_id = f"user_pref:{entry_id}"
             elif entry_type == "pattern":
@@ -209,17 +193,17 @@ def find_similar(entry_id: str):
                 lookup_id = f"entity:{entry_id}"
         else:
             lookup_id = entry_id
-            
-        entry = loop.run_until_complete(_store().get(lookup_id))
-        
+
+        entry = _run_async(_store().get(lookup_id))
+
         if not entry:
             return jsonify({
                 "ok": False,
                 "error": f"Entry not found: {entry_id}",
             }), 404
-            
+
         # Search for similar
-        results = loop.run_until_complete(
+        results = _run_async(
             _store().search_similar(
                 query_vector=entry.vector,
                 entry_type=entry_type,
@@ -228,7 +212,7 @@ def find_similar(entry_id: str):
                 exclude_ids=[lookup_id],
             )
         )
-        
+
         return jsonify({
             "ok": True,
             "query_id": lookup_id,
@@ -244,14 +228,12 @@ def find_similar(entry_id: str):
             ],
             "count": len(results),
         })
-        
+
     except ValueError as e:
         return jsonify({"ok": False, "error": str(e)}), 400
     except Exception as e:
         _LOGGER.exception("Failed to find similar entries")
         return jsonify({"ok": False, "error": str(e)}), 500
-    finally:
-        loop.close()
 
 
 # ==================== Vector Management ====================
@@ -259,33 +241,23 @@ def find_similar(entry_id: str):
 @bp.get("/vectors")
 def list_vectors():
     """List vectors.
-    
+
     Query params:
     - type: Filter by type (entity, user_preference, pattern)
     - limit: Max results (default 50)
     """
-    import asyncio
-    
     try:
         entry_type = request.args.get("type")
         limit = min(int(request.args.get("limit", "50")), 200)
-        
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        
+
         if entry_type:
-            entries = loop.run_until_complete(
-                _store().get_by_type(entry_type, limit)
-            )
+            entries = _run_async(_store().get_by_type(entry_type, limit))
         else:
-            # Get all types
             entries = []
             for t in ["entity", "user_preference", "pattern"]:
-                entries.extend(
-                    loop.run_until_complete(_store().get_by_type(t, limit))
-                )
+                entries.extend(_run_async(_store().get_by_type(t, limit)))
             entries = entries[:limit]
-            
+
         return jsonify({
             "ok": True,
             "entries": [
@@ -300,41 +272,32 @@ def list_vectors():
             ],
             "count": len(entries),
         })
-        
+
     except Exception as e:
         _LOGGER.exception("Failed to list vectors")
         return jsonify({"ok": False, "error": str(e)}), 500
-    finally:
-        loop.close()
 
 
 @bp.get("/vectors/<path:entry_id>")
 def get_vector(entry_id: str):
     """Get a specific vector."""
-    import asyncio
-    
     try:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        
         # Normalize entry_id
         if not entry_id.startswith(("entity:", "user_pref:", "pattern:")):
-            # Try different prefixes
+            entry = None
             for prefix in ["entity:", "user_pref:", "pattern:"]:
-                entry = loop.run_until_complete(_store().get(f"{prefix}{entry_id}"))
+                entry = _run_async(_store().get(f"{prefix}{entry_id}"))
                 if entry:
                     break
-            else:
-                entry = None
         else:
-            entry = loop.run_until_complete(_store().get(entry_id))
-            
+            entry = _run_async(_store().get(entry_id))
+
         if not entry:
             return jsonify({
                 "ok": False,
                 "error": f"Entry not found: {entry_id}",
             }), 404
-            
+
         return jsonify({
             "ok": True,
             "entry": {
@@ -347,27 +310,20 @@ def get_vector(entry_id: str):
                 "metadata": entry.metadata,
             },
         })
-        
+
     except Exception as e:
         _LOGGER.exception("Failed to get vector")
         return jsonify({"ok": False, "error": str(e)}), 500
-    finally:
-        loop.close()
 
 
 @bp.delete("/vectors/<path:entry_id>")
 def delete_vector(entry_id: str):
     """Delete a vector."""
-    import asyncio
-    
     try:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        
         # Normalize entry_id
         if not entry_id.startswith(("entity:", "user_pref:", "pattern:")):
             for prefix in ["entity:", "user_pref:", "pattern:"]:
-                deleted = loop.run_until_complete(_store().delete(f"{prefix}{entry_id}"))
+                deleted = _run_async(_store().delete(f"{prefix}{entry_id}"))
                 if deleted:
                     return jsonify({"ok": True, "deleted": f"{prefix}{entry_id}"})
             return jsonify({
@@ -375,20 +331,18 @@ def delete_vector(entry_id: str):
                 "error": f"Entry not found: {entry_id}",
             }), 404
         else:
-            deleted = loop.run_until_complete(_store().delete(entry_id))
+            deleted = _run_async(_store().delete(entry_id))
             if not deleted:
                 return jsonify({
                     "ok": False,
                     "error": f"Entry not found: {entry_id}",
                 }), 404
-                
+
         return jsonify({"ok": True, "deleted": entry_id})
-        
+
     except Exception as e:
         _LOGGER.exception("Failed to delete vector")
         return jsonify({"ok": False, "error": str(e)}), 500
-    finally:
-        loop.close()
 
 
 # ==================== Stats ====================
@@ -396,54 +350,39 @@ def delete_vector(entry_id: str):
 @bp.get("/stats")
 def vector_stats():
     """Get vector store statistics."""
-    import asyncio
-    
     try:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        
-        stats = loop.run_until_complete(_store().stats())
-        
+        stats = _run_async(_store().stats())
+
         return jsonify({
             "ok": True,
             "stats": stats,
         })
-        
+
     except Exception as e:
         _LOGGER.exception("Failed to get vector stats")
         return jsonify({"ok": False, "error": str(e)}), 500
-    finally:
-        loop.close()
 
 
 @bp.delete("/vectors")
 def clear_vectors():
     """Clear vectors by type.
-    
+
     Query params:
     - type: Only clear entries of this type (optional)
     """
-    import asyncio
-    
     try:
         entry_type = request.args.get("type")
-        
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        
-        count = loop.run_until_complete(_store().clear(entry_type))
-        
+        count = _run_async(_store().clear(entry_type))
+
         return jsonify({
             "ok": True,
             "deleted_count": count,
             "type": entry_type or "all",
         })
-        
+
     except Exception as e:
         _LOGGER.exception("Failed to clear vectors")
         return jsonify({"ok": False, "error": str(e)}), 500
-    finally:
-        loop.close()
 
 
 # ==================== Bulk Operations ====================
@@ -452,22 +391,17 @@ def clear_vectors():
 @validate_json(BulkEmbeddingRequest)
 def create_embeddings_bulk(body: BulkEmbeddingRequest):
     """Create multiple embeddings at once."""
-    import asyncio
-
     try:
         entities = body.entities
         user_preferences = body.user_preferences
         patterns = body.patterns
-            
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        
+
         results = {
             "entities": {"created": 0, "failed": 0},
             "user_preferences": {"created": 0, "failed": 0},
             "patterns": {"created": 0, "failed": 0},
         }
-        
+
         # Process entities
         for entity in entities:
             try:
@@ -475,8 +409,8 @@ def create_embeddings_bulk(body: BulkEmbeddingRequest):
                 if not entity_id:
                     results["entities"]["failed"] += 1
                     continue
-                    
-                loop.run_until_complete(
+
+                _run_async(
                     _store().store_entity_embedding(
                         entity_id=entity_id,
                         domain=entity.get("domain"),
@@ -491,7 +425,7 @@ def create_embeddings_bulk(body: BulkEmbeddingRequest):
             except Exception as e:
                 _LOGGER.warning("Failed to create entity embedding: %s", e)
                 results["entities"]["failed"] += 1
-                
+
         # Process user preferences
         for pref in user_preferences:
             try:
@@ -500,8 +434,8 @@ def create_embeddings_bulk(body: BulkEmbeddingRequest):
                 if not user_id or not preferences:
                     results["user_preferences"]["failed"] += 1
                     continue
-                    
-                loop.run_until_complete(
+
+                _run_async(
                     _store().store_user_preference_embedding(
                         user_id=user_id,
                         preferences=preferences,
@@ -512,7 +446,7 @@ def create_embeddings_bulk(body: BulkEmbeddingRequest):
             except Exception as e:
                 _LOGGER.warning("Failed to create user preference embedding: %s", e)
                 results["user_preferences"]["failed"] += 1
-                
+
         # Process patterns
         for pattern in patterns:
             try:
@@ -521,8 +455,8 @@ def create_embeddings_bulk(body: BulkEmbeddingRequest):
                 if not pattern_id or not entities_list:
                     results["patterns"]["failed"] += 1
                     continue
-                    
-                loop.run_until_complete(
+
+                _run_async(
                     _store().store_pattern_embedding(
                         pattern_id=pattern_id,
                         pattern_type=pattern.get("pattern_type", "learned"),
@@ -536,17 +470,15 @@ def create_embeddings_bulk(body: BulkEmbeddingRequest):
             except Exception as e:
                 _LOGGER.warning("Failed to create pattern embedding: %s", e)
                 results["patterns"]["failed"] += 1
-                
+
         return jsonify({
             "ok": True,
             "results": results,
         }), 201
-        
+
     except Exception as e:
         _LOGGER.exception("Failed to create bulk embeddings")
         return jsonify({"ok": False, "error": str(e)}), 500
-    finally:
-        loop.close()
 
 
 # ==================== Similarity Between Two ====================
@@ -555,9 +487,6 @@ def create_embeddings_bulk(body: BulkEmbeddingRequest):
 @validate_json(SimilarityRequest)
 def compute_similarity(body: SimilarityRequest):
     """Compute similarity between two entries or vectors."""
-    import asyncio
-    import math
-
     try:
         # Check for vector inputs
         if body.vector1 is not None and body.vector2 is not None:
@@ -566,50 +495,46 @@ def compute_similarity(body: SimilarityRequest):
         else:
             id1 = body.id1
             id2 = body.id2
-                
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            
+
             # Normalize IDs
             def normalize_id(id_str):
                 if not id_str.startswith(("entity:", "user_pref:", "pattern:")):
                     return f"entity:{id_str}"
                 return id_str
-                
-            entry1 = loop.run_until_complete(_store().get(normalize_id(id1)))
-            entry2 = loop.run_until_complete(_store().get(normalize_id(id2)))
-            loop.close()
-            
+
+            entry1 = _run_async(_store().get(normalize_id(id1)))
+            entry2 = _run_async(_store().get(normalize_id(id2)))
+
             if not entry1:
                 return jsonify({"ok": False, "error": f"Entry not found: {id1}"}), 404
             if not entry2:
                 return jsonify({"ok": False, "error": f"Entry not found: {id2}"}), 404
-                
+
             vec1 = entry1.vector
             vec2 = entry2.vector
-            
+
         # Compute cosine similarity
         if len(vec1) != len(vec2):
             return jsonify({
                 "ok": False,
                 "error": f"Vector dimensions don't match: {len(vec1)} vs {len(vec2)}",
             }), 400
-            
+
         dot_product = sum(a * b for a, b in zip(vec1, vec2))
         magnitude1 = math.sqrt(sum(a * a for a in vec1))
         magnitude2 = math.sqrt(sum(b * b for b in vec2))
-        
+
         if magnitude1 == 0 or magnitude2 == 0:
             similarity = 0.0
         else:
             similarity = dot_product / (magnitude1 * magnitude2)
-            
+
         return jsonify({
             "ok": True,
             "similarity": round(similarity, 4),
             "dimension": len(vec1),
         })
-        
+
     except Exception as e:
         _LOGGER.exception("Failed to compute similarity")
         return jsonify({"ok": False, "error": str(e)}), 500

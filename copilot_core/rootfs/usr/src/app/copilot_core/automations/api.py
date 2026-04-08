@@ -6,7 +6,7 @@ from flask import Blueprint, Response, jsonify, request
 from ..api.security import require_api_key
 from .suggestion_engine import AutomationSuggestionEngine
 
-automations_bp = Blueprint("automations", __name__)
+automations_bp = Blueprint("automations_suggestions", __name__)
 
 _engine: AutomationSuggestionEngine | None = None
 

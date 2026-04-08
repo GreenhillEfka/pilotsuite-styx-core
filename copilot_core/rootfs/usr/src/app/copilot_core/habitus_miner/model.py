@@ -17,7 +17,7 @@ class NormEvent:
     key: str  # normalized event key: "entity_id:transition" (e.g., "light.kitchen:on")
     entity_id: str
     domain: str  
-    transition: str  # e.g., "on", "off", ":on", ":off"
+    transition: str  # e.g., "on", "off", "heat" (without colon prefix)
     context: dict[str, str] | None = None
     
     def __post_init__(self):
@@ -90,7 +90,7 @@ class MiningConfig:
     min_hits: int = 10       # minimum AB hits needed
     
     # Quality filters
-    min_confidence: float = 0.5
+    min_confidence: float = 0.7
     min_confidence_lb: float = 0.3  # Wilson lower bound threshold
     min_lift: float = 1.2
     min_leverage: float = 0.05

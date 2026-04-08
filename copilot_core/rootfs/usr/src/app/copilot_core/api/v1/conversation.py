@@ -66,34 +66,50 @@ openai_compat_bp = Blueprint('openai_compat', __name__, url_prefix='/v1')
 
 RECOMMENDED_MODELS = [
     {
-        "id": "lfm2.5-thinking",
-        "name": "LFM 2.5 Thinking (1.2B)",
-        "size_mb": 731,
-        "description": "Liquid AI reasoning model. Ultra-light (731MB), 32K context. Good for simple conversation.",
-        "tags": ["lightweight", "reasoning"],
-        "supports_tools": False,
+        "id": "qwen3:4b",
+        "name": "Qwen 3 (4B) — Empfohlen",
+        "size_mb": 2500,
+        "description": "Beste Wahl fuer PilotSuite. Hybrid-Reasoning, 256K Kontext, exzellentes Tool-Calling, mehrsprachig (DE/EN).",
+        "tags": ["default", "recommended", "tool-calling", "multilingual", "reasoning"],
+        "supports_tools": True,
     },
     {
-        "id": "qwen3:4b",
-        "name": "Qwen 3 (4B)",
-        "size_mb": 2500,
-        "description": "Higher-quality tool-calling model. Recommended on stronger hardware.",
-        "tags": ["high-quality", "tool-calling"],
+        "id": "qwen3:1.7b",
+        "name": "Qwen 3 (1.7B)",
+        "size_mb": 1100,
+        "description": "Leichtgewichtig mit Tool-Calling. Ideal fuer Raspberry Pi / NUC mit 4GB RAM.",
+        "tags": ["lightweight", "tool-calling", "multilingual"],
         "supports_tools": True,
     },
     {
         "id": "qwen3:0.6b",
         "name": "Qwen 3 (0.6B)",
         "size_mb": 400,
-        "description": "Ultra-lightweight with tool-calling. Fast startup and low memory footprint.",
-        "tags": ["default", "recommended", "ultra-lightweight", "tool-calling"],
+        "description": "Ultra-leicht fuer schwache Hardware. Minimaler RAM-Verbrauch, schneller Start.",
+        "tags": ["ultra-lightweight", "tool-calling"],
+        "supports_tools": True,
+    },
+    {
+        "id": "gemma3:4b",
+        "name": "Gemma 3 (4B)",
+        "size_mb": 2500,
+        "description": "Google Gemini-Technologie. 128K Kontext, multimodal-faehig, kompakt.",
+        "tags": ["multimodal", "tool-calling"],
+        "supports_tools": True,
+    },
+    {
+        "id": "fixt/home-3b-v3",
+        "name": "Home 3B v3 (HA-optimiert)",
+        "size_mb": 2000,
+        "description": "Speziell fuer HA-Geraetesteuerung trainiert. 97% Function-Calling-Genauigkeit.",
+        "tags": ["ha-optimized", "tool-calling", "multilingual"],
         "supports_tools": True,
     },
     {
         "id": "llama3.2:3b",
         "name": "Llama 3.2 (3B)",
         "size_mb": 2000,
-        "description": "Meta's small model. 128K context window. Basic tool calling support.",
+        "description": "Meta's kompaktes Modell. 128K Kontext, solides Tool-Calling.",
         "tags": ["tool-calling", "lightweight"],
         "supports_tools": True,
     },
@@ -101,21 +117,56 @@ RECOMMENDED_MODELS = [
         "id": "mistral:7b",
         "name": "Mistral (7B)",
         "size_mb": 4000,
-        "description": "Proven function-calling reliability. Widely used in HA community.",
+        "description": "Bewaehrte Function-Calling-Zuverlaessigkeit. Benoetigt 8GB+ RAM.",
         "tags": ["reliable", "tool-calling"],
         "supports_tools": True,
     },
     {
-        "id": "fixt/home-3b-v3",
-        "name": "Home 3B v3 (HA-optimized)",
-        "size_mb": 2000,
-        "description": "Purpose-trained for HA device control. 97% function-calling accuracy. Use with home-llm.",
-        "tags": ["ha-optimized", "tool-calling"],
+        "id": "phi4-mini",
+        "name": "Phi-4 Mini (3.8B)",
+        "size_mb": 2200,
+        "description": "Microsoft. Starkes Reasoning + Mathematik, explizites Function-Calling.",
+        "tags": ["reasoning", "tool-calling", "multilingual"],
         "supports_tools": True,
     },
 ]
 
-DEFAULT_MODEL = "qwen3:0.6b"
+RECOMMENDED_CLOUD_MODELS = [
+    {
+        "id": "gpt-4.1-nano",
+        "name": "GPT-4.1 Nano — Empfohlen",
+        "description": "OpenAI's schnellstes + guenstigstes Modell. $0.10/1M Input. Ideal fuer Smart-Home.",
+        "tags": ["default", "recommended", "budget"],
+        "price_input_1m": 0.10,
+        "price_output_1m": 0.40,
+    },
+    {
+        "id": "gpt-4.1-mini",
+        "name": "GPT-4.1 Mini",
+        "description": "Ausgewogen: schnell + hochqualitativ. $0.40/1M Input.",
+        "tags": ["balanced"],
+        "price_input_1m": 0.40,
+        "price_output_1m": 1.60,
+    },
+    {
+        "id": "gpt-4.1",
+        "name": "GPT-4.1",
+        "description": "Vollstaendiges GPT-4.1. 1M Token Kontext.",
+        "tags": ["premium"],
+        "price_input_1m": 2.00,
+        "price_output_1m": 8.00,
+    },
+    {
+        "id": "deepseek-chat",
+        "name": "DeepSeek V3",
+        "description": "Extrem guenstig ($0.14/1M). OpenAI-kompatibel. Qualitaet auf GPT-4-Niveau.",
+        "tags": ["budget", "high-quality"],
+        "price_input_1m": 0.14,
+        "price_output_1m": 0.28,
+    },
+]
+
+DEFAULT_MODEL = "qwen3:4b"
 MODEL_ALIASES = {"pilotsuite", "default", "auto", "primary"}
 LOCAL_MODEL_ALIASES = {"local", "offline", "ollama"}
 CLOUD_MODEL_ALIASES = {"cloud", "remote"}
@@ -443,7 +494,7 @@ def _get_user_context() -> str:
                 if summary:
                     context_parts.append(f"Regionale Warnungen: {summary}")
             except Exception:
-                pass
+                logger.debug("LLM context: regional warnings failed", exc_info=True)
 
         # Active Musikwolke sessions (v3.1.0)
         media_mgr = services.get("media_zone_manager")
@@ -455,7 +506,7 @@ def _get_user_context() -> str:
                         f"Musikwolke aktiv: {len(sessions)} Session(s)"
                     )
             except Exception:
-                pass
+                logger.debug("LLM context: musikwolke sessions failed", exc_info=True)
 
         # Waste collection context (v3.2.0)
         waste_svc = services.get("waste_service")
@@ -465,7 +516,7 @@ def _get_user_context() -> str:
                 if waste_ctx:
                     context_parts.append(waste_ctx)
             except Exception:
-                pass
+                logger.debug("LLM context: waste service failed", exc_info=True)
 
         # Birthday context (v3.2.0)
         birthday_svc = services.get("birthday_service")
@@ -475,7 +526,7 @@ def _get_user_context() -> str:
                 if bday_ctx:
                     context_parts.append(bday_ctx)
             except Exception:
-                pass
+                logger.debug("LLM context: birthday service failed", exc_info=True)
 
         # Entity tags context (v3.2.3)
         tag_registry = services.get("tag_registry")
@@ -485,7 +536,7 @@ def _get_user_context() -> str:
                 if tags_ctx:
                     context_parts.append(tags_ctx)
             except Exception:
-                pass
+                logger.debug("LLM context: tag registry failed", exc_info=True)
 
         # Presence context (v3.3.0)
         try:
@@ -494,7 +545,7 @@ def _get_user_context() -> str:
             if presence_ctx:
                 context_parts.append(presence_ctx)
         except Exception:
-            pass
+            logger.debug("LLM context: presence failed", exc_info=True)
 
         # Scene context (v3.4.0)
         try:
@@ -503,7 +554,7 @@ def _get_user_context() -> str:
             if scene_ctx:
                 context_parts.append(scene_ctx)
         except Exception:
-            pass
+            logger.debug("LLM context: scenes failed", exc_info=True)
 
         # HomeKit context (v3.4.0)
         try:
@@ -512,7 +563,7 @@ def _get_user_context() -> str:
             if homekit_ctx:
                 context_parts.append(homekit_ctx)
         except Exception:
-            pass
+            logger.debug("LLM context: homekit failed", exc_info=True)
 
         # Calendar context (v3.5.0)
         try:
@@ -521,7 +572,7 @@ def _get_user_context() -> str:
             if cal_ctx:
                 context_parts.append(cal_ctx)
         except Exception:
-            pass
+            logger.debug("LLM context: calendar failed", exc_info=True)
 
         # Shopping list context (v3.5.0)
         try:
@@ -530,7 +581,7 @@ def _get_user_context() -> str:
             if shop_ctx:
                 context_parts.append(shop_ctx)
         except Exception:
-            pass
+            logger.debug("LLM context: shopping failed", exc_info=True)
 
         # Reminders context (v3.5.0)
         try:
@@ -539,7 +590,7 @@ def _get_user_context() -> str:
             if rem_ctx:
                 context_parts.append(rem_ctx)
         except Exception:
-            pass
+            logger.debug("LLM context: reminders failed", exc_info=True)
 
     except Exception as exc:
         logger.debug("Could not load user context: %s", exc)
@@ -576,6 +627,94 @@ def _get_user_context() -> str:
                     )
     except Exception:
         logger.debug("RAG retrieval failed (non-critical)", exc_info=True)
+
+    # RAG: Hybrid Search (BM25 + Semantic + RRF) for knowledge retrieval (v3.6.0)
+    try:
+        _current_msg = getattr(_get_user_context, "_current_query", "")
+        _qclass = getattr(_get_user_context, "_query_classification", None)
+        # Skip local RAG for pure web queries (weather, news etc.)
+        _skip_local_rag = (
+            _qclass and _qclass.query_type.value == "web" and _qclass.confidence >= 0.7
+        )
+        # Add web search hint for web/hybrid queries
+        if _qclass and _qclass.use_web_search:
+            context_parts.append(
+                "Hinweis: Diese Frage koennte aktuelle Web-Informationen erfordern "
+                f"(Typ: {_qclass.query_type.value}, Schluesselwoerter: {', '.join(_qclass.web_keywords_found[:3])})"
+            )
+        if _current_msg and len(_current_msg) >= 3 and not _skip_local_rag:
+            from copilot_core.rag.bm25 import BM25SqliteIndex, BM25Hit
+            from copilot_core.rag.semantic_backend import rag_semantic_search
+            from copilot_core.rag.hybrid_search import (
+                RankedHit, reciprocal_rank_fusion,
+            )
+
+            # BM25 lexical search
+            bm25_hits: list = []
+            try:
+                _bm25 = BM25SqliteIndex()  # uses default /data/ path
+                bm25_hits = _bm25.search(
+                    namespace="ha_docs",
+                    query=_current_msg,
+                    top_k=5,
+                    include_text=True,
+                )
+            except Exception:
+                logger.debug("RAG BM25 search failed", exc_info=True)
+
+            # Semantic search
+            sem_hits: list = []
+            try:
+                sem_hits = rag_semantic_search(
+                    namespace="ha_docs",
+                    query=_current_msg,
+                    top_k=5,
+                )
+            except Exception:
+                logger.debug("RAG semantic search failed", exc_info=True)
+
+            # Fuse via RRF if we have results from either source
+            if bm25_hits or sem_hits:
+                lexical_ranked = [
+                    RankedHit(doc_id=h.doc_id, score=h.score, rank=h.rank)
+                    for h in bm25_hits
+                ]
+                semantic_ranked = [
+                    RankedHit(
+                        doc_id=h.get("id", ""),
+                        score=h.get("score", 0.0),
+                        rank=idx + 1,
+                    )
+                    for idx, h in enumerate(sem_hits)
+                ]
+                fused = reciprocal_rank_fusion(
+                    lexical_hits=lexical_ranked,
+                    semantic_hits=semantic_ranked,
+                    top_k=5,
+                )
+
+                if fused:
+                    # Build snippet lookup from both sources
+                    snippets: dict = {}
+                    for h in bm25_hits:
+                        if h.text:
+                            snippets[h.doc_id] = h.text[:200]
+                    for h in sem_hits:
+                        did = h.get("id", "")
+                        if did and did not in snippets:
+                            snippets[did] = h.get("text", "")[:200]
+
+                    rag_lines = []
+                    for fh in fused:
+                        snippet = snippets.get(fh.doc_id, "")
+                        if snippet:
+                            rag_lines.append(f"[{fh.doc_id}] {snippet}")
+                    if rag_lines:
+                        context_parts.append(
+                            "Relevantes Wissen (RAG):\n  " + "\n  ".join(rag_lines)
+                        )
+    except Exception:
+        logger.debug("RAG hybrid search failed (non-critical)", exc_info=True)
 
     if not context_parts:
         return ""
@@ -685,6 +824,7 @@ def _handle_chat_completions():
         temperature = data.get('temperature')
         max_tokens = data.get('max_tokens') or data.get('max_completion_tokens')
         tools = data.get('tools')  # Client-specified tools (e.g. from extended_openai_conversation)
+        conversation_id = data.get('conversation_id', '')
 
         # Extract last user message for logging
         user_message = ""
@@ -699,7 +839,7 @@ def _handle_chat_completions():
         logger.info("Chat request: %s...", user_message[:80] if user_message else "(system-only)")
 
         # Store user message in conversation memory (lifelong learning)
-        _store_in_memory(user_message, role="user")
+        _store_in_memory(user_message, role="user", conversation_id=conversation_id)
 
         response = _process_conversation(messages, model_override=model_override,
                                          temperature=temperature, max_tokens=max_tokens,
@@ -710,7 +850,8 @@ def _handle_chat_completions():
         if choice.get("finish_reason") != "tool_calls":
             assistant_content = choice.get("message", {}).get("content", "")
             if assistant_content:
-                _store_in_memory(assistant_content, role="assistant")
+                _store_in_memory(assistant_content, role="assistant",
+                                 conversation_id=conversation_id)
 
         # If tool_calls response, return directly (no streaming)
         if choice.get("finish_reason") == "tool_calls":
@@ -756,53 +897,6 @@ def list_characters():
             for key, val in CONVERSATION_CHARACTERS.items()
         ],
         "default": DEFAULT_CHARACTER,
-    })
-
-
-@conversation_bp.route('/models/recommended', methods=['GET'])
-def list_recommended_models():
-    """List recommended local+cloud models and runtime routing."""
-    provider = _get_llm_provider()
-    provider_status = provider.status()
-    catalog = provider.model_catalog()
-
-    installed = {
-        str(model).split(":")[0]
-        for model in catalog.get("offline", {}).get("models", [])
-    }
-    installed_full = {str(model) for model in catalog.get("offline", {}).get("models", [])}
-
-    models = []
-    for m in RECOMMENDED_MODELS:
-        model_id = str(m["id"])
-        models.append({
-            **m,
-            "installed": model_id in installed_full or model_id.split(":")[0] in installed,
-            "active": model_id == str(provider_status.get("ollama_model", "")),
-            "scope": "offline",
-        })
-
-    cloud_models = []
-    for model_id in catalog.get("cloud", {}).get("recommended", []) or []:
-        cloud_models.append({
-            "id": model_id,
-            "name": model_id,
-            "description": "Cloud model",
-            "tags": ["cloud"],
-            "supports_tools": True,
-            "active": model_id == str(provider_status.get("cloud_model", "")),
-        })
-
-    return jsonify({
-        "models": models,
-        "cloud_models": cloud_models,
-        "offline_models": catalog.get("offline", {}).get("models", []),
-        "current_model": provider_status.get("ollama_model", DEFAULT_MODEL),
-        "cloud_current_model": provider_status.get("cloud_model"),
-        "primary_provider": provider_status.get("primary_provider", "offline"),
-        "secondary_provider": provider_status.get("secondary_provider", "cloud"),
-        "ollama_url": provider_status.get("ollama_url"),
-        "cloud_url": provider_status.get("cloud_api_url"),
     })
 
 
@@ -887,12 +981,167 @@ def llm_routing_set():
         secondary_provider=body.get("secondary_provider"),
         offline_model=body.get("offline_model"),
         cloud_model=body.get("cloud_model"),
+        cloud_api_url=body.get("cloud_api_url"),
+        cloud_api_key=body.get("cloud_api_key"),
         persist=persist,
     )
     return jsonify({
         "ok": True,
         "status": status,
         "catalog": provider.model_catalog(force_refresh=True),
+    })
+
+
+@conversation_bp.route('/models/pull', methods=['POST'])
+@require_token
+def llm_model_pull():
+    """Trigger Ollama model download (pull). Returns streaming progress."""
+    body = request.get_json(silent=True) or {}
+    model_name = str(body.get("model", "")).strip()
+    if not model_name:
+        return jsonify({"ok": False, "error": "Missing 'model' parameter"}), 400
+
+    provider = _get_llm_provider()
+    ollama_url = provider.ollama_url
+
+    import requests as http_req
+    try:
+        resp = http_req.post(
+            f"{ollama_url}/api/pull",
+            json={"name": model_name, "stream": False},
+            timeout=600,
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            provider.reload_config()
+            return jsonify({
+                "ok": True,
+                "model": model_name,
+                "status": data.get("status", "success"),
+                "catalog": provider.model_catalog(force_refresh=True),
+            })
+        return jsonify({
+            "ok": False,
+            "error": f"Ollama returned {resp.status_code}: {resp.text[:200]}",
+        }), 502
+    except http_req.exceptions.ConnectionError:
+        return jsonify({
+            "ok": False,
+            "error": f"Ollama nicht erreichbar unter {ollama_url}",
+        }), 503
+    except http_req.exceptions.Timeout:
+        return jsonify({
+            "ok": False,
+            "error": "Download-Timeout (>600s). Modell manuell herunterladen: ollama pull " + model_name,
+        }), 504
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+@conversation_bp.route('/models/pull/status', methods=['POST'])
+@require_token
+def llm_model_pull_status():
+    """Check if a model is already downloaded in Ollama."""
+    body = request.get_json(silent=True) or {}
+    model_name = str(body.get("model", "")).strip()
+    if not model_name:
+        return jsonify({"ok": False, "error": "Missing 'model'"}), 400
+
+    provider = _get_llm_provider()
+    ollama_url = provider.ollama_url
+
+    import requests as http_req
+    try:
+        resp = http_req.post(
+            f"{ollama_url}/api/show",
+            json={"name": model_name},
+            timeout=10,
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            size_bytes = 0
+            for layer in data.get("details", {}).get("families", []):
+                pass
+            # Try to get model size from modelfile info
+            model_info = data.get("modelinfo", data.get("details", {}))
+            return jsonify({
+                "ok": True,
+                "model": model_name,
+                "installed": True,
+                "details": {
+                    "format": model_info.get("format", ""),
+                    "family": model_info.get("family", ""),
+                    "parameter_size": model_info.get("parameter_size", ""),
+                    "quantization_level": model_info.get("quantization_level", ""),
+                },
+            })
+        return jsonify({"ok": True, "model": model_name, "installed": False})
+    except Exception:
+        return jsonify({"ok": True, "model": model_name, "installed": False})
+
+
+@conversation_bp.route('/models/delete', methods=['POST'])
+@require_token
+def llm_model_delete():
+    """Delete an Ollama model."""
+    body = request.get_json(silent=True) or {}
+    model_name = str(body.get("model", "")).strip()
+    if not model_name:
+        return jsonify({"ok": False, "error": "Missing 'model'"}), 400
+
+    provider = _get_llm_provider()
+    ollama_url = provider.ollama_url
+
+    import requests as http_req
+    try:
+        resp = http_req.delete(
+            f"{ollama_url}/api/delete",
+            json={"name": model_name},
+            timeout=30,
+        )
+        if resp.status_code == 200:
+            provider.reload_config()
+            return jsonify({
+                "ok": True,
+                "model": model_name,
+                "status": "deleted",
+                "catalog": provider.model_catalog(force_refresh=True),
+            })
+        return jsonify({
+            "ok": False,
+            "error": f"Ollama: {resp.status_code} — {resp.text[:200]}",
+        }), 502
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+@conversation_bp.route('/models/recommended', methods=['GET'])
+def llm_recommended_models():
+    """Return recommended offline + cloud models with install status."""
+    provider = _get_llm_provider()
+    catalog = provider.model_catalog(force_refresh=False)
+    installed = set(catalog.get("offline", {}).get("models", []))
+
+    offline_recs = []
+    for m in RECOMMENDED_MODELS:
+        entry = dict(m)
+        entry["installed"] = m["id"] in installed or any(
+            m["id"].split(":")[0] in inst for inst in installed
+        )
+        entry["active"] = m["id"] == catalog.get("offline", {}).get("active_model")
+        offline_recs.append(entry)
+
+    cloud_recs = []
+    for m in RECOMMENDED_CLOUD_MODELS:
+        entry = dict(m)
+        entry["active"] = m["id"] == catalog.get("cloud", {}).get("active_model")
+        cloud_recs.append(entry)
+
+    return jsonify({
+        "ok": True,
+        "offline": offline_recs,
+        "cloud": cloud_recs,
+        "status": provider.status(),
     })
 
 
@@ -919,9 +1168,7 @@ def memory_stats():
         if vector_store:
             import asyncio
             try:
-                loop = asyncio.new_event_loop()
-                vs_stats = loop.run_until_complete(vector_store.stats())
-                loop.close()
+                vs_stats = asyncio.run(vector_store.stats())
                 result["vector_store"] = vs_stats
                 result["rag_active"] = True
             except Exception:
@@ -956,7 +1203,7 @@ def memory_preferences():
         return jsonify({"error": str(exc)}), 500
 
 
-def _store_in_memory(content: str, role: str = "user"):
+def _store_in_memory(content: str, role: str = "user", conversation_id: str = ""):
     """Store a message in conversation memory + vector store (fire-and-forget)."""
     try:
         from flask import current_app
@@ -964,7 +1211,10 @@ def _store_in_memory(content: str, role: str = "user"):
         conv_memory = services.get("conversation_memory")
         if conv_memory and content:
             character = os.environ.get("CONVERSATION_CHARACTER", DEFAULT_CHARACTER)
-            msg_id = conv_memory.store_message(role=role, content=content, character=character)
+            msg_id = conv_memory.store_message(
+                role=role, content=content, character=character,
+                conversation_id=conversation_id or None,
+            )
 
             # RAG: also embed the message in VectorStore for semantic retrieval
             vector_store = services.get("vector_store")
@@ -1009,7 +1259,7 @@ def _process_conversation(messages: list, model_override: str = None,
     # Resolve character
     character_name = os.environ.get("CONVERSATION_CHARACTER", DEFAULT_CHARACTER)
     for char_key in CONVERSATION_CHARACTERS:
-        if char_key in model.lower():
+        if char_key in response_model.lower():
             character_name = char_key
             break
 
@@ -1022,6 +1272,20 @@ def _process_conversation(messages: list, model_override: str = None,
             last_user_msg = msg.get("content", "")
             break
     _get_user_context._current_query = last_user_msg
+
+    # Query Router: classify query for search strategy (v3.6.0)
+    try:
+        from copilot_core.rag.query_router import classify_query
+        qclass = classify_query(last_user_msg) if last_user_msg else None
+        _get_user_context._query_classification = qclass
+        if qclass:
+            logger.debug(
+                "Query classified: type=%s confidence=%.2f web=%s",
+                qclass.query_type.value, qclass.confidence, qclass.use_web_search,
+            )
+    except Exception:
+        _get_user_context._query_classification = None
+        logger.debug("Query router failed (non-critical)", exc_info=True)
 
     # Build system prompt with user context injection
     system_prompt = character["system_prompt"]
@@ -2017,7 +2281,13 @@ def _stream_response(response: dict):
 
 
 def register_routes(app):
-    """Register conversation routes with Flask app."""
+    """Register conversation routes with Flask app.
+
+    DEPRECATED: Blueprints are now registered centrally in core_setup.py.
+    This function is kept for backward compatibility but only registers
+    conversation_bp. The openai_compat_bp is registered in core_setup.py
+    to avoid double registration conflicts.
+    """
     app.register_blueprint(conversation_bp)
-    app.register_blueprint(openai_compat_bp)
-    logger.info("Registered conversation API at /chat/* and /v1/*")
+    # openai_compat_bp is now registered in core_setup.py only
+    logger.info("Registered conversation API at /chat/*")

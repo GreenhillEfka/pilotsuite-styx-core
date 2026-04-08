@@ -324,13 +324,72 @@ class TagRegistry:
         return zone
     
     def add_to_zone(self, zone_id: str, subject_canonical_id: str) -> bool:
-        """Fügt ein Subject zu einer Zone hinzu."""
-        zone = self._zones.get(zone_id)
-        if zone and subject_canonical_id in self._subjects:
+        """Fügt ein Subject zu einer Zone hinzu. Erstellt Zone automatisch falls nötig."""
+        if zone_id not in self._zones:
+            # Auto-create zone from place tag
+            zone_name = zone_id.replace("zone:", "").replace("_", " ").title()
+            self.create_zone(zone_id, zone_name)
+        zone = self._zones[zone_id]
+        if subject_canonical_id not in zone.member_subject_ids:
             zone.member_subject_ids.append(subject_canonical_id)
+        return True
+
+    def remove_from_zone(self, zone_id: str, subject_canonical_id: str) -> bool:
+        """Entfernt ein Subject aus einer Zone."""
+        zone = self._zones.get(zone_id)
+        if zone and subject_canonical_id in zone.member_subject_ids:
+            zone.member_subject_ids.remove(subject_canonical_id)
             return True
         return False
-    
+
+    def get_zone_members(self, zone_id: str) -> list[str]:
+        """Liefert alle Subject-IDs einer Zone."""
+        zone = self._zones.get(zone_id)
+        if zone:
+            return list(zone.member_subject_ids)
+        return []
+
+    def get_zones(self) -> list[str]:
+        """Liefert alle Zone-IDs die Mitglieder haben."""
+        return [zid for zid, z in self._zones.items() if z.member_subject_ids]
+
+    def get_subject_tag_ids(self, subject_canonical_id: str) -> list[str]:
+        """Liefert alle Tag-IDs (als Strings) für ein Subject."""
+        return [
+            a.tag_id for a in self._assignments
+            if a.subject_canonical_id == subject_canonical_id
+        ]
+
+    def get_context_for_llm(self) -> dict:
+        """Liefert Tag-Kontext für LLM-Prompt-Enrichment."""
+        return {
+            "tags_count": len(self._tags),
+            "subjects_count": len(self._subjects),
+            "zones_count": len(self._zones),
+            "assignments_count": len(self._assignments),
+            "zones": {
+                zid: {
+                    "name": z.name,
+                    "members": len(z.member_subject_ids),
+                }
+                for zid, z in self._zones.items()
+            },
+        }
+
+    def auto_tag_styx(self, entity_ids: list[str]) -> None:
+        """Auto-tags entities that Styx interacts with."""
+        styx_tag_id = "aicp.role.styx"
+        if styx_tag_id not in self._tags:
+            self.create_tag(
+                styx_tag_id, TagFacet.ROLE,
+                display_de="Styx", display_en="Styx",
+            )
+        for eid in entity_ids:
+            if eid not in self._subjects:
+                domain = eid.split(".")[0] if "." in eid else ""
+                self.register_subject(eid, SubjectType.ENTITY, domain=domain)
+            self.assign_tag(styx_tag_id, eid, assigned_by="styx")
+
     # === Export für HA Labels ===
     
     def export_ha_labels(self) -> list[dict]:

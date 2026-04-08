@@ -5,27 +5,94 @@ from __future__ import annotations
 import json
 import logging
 import time
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from .model import NormEvent, Rule, MiningConfig, EventStreamType, RulesType  
+from .model import NormEvent, Rule, MiningConfig, EventStreamType, RulesType
 from .store import HabitusMinerStore
 from .mining import mine_ab_rules, mine_with_context_stratification
+from .feedback_store import HabitusFeedbackStore
+from .zone_mining import ZoneBasedMiner
 
 _LOGGER = logging.getLogger(__name__)
 
 
 class HabitusMinerService:
     """Main service for discovering behavioral patterns in Smart Home events."""
-    
+
     def __init__(
         self,
         storage_dir: Path,
-        config: MiningConfig | None = None
+        config: MiningConfig | None = None,
+        vector_store: Any = None,
+        embedding_engine: Any = None,
+        integration_bus: Any = None,
     ):
         self.storage_dir = Path(storage_dir)
         self.config = config or MiningConfig()
         self.store = HabitusMinerStore(self.storage_dir)
+        self.feedback_store = HabitusFeedbackStore(self.storage_dir)
+        self._vector_store = vector_store
+        self._embedding_engine = embedding_engine
+        self._integration_bus = integration_bus
+
+    def _bucket_numeric_sensor_state(self, entity_id: str, value: str) -> str | None:
+        """Bucket noisy numeric sensor values into semantic states.
+
+        This creates reusable mining tokens such as ``dark`` or ``cool`` so
+        proposals can be learned from sensor/media/presence correlations rather
+        than from exact numeric values.
+        """
+        try:
+            numeric = float(value)
+        except (TypeError, ValueError):
+            return None
+
+        entity_lower = entity_id.lower()
+        if any(token in entity_lower for token in ("illuminance", "brightness", "lux", "light_level")):
+            if numeric < 10:
+                return "very_dark"
+            if numeric < 50:
+                return "dark"
+            if numeric < 150:
+                return "dim"
+            if numeric < 500:
+                return "bright"
+            return "very_bright"
+
+        if any(token in entity_lower for token in ("temperature", "temp")):
+            if numeric < 18:
+                return "cold"
+            if numeric < 21:
+                return "cool"
+            if numeric < 24:
+                return "comfortable"
+            if numeric < 27:
+                return "warm"
+            return "hot"
+
+        if any(token in entity_lower for token in ("humidity", "feuchtigkeit")):
+            if numeric < 30:
+                return "dry"
+            if numeric < 60:
+                return "normal"
+            if numeric < 75:
+                return "humid"
+            return "very_humid"
+
+        return None
+
+    def _normalize_state_value(self, entity_id: str, domain: str, state: Any) -> str | None:
+        if state in (None, "", "unknown", "unavailable"):
+            return None
+
+        normalized = str(state).strip().lower()
+        if domain == "sensor":
+            bucket = self._bucket_numeric_sensor_state(entity_id, normalized)
+            if bucket:
+                return bucket
+        return normalized
     
     def normalize_ha_event(self, ha_event: dict[str, Any]) -> NormEvent | None:
         """Convert Home Assistant event to normalized event.
@@ -60,35 +127,37 @@ class HabitusMinerService:
             if not new_state or not isinstance(new_state, dict):
                 return None
             
-            old_val = old_state.get("state") if old_state else None
-            new_val = new_state.get("state")
-            
-            # Only process actual state transitions
+            raw_old_val = old_state.get("state") if old_state else None
+            raw_new_val = new_state.get("state")
+
+            # Extract domain early because normalization may depend on it
+            domain = entity_id.split('.', 1)[0] if '.' in entity_id else ""
+            old_val = self._normalize_state_value(entity_id, domain, raw_old_val)
+            new_val = self._normalize_state_value(entity_id, domain, raw_new_val)
+
+            # Only process meaningful state transitions after normalization
             if old_val == new_val:
                 return None
-            
+
             # Skip unavailable/unknown states
-            if new_val in ("unavailable", "unknown", ""):
+            if new_val is None:
                 return None
-            
+
             # Parse timestamp
             time_fired = ha_event.get("time_fired")
             if isinstance(time_fired, str):
                 # Parse ISO timestamp
                 from datetime import datetime
-                dt = datetime.fromisoformat(time_fired.replace('Z', '+00:00'))
-                ts_ms = int(dt.timestamp() * 1000)
+                parsed_dt = datetime.fromisoformat(time_fired.replace('Z', '+00:00'))
+                ts_ms = int(parsed_dt.timestamp() * 1000)
             elif isinstance(time_fired, (int, float)):
                 ts_ms = int(time_fired * 1000)
             else:
                 ts_ms = int(time.time() * 1000)
-            
-            # Extract domain
-            domain = entity_id.split('.', 1)[0] if '.' in entity_id else ""
-            
-            # Create normalized transition
-            transition = f":{new_val}"  # e.g., ":on", ":off", ":heat"
-            
+
+            # Create normalized transition (without colon prefix)
+            transition = new_val  # e.g., "on", "dark", "comfortable"
+
             # Extract context (privacy-aware)
             context = {}
             ha_context = ha_event.get("context", {})
@@ -117,7 +186,7 @@ class HabitusMinerService:
             
             return NormEvent(
                 ts=ts_ms,
-                key=f"{entity_id}{transition}",  # e.g., "light.kitchen:on"
+                key=f"{entity_id}:{transition}",  # e.g., "light.kitchen:on"
                 entity_id=entity_id,
                 domain=domain,
                 transition=transition,
@@ -172,13 +241,138 @@ class HabitusMinerService:
             "Mining completed in %.2fs: found %d rules",
             mining_time, len(rules)
         )
-        
+
+        # Apply feedback weights from previous user decisions
+        rules = self._apply_feedback_weights(rules)
+
         # Cache events and save rules
         self.store.cache_events(events)
         self.store.save_rules(rules)
         self.store.update_mining_timestamp(int(time.time() * 1000))
-        
+
+        # Embed new rules in RAG vector store and publish discovery events
+        if rules:
+            self._embed_rules_in_rag(rules)
+            self._publish_pattern_events(rules)
+
         return rules
+
+    def _apply_feedback_weights(self, rules: RulesType) -> RulesType:
+        """Apply persistent feedback weights to mined rules.
+
+        Accepted patterns get boosted confidence, rejected patterns get
+        suppressed.  Rules whose weighted confidence drops below the
+        configured min_confidence are removed.
+        """
+        weights = self.feedback_store.get_feedback_weights()
+        if not weights:
+            return rules
+
+        adjusted = []
+        suppressed = 0
+        for rule in rules:
+            # Build pattern key matching the feedback store format
+            pattern_key = f"{rule.A}->{rule.B}"
+            w = weights.get(pattern_key)
+            if w is None:
+                adjusted.append(rule)
+                continue
+
+            # Apply weight multiplier to confidence
+            rule.confidence = min(1.0, rule.confidence * w)
+            from .mining import _wilson_lower_bound
+            # Recalculate lower bound based on adjusted confidence
+            rule.confidence_lb = _wilson_lower_bound(
+                int(rule.nAB * w), rule.nA
+            ) if rule.nA > 0 else 0.0
+
+            # Suppress rules that fall below threshold after feedback
+            if rule.confidence < self.config.min_confidence:
+                suppressed += 1
+                continue
+            adjusted.append(rule)
+
+        if suppressed:
+            _LOGGER.info("Feedback suppressed %d rules below confidence threshold", suppressed)
+
+        # Re-sort by score
+        adjusted.sort(key=lambda r: r.score(), reverse=True)
+        return adjusted
+
+    def _embed_rules_in_rag(self, rules: RulesType) -> None:
+        """Embed discovered rules in vector store for semantic search.
+
+        Only embeds when the embedding engine uses Ollama (semantic
+        embeddings).  Hash-based local embeddings (bag-of-words) produce
+        vectors without real semantic meaning, so skipping them avoids
+        polluting the vector store with useless data.
+        """
+        vs = self._vector_store
+        ee = self._embedding_engine
+        if not vs or not ee or not hasattr(ee, "embed_text_sync"):
+            return
+        # Skip if embedding engine is hash-only (no semantic value)
+        if hasattr(ee, "config") and not getattr(ee.config, "use_ollama", False):
+            _LOGGER.debug("Skipping RAG embedding — hash-only engine has no semantic value")
+            return
+
+        embedded = 0
+        for rule in rules:
+            try:
+                a_entity = rule.A.rsplit(":", 1)[0] if ":" in rule.A else rule.A
+                b_entity = rule.B.rsplit(":", 1)[0] if ":" in rule.B else rule.B
+                zone_id = getattr(rule, "zone_id", "") or ""
+                text = (
+                    f"Wenn {a_entity} sich aendert, "
+                    f"folgt {b_entity} innerhalb von {rule.dt_sec} Sekunden "
+                    f"mit {rule.confidence:.0%} Wahrscheinlichkeit"
+                    f" ({rule.lift:.1f}x haeufiger als Zufall, {rule.nAB} Beobachtungen)"
+                )
+                if zone_id:
+                    text += f" in Zone {zone_id}"
+                vector = ee.embed_text_sync(text)
+                rule_key = f"{rule.A}_{rule.B}_{rule.dt_sec}"
+                vs.upsert_sync(
+                    entry_id=f"pattern:{rule_key}",
+                    vector=vector,
+                    entry_type="pattern",
+                    metadata={
+                        "a_entity": a_entity,
+                        "b_entity": b_entity,
+                        "confidence": rule.confidence,
+                        "lift": rule.lift,
+                        "support": rule.nAB,
+                        "zone_id": getattr(rule, "zone_id", "") or "",
+                    },
+                )
+                embedded += 1
+            except Exception:
+                _LOGGER.debug("Failed to embed rule %s → %s in RAG", rule.A, rule.B, exc_info=True)
+
+        if embedded:
+            _LOGGER.info("Embedded %d/%d rules in RAG vector store", embedded, len(rules))
+
+    def _publish_pattern_events(self, rules: RulesType) -> None:
+        """Publish pattern.discovered events on the integration bus."""
+        bus = self._integration_bus
+        if not bus or not hasattr(bus, "publish"):
+            return
+
+        for rule in rules:
+            try:
+                a_entity = rule.A.rsplit(":", 1)[0] if ":" in rule.A else rule.A
+                b_entity = rule.B.rsplit(":", 1)[0] if ":" in rule.B else rule.B
+                bus.publish("pattern.discovered", {
+                    "rule_key": f"{rule.A}_{rule.B}_{rule.dt_sec}",
+                    "a_entity": a_entity,
+                    "b_entity": b_entity,
+                    "confidence": rule.confidence,
+                    "lift": rule.lift,
+                    "support": rule.nAB,
+                    "zone_id": getattr(rule, "zone_id", "") or "",
+                })
+            except Exception:
+                _LOGGER.debug("Failed to publish pattern.discovered event", exc_info=True)
     
     def get_rules(
         self, 
@@ -315,6 +509,51 @@ class HabitusMinerService:
             "storage_stats": self.store.get_stats(),
         }
     
+    def get_zone_proposals(
+        self,
+        *,
+        tag_zone_integration: Any,
+        events: EventStreamType | None = None,
+        zone_id: str | None = None,
+        limit: int = 10,
+        min_confidence: float = 0.55,
+        zone_configs: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Generate explainable automation proposals for habitus zones."""
+        if tag_zone_integration is None:
+            raise ValueError("tag_zone_integration is required")
+
+        event_stream = events if events is not None else self.store.load_cached_events()
+        miner = ZoneBasedMiner(tag_zone_integration, self.config)
+
+        if zone_configs:
+            for current_zone_id, config in zone_configs.items():
+                miner.set_zone_config(current_zone_id, config)
+
+        results = miner.mine_all_zones(event_stream)
+        if zone_id:
+            zone_result = results.get(zone_id)
+            if zone_result is None:
+                zone_result = miner.mine_zone(event_stream, zone_id)
+            results = {zone_id: zone_result}
+
+        return {
+            "status": "ok",
+            "zone_id": zone_id,
+            "events": len(event_stream),
+            "proposals": miner.build_zone_proposals(
+                results,
+                limit=limit,
+                min_confidence=min_confidence,
+                zone_id=zone_id,
+            ),
+            "results": miner.export_results(
+                results,
+                proposal_limit=limit,
+                proposal_min_confidence=min_confidence,
+            ),
+        }
+
     def update_config(self, **kwargs) -> None:
         """Update mining configuration."""
         for key, value in kwargs.items():
@@ -322,7 +561,57 @@ class HabitusMinerService:
                 setattr(self.config, key, value)
                 _LOGGER.info("Updated config %s = %s", key, value)
     
+    def apply_feedback(self, rule_a: str, rule_b: str, accepted: bool) -> bool:
+        """Apply user feedback to a rule's confidence.
+
+        When a suggestion based on a rule is accepted, the rule's nAB count
+        is incremented (raising confidence).  When rejected, nA is
+        incremented without nAB (lowering confidence).  The rule is then
+        re-scored and persisted.
+
+        Feedback is also recorded in the persistent feedback store so that
+        future mining runs apply the same reinforcement/suppression.
+
+        Returns True if the rule was found and updated.
+        """
+        rules = self.store.rules
+        target = None
+        for rule in rules:
+            if rule.A == rule_a and rule.B == rule_b:
+                target = rule
+                break
+
+        if target is None:
+            _LOGGER.warning("Feedback for unknown rule %s -> %s", rule_a, rule_b)
+            return False
+
+        if accepted:
+            target.nA += 1
+            target.nAB += 1
+        else:
+            target.nA += 1
+            # nAB stays the same -> confidence drops
+
+        # Recalculate confidence
+        target.confidence = target.nAB / target.nA if target.nA > 0 else 0.0
+        from .mining import _wilson_lower_bound
+        target.confidence_lb = _wilson_lower_bound(target.nAB, target.nA)
+
+        self.store.save_rules(rules)
+
+        # Persist feedback for future mining runs
+        pattern_key = f"{rule_a}->{rule_b}"
+        action = "accepted" if accepted else "rejected"
+        self.feedback_store.record_feedback(pattern_key, action)
+
+        _LOGGER.info(
+            "Feedback applied to %s -> %s: accepted=%s, new confidence=%.3f",
+            rule_a, rule_b, accepted, target.confidence,
+        )
+        return True
+
     def reset_cache(self) -> None:
-        """Reset all cached data."""
+        """Reset all cached data including feedback."""
         self.store.clear_cache()
-        _LOGGER.info("Reset all cached data")
+        self.feedback_store.clear()
+        _LOGGER.info("Reset all cached data including feedback")

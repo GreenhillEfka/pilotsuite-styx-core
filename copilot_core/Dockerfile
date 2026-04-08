@@ -25,9 +25,21 @@ RUN apk add --no-cache \
         pydantic==2.12.5 \
         requests==2.31.0 \
         qrcode==8.0 \
-        numpy && \
+        numpy \
+        aiohttp \
+        scikit-learn \
+        prometheus_client && \
     # Remove build deps to keep image small
     apk del gcc g++ musl-dev python3-dev linux-headers
+
+# ── Node.js + node-sonos-http-api (Sonos native control) ────────────────────
+RUN apk add --no-cache nodejs npm git && \
+    mkdir -p /usr/src/sonos && \
+    cd /usr/src/sonos && \
+    npm init -y && \
+    npm install --omit=dev github:jishi/node-sonos-http-api && \
+    mkdir -p presets cache clips && \
+    apk del git
 
 # ── Ollama (optional — LLM features) ────────────────────────────────────────
 # Try Alpine edge package first, fall back to binary download

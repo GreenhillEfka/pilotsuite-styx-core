@@ -1,0 +1,1357 @@
+openapi: 3.0.3
+info:
+  title: PilotSuite Styx Core API
+  description: "\n# PilotSuite Styx Core API Documentation\n\nComprehensive REST API\
+    \ documentation for the PilotSuite Styx Core home automation platform.\n\n## Architecture\n\
+    \nPilotSuite Styx Core is a modular home automation backend built on Flask, providing:\n\
+    \n- **Smart Home Integration**: Native Home Assistant integration with bi-directional\
+    \ sync\n- **AI-Powered Automation**: Pattern mining, habitus learning, and predictive\
+    \ automation\n- **Multi-Home Support**: Cross-home entity sharing and federated\
+    \ learning\n- **Real-time Monitoring**: System health, energy tracking, and network\
+    \ diagnostics\n- **Notification Engine**: Multi-channel notifications with digest\
+    \ and scheduling\n\n## Authentication\n\nAll API endpoints require authentication\
+    \ via one of the following methods:\n\n### API Key Authentication\nMost endpoints\
+    \ use API Key authentication via the `X-API-Key` header:\n```\nX-API-Key: your-api-key-here\n\
+    ```\n\n### Bearer Token Authentication\nSome endpoints (Notifications, Telegram)\
+    \ use Bearer token authentication:\n```\nAuthorization: Bearer your-token-here\n\
+    ```\n\n## Versioning\n\nAPI versioning is supported via the `Accept-Version` header:\n\
+    ```\nAccept-Version: v1\n```\n\nDeprecated endpoints include `Deprecation` and\
+    \ `Sunset` headers in responses.\n\n## Response Format\n\nAll responses follow\
+    \ a consistent JSON structure:\n```json\n{\n  \"status\": \"success\",\n  \"data\"\
+    : { ... },\n  \"metadata\": {\n    \"timestamp\": \"2026-03-01T10:00:00Z\",\n\
+    \    \"version\": \"v1\"\n  }\n}\n```\n\nError responses include:\n```json\n{\n\
+    \  \"status\": \"error\",\n  \"error\": {\n    \"code\": \"ERROR_CODE\",\n   \
+    \ \"message\": \"Human-readable error message\",\n    \"details\": { ... }\n \
+    \ }\n}\n```\n"
+  version: 14.7.3
+  contact:
+    name: PilotSuite
+    url: https://github.com/GreenhillEfka/pilotsuite-styx-core
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+servers:
+- url: http://localhost:8909
+  description: Local development server
+- url: http://homeassistant.local:8909
+  description: Home Assistant network server
+- url: https://pilotsuite.example.com/api
+  description: Production server
+tags:
+- name: System Health
+  description: System health monitoring, diagnostics, and performance metrics
+- name: Brain Graph
+  description: Knowledge graph for event storage, pattern mining, and neural visualization
+- name: Habitus
+  description: Pattern mining and habitus learning for automation discovery
+- name: Candidates
+  description: Automation candidate management lifecycle
+- name: Mood
+  description: Zone mood scoring and ambient context
+- name: Notifications
+  description: Notification engine with multi-channel delivery
+- name: Sharing
+  description: Cross-home entity sharing and synchronization
+- name: Collective Intelligence
+  description: Federated learning across multiple homes
+- name: Energy
+  description: Energy monitoring and optimization
+- name: UniFi
+  description: UniFi network monitoring
+- name: Tags
+  description: Tag system for entity organization
+- name: Dev Surface
+  description: Development observability and diagnostics
+- name: Telegram
+  description: Telegram bot integration
+- name: Hub
+  description: PilotSuite Hub - Central management interface
+security:
+- apiKeyAuth: []
+- bearerAuth: []
+paths:
+  /api/v1/system_health:
+    get:
+      summary: Get complete system health status
+      description: Returns comprehensive system health including CPU, memory, disk,
+        network, and service status.
+      operationId: getSystemHealth
+      tags:
+      - System Health
+      responses:
+        '200':
+          description: System health status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: healthy
+                  cpu:
+                    type: object
+                    properties:
+                      usage_percent:
+                        type: number
+                        example: 23.5
+                      cores:
+                        type: integer
+                        example: 4
+                      temperature:
+                        type: number
+                        example: 45.2
+                  memory:
+                    type: object
+                    properties:
+                      total_mb:
+                        type: integer
+                        example: 8192
+                      used_mb:
+                        type: integer
+                        example: 4096
+                      percent:
+                        type: number
+                        example: 50.0
+                  disk:
+                    type: object
+                    properties:
+                      total_gb:
+                        type: number
+                        example: 128
+                      used_gb:
+                        type: number
+                        example: 64
+                      percent:
+                        type: number
+                        example: 50.0
+                  services:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                        status:
+                          type: string
+                          enum:
+                          - running
+                          - stopped
+                          - error
+      security:
+      - apiKeyAuth: []
+  /api/v1/system_health/zigbee:
+    get:
+      summary: Get Zigbee mesh health
+      description: Returns Zigbee network health including signal quality, routing
+        tables, and device status.
+      operationId: getZigbeeHealth
+      tags:
+      - System Health
+      - Zigbee
+      responses:
+        '200':
+          description: Zigbee mesh health
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  coordinator:
+                    type: object
+                    properties:
+                      ieee:
+                        type: string
+                        example: 00:12:4b:00:12:34:56:78
+                      status:
+                        type: string
+                      channel:
+                        type: integer
+                        example: 15
+                  devices:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        ieee:
+                          type: string
+                        nwk:
+                          type: string
+                        lqi:
+                          type: integer
+                        rssi:
+                          type: integer
+      parameters:
+      - name: force
+        in: query
+        description: Force refresh from coordinator
+        required: false
+        schema:
+          type: boolean
+          default: false
+      security:
+      - apiKeyAuth: []
+  /api/v1/system_health/zwave:
+    get:
+      summary: Get Z-Wave mesh health
+      description: Returns Z-Wave network health including node status, routing, and
+        signal quality.
+      operationId: getZWaveHealth
+      tags:
+      - System Health
+      - Z-Wave
+      responses:
+        '200':
+          description: Z-Wave mesh health
+      security:
+      - apiKeyAuth: []
+  /api/v1/graph/state:
+    get:
+      summary: Get current graph state as JSON
+      description: Returns the complete graph state including nodes, edges, and metadata.
+      operationId: getGraphState
+      tags:
+      - Brain Graph
+      responses:
+        '200':
+          description: Graph state
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  nodes:
+                    type: array
+                    items:
+                      type: object
+                  edges:
+                    type: array
+                    items:
+                      type: object
+                  metadata:
+                    type: object
+      parameters:
+      - name: kind
+        in: query
+        description: Filter by node kind (repeatable)
+        required: false
+        schema:
+          type: string
+      - name: domain
+        in: query
+        description: Filter by domain (repeatable)
+        required: false
+        schema:
+          type: string
+      - name: center
+        in: query
+        description: Center node for neighborhood query
+        required: false
+        schema:
+          type: string
+      - name: hops
+        in: query
+        description: Number of hops for neighborhood
+        required: false
+        schema:
+          type: integer
+          default: 1
+      - name: limitNodes
+        in: query
+        description: Maximum nodes to return
+        required: false
+        schema:
+          type: integer
+          default: 100
+      - name: nocache
+        in: query
+        description: Bypass cache
+        required: false
+        schema:
+          type: boolean
+          default: false
+      security:
+      - apiKeyAuth: []
+  /api/v1/graph/render:
+    post:
+      summary: Render graph visualization
+      description: Generates SVG or PNG visualization of the graph.
+      operationId: renderGraph
+      tags:
+      - Brain Graph
+      responses:
+        '200':
+          description: Graph visualization
+          content:
+            image/svg+xml:
+              schema:
+                type: string
+            image/png:
+              schema:
+                type: string
+                format: binary
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                format:
+                  type: string
+                  enum:
+                  - svg
+                  - png
+                  default: svg
+                layout:
+                  type: string
+                  enum:
+                  - force
+                  - hierarchical
+                  - circular
+                filters:
+                  type: object
+      security:
+      - apiKeyAuth: []
+  /api/v1/graph/query:
+    post:
+      summary: Execute graph query
+      description: Execute complex queries on the knowledge graph.
+      operationId: queryGraph
+      tags:
+      - Brain Graph
+      responses:
+        '200':
+          description: Query results
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                query:
+                  type: string
+                parameters:
+                  type: object
+      security:
+      - apiKeyAuth: []
+  /api/v1/habitus/mine:
+    post:
+      summary: Trigger habitus pattern mining
+      description: Initiates pattern mining to discover automation candidates from
+        historical data.
+      operationId: triggerMining
+      tags:
+      - Habitus
+      responses:
+        '200':
+          description: Mining triggered successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: started
+                  job_id:
+                    type: string
+                  estimated_duration:
+                    type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                lookback_hours:
+                  type: integer
+                  default: 72
+                  description: How far back to analyze
+                force:
+                  type: boolean
+                  default: false
+                  description: Force run even if recent
+                zone:
+                  type: string
+                  description: Zone ID to filter patterns
+      security:
+      - apiKeyAuth: []
+  /api/v1/habitus/stats:
+    get:
+      summary: Get mining statistics
+      description: Returns statistics about pattern mining operations.
+      operationId: getHabitusStats
+      tags:
+      - Habitus
+      responses:
+        '200':
+          description: Mining statistics
+      security:
+      - apiKeyAuth: []
+  /api/v1/habitus/patterns:
+    get:
+      summary: Get recent patterns
+      description: Returns recently discovered patterns.
+      operationId: getHabitusPatterns
+      tags:
+      - Habitus
+      responses:
+        '200':
+          description: Recent patterns
+      parameters:
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          default: 50
+      security:
+      - apiKeyAuth: []
+  /api/v1/candidates:
+    get:
+      summary: List candidates
+      description: List automation candidates with optional filters.
+      operationId: listCandidates
+      tags:
+      - Candidates
+      responses:
+        '200':
+          description: List of candidates
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  candidates:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Candidate'
+                  count:
+                    type: integer
+      parameters:
+      - name: state
+        in: query
+        description: Filter by state
+        required: false
+        schema:
+          type: string
+          enum:
+          - pending
+          - offered
+          - accepted
+          - dismissed
+          - deferred
+      - name: include_ready_deferred
+        in: query
+        description: Include deferred candidates ready for retry
+        required: false
+        schema:
+          type: boolean
+          default: false
+      - name: limit
+        in: query
+        description: Maximum results
+        required: false
+        schema:
+          type: integer
+          default: 50
+          maximum: 200
+      security:
+      - apiKeyAuth: []
+    post:
+      summary: Create candidate
+      description: Create a new automation candidate from pattern discovery.
+      operationId: createCandidate
+      tags:
+      - Candidates
+      responses:
+        '201':
+          description: Candidate created
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CandidateInput'
+      security:
+      - apiKeyAuth: []
+  /api/v1/candidates/{candidate_id}:
+    get:
+      summary: Get candidate details
+      description: Retrieve a specific candidate by ID.
+      operationId: getCandidate
+      tags:
+      - Candidates
+      responses:
+        '200':
+          description: Candidate details
+        '404':
+          description: Candidate not found
+      parameters:
+      - name: candidate_id
+        in: path
+        required: true
+        schema:
+          type: string
+      security:
+      - apiKeyAuth: []
+    put:
+      summary: Update candidate state
+      description: Update candidate state (accept/dismiss/defer).
+      operationId: updateCandidate
+      tags:
+      - Candidates
+      responses:
+        '200':
+          description: Candidate updated
+      parameters:
+      - name: candidate_id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                state:
+                  type: string
+                  enum:
+                  - accepted
+                  - dismissed
+                  - deferred
+                reason:
+                  type: string
+      security:
+      - apiKeyAuth: []
+  /api/v1/candidates/stats:
+    get:
+      summary: Get storage statistics
+      description: Returns candidate storage statistics and health.
+      operationId: getCandidateStats
+      tags:
+      - Candidates
+      responses:
+        '200':
+          description: Storage statistics
+      security:
+      - apiKeyAuth: []
+  /api/v1/mood:
+    get:
+      summary: Get all zone moods
+      description: Returns mood scores for all zones.
+      operationId: getAllMoods
+      tags:
+      - Mood
+      responses:
+        '200':
+          description: All zone moods
+      security:
+      - apiKeyAuth: []
+  /api/v1/mood/{zone_id}:
+    get:
+      summary: Get specific zone mood
+      description: Returns mood score for a specific zone.
+      operationId: getZoneMood
+      tags:
+      - Mood
+      responses:
+        '200':
+          description: Zone mood
+      parameters:
+      - name: zone_id
+        in: path
+        required: true
+        schema:
+          type: string
+      security:
+      - apiKeyAuth: []
+  /api/v1/mood/summary:
+    get:
+      summary: Get aggregated mood stats
+      description: Returns aggregated mood statistics across all zones.
+      operationId: getMoodSummary
+      tags:
+      - Mood
+      responses:
+        '200':
+          description: Mood summary
+      security:
+      - apiKeyAuth: []
+  /api/v1/mood/update-media:
+    post:
+      summary: Update moods from media context
+      description: Updates zone moods based on media player state.
+      operationId: updateMoodFromMedia
+      tags:
+      - Mood
+      responses:
+        '200':
+          description: Moods updated
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                music_active:
+                  type: boolean
+                tv_active:
+                  type: boolean
+                primary_player:
+                  type: object
+      security:
+      - apiKeyAuth: []
+  /api/v1/mood/update-habitus:
+    post:
+      summary: Update moods from habitus
+      description: Updates zone moods based on habitus patterns.
+      operationId: updateMoodFromHabitus
+      tags:
+      - Mood
+      responses:
+        '200':
+          description: Moods updated
+      security:
+      - apiKeyAuth: []
+  /api/v1/mood/{zone_id}/suppress-energy-saving:
+    get:
+      summary: Check energy-saving suppression
+      description: Checks if energy-saving should be suppressed for this zone.
+      operationId: checkEnergySavingSuppression
+      tags:
+      - Mood
+      responses:
+        '200':
+          description: Suppression status
+      parameters:
+      - name: zone_id
+        in: path
+        required: true
+        schema:
+          type: string
+      security:
+      - apiKeyAuth: []
+  /api/v1/notifications:
+    get:
+      summary: Get notification history
+      description: Returns notification history with optional filtering.
+      operationId: getNotifications
+      tags:
+      - Notifications
+      responses:
+        '200':
+          description: Notification history
+      parameters:
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          default: 50
+      - name: source
+        in: query
+        schema:
+          type: string
+      - name: unread_only
+        in: query
+        schema:
+          type: boolean
+          default: false
+      - name: type
+        in: query
+        schema:
+          type: string
+          enum:
+          - mood_change
+          - alert
+          - suggestion
+          - system
+          - info
+          - warning
+      security:
+      - bearerAuth: []
+    post:
+      summary: Create notification
+      description: Creates a new notification.
+      operationId: createNotification
+      tags:
+      - Notifications
+      responses:
+        '201':
+          description: Notification created
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificationRequest'
+      security:
+      - bearerAuth: []
+  /api/v1/notifications/digest:
+    get:
+      summary: Get notification digest
+      description: Returns notification digest summary.
+      operationId: getNotificationDigest
+      tags:
+      - Notifications
+      responses:
+        '200':
+          description: Notification digest
+      security:
+      - bearerAuth: []
+  /api/v1/notifications/pending:
+    get:
+      summary: Get pending notifications
+      description: Returns pending notifications for delivery.
+      operationId: getPendingNotifications
+      tags:
+      - Notifications
+      responses:
+        '200':
+          description: Pending notifications
+      security:
+      - bearerAuth: []
+  /api/v1/notifications/stats:
+    get:
+      summary: Get notification statistics
+      description: Returns notification engine statistics.
+      operationId: getNotificationStats
+      tags:
+      - Notifications
+      responses:
+        '200':
+          description: Notification statistics
+      security:
+      - bearerAuth: []
+  /api/v1/sharing:
+    get:
+      summary: Get sharing system status
+      description: Returns combined status of sharing, sync, and discovery services.
+      operationId: getSharingStatus
+      tags:
+      - Sharing
+      responses:
+        '200':
+          description: Sharing system status
+      security:
+      - apiKeyAuth: []
+  /api/v1/sharing/entities:
+    get:
+      summary: List shared entities
+      description: Returns all shared entities.
+      operationId: listSharedEntities
+      tags:
+      - Sharing
+      responses:
+        '200':
+          description: Shared entities
+      security:
+      - apiKeyAuth: []
+    post:
+      summary: Register shared entity
+      description: Registers a new entity for cross-home sharing.
+      operationId: registerSharedEntity
+      tags:
+      - Sharing
+      responses:
+        '201':
+          description: Entity registered
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SharedEntity'
+      security:
+      - apiKeyAuth: []
+  /api/v1/sharing/sync/status:
+    get:
+      summary: Get sync status
+      description: Returns synchronization status.
+      operationId: getSyncStatus
+      tags:
+      - Sharing
+      responses:
+        '200':
+          description: Sync status
+      security:
+      - apiKeyAuth: []
+  /api/v1/sharing/discovery/peers:
+    get:
+      summary: List discovered peers
+      description: Returns discovered peer CoPilot instances.
+      operationId: listPeers
+      tags:
+      - Sharing
+      responses:
+        '200':
+          description: Discovered peers
+      security:
+      - apiKeyAuth: []
+  /api/v1/federated:
+    get:
+      summary: Get federated learning status
+      description: Returns federated learning system status.
+      operationId: getFederatedStatus
+      tags:
+      - Federated Learning
+      responses:
+        '200':
+          description: Federated learning status
+      security:
+      - apiKeyAuth: []
+  /api/v1/federated/start:
+    post:
+      summary: Start federated learning
+      description: Starts the federated learning service.
+      operationId: startFederated
+      tags:
+      - Federated Learning
+      responses:
+        '200':
+          description: Service started
+      security:
+      - apiKeyAuth: []
+  /api/v1/federated/stop:
+    post:
+      summary: Stop federated learning
+      description: Stops the federated learning service.
+      operationId: stopFederated
+      tags:
+      - Federated Learning
+      responses:
+        '200':
+          description: Service stopped
+      security:
+      - apiKeyAuth: []
+  /api/v1/federated/register:
+    post:
+      summary: Register home node
+      description: Registers a new home node in the federation.
+      operationId: registerNode
+      tags:
+      - Federated Learning
+      responses:
+        '201':
+          description: Node registered
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                home_id:
+                  type: string
+                name:
+                  type: string
+                capabilities:
+                  type: array
+                  items:
+                    type: string
+      security:
+      - apiKeyAuth: []
+  /api/v1/federated/update:
+    post:
+      summary: Submit model update
+      description: Submits a local model update to the federation.
+      operationId: submitUpdate
+      tags:
+      - Federated Learning
+      responses:
+        '200':
+          description: Update submitted
+      security:
+      - apiKeyAuth: []
+  /api/v1/federated/round:
+    post:
+      summary: Start federated round
+      description: Initiates a new federated learning round.
+      operationId: startRound
+      tags:
+      - Federated Learning
+      responses:
+        '200':
+          description: Round started
+      security:
+      - apiKeyAuth: []
+  /api/v1/federated/aggregate:
+    post:
+      summary: Execute aggregation
+      description: Executes model aggregation for a round.
+      operationId: aggregateRound
+      tags:
+      - Federated Learning
+      responses:
+        '200':
+          description: Aggregation completed
+      security:
+      - apiKeyAuth: []
+  /api/v1/federated/rounds:
+    get:
+      summary: Get round history
+      description: Returns history of federated learning rounds.
+      operationId: getRoundHistory
+      tags:
+      - Federated Learning
+      responses:
+        '200':
+          description: Round history
+      security:
+      - apiKeyAuth: []
+  /api/v1/federated/statistics:
+    get:
+      summary: Get comprehensive statistics
+      description: Returns comprehensive federated learning statistics.
+      operationId: getFederatedStats
+      tags:
+      - Federated Learning
+      responses:
+        '200':
+          description: Statistics
+      security:
+      - apiKeyAuth: []
+  /api/v1/energy:
+    get:
+      summary: Get energy snapshot
+      description: Returns complete energy snapshot.
+      operationId: getEnergy
+      tags:
+      - Energy
+      responses:
+        '200':
+          description: Energy snapshot
+      security:
+      - apiKeyAuth: []
+  /api/v1/energy/anomalies:
+    get:
+      summary: Get energy anomalies
+      description: Returns detected energy anomalies.
+      operationId: getEnergyAnomalies
+      tags:
+      - Energy
+      responses:
+        '200':
+          description: Energy anomalies
+      security:
+      - apiKeyAuth: []
+  /api/v1/energy/sankey:
+    get:
+      summary: Get energy Sankey diagram
+      description: Returns Sankey diagram data for energy flows.
+      operationId: getEnergySankey
+      tags:
+      - Energy
+      responses:
+        '200':
+          description: Sankey diagram data
+      security:
+      - apiKeyAuth: []
+  /api/v1/unifi:
+    get:
+      summary: Get UniFi network snapshot
+      description: Returns complete UniFi network snapshot.
+      operationId: getUniFi
+      tags:
+      - UniFi
+      responses:
+        '200':
+          description: UniFi snapshot
+      security:
+      - bearerAuth: []
+  /api/v1/tag-system/tags:
+    get:
+      summary: List tag registry entries
+      description: Returns all tags from the canonical tag registry.
+      operationId: listTags
+      tags:
+      - Tags
+      responses:
+        '200':
+          description: List of tags
+      security:
+      - bearerAuth: []
+  /api/v1/tag-system/tags/{tag_id}:
+    get:
+      summary: Get tag registry entry
+      description: Returns a single tag by id from the canonical tag registry.
+      operationId: getTag
+      tags:
+      - Tags
+      responses:
+        '200':
+          description: Tag details
+        '404':
+          description: Tag not found
+      parameters:
+      - name: tag_id
+        in: path
+        required: true
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+  /api/v1/tag-system/assignments:
+    get:
+      summary: List tag assignments
+      description: Returns tag assignments with optional subject/tag filters.
+      operationId: listTagAssignments
+      tags:
+      - Tags
+      responses:
+        '200':
+          description: Tag assignments
+      parameters:
+      - name: subject_id
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: subject_kind
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: tag_id
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: materialized
+        in: query
+        required: false
+        schema:
+          type: boolean
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 200
+      security:
+      - bearerAuth: []
+    post:
+      summary: Create or update tag assignment
+      description: Upserts a tag assignment for a subject.
+      operationId: upsertTagAssignment
+      tags:
+      - Tags
+      responses:
+        '200':
+          description: Assignment updated
+        '201':
+          description: Assignment created
+        '400':
+          description: Invalid assignment payload
+        '404':
+          description: Tag not found
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - subject_id
+              - subject_kind
+              - tag_id
+              properties:
+                subject_id:
+                  type: string
+                subject_kind:
+                  type: string
+                tag_id:
+                  type: string
+                source:
+                  type: string
+                  default: core
+                confidence:
+                  type: number
+                  format: float
+                  minimum: 0
+                  maximum: 1
+                meta:
+                  type: object
+                materialized:
+                  type: boolean
+      security:
+      - bearerAuth: []
+  /api/v1/dev/logs:
+    get:
+      summary: Get recent logs
+      description: Returns recent log entries with optional filtering.
+      operationId: getDevLogs
+      tags:
+      - Dev Surface
+      responses:
+        '200':
+          description: Log entries
+      parameters:
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          default: 100
+      - name: level
+        in: query
+        schema:
+          type: string
+          enum:
+          - DEBUG
+          - INFO
+          - WARNING
+          - ERROR
+      security:
+      - apiKeyAuth: []
+  /api/v1/dev/errors:
+    get:
+      summary: Get error summary
+      description: Returns error summary and statistics.
+      operationId: getErrorSummary
+      tags:
+      - Dev Surface
+      responses:
+        '200':
+          description: Error summary
+      security:
+      - apiKeyAuth: []
+  /telegram/status:
+    get:
+      summary: Get Telegram bot status
+      description: Returns Telegram bot status.
+      operationId: getTelegramStatus
+      tags:
+      - Telegram
+      responses:
+        '200':
+          description: Bot status
+      security:
+      - bearerAuth: []
+  /telegram/send:
+    post:
+      summary: Send Telegram message
+      description: Sends a proactive message to a Telegram chat.
+      operationId: sendTelegram
+      tags:
+      - Telegram
+      responses:
+        '200':
+          description: Message sent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                chat_id:
+                  type: string
+                text:
+                  type: string
+              required:
+              - chat_id
+              - text
+      security:
+      - bearerAuth: []
+  /api/v1/hub/status:
+    get:
+      summary: Get Hub status
+      description: Returns complete Hub status including all engines.
+      operationId: getHubStatus
+      tags:
+      - Hub
+      responses:
+        '200':
+          description: Hub status
+      security:
+      - bearerAuth: []
+  /api/v1/hub/zones:
+    get:
+      summary: List zones
+      description: Returns all configured zones.
+      operationId: listZones
+      tags:
+      - Hub
+      responses:
+        '200':
+          description: List of zones
+      security:
+      - bearerAuth: []
+  /api/v1/hub/modes:
+    get:
+      summary: List modes
+      description: Returns all configured modes.
+      operationId: listModes
+      tags:
+      - Hub
+      responses:
+        '200':
+          description: List of modes
+      security:
+      - bearerAuth: []
+components:
+  schemas:
+    Candidate:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique candidate identifier
+        pattern_id:
+          type: string
+          description: Source pattern ID
+        state:
+          type: string
+          enum:
+          - pending
+          - offered
+          - accepted
+          - dismissed
+          - deferred
+          description: Current candidate state
+        title:
+          type: string
+          description: Candidate title
+        description:
+          type: string
+          description: Candidate description
+        automation_yaml:
+          type: string
+          description: Generated automation YAML
+        confidence:
+          type: number
+          description: Confidence score (0-1)
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        deferred_until:
+          type: string
+          format: date-time
+      required:
+      - id
+      - state
+      - title
+      - created_at
+    CandidateInput:
+      type: object
+      properties:
+        pattern_id:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        automation_yaml:
+          type: string
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+      required:
+      - pattern_id
+      - title
+      - automation_yaml
+    NotificationRequest:
+      type: object
+      properties:
+        title:
+          type: string
+          description: Notification title
+        message:
+          type: string
+          description: Notification message
+        type:
+          type: string
+          enum:
+          - mood_change
+          - alert
+          - suggestion
+          - system
+          - info
+          - warning
+        priority:
+          type: string
+          enum:
+          - low
+          - normal
+          - high
+          - urgent
+          default: normal
+        channel:
+          type: string
+          enum:
+          - push
+          - telegram
+          - email
+          - all
+        data:
+          type: object
+          description: Additional payload data
+      required:
+      - title
+      - message
+    NotificationResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        status:
+          type: string
+        delivered_at:
+          type: string
+          format: date-time
+    SharedEntity:
+      type: object
+      properties:
+        entity_id:
+          type: string
+          description: Home Assistant entity ID
+        name:
+          type: string
+          description: Entity display name
+        type:
+          type: string
+          description: Entity type
+        home_id:
+          type: string
+          description: Source home identifier
+        capabilities:
+          type: array
+          items:
+            type: string
+        metadata:
+          type: object
+      required:
+      - entity_id
+      - name
+      - type
+      - home_id
+    Error:
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+  securitySchemes:
+    apiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: API Key authentication for most endpoints
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Bearer token authentication for Notifications and Telegram APIs

@@ -296,6 +296,31 @@ class HabitusZoneEngine:
         zone.settings.update(settings)
         return True
 
+    def set_zone_name(self, zone_id: str, name: str) -> bool:
+        """Rename a zone."""
+        zone = self._zones.get(zone_id)
+        if not zone or not name.strip():
+            return False
+        zone.name = name.strip()
+        logger.info("Zone '%s' umbenannt zu '%s'", zone_id, zone.name)
+        return True
+
+    def set_zone_icon(self, zone_id: str, icon: str) -> bool:
+        """Set zone icon (mdi:icon-name format)."""
+        zone = self._zones.get(zone_id)
+        if not zone or not icon.strip():
+            return False
+        zone.icon = icon.strip()
+        return True
+
+    def set_zone_priority(self, zone_id: str, priority: int) -> bool:
+        """Set zone priority (higher = more important)."""
+        zone = self._zones.get(zone_id)
+        if not zone:
+            return False
+        zone.priority = int(priority)
+        return True
+
     # ── Entity state tracking ───────────────────────────────────────────
 
     def update_entity_state(self, entity_id: str, value: Any) -> None:

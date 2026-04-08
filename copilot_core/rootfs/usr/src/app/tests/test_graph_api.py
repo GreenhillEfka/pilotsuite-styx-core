@@ -46,6 +46,17 @@ class TestGraphApi(unittest.TestCase):
         if create_app is None:
             self.skipTest("Flask not installed")
         app = create_app()
+        from dataclasses import replace
+        cfg = app.config["COPILOT_CFG"]
+        app.config["COPILOT_CFG"] = replace(
+            cfg,
+            data_dir=self.tmpdir.name,
+            brain_graph_json_path=f"{self.tmpdir.name}/brain_graph.json",
+        )
+        from copilot_core.brain_graph import provider
+        provider._STORE = None
+        provider._SVC = None
+
         client = app.test_client()
         r = client.get("/api/v1/graph/snapshot.svg")
         self.assertEqual(r.status_code, 200)

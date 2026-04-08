@@ -69,7 +69,7 @@ def sanitize_text(text: str, *, stats: RedactionStats | None = None, max_line_ch
         return ""
 
     def _count_sub(regex: re.Pattern[str], repl: str, s: str, field: str) -> str:
-        nonlocal stats
+        # nonlocal stats
         if stats is None:
             return regex.sub(repl, s)
         new_s, n = regex.subn(repl, s)
@@ -274,7 +274,7 @@ def build_bundle_zip(
     zbuf = io.BytesIO()
     with zipfile.ZipFile(zbuf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         def write_text(path: str, text: str) -> None:
-            nonlocal budget
+            # nonlocal budget
             text = text or ""
             text, _ = budget.add_text(path, text)
             data = text.encode("utf-8")
