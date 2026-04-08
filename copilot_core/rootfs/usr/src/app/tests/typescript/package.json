@@ -1,0 +1,22 @@
+{
+  "name": "rag-chat-ui-tests",
+  "version": "1.0.0",
+  "description": "Test suite for RAG Chat UI component",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "type-check": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@open-wc/testing": "^4.0.0",
+    "@open-wc/testing-helpers": "^3.0.0",
+    "@vitest/coverage-v8": "^1.0.0",
+    "lit": "^3.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^1.0.0"
+  },
+  "author": "Clawdya",
+  "license": "MIT"
+}

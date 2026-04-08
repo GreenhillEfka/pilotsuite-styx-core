@@ -1,0 +1,56 @@
+name: PilotSuite Core
+version: "14.7.5"
+slug: copilot_core
+description: "PilotSuite Styx — AI Home Copilot with Brain Architecture, Neural Sensors, and local LLM conversation."
+url: https://github.com/GreenhillEfka/pilotsuite-styx-core
+arch:
+  - amd64
+  - aarch64
+homeassistant: "2024.1.0"
+startup: services
+boot: auto
+init: false
+hassio_api: true
+homeassistant_api: true
+ingress: true
+ingress_port: 8909
+host_network: true
+map:
+  - share:rw
+panel_icon: mdi:brain
+panel_title: Styx
+ports:
+  8909/tcp: 8909
+ports_description:
+  8909/tcp: PilotSuite Core HTTP API
+webui: "http://[HOST]:[PORT:8909]/"
+options:
+  log_level: info
+  auth_token: ""
+  conversation_ollama_url: "http://localhost:11435"
+  conversation_ollama_model: "qwen3:0.6b"
+  conversation_cloud_api_url: "https://ollama.com/v1"
+  conversation_cloud_api_key: ""
+  conversation_cloud_model: "gpt-oss:20b"
+  conversation_prefer_local: true
+  conversation_assistant_name: Styx
+  conversation_enabled: true
+  searxng_enabled: true
+  searxng_base_url: "http://192.168.30.18:4041"
+  sonos_enabled: true
+  sonos_port: 5005
+schema:
+  log_level: "list(trace|debug|info|warning|error)"
+  auth_token: "password?"
+  conversation_ollama_url: "str?"
+  conversation_ollama_model: "str?"
+  conversation_cloud_api_url: "str?"
+  conversation_cloud_api_key: "password?"
+  conversation_cloud_model: "str?"
+  conversation_prefer_local: "bool?"
+  conversation_assistant_name: "str?"
+  conversation_enabled: "bool?"
+  searxng_enabled: "bool?"
+  searxng_base_url: "str?"
+  sonos_enabled: "bool?"
+  sonos_port: "int?"
