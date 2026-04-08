@@ -1,0 +1,277 @@
+openapi: 3.0.3
+info:
+  title: "PilotSuite Core API"
+  version: 20.0.0
+  description: "OpenAPI-Inventur des aktuellen v20-Core-Baums. Öffentliche Runtime-Surface derzeit `/health`, `/version`, `/api/v1/presence`, `/api/v1/analytics`, `/api/v1/notifications`, `/api/v1/notifications/digest`, `/api/v1/notifications/pending`, `/api/v1/notifications/stats`, `/api/v1/zones` und `/api/v1/widgets/positions*`; Legacy-Endpunkte außerhalb dieser inventarisierten Surface sind bewusst nicht Teil dieser Runtime."
+servers:
+  -
+    url: "http://localhost:8000"
+    description: "PilotSuite Core local runtime"
+tags:
+  -
+    name: System
+    description: "Runtime basics"
+  -
+    name: Presence
+    description: "Read-only household presence summary"
+  -
+    name: Analytics
+    description: "Read-only analytics overview"
+  -
+    name: Notifications
+    description: "Read-only notification feed"
+  -
+    name: Zones
+    description: "Read-only habitus zone catalog"
+  -
+    name: Dashboard
+    description: "Dashboard widget layout and persistence"
+paths:
+  /health:
+    get:
+      tags:
+        - System
+      summary: "Health check"
+      operationId: getHealth
+      responses:
+        200:
+          description: "Service is healthy"
+  /version:
+    get:
+      tags:
+        - System
+      summary: "Runtime version"
+      operationId: getVersion
+      responses:
+        200:
+          description: "Runtime version manifest"
+  /api/v1/presence:
+    get:
+      tags:
+        - Presence
+      summary: "Read-only household presence summary"
+      operationId: getPresenceSummary
+      responses:
+        200:
+          description: "Historical v20-derived presence summary snapshot"
+  /api/v1/analytics:
+    get:
+      tags:
+        - Analytics
+      summary: "Read-only analytics overview"
+      operationId: getAnalyticsOverview
+      responses:
+        200:
+          description: "Historical v20-derived analytics overview snapshot"
+  /api/v1/notifications:
+    get:
+      tags:
+        - Notifications
+      summary: "Read-only notification feed"
+      operationId: getNotifications
+      parameters:
+        -
+          name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+          description: "Maximum number of notifications to return"
+        -
+          name: unread_only
+          in: query
+          required: false
+          schema:
+            type: boolean
+          description: "If true, only unread notifications are returned"
+        -
+          name: type
+          in: query
+          required: false
+          schema:
+            type: string
+          description: "Optional exact notification type filter"
+        -
+          name: source
+          in: query
+          required: false
+          schema:
+            type: string
+          description: "Optional exact notification source filter"
+      responses:
+        200:
+          description: "Read-only notification feed snapshot"
+        400:
+          description: "Invalid limit parameter"
+  /api/v1/notifications/digest:
+    get:
+      tags:
+        - Notifications
+      summary: "Read-only notification digest"
+      operationId: getNotificationsDigest
+      responses:
+        200:
+          description: "Read-only notification digest snapshot"
+  /api/v1/notifications/pending:
+    get:
+      tags:
+        - Notifications
+      summary: "Read-only pending notification queue"
+      operationId: getPendingNotifications
+      responses:
+        200:
+          description: "Read-only pending notification delivery snapshot"
+  /api/v1/notifications/stats:
+    get:
+      tags:
+        - Notifications
+      summary: "Read-only notification stats"
+      operationId: getNotificationsStats
+      responses:
+        200:
+          description: "Read-only notification stats snapshot"
+  /api/v1/zones:
+    get:
+      tags:
+        - Zones
+      summary: "List habitus zones"
+      operationId: listZones
+      parameters:
+        -
+          name: zone_type
+          in: query
+          required: false
+          schema:
+            type: string
+          description: "Optional exact zone type filter"
+      responses:
+        200:
+          description: "Read-only zone catalog"
+        400:
+          description: "Invalid zone type filter"
+  /api/v1/widgets/positions:
+    get:
+      tags:
+        - Dashboard
+      summary: "List all widget positions"
+      operationId: listWidgetPositions
+      responses:
+        200:
+          description: "All persisted widget positions"
+    post:
+      tags:
+        - Dashboard
+      summary: "Create or overwrite a widget position"
+      operationId: saveWidgetPosition
+      responses:
+        200:
+          description: "Widget position saved"
+        400:
+          description: "Validation error"
+  /api/v1/widgets/positions/bulk:
+    post:
+      tags:
+        - Dashboard
+      summary: "Save multiple widget positions"
+      operationId: saveBulkWidgetPositions
+      responses:
+        200:
+          description: "Bulk result"
+        400:
+          description: "Missing positions payload"
+  /api/v1/widgets/positions/{widget_id}:
+    parameters:
+      -
+        name: widget_id
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags:
+        - Dashboard
+      summary: "Get one widget position"
+      operationId: getWidgetPosition
+      responses:
+        200:
+          description: "Widget position found"
+        404:
+          description: "Widget position not found"
+    delete:
+      tags:
+        - Dashboard
+      summary: "Delete one widget position"
+      operationId: deleteWidgetPosition
+      responses:
+        200:
+          description: "Widget position deleted"
+        404:
+          description: "Widget position not found"
+  /api/v1/widgets/positions/{widget_id}/history:
+    post:
+      tags:
+        - Dashboard
+      summary: "Append current position to history"
+      operationId: appendWidgetPositionHistory
+      parameters:
+        -
+          name: widget_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: "History entry recorded"
+        400:
+          description: "Missing payload"
+        404:
+          description: "Widget position not found"
+  /api/v1/widgets/positions/{widget_id}/undo:
+    post:
+      tags:
+        - Dashboard
+      summary: "Undo the last widget position change"
+      operationId: undoWidgetPosition
+      parameters:
+        -
+          name: widget_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: "Undo applied"
+        404:
+          description: "Widget position missing or no history available"
+  /api/v1/widgets/positions/{widget_id}/redo:
+    post:
+      tags:
+        - Dashboard
+      summary: "Redo the last undone widget position change"
+      operationId: redoWidgetPosition
+      parameters:
+        -
+          name: widget_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: "Redo applied"
+        404:
+          description: "Widget position missing or no redo available"
+  /api/v1/widgets/positions/reset:
+    post:
+      tags:
+        - Dashboard
+      summary: "Reset all widget positions"
+      operationId: resetWidgetPositions
+      responses:
+        200:
+          description: "All widget positions reset"
