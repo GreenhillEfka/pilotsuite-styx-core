@@ -1,35 +1,37 @@
 ARG BUILD_FROM
 FROM $BUILD_FROM
 
-ARG BUILD_ARCH
-ARG BUILD_VERSION
-LABEL \
-    io.hass.version="${BUILD_VERSION}" \
-    io.hass.type="addon" \
-    io.hass.arch="${BUILD_ARCH}"
-
-WORKDIR /app
-
-COPY app/requirements.txt /tmp/requirements.txt
-
-RUN apk add --no-cache \
-        python3 py3-pip bash curl libstdc++ libgcc \
-        gcc g++ musl-dev python3-dev linux-headers && \
-    pip3 install --no-cache-dir --break-system-packages --prefer-binary \
-        -r /tmp/requirements.txt && \
-    apk del gcc g++ musl-dev python3-dev linux-headers
-
+# Copy app directory
 COPY . /app
 
+# Set working directory
 WORKDIR /app/app
 
-# Create persistent data directory
+# Install system dependencies
+RUN apk add --no-cache \
+    python3 \
+    py3-pip \
+    bash \
+    curl \
+    libstdc++ \
+    libgcc
+
+# Install Python dependencies
+RUN pip3 install --no-cache-dir --break-system-packages \
+    aiohttp \
+    fastapi \
+    uvicorn \
+    pydantic \
+    requests \
+    numpy \
+    scipy
+
+# Create data directory for persistence
 RUN mkdir -p /data && chmod 755 /data
 
-# Set environment variable for data storage
+# Set environment variables
 ENV DATA_DIR=/data
-ENV PYTHONPATH=/app/app
-ENV COPILOT_VERSION=${BUILD_VERSION}
+ENV PYTHONPATH=/app
 
 # Expose API port
 EXPOSE 8909

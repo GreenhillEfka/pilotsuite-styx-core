@@ -162,6 +162,28 @@ def _coerce_stack_entries(values: Any, *, field: str) -> tuple[list[dict[str, An
     return normalized_entries, None
 
 
+def _pop_runtime_stack_entry(current: dict[str, Any], *, field: str) -> dict[str, Any] | None:
+    stack = current.get(field, [])
+    if not isinstance(stack, list) or not stack:
+        return None
+
+    normalized_entry, error = _coerce_stack_entry(stack[-1], field=field)
+    if error:
+        return None
+
+    stack.pop()
+    current[field] = stack
+    return normalized_entry
+
+
+def _runtime_current_position(current: Any) -> dict[str, Any] | None:
+    normalized_entry, error = _coerce_stack_entry(current, field="position")
+    if error:
+        return None
+
+    return normalized_entry
+
+
 def _coerce_position(data: Any, *, require_widget_id: bool = True) -> tuple[dict[str, Any] | None, str | None]:
     if not isinstance(data, dict):
         return None, "Invalid position payload"
@@ -242,6 +264,8 @@ def save_position():
     with _STORE_LOCK:
         existing = _positions().get(widget_id)
         if existing:
+            if "redo_stack" in existing and not isinstance(existing.get("redo_stack"), list):
+                return jsonify({"error": "Widget position not found"}), 404
             position["history"] = deepcopy(existing.get("history", []))
             position["redo_stack"] = []
         _positions()[widget_id] = position
@@ -307,6 +331,9 @@ def save_bulk_positions():
 
             existing = _positions().get(widget_id)
             if existing:
+                if "redo_stack" in existing and not isinstance(existing.get("redo_stack"), list):
+                    errors.append({"widget_id": widget_id, "error": "Widget position not found"})
+                    continue
                 position["history"] = deepcopy(existing.get("history", []))
                 position["redo_stack"] = []
             _positions()[widget_id] = position
@@ -341,13 +368,25 @@ def add_position_history(widget_id: str):
         if not current:
             return jsonify({"error": "Widget position not found"}), 404
 
-        history = current.setdefault("history", [])
+        current_position, error = _coerce_stack_entry(current, field="history")
+        if error:
+            return jsonify({"error": "Widget position not found"}), 404
+
+        history = current.get("history")
+        if history is None:
+            history = []
+        elif not isinstance(history, list):
+            return jsonify({"error": "Widget position not found"}), 404
+
+        if "redo_stack" in current and not isinstance(current.get("redo_stack"), list):
+            return jsonify({"error": "Widget position not found"}), 404
+
         history.append(
             {
-                "x": current["x"],
-                "y": current["y"],
-                "width": current.get("width", 1),
-                "height": current.get("height", 1),
+                "x": current_position["x"],
+                "y": current_position["y"],
+                "width": current_position.get("width", 1),
+                "height": current_position.get("height", 1),
                 "timestamp": _utc_now(),
             }
         )
@@ -374,18 +413,27 @@ def undo_position(widget_id: str):
         if not current:
             return jsonify({"error": "Widget position not found"}), 404
 
-        history = current.get("history", [])
-        if not history:
+        current_position = _runtime_current_position(current)
+        if current_position is None:
+            return jsonify({"error": "Widget position not found"}), 404
+
+        redo_stack = current.get("redo_stack")
+        if redo_stack is None:
+            redo_stack = []
+            current["redo_stack"] = redo_stack
+        elif not isinstance(redo_stack, list):
+            return jsonify({"error": "Widget position not found"}), 404
+
+        previous = _pop_runtime_stack_entry(current, field="history")
+        if previous is None:
             return jsonify({"error": "No history available"}), 404
 
-        previous = history.pop()
-        redo_stack = current.setdefault("redo_stack", [])
         redo_stack.append(
             {
-                "x": current["x"],
-                "y": current["y"],
-                "width": current.get("width", 1),
-                "height": current.get("height", 1),
+                "x": current_position["x"],
+                "y": current_position["y"],
+                "width": current_position.get("width", 1),
+                "height": current_position.get("height", 1),
                 "timestamp": _utc_now(),
             }
         )
@@ -424,18 +472,27 @@ def redo_position(widget_id: str):
         if not current:
             return jsonify({"error": "Widget position not found"}), 404
 
-        redo_stack = current.get("redo_stack", [])
-        if not redo_stack:
+        current_position = _runtime_current_position(current)
+        if current_position is None:
+            return jsonify({"error": "Widget position not found"}), 404
+
+        history = current.get("history")
+        if history is None:
+            history = []
+            current["history"] = history
+        elif not isinstance(history, list):
+            return jsonify({"error": "Widget position not found"}), 404
+
+        next_position = _pop_runtime_stack_entry(current, field="redo_stack")
+        if next_position is None:
             return jsonify({"error": "No redo available"}), 404
 
-        next_position = redo_stack.pop()
-        history = current.setdefault("history", [])
         history.append(
             {
-                "x": current["x"],
-                "y": current["y"],
-                "width": current.get("width", 1),
-                "height": current.get("height", 1),
+                "x": current_position["x"],
+                "y": current_position["y"],
+                "width": current_position.get("width", 1),
+                "height": current_position.get("height", 1),
                 "timestamp": _utc_now(),
             }
         )
