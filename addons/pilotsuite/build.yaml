@@ -1,10 +1,7 @@
+# PilotSuite Core Add-on Build Configuration
 build_from:
   amd64: ghcr.io/home-assistant/amd64-base:latest
   aarch64: ghcr.io/home-assistant/aarch64-base:latest
 
 # Build context
 context: addons/pilotsuite
-
-# Build args
-build_args:
-  BUILD_FROM: ghcr.io/home-assistant/amd64-base:latest
