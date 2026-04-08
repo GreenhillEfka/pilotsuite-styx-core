@@ -64,6 +64,19 @@ class TestVoiceIntentHandler:
         
         assert intent.intent_type == IntentType.CLIMATE_SET
         assert intent.slots.get("temperature") == 21
+        assert intent.route == "tier1_regex"
+        assert intent.clarification_needed is False
+
+    def test_parse_intent_climate_missing_slot_requests_clarification(self):
+        """Recognised but incomplete commands should ask for missing slots."""
+        handler = VoiceIntentHandler()
+        intent = handler.parse_intent("Stell die Temperatur")
+
+        assert intent.intent_type == IntentType.CLIMATE_SET
+        assert "target_temp" in intent.missing_slots
+        assert intent.clarification_needed is True
+        assert intent.route == "tier2_ml"
+        assert intent.clarification_prompt is not None
     
     def test_parse_intent_media_play(self):
         """Test media play intent parsing."""
@@ -91,12 +104,27 @@ class TestVoiceIntentHandler:
             confidence=0.0,
             language="de",
             raw_text="Unknown text",
+            route="tier3_llm",
+            route_reason="unknown_intent",
         )
         
         response = handler.handle_intent(intent)
         
         assert response.tts_text != ""
         assert response.language == "de"
+        assert response.actions == []
+        assert response.route == "tier3_llm"
+
+    def test_handle_intent_returns_clarification_response(self):
+        """Test clarification responses do not execute actions."""
+        handler = VoiceIntentHandler()
+        intent = handler.parse_intent("Stell die Temperatur")
+
+        response = handler.handle_intent(intent, VoiceContext(language_preference="de"))
+
+        assert response.clarification_needed is True
+        assert response.actions == []
+        assert "grad" in response.tts_text.lower()
     
     def test_handle_intent_light_on(self):
         """Test handling light on intent."""

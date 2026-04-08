@@ -168,6 +168,12 @@ _SUBSCRIPTION_PREFERENCE_KEYS = frozenset(
 _SUBSCRIPTION_DEVICE_TYPES = frozenset({"mobile", "tablet", "watch", "speaker"})
 _NOTIFICATION_PRIORITY_VALUES = frozenset({"low", "normal", "high", "urgent"})
 _NOTIFICATION_TYPE_VALUES = frozenset({"mood_change", "alert", "suggestion", "system", "info", "warning"})
+_LEGACY_INTEGER_NOTIFICATION_PRIORITY_MAP = {
+    1: "urgent",
+    2: "high",
+    3: "normal",
+    4: "low",
+}
 
 _SUBSCRIPTIONS = deepcopy(_DEFAULT_SUBSCRIPTIONS)
 
@@ -300,6 +306,16 @@ def _validated_notification_source_alias(body: dict) -> str:
     return source.strip().lower()
 
 
+def _validated_notification_priority(raw_priority: object) -> str:
+    if isinstance(raw_priority, int) and not isinstance(raw_priority, bool):
+        return _LEGACY_INTEGER_NOTIFICATION_PRIORITY_MAP.get(raw_priority, "normal")
+
+    if not isinstance(raw_priority, str) or raw_priority.strip() not in _NOTIFICATION_PRIORITY_VALUES:
+        raise ValueError("invalid_priority")
+
+    return raw_priority.strip()
+
+
 def _create_notification_from_request():
     body = request.get_json(silent=True)
     if not isinstance(body, dict):
@@ -337,8 +353,9 @@ def _create_notification_from_request():
             400,
         )
 
-    priority = body.get("priority", "normal")
-    if not isinstance(priority, str) or priority.strip() not in _NOTIFICATION_PRIORITY_VALUES:
+    try:
+        priority = _validated_notification_priority(body.get("priority", "normal"))
+    except ValueError:
         return (
             jsonify(
                 {

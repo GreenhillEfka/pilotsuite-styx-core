@@ -18,7 +18,9 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 
+from .confidence_router import ConfidenceRouter, RoutingDecision
 from .context_builder import VoiceContextBuilder, VoiceContext
+from .intent_parser import IntentParser
 from ..mood.engine import MoodEngine, MoodState, MoodConfig
 from ..habitus.service import HabitusService
 
@@ -73,6 +75,12 @@ class VoiceIntent:
     slots: Dict[str, Any] = field(default_factory=dict)
     language: str = "de"
     raw_text: str = ""
+    missing_slots: List[str] = field(default_factory=list)
+    clarification_needed: bool = False
+    clarification_prompt: Optional[str] = None
+    suggested_intents: List[str] = field(default_factory=list)
+    route: Optional[str] = None
+    route_reason: Optional[str] = None
     timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     
     def to_dict(self) -> Dict[str, Any]:
@@ -82,6 +90,12 @@ class VoiceIntent:
             "slots": self.slots,
             "language": self.language,
             "raw_text": self.raw_text,
+            "missing_slots": self.missing_slots,
+            "clarification_needed": self.clarification_needed,
+            "clarification_prompt": self.clarification_prompt,
+            "suggested_intents": self.suggested_intents,
+            "route": self.route,
+            "route_reason": self.route_reason,
             "timestamp": self.timestamp.isoformat(),
         }
 
@@ -101,6 +115,10 @@ class VoiceResponse:
     confidence: float = 0.0
     mood_context: Optional[str] = None
     language: str = "de"
+    clarification_needed: bool = False
+    missing_slots: List[str] = field(default_factory=list)
+    route: Optional[str] = None
+    route_reason: Optional[str] = None
     
     # Optional: proactive suggestions
     suggestions: List[str] = field(default_factory=list)
@@ -113,6 +131,10 @@ class VoiceResponse:
             "confidence": self.confidence,
             "mood_context": self.mood_context,
             "language": self.language,
+            "clarification_needed": self.clarification_needed,
+            "missing_slots": self.missing_slots,
+            "route": self.route,
+            "route_reason": self.route_reason,
             "suggestions": self.suggestions,
         }
 
@@ -386,6 +408,8 @@ class VoiceIntentHandler:
         self.habitus_service = habitus_service
         self.default_language = default_language
         self._context_builder = VoiceContextBuilder()
+        self._intent_parser = IntentParser()
+        self._confidence_router = ConfidenceRouter()
     
     def parse_intent(self, text: str, language: Optional[str] = None) -> VoiceIntent:
         """Parse voice text into structured intent.
@@ -398,7 +422,38 @@ class VoiceIntentHandler:
             Parsed VoiceIntent
         """
         language = language or self._detect_language(text)
-        
+
+        if language == "de":
+            parsed = self._intent_parser.parse(text)
+            routing = self._confidence_router.route(parsed)
+            mapped_intent = self._map_parsed_intent(parsed.intent)
+            suggested_intents = routing.suggested_intents or parsed.suggested_intents
+
+            if mapped_intent is not None:
+                return VoiceIntent(
+                    intent_type=mapped_intent,
+                    confidence=parsed.confidence,
+                    slots=self._map_parsed_slots(parsed.intent, parsed.slots),
+                    language=language,
+                    raw_text=text,
+                    missing_slots=list(parsed.missing_slots),
+                    clarification_needed=routing.decision == RoutingDecision.CLARIFY,
+                    clarification_prompt=routing.clarification_prompt,
+                    suggested_intents=suggested_intents,
+                    route=routing.processing_tier.value,
+                    route_reason=routing.reason,
+                )
+
+            return VoiceIntent(
+                intent_type=IntentType.UNKNOWN,
+                confidence=parsed.confidence,
+                language=language,
+                raw_text=text,
+                suggested_intents=suggested_intents,
+                route=routing.processing_tier.value,
+                route_reason=routing.reason,
+            )
+
         # Select pattern set based on language
         patterns = self.DE_INTENT_PATTERNS if language == "de" else self.EN_INTENT_PATTERNS
         
@@ -429,6 +484,17 @@ class VoiceIntentHandler:
                 confidence=0.0,
                 language=language,
                 raw_text=text,
+                route="tier3_llm",
+                route_reason="unknown_intent",
+            )
+
+        route, route_reason, clarification_needed = self._legacy_route_from_confidence(best_confidence)
+        clarification_prompt = None
+        if clarification_needed:
+            clarification_prompt = (
+                "Kannst du das bitte genauer sagen?"
+                if language == "de"
+                else "Could you clarify that a bit more?"
             )
         
         return VoiceIntent(
@@ -437,8 +503,38 @@ class VoiceIntentHandler:
             slots=best_slots,
             language=language,
             raw_text=text,
+            clarification_needed=clarification_needed,
+            clarification_prompt=clarification_prompt,
+            route=route,
+            route_reason=route_reason,
         )
+
+    def _map_parsed_intent(self, parsed_intent: str) -> Optional[IntentType]:
+        """Map task-2 intent ids to legacy voice handler enums."""
+        mapping = {
+            "light.turn_on": IntentType.LIGHT_ON,
+            "light.turn_off": IntentType.LIGHT_OFF,
+            "light.set_brightness": IntentType.LIGHT_DIM,
+            "climate.set_temperature": IntentType.CLIMATE_SET,
+            "scene.activate": IntentType.SCENE_ACTIVATE,
+        }
+        return mapping.get(parsed_intent)
+
+    def _map_parsed_slots(self, parsed_intent: str, slots: Dict[str, Any]) -> Dict[str, Any]:
+        """Translate new parser slots to existing handler slot names."""
+        mapped = dict(slots)
+        if parsed_intent == "climate.set_temperature" and "target_temp" in mapped:
+            mapped["temperature"] = mapped.pop("target_temp")
+        return mapped
     
+    def _legacy_route_from_confidence(self, confidence: float) -> Tuple[str, str, bool]:
+        """Route legacy non-German matches using the same approved thresholds."""
+        if confidence >= self._confidence_router.DIRECT_THRESHOLD:
+            return "tier1_regex", "high_confidence", False
+        if confidence >= self._confidence_router.CLARIFY_THRESHOLD:
+            return "tier2_ml", "medium_confidence", True
+        return "tier3_llm", "low_confidence", False
+
     def _detect_language(self, text: str) -> str:
         """Detect language from text (simple heuristic)."""
         # German indicators - common German words and commands
@@ -528,6 +624,8 @@ class VoiceIntentHandler:
                 mood_engine=self.mood_engine,
                 habitus_service=self.habitus_service,
             )
+
+        self._hydrate_missing_slots_from_context(intent, context)
         
         # Get mood-based response templates
         mood_state = context.mood_state if context.mood_state else MoodState.NEUTRAL
@@ -539,13 +637,34 @@ class VoiceIntentHandler:
         # Handle intent based on type
         actions = []
         tts_text = ""
-        suggestions = []
+        suggestions = list(intent.suggested_intents)
+
+        if intent.clarification_needed:
+            return VoiceResponse(
+                tts_text=intent.clarification_prompt or (
+                    "Kannst du das bitte genauer sagen?"
+                    if intent.language == "de"
+                    else "Could you clarify that a bit more?"
+                ),
+                actions=[],
+                intent_type=intent.intent_type,
+                confidence=intent.confidence,
+                mood_context=str(mood_state.value) if hasattr(mood_state, "value") else str(mood_state),
+                language=intent.language,
+                clarification_needed=True,
+                missing_slots=list(intent.missing_slots),
+                route=intent.route,
+                route_reason=intent.route_reason,
+                suggestions=suggestions,
+            )
         
-        if intent.intent_type == IntentType.UNKNOWN:
+        if intent.route == "tier3_llm" or intent.intent_type == IntentType.UNKNOWN:
             tts_text = (
-                "Ich habe dich nicht verstanden. Kannst du das bitte wiederholen?"
+                "Ich bin mir noch nicht sicher. Sag es bitte noch einmal einfacher, zum Beispiel: "
+                + ", ".join(self._suggest_examples(intent.language, suggestions))
                 if intent.language == "de"
-                else "I didn't understand. Could you repeat that?"
+                else "I'm not confident yet. Please try again more directly, for example: "
+                + ", ".join(self._suggest_examples(intent.language, suggestions))
             )
         
         elif intent.intent_type in (IntentType.LIGHT_ON, IntentType.LIGHT_OFF):
@@ -589,8 +708,65 @@ class VoiceIntentHandler:
             confidence=intent.confidence,
             mood_context=mood_state.value,
             language=intent.language,
+            clarification_needed=False,
+            missing_slots=list(intent.missing_slots),
+            route=intent.route,
+            route_reason=intent.route_reason,
             suggestions=suggestions,
         )
+
+    def _hydrate_missing_slots_from_context(self, intent: VoiceIntent, context: VoiceContext) -> None:
+        """Use zone context to resolve common missing slots before clarifying."""
+        if "room" not in intent.missing_slots:
+            return
+
+        zone_name = context.zone_name or ""
+        if not zone_name or zone_name == "unknown":
+            return
+
+        intent.slots.setdefault("room", zone_name)
+        intent.missing_slots = [slot for slot in intent.missing_slots if slot != "room"]
+        if not intent.missing_slots:
+            intent.clarification_needed = False
+            intent.clarification_prompt = None
+            intent.confidence = min(0.92, round(intent.confidence + 0.12, 2))
+            if intent.route == "tier2_ml":
+                intent.route = "tier1_regex"
+                intent.route_reason = "context_resolved_slot"
+
+    def _resolve_target_zone(self, intent: VoiceIntent, context: VoiceContext, default: str = "wohnzimmer") -> str:
+        """Resolve room slot first, then fall back to context/default."""
+        room = intent.slots.get("room")
+        if room:
+            return str(room).replace(" ", "_")
+        if context.zone_name and context.zone_name != "unknown":
+            return str(context.zone_name).replace(" ", "_")
+        return default
+
+    def _suggest_examples(self, language: str, suggestions: List[str]) -> List[str]:
+        """Map intent suggestions to short example utterances."""
+        example_map = {
+            "light.turn_on": "Mach das Licht im Wohnzimmer an" if language == "de" else "Turn on the living room light",
+            "light.turn_off": "Mach das Licht im Wohnzimmer aus" if language == "de" else "Turn off the living room light",
+            "climate.set_temperature": "Stell die Temperatur im Wohnzimmer auf 21 Grad" if language == "de" else "Set the living room temperature to 21 degrees",
+            "scene.activate": "Aktiviere die Szene Abend" if language == "de" else "Activate the evening scene",
+            "cover.open_cover": "Öffne den Rollladen im Wohnzimmer" if language == "de" else "Open the living room shutter",
+            "cover.close_cover": "Schließe den Rollladen im Wohnzimmer" if language == "de" else "Close the living room shutter",
+        }
+        resolved = [example_map[item] for item in suggestions if item in example_map]
+        if resolved:
+            return resolved[:3]
+        if language == "de":
+            return [
+                "Mach das Licht an",
+                "Stell die Temperatur auf 21 Grad",
+                "Spiel Musik",
+            ]
+        return [
+            "Turn on the light",
+            "Set temperature to 21 degrees",
+            "Play music",
+        ]
     
     def _handle_light(
         self,
@@ -602,7 +778,7 @@ class VoiceIntentHandler:
         actions = []
         
         # Determine target entity
-        zone = context.current_zone if context.current_zone != "unknown" else "wohnzimmer"
+        zone = self._resolve_target_zone(intent, context)
         light_entity = f"light.{zone}"
         
         if intent.intent_type == IntentType.LIGHT_ON:
@@ -634,7 +810,7 @@ class VoiceIntentHandler:
         """Handle light dim/brighten intents."""
         actions = []
         
-        zone = context.current_zone if context.current_zone != "unknown" else "wohnzimmer"
+        zone = self._resolve_target_zone(intent, context)
         light_entity = f"light.{zone}"
         
         brightness = intent.slots.get("brightness", 50 if intent.intent_type == IntentType.LIGHT_DIM else 100)
@@ -665,7 +841,7 @@ class VoiceIntentHandler:
         temperature = intent.slots.get("temperature", 21)
         
         # Default climate entity
-        climate_entity = "climate.wohnzimmer"
+        climate_entity = f"climate.{self._resolve_target_zone(intent, context)}"
         
         actions.append({
             "domain": "climate",
@@ -690,7 +866,7 @@ class VoiceIntentHandler:
         """Handle media control intents."""
         actions = []
         
-        media_entity = "media_player.wohnzimmer"
+        media_entity = f"media_player.{self._resolve_target_zone(intent, context)}"
         
         if intent.intent_type == IntentType.MEDIA_PLAY:
             actions.append({

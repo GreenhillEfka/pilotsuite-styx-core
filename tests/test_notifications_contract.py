@@ -405,6 +405,98 @@ def test_notifications_root_create_alias_accepts_legacy_data_channel_and_source_
     }
 
 
+def test_notifications_root_create_alias_accepts_historical_integer_priority_and_keeps_read_models_in_sync(client):
+    response = client.post(
+        "/api/v1/notifications",
+        json={
+            "title": "Legacy-Integer-Priority bleibt kompatibel",
+            "message": "Historische Integer-Prioritäten werden kontrolliert auf die schlanke Runtime-Wahrheit normalisiert.",
+            "priority": 1,
+            "type": "system",
+            "data": {
+                "slice": 120,
+            },
+            "source": "Legacy_Bridge",
+            "tags": ["legacy", "priority"],
+        },
+    )
+    assert response.status_code == 200
+
+    payload = response.get_json()
+    created_notification = payload["notification"]
+    assert payload["ok"] is True
+    assert created_notification["title"] == "Legacy-Integer-Priority bleibt kompatibel"
+    assert created_notification["message"] == "Historische Integer-Prioritäten werden kontrolliert auf die schlanke Runtime-Wahrheit normalisiert."
+    assert created_notification["priority"] == "urgent"
+    assert created_notification["type"] == "system"
+    assert created_notification["action_data"] == {"slice": 120}
+    assert created_notification["source"] == "legacy_bridge"
+    assert created_notification["tags"] == ["legacy", "priority"]
+
+    refreshed_feed = client.get("/api/v1/notifications?source=legacy_bridge")
+    assert refreshed_feed.status_code == 200
+    assert refreshed_feed.get_json()["count"] == 1
+    assert refreshed_feed.get_json()["notifications"][0] == created_notification
+    assert refreshed_feed.get_json()["unread_count"] == 3
+    assert refreshed_feed.get_json()["total_count"] == 4
+
+    refreshed_digest = client.get("/api/v1/notifications/digest")
+    assert refreshed_digest.status_code == 200
+    assert refreshed_digest.get_json()["digest"] == {
+        "period": "last_24h",
+        "total": 4,
+        "unread": 3,
+        "read": 1,
+        "dismissed": 0,
+        "sent": 4,
+        "by_type": {
+            "system": 1,
+            "alert": 1,
+            "info": 1,
+            "suggestion": 1,
+        },
+        "by_source": {
+            "legacy_bridge": 1,
+            "presence": 1,
+            "dashboard_layout": 1,
+            "zone_truth": 1,
+        },
+        "by_priority": {
+            "urgent": 1,
+            "high": 1,
+            "normal": 1,
+            "low": 1,
+        },
+        "latest_timestamp": created_notification["timestamp"],
+    }
+
+    refreshed_stats = client.get("/api/v1/notifications/stats")
+    assert refreshed_stats.status_code == 200
+    assert refreshed_stats.get_json() == {
+        "ok": True,
+        "total_notifications": 4,
+        "unread_count": 3,
+        "by_source": {
+            "legacy_bridge": 1,
+            "presence": 1,
+            "dashboard_layout": 1,
+            "zone_truth": 1,
+        },
+        "by_priority": {
+            "urgent": 1,
+            "high": 1,
+            "normal": 1,
+            "low": 1,
+        },
+        "by_type": {
+            "system": 1,
+            "alert": 1,
+            "info": 1,
+            "suggestion": 1,
+        },
+    }
+
+
 def test_notifications_root_create_alias_contract_matches_send_write_slice_and_keeps_read_models_in_sync(client):
     response = client.post(
         "/api/v1/notifications",
@@ -881,6 +973,13 @@ def test_notifications_send_contract_rejects_invalid_payloads(client):
     )
     assert invalid_priority.status_code == 400
     assert invalid_priority.get_json()["error"] == "invalid_priority"
+
+    invalid_boolean_priority = client.post(
+        "/api/v1/notifications/send",
+        json={"title": "Test", "message": "ok", "priority": True},
+    )
+    assert invalid_boolean_priority.status_code == 400
+    assert invalid_boolean_priority.get_json()["error"] == "invalid_priority"
 
     invalid_target_devices = client.post(
         "/api/v1/notifications/send",

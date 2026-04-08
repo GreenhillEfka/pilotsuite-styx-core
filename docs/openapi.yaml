@@ -105,22 +105,22 @@ paths:
     post:
       tags:
       - Notifications
-      summary: Create one notification via root alias with legacy data/channel compatibility
+      summary: Create one notification via root alias with legacy data/channel/source and integer-priority compatibility
       operationId: createNotification
       responses:
         '200':
-          description: Notification created and added to the runtime feed via the root alias; historical `data` and `channel` payload hints stay accepted without reintroducing delivery routing
+          description: Notification created and added to the runtime feed via the root alias; historical `data`, `channel`, `source` and integer `priority` payload hints stay accepted without reintroducing delivery routing
         '400':
           description: Invalid notification payload
   /api/v1/notifications/send:
     post:
       tags:
       - Notifications
-      summary: Send one notification with legacy data/channel compatibility
+      summary: Send one notification with legacy data/channel/source and integer-priority compatibility
       operationId: sendNotification
       responses:
         '200':
-          description: Notification created and added to the runtime feed; historical `data` and `channel` payload hints stay accepted without reintroducing delivery routing
+          description: Notification created and added to the runtime feed; historical `data`, `channel`, `source` and integer `priority` payload hints stay accepted without reintroducing delivery routing
         '400':
           description: Invalid notification payload
   /api/v1/notifications/digest:
