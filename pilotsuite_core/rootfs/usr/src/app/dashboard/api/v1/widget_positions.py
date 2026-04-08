@@ -184,6 +184,18 @@ def _runtime_current_position(current: Any) -> dict[str, Any] | None:
     return normalized_entry
 
 
+def _overwrite_source_history(existing: dict[str, Any]) -> list[dict[str, Any]] | None:
+    history = existing.get("history")
+    if history is None:
+        return []
+
+    normalized_history, error = _coerce_stack_entries(history, field="history")
+    if error:
+        return None
+
+    return normalized_history
+
+
 def _coerce_position(data: Any, *, require_widget_id: bool = True) -> tuple[dict[str, Any] | None, str | None]:
     if not isinstance(data, dict):
         return None, "Invalid position payload"
@@ -264,11 +276,12 @@ def save_position():
     with _STORE_LOCK:
         existing = _positions().get(widget_id)
         if existing:
-            if "history" in existing and not isinstance(existing.get("history"), list):
+            history = _overwrite_source_history(existing)
+            if history is None:
                 return jsonify({"error": "Widget position not found"}), 404
             if "redo_stack" in existing and not isinstance(existing.get("redo_stack"), list):
                 return jsonify({"error": "Widget position not found"}), 404
-            position["history"] = deepcopy(existing.get("history", []))
+            position["history"] = history
             position["redo_stack"] = []
         _positions()[widget_id] = position
         _persist()
@@ -333,13 +346,14 @@ def save_bulk_positions():
 
             existing = _positions().get(widget_id)
             if existing:
-                if "history" in existing and not isinstance(existing.get("history"), list):
+                history = _overwrite_source_history(existing)
+                if history is None:
                     errors.append({"widget_id": widget_id, "error": "Widget position not found"})
                     continue
                 if "redo_stack" in existing and not isinstance(existing.get("redo_stack"), list):
                     errors.append({"widget_id": widget_id, "error": "Widget position not found"})
                     continue
-                position["history"] = deepcopy(existing.get("history", []))
+                position["history"] = history
                 position["redo_stack"] = []
             _positions()[widget_id] = position
             emitted_updates.append({"widget_id": widget_id, "position": deepcopy(position)})
