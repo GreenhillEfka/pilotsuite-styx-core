@@ -4,8 +4,9 @@ FROM $BUILD_FROM
 # Install dependencies
 RUN apk add --no-cache python3 py3-pip py3-aiohttp py3-fastapi py3-uvicorn py3-pydantic py3-requests py3-numpy py3-scipy
 
-# Copy application
+# Copy application from repo root (build context is repo root for HA addons)
 COPY pilotsuite_core/rootfs/usr/src/app /app
+
 WORKDIR /app
 
 # Install Python requirements
