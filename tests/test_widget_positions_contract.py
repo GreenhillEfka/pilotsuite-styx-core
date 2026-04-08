@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -171,3 +172,42 @@ def test_widget_positions_contract_covers_validation_and_not_found_paths(client,
     no_redo = client.post("/api/v1/widgets/positions/temp/redo")
     assert no_redo.status_code == 404
     assert no_redo.get_json() == {"error": "No redo available"}
+
+
+def test_widget_positions_contract_ignores_non_mapping_persisted_entries(tmp_path):
+    persisted_file = tmp_path / "widget_positions.json"
+    persisted_file.write_text(
+        json.dumps(
+            {
+                "weather": {"x": 4, "y": 2, "last_update": "2026-04-08T06:22:00+00:00"},
+                "broken": ["not", "a", "mapping"],
+            }
+        )
+    )
+
+    app = create_app(
+        {
+            "TESTING": True,
+            "WIDGET_POSITIONS_FILE": str(persisted_file),
+        }
+    )
+    client = app.test_client()
+
+    response = client.get("/api/v1/widgets/positions")
+    assert response.status_code == 200
+    assert response.get_json() == {
+        "positions": {
+            "weather": {
+                "widget_id": "weather",
+                "x": 4,
+                "y": 2,
+                "last_update": "2026-04-08T06:22:00+00:00",
+            }
+        },
+        "total": 1,
+        "last_update": "2026-04-08T06:22:00+00:00",
+    }
+
+    missing = client.get("/api/v1/widgets/positions/broken")
+    assert missing.status_code == 404
+    assert missing.get_json() == {"error": "Widget position not found"}

@@ -34,6 +34,22 @@ def _positions_file() -> Path:
     )
 
 
+def _sanitize_loaded_positions(raw: Any) -> dict[str, dict[str, Any]]:
+    if not isinstance(raw, dict):
+        return {}
+
+    sanitized: dict[str, dict[str, Any]] = {}
+    for widget_id, entry in raw.items():
+        if not isinstance(widget_id, str) or not isinstance(entry, dict):
+            continue
+
+        normalized = deepcopy(entry)
+        normalized.setdefault("widget_id", widget_id)
+        sanitized[widget_id] = normalized
+
+    return sanitized
+
+
 def _state() -> dict[str, Any]:
     state = current_app.extensions.setdefault(
         "widget_positions_state",
@@ -43,7 +59,9 @@ def _state() -> dict[str, Any]:
         positions_file = _positions_file()
         try:
             if positions_file.exists():
-                state["positions"] = json.loads(positions_file.read_text())
+                state["positions"] = _sanitize_loaded_positions(
+                    json.loads(positions_file.read_text())
+                )
         except Exception:
             state["positions"] = {}
         state["loaded"] = True

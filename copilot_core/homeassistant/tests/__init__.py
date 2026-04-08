@@ -1,1 +1,0 @@
-"""HomeAssistant Integration Tests."""
