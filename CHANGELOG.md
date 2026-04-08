@@ -1,5 +1,12 @@
 # Changelog
 
+## [20.0.2] - 2026-04-08
+
+### Fixed
+- Core add-on Docker build context now uses the canonical add-on path under `addons/pilotsuite/`
+- Removed release ambiguity around legacy `pilotsuite_core/rootfs/...` copy paths
+- Prepared a fresh clean release asset for Home Assistant add-on installation
+
 ## [20.0.0] - 2026-04-08
 
 ### Changed
