@@ -1,12 +1,7 @@
-# Ignore large directories
-__pycache__/
-*.pyc
-*.pyo
+app/__pycache__/
+app/*.pyc
+app/tests/
+app/docs/
+app/*.md
 .git/
 .github/
-tests/
-test_*
-.venv/
-*.md
-docs/
-*.log

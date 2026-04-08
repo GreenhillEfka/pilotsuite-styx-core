@@ -3,14 +3,17 @@ FROM $BUILD_FROM
 
 WORKDIR /app
 
-# Copy requirements and install
+# Install dependencies
+RUN apk add --no-cache python3 py3-pip py3-aiohttp py3-fastapi py3-uvicorn py3-pydantic py3-requests py3-numpy py3-scipy
+
+# Copy requirements first (better caching)
 COPY app/requirements.txt .
 RUN pip3 install --no-cache-dir -r requirements.txt
 
 # Copy application (main.py + copilot_core/ package)
 COPY app/ .
 
-# Set Python path
+# Python path for imports
 ENV PYTHONPATH=/app
 
 EXPOSE 8909
