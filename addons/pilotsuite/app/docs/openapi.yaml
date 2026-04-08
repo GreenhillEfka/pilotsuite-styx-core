@@ -1,0 +1,2289 @@
+openapi: 3.0.3
+info:
+  title: PilotSuite Core API
+  description: |
+    REST API for the PilotSuite Core Add-on.
+    
+    This API provides endpoints for:
+    - Habitus pattern mining and rules discovery
+    - Brain graph visualization and synchronization
+    - User preference learning (MUPL)
+    - Tag system v2 for entity classification
+    - Mood context aggregation
+    - Event ingestion with idempotency
+    - System health monitoring
+    - Energy monitoring, anomaly detection, and load shifting
+    - Zone-based energy tracking and Sankey flow diagrams
+    
+    ## Authentication
+    All endpoints require `X-Auth-Token` header when authentication is enabled.
+    
+    ## Idempotency
+    Event endpoints support `Idempotency-Key` header for deduplication.
+  version: 5.4.0
+  contact:
+    name: PilotSuite
+    url: https://github.com/GreenhillEfka/pilotsuite-styx-core
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://homeassistant.local:8909
+    description: PilotSuite Core Add-on (default port)
+  - url: http://localhost:8909
+    description: Development server
+
+tags:
+  - name: Habitus
+    description: Pattern mining and A→B rule discovery
+  - name: Graph
+    description: Brain graph visualization and sync
+  - name: Mood
+    description: Mood context aggregation
+  - name: Tags
+    description: Entity tagging and classification
+  - name: Events
+    description: Event ingestion and processing
+  - name: System
+    description: System health and diagnostics
+  - name: Candidates
+    description: Automation candidates discovery
+  - name: Neurons
+    description: Neural system state and evaluation
+  - name: Vector
+    description: Vector embeddings and similarity search
+  - name: Weather
+    description: Weather context and PV recommendations
+  - name: Voice
+    description: Voice assistant context integration
+  - name: Energy
+    description: Energy monitoring, anomaly detection, load shifting, and Sankey diagrams
+  - name: Documentation
+    description: Interactive API documentation and OpenAPI spec
+
+paths:
+  # ==================== HABITUS ====================
+  /api/v1/habitus/status:
+    get:
+      tags: [Habitus]
+      summary: Get habitus miner status
+      operationId: getHabitusStatus
+      responses:
+        '200':
+          description: Habitus miner status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HabitusStatus'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/v1/habitus/rules:
+    get:
+      tags: [Habitus]
+      summary: Get discovered A→B rules
+      operationId: getHabitusRules
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 100
+        - name: min_score
+          in: query
+          schema:
+            type: number
+            format: float
+        - name: a_filter
+          in: query
+          schema:
+            type: string
+        - name: b_filter
+          in: query
+          schema:
+            type: string
+        - name: domain_filter
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of discovered rules
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RulesResponse'
+
+  /api/v1/habitus/mine:
+    post:
+      tags: [Habitus]
+      summary: Mine rules from HA events
+      operationId: mineRules
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MineRequest'
+      responses:
+        '200':
+          description: Mining result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MineResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+
+  /api/v1/habitus/dashboard_cards:
+    get:
+      tags: [Habitus]
+      summary: Get dashboard card templates
+      operationId: getDashboardCards
+      responses:
+        '200':
+          description: Dashboard card templates
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardCardsResponse'
+
+  /api/v1/habitus/dashboard_cards/zones:
+    get:
+      tags: [Habitus]
+      summary: Get discovered zones
+      operationId: getZones
+      responses:
+        '200':
+          description: Zone list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ZonesResponse'
+
+  # ==================== GRAPH ====================
+  /api/v1/graph/state:
+    get:
+      tags: [Graph]
+      summary: Get brain graph state
+      operationId: getGraphState
+      parameters:
+        - name: max_nodes
+          in: query
+          schema:
+            type: integer
+            default: 500
+        - name: max_edges
+          in: query
+          schema:
+            type: integer
+            default: 2000
+      responses:
+        '200':
+          description: Brain graph visualization data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GraphState'
+
+  /api/v1/graph/sync:
+    post:
+      tags: [Graph]
+      summary: Synchronize graph with HA entities
+      operationId: syncGraph
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GraphSyncRequest'
+      responses:
+        '200':
+          description: Sync result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GraphSyncResponse'
+
+  /api/v1/graph/patterns:
+    get:
+      tags: [Graph]
+      summary: Get discovered patterns
+      operationId: getPatterns
+      responses:
+        '200':
+          description: Pattern list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PatternsResponse'
+
+  # ==================== MOOD ====================
+  /api/v1/mood:
+    get:
+      tags: [Mood]
+      summary: Get current mood context
+      operationId: getMood
+      parameters:
+        - name: zone_id
+          in: query
+          schema:
+            type: string
+        - name: user_id
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Mood context
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MoodResponse'
+
+  # ==================== TAGS ====================
+  /api/v1/tags2/tags:
+    get:
+      tags: [Tags]
+      summary: Get all tags
+      operationId: getTags
+      responses:
+        '200':
+          description: Tag list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TagsResponse'
+    post:
+      tags: [Tags]
+      summary: Create a tag
+      operationId: createTag
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TagCreate'
+      responses:
+        '201':
+          description: Tag created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tag'
+
+  /api/v1/tags2/subjects/{subject_id}/tags:
+    get:
+      tags: [Tags]
+      summary: Get tags for a subject
+      operationId: getSubjectTags
+      parameters:
+        - name: subject_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Subject's tags
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubjectTagsResponse'
+    post:
+      tags: [Tags]
+      summary: Assign tag to subject
+      operationId: assignTag
+      parameters:
+        - name: subject_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TagAssignment'
+      responses:
+        '201':
+          description: Tag assigned
+
+  # ==================== EVENTS ====================
+  /api/v1/events:
+    post:
+      tags: [Events]
+      summary: Ingest event
+      operationId: ingestEvent
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          description: Unique key for deduplication
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EventIngest'
+      responses:
+        '200':
+          description: Event processed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventIngestResponse'
+
+  # ==================== CANDIDATES ====================
+  /api/v1/candidates:
+    get:
+      tags: [Candidates]
+      summary: Get automation candidates
+      operationId: getCandidates
+      parameters:
+        - name: min_score
+          in: query
+          schema:
+            type: number
+            format: float
+            default: 0.5
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+      responses:
+        '200':
+          description: Candidate list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CandidatesResponse'
+
+  /api/v1/candidates/stats:
+    get:
+      tags: [Candidates]
+      summary: Get candidate statistics
+      operationId: getCandidateStats
+      responses:
+        '200':
+          description: Candidate statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CandidateStats'
+
+  # ==================== SYSTEM ====================
+  /api/v1/system-health:
+    get:
+      tags: [System]
+      summary: Get system health
+      operationId: getSystemHealth
+      responses:
+        '200':
+          description: System health status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemHealth'
+
+  # ==================== ENERGY ====================
+  /api/v1/energy:
+    get:
+      tags: [Energy]
+      summary: Get complete energy snapshot
+      operationId: getEnergySnapshot
+      description: Returns consumption, production, power, anomalies, and baselines
+      responses:
+        '200':
+          description: Energy snapshot
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnergySnapshot'
+        '503':
+          description: Energy service not initialized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/energy/anomalies:
+    get:
+      tags: [Energy]
+      summary: Get detected energy anomalies
+      operationId: getEnergyAnomalies
+      description: Returns consumption anomalies with severity and deviation info
+      responses:
+        '200':
+          description: Anomaly list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnergyAnomaliesResponse'
+        '503':
+          description: Energy service not initialized
+
+  /api/v1/energy/shifting:
+    get:
+      tags: [Energy]
+      summary: Get load shifting opportunities
+      operationId: getShiftingOpportunities
+      description: Returns opportunities to shift energy consumption for cost savings
+      responses:
+        '200':
+          description: Shifting opportunities
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShiftingResponse'
+        '503':
+          description: Energy service not initialized
+
+  /api/v1/energy/explain/{suggestion_id}:
+    get:
+      tags: [Energy]
+      summary: Explain an energy suggestion
+      operationId: explainSuggestion
+      description: Returns detailed explanation for an anomaly or shifting suggestion
+      parameters:
+        - name: suggestion_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: ID of the anomaly or shifting opportunity
+      responses:
+        '200':
+          description: Suggestion explanation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuggestionExplanation'
+        '503':
+          description: Energy service not initialized
+
+  /api/v1/energy/baselines:
+    get:
+      tags: [Energy]
+      summary: Get energy consumption baselines
+      operationId: getEnergyBaselines
+      description: Returns average daily kWh per device type
+      responses:
+        '200':
+          description: Baselines
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BaselinesResponse'
+        '503':
+          description: Energy service not initialized
+
+  /api/v1/energy/suppress:
+    get:
+      tags: [Energy]
+      summary: Check suggestion suppression status
+      operationId: getSuppressStatus
+      description: Returns whether energy suggestions are suppressed due to high-severity anomalies
+      responses:
+        '200':
+          description: Suppression status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuppressResponse'
+        '503':
+          description: Energy service not initialized
+
+  /api/v1/energy/health:
+    get:
+      tags: [Energy]
+      summary: Get energy service health
+      operationId: getEnergyHealth
+      description: Returns service status including HA availability and cache state
+      responses:
+        '200':
+          description: Health status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnergyHealthResponse'
+        '503':
+          description: Energy service not initialized
+
+  /api/v1/energy/zone/{zone_id}:
+    get:
+      tags: [Energy]
+      summary: Get zone energy data
+      operationId: getZoneEnergy
+      description: Returns aggregated energy data for a specific Habitzone
+      parameters:
+        - name: zone_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Zone energy data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ZoneEnergyResponse'
+        '404':
+          description: Zone not registered
+        '503':
+          description: Energy service not initialized
+    post:
+      tags: [Energy]
+      summary: Register energy entities for a zone
+      operationId: registerZoneEnergy
+      description: Associates HA energy entities with a Habitzone
+      parameters:
+        - name: zone_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ZoneEnergyRegister'
+      responses:
+        '201':
+          description: Zone energy registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ZoneEnergyRegistered'
+        '400':
+          description: Invalid request (entity_ids not a list)
+        '503':
+          description: Energy service not initialized
+
+  /api/v1/energy/zones:
+    get:
+      tags: [Energy]
+      summary: Get all zones energy overview
+      operationId: getAllZonesEnergy
+      description: Returns energy overview for all registered zones sorted by power descending
+      responses:
+        '200':
+          description: All zones energy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AllZonesEnergyResponse'
+        '503':
+          description: Energy service not initialized
+
+  /api/v1/energy/sankey:
+    get:
+      tags: [Energy]
+      summary: Get Sankey flow data (JSON)
+      operationId: getSankeyData
+      description: Returns Sankey diagram node and flow data as JSON
+      parameters:
+        - name: zone
+          in: query
+          description: Optional zone_id to filter (default global)
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Sankey data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SankeyDataResponse'
+        '404':
+          description: Zone not found
+        '503':
+          description: Energy service not initialized
+
+  /api/v1/energy/sankey.svg:
+    get:
+      tags: [Energy]
+      summary: Get Sankey diagram (SVG)
+      operationId: getSankeySvg
+      description: Returns a rendered SVG Sankey energy flow diagram
+      parameters:
+        - name: zone
+          in: query
+          description: Optional zone_id (default global)
+          schema:
+            type: string
+        - name: width
+          in: query
+          description: SVG width in pixels (max 2000)
+          schema:
+            type: integer
+            default: 700
+            maximum: 2000
+        - name: height
+          in: query
+          description: SVG height in pixels (max 1200)
+          schema:
+            type: integer
+            default: 400
+            maximum: 1200
+        - name: theme
+          in: query
+          description: Color theme
+          schema:
+            type: string
+            enum: [dark, light]
+            default: dark
+      responses:
+        '200':
+          description: SVG Sankey diagram
+          content:
+            image/svg+xml:
+              schema:
+                type: string
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                example: public, max-age=30
+        '503':
+          description: Service unavailable (SVG error message)
+
+  # ==================== DOCUMENTATION ====================
+  /api/v1/docs:
+    get:
+      tags: [Documentation]
+      summary: Swagger UI documentation
+      operationId: getSwaggerUI
+      description: Interactive API documentation using Swagger UI
+      responses:
+        '200':
+          description: Swagger UI HTML page
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /api/v1/docs/openapi.yaml:
+    get:
+      tags: [Documentation]
+      summary: OpenAPI specification (YAML)
+      operationId: getOpenApiYaml
+      description: Raw OpenAPI 3.0.3 specification in YAML format
+      responses:
+        '200':
+          description: OpenAPI YAML specification
+          content:
+            text/yaml:
+              schema:
+                type: string
+
+  /api/v1/docs/openapi.json:
+    get:
+      tags: [Documentation]
+      summary: OpenAPI specification (JSON)
+      operationId: getOpenApiJson
+      description: OpenAPI 3.0.3 specification in JSON format
+      responses:
+        '200':
+          description: OpenAPI JSON specification
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /api/v1/docs/validate:
+    get:
+      tags: [Documentation]
+      summary: Validate OpenAPI specification
+      operationId: validateOpenApi
+      description: Validates the loaded OpenAPI spec and returns metadata
+      responses:
+        '200':
+          description: Validation result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  version:
+                    type: string
+                  title:
+                    type: string
+                  path_count:
+                    type: integer
+                  tag_count:
+                    type: integer
+
+  # ==================== NEURONS ====================
+  /api/v1/neurons:
+    get:
+      tags: [Neurons]
+      summary: List all neurons
+      operationId: listNeurons
+      responses:
+        '200':
+          description: Neuron list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NeuronsResponse'
+
+  /api/v1/neurons/{neuron_id}:
+    get:
+      tags: [Neurons]
+      summary: Get neuron state
+      operationId: getNeuron
+      parameters:
+        - name: neuron_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Neuron state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NeuronState'
+
+  /api/v1/neurons/evaluate:
+    post:
+      tags: [Neurons]
+      summary: Run neural evaluation
+      operationId: evaluateNeurons
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NeuronEvaluateRequest'
+      responses:
+        '200':
+          description: Evaluation result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NeuronEvaluateResponse'
+
+  /api/v1/neurons/mood:
+    get:
+      tags: [Neurons]
+      summary: Get current mood
+      operationId: getNeuronMood
+      responses:
+        '200':
+          description: Current mood state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MoodResponse'
+
+  /api/v1/neurons/suggestions:
+    get:
+      tags: [Neurons]
+      summary: Get suggestions
+      operationId: getNeuronSuggestions
+      responses:
+        '200':
+          description: Suggestions list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuggestionsResponse'
+
+  # ==================== VECTOR ====================
+  /api/v1/vector/embeddings:
+    post:
+      tags: [Vector]
+      summary: Create embedding
+      operationId: createEmbedding
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VectorEmbeddingRequest'
+      responses:
+        '201':
+          description: Embedding created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VectorEmbeddingResponse'
+
+  /api/v1/vector/embeddings/bulk:
+    post:
+      tags: [Vector]
+      summary: Create embeddings in bulk
+      operationId: createEmbeddingsBulk
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VectorBulkRequest'
+      responses:
+        '201':
+          description: Bulk embeddings created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VectorBulkResponse'
+
+  /api/v1/vector/similar/{entry_id}:
+    get:
+      tags: [Vector]
+      summary: Find similar entities
+      operationId: findSimilar
+      parameters:
+        - name: entry_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: type
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+        - name: threshold
+          in: query
+          schema:
+            type: number
+            default: 0.7
+      responses:
+        '200':
+          description: Similar entities
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimilarResponse'
+
+  /api/v1/vector/vectors:
+    get:
+      tags: [Vector]
+      summary: List vectors
+      operationId: listVectors
+      parameters:
+        - name: type
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+      responses:
+        '200':
+          description: Vector list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VectorsListResponse'
+    delete:
+      tags: [Vector]
+      summary: Clear vectors
+      operationId: clearVectors
+      parameters:
+        - name: type
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Vectors cleared
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VectorsClearResponse'
+
+  /api/v1/vector/vectors/{entry_id}:
+    get:
+      tags: [Vector]
+      summary: Get vector
+      operationId: getVector
+      parameters:
+        - name: entry_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Vector details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VectorDetailResponse'
+    delete:
+      tags: [Vector]
+      summary: Delete vector
+      operationId: deleteVector
+      parameters:
+        - name: entry_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Vector deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VectorDeleteResponse'
+
+  /api/v1/vector/stats:
+    get:
+      tags: [Vector]
+      summary: Get vector stats
+      operationId: getVectorStats
+      responses:
+        '200':
+          description: Vector statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VectorStatsResponse'
+
+  /api/v1/vector/similarity:
+    post:
+      tags: [Vector]
+      summary: Compute similarity between entries
+      operationId: computeSimilarity
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SimilarityRequest'
+      responses:
+        '200':
+          description: Similarity score
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimilarityResponse'
+
+  # ==================== WEATHER ====================
+  /api/v1/weather/:
+    get:
+      tags: [Weather]
+      summary: Get current weather
+      operationId: getWeather
+      responses:
+        '200':
+          description: Weather data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WeatherResponse'
+
+  /api/v1/weather/forecast:
+    get:
+      tags: [Weather]
+      summary: Get weather forecast
+      operationId: getWeatherForecast
+      parameters:
+        - name: days
+          in: query
+          schema:
+            type: integer
+            default: 5
+      responses:
+        '200':
+          description: Weather forecast
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WeatherForecastResponse'
+
+  /api/v1/weather/pv-recommendations:
+    get:
+      tags: [Weather]
+      summary: Get PV recommendations
+      operationId: getPvRecommendations
+      responses:
+        '200':
+          description: PV recommendations
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PvRecommendationsResponse'
+
+  # ==================== VOICE CONTEXT ====================
+  /api/v1/voice/context:
+    get:
+      tags: [Voice]
+      summary: Get voice context
+      operationId: getVoiceContext
+      responses:
+        '200':
+          description: Voice context
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VoiceContextResponse'
+    post:
+      tags: [Voice]
+      summary: Update voice context
+      operationId: updateVoiceContext
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Context updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VoiceContextUpdateResponse'
+
+  /api/v1/voice/prompt:
+    get:
+      tags: [Voice]
+      summary: Get voice prompt
+      operationId: getVoicePrompt
+      responses:
+        '200':
+          description: Voice prompt
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VoicePromptResponse'
+
+  /api/v1/voice/mood_history:
+    get:
+      tags: [Voice]
+      summary: Get voice mood history
+      operationId: getVoiceMoodHistory
+      responses:
+        '200':
+          description: Mood history
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VoiceMoodHistoryResponse'
+
+  /api/v1/voice/suggestions:
+    get:
+      tags: [Voice]
+      summary: Get voice suggestions
+      operationId: getVoiceSuggestions
+      responses:
+        '200':
+          description: Voice suggestions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VoiceSuggestionsResponse'
+
+components:
+  schemas:
+    # ---------- HABITUS ----------
+    HabitusStatus:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [ok, error]
+        version:
+          type: string
+        statistics:
+          type: object
+          properties:
+            total_rules:
+              type: integer
+            total_events:
+              type: integer
+            last_mining_ms:
+              type: integer
+        config:
+          type: object
+
+    Rule:
+      type: object
+      properties:
+        A:
+          type: string
+          description: Antecedent entity/transition
+        B:
+          type: string
+          description: Consequent entity/transition
+        dt_sec:
+          type: number
+          description: Time delta in seconds
+        nA:
+          type: integer
+          description: Antecedent count
+        nB:
+          type: integer
+          description: Consequent count
+        nAB:
+          type: integer
+          description: Co-occurrence count
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+        confidence_lb:
+          type: number
+          description: Lower bound confidence
+        lift:
+          type: number
+        leverage:
+          type: number
+        score:
+          type: number
+        evidence:
+          type: object
+          properties:
+            hit_examples:
+              type: array
+              items:
+                type: object
+            miss_examples:
+              type: array
+              items:
+                type: object
+            latency_quantiles:
+              type: array
+              items:
+                type: number
+
+    RulesResponse:
+      type: object
+      properties:
+        status:
+          type: string
+        total_rules:
+          type: integer
+        rules:
+          type: array
+          items:
+            $ref: '#/components/schemas/Rule'
+
+    MineRequest:
+      type: object
+      required:
+        - events
+      properties:
+        events:
+          type: array
+          items:
+            type: object
+        config:
+          type: object
+
+    MineResponse:
+      type: object
+      properties:
+        status:
+          type: string
+        mining_time_sec:
+          type: number
+        total_input_events:
+          type: integer
+        discovered_rules:
+          type: integer
+        top_rules:
+          type: array
+          items:
+            type: object
+
+    DashboardCardsResponse:
+      type: object
+      properties:
+        status:
+          type: string
+        cards:
+          type: array
+          items:
+            type: object
+
+    ZonesResponse:
+      type: object
+      properties:
+        status:
+          type: string
+        zones:
+          type: array
+          items:
+            type: object
+            properties:
+              zone_id:
+                type: string
+              name:
+                type: string
+              entities:
+                type: array
+                items:
+                  type: string
+
+    # ---------- GRAPH ----------
+    GraphState:
+      type: object
+      properties:
+        status:
+          type: string
+        nodes:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              type:
+                type: string
+              label:
+                type: string
+              domain:
+                type: string
+              score:
+                type: number
+        edges:
+          type: array
+          items:
+            type: object
+            properties:
+              source:
+                type: string
+              target:
+                type: string
+              type:
+                type: string
+              weight:
+                type: number
+
+    GraphSyncRequest:
+      type: object
+      properties:
+        entities:
+          type: array
+          items:
+            type: object
+        full_sync:
+          type: boolean
+          default: false
+
+    GraphSyncResponse:
+      type: object
+      properties:
+        status:
+          type: string
+        nodes_added:
+          type: integer
+        nodes_updated:
+          type: integer
+        nodes_removed:
+          type: integer
+        edges_added:
+          type: integer
+
+    PatternsResponse:
+      type: object
+      properties:
+        status:
+          type: string
+        patterns:
+          type: array
+          items:
+            type: object
+
+    # ---------- MOOD ----------
+    MoodResponse:
+      type: object
+      properties:
+        status:
+          type: string
+        mood:
+          type: object
+          properties:
+            score:
+              type: number
+              minimum: 0
+              maximum: 1
+            confidence:
+              type: number
+            factors:
+              type: array
+              items:
+                type: object
+                properties:
+                  name:
+                    type: string
+                  value:
+                    type: number
+                  weight:
+                    type: number
+        zone_id:
+          type: string
+        user_id:
+          type: string
+
+    # ---------- TAGS ----------
+    TagsResponse:
+      type: object
+      properties:
+        status:
+          type: string
+        tags:
+          type: array
+          items:
+            $ref: '#/components/schemas/Tag'
+
+    Tag:
+      type: object
+      properties:
+        tag_id:
+          type: string
+        namespace:
+          type: string
+        facet:
+          type: string
+        key:
+          type: string
+        description:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    TagCreate:
+      type: object
+      required:
+        - tag_id
+      properties:
+        tag_id:
+          type: string
+          pattern: '^[a-z0-9_]+\.[a-z0-9_]+\.[a-z0-9_]+$'
+          example: 'aicp.place.kueche'
+        description:
+          type: string
+
+    TagAssignment:
+      type: object
+      required:
+        - tag_id
+      properties:
+        tag_id:
+          type: string
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+        source:
+          type: string
+          enum: [manual, inferred, learned]
+
+    SubjectTagsResponse:
+      type: object
+      properties:
+        status:
+          type: string
+        subject_id:
+          type: string
+        tags:
+          type: array
+          items:
+            $ref: '#/components/schemas/Tag'
+
+    # ---------- EVENTS ----------
+    EventIngest:
+      type: object
+      required:
+        - type
+      properties:
+        type:
+          type: string
+        text:
+          type: string
+        payload:
+          type: object
+        idempotency_key:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+
+    EventIngestResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        stored:
+          type: boolean
+        deduped:
+          type: boolean
+        event_id:
+          type: string
+
+    # ---------- CANDIDATES ----------
+    CandidatesResponse:
+      type: object
+      properties:
+        status:
+          type: string
+        candidates:
+          type: array
+          items:
+            type: object
+            properties:
+              candidate_id:
+                type: string
+              trigger:
+                type: object
+              action:
+                type: object
+              score:
+                type: number
+              source:
+                type: string
+
+    CandidateStats:
+      type: object
+      properties:
+        status:
+          type: string
+        total:
+          type: integer
+        by_source:
+          type: object
+        by_domain:
+          type: object
+
+    # ---------- SYSTEM ----------
+    SystemHealth:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy, degraded, unhealthy]
+        checks:
+          type: object
+          properties:
+            api:
+              type: string
+              enum: [ok, error]
+            storage:
+              type: string
+              enum: [ok, error]
+            ha_connection:
+              type: string
+              enum: [ok, error]
+        version:
+          type: string
+        uptime_seconds:
+          type: integer
+
+    # ---------- ENERGY ----------
+    EnergySnapshot:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        total_consumption_today_kwh:
+          type: number
+          description: Total energy consumed today in kWh
+        total_production_today_kwh:
+          type: number
+          description: Total solar/PV production today in kWh
+        current_power_watts:
+          type: number
+          description: Current power draw in Watts
+        peak_power_today_watts:
+          type: number
+          description: Peak power today in Watts
+        anomalies_detected:
+          type: integer
+        shifting_opportunities:
+          type: integer
+        baselines:
+          type: object
+          additionalProperties:
+            type: number
+          description: Device type to avg daily kWh mapping
+
+    EnergyAnomaly:
+      type: object
+      properties:
+        id:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        device_id:
+          type: string
+        device_type:
+          type: string
+        expected_value:
+          type: number
+        actual_value:
+          type: number
+        deviation_percent:
+          type: number
+        severity:
+          type: string
+          enum: [low, medium, high]
+        description:
+          type: string
+
+    EnergyAnomaliesResponse:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        count:
+          type: integer
+        anomalies:
+          type: array
+          items:
+            $ref: '#/components/schemas/EnergyAnomaly'
+
+    ShiftingOpportunity:
+      type: object
+      properties:
+        id:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        device_type:
+          type: string
+        reason:
+          type: string
+          enum: [solar_oversupply, off_peak_pricing, avoid_peak_pricing]
+        current_cost_eur:
+          type: number
+        optimal_cost_eur:
+          type: number
+        savings_estimate_eur:
+          type: number
+        suggested_window_start:
+          type: string
+          format: date-time
+        suggested_window_end:
+          type: string
+          format: date-time
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+
+    ShiftingResponse:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        count:
+          type: integer
+        opportunities:
+          type: array
+          items:
+            $ref: '#/components/schemas/ShiftingOpportunity'
+
+    SuggestionExplanation:
+      type: object
+      properties:
+        suggestion_id:
+          type: string
+        type:
+          type: string
+          enum: [anomaly, shifting, unknown]
+        title:
+          type: string
+        description:
+          type: string
+        details:
+          type: object
+        actions:
+          type: array
+          items:
+            type: string
+
+    BaselinesResponse:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        baselines:
+          type: object
+          additionalProperties:
+            type: number
+          description: Device type to avg daily kWh
+
+    SuppressResponse:
+      type: object
+      properties:
+        suppressed:
+          type: boolean
+        reason:
+          type: string
+          nullable: true
+        suppress_until:
+          type: string
+          nullable: true
+        recommendations:
+          type: array
+          items:
+            type: string
+
+    EnergyHealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy, degraded, unhealthy]
+        hass_available:
+          type: boolean
+        cache_valid:
+          type: boolean
+        last_update:
+          type: number
+        baselines_configured:
+          type: integer
+        anomaly_thresholds:
+          type: object
+          properties:
+            low:
+              type: number
+            medium:
+              type: number
+            high:
+              type: number
+        energy_entities_found:
+          type: integer
+
+    ZoneEnergyRegister:
+      type: object
+      required:
+        - entity_ids
+      properties:
+        entity_ids:
+          type: array
+          items:
+            type: string
+          description: HA entity IDs for energy sensors
+          example: ["sensor.kitchen_power", "sensor.kitchen_energy"]
+        zone_name:
+          type: string
+          description: Display name for the zone
+          example: Kitchen
+
+    ZoneEnergyRegistered:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        zone_id:
+          type: string
+        zone_name:
+          type: string
+        entity_count:
+          type: integer
+
+    ZoneEnergyResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        zone_id:
+          type: string
+        zone_name:
+          type: string
+        total_power_watts:
+          type: number
+        entity_count:
+          type: integer
+        active_count:
+          type: integer
+        breakdown:
+          type: array
+          items:
+            type: object
+            properties:
+              entity_id:
+                type: string
+              value:
+                type: number
+                nullable: true
+              status:
+                type: string
+                enum: [ok, unavailable]
+        timestamp:
+          type: string
+          format: date-time
+
+    AllZonesEnergyResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        zones:
+          type: array
+          items:
+            type: object
+            properties:
+              zone_id:
+                type: string
+              zone_name:
+                type: string
+              total_power_watts:
+                type: number
+              entity_count:
+                type: integer
+              active_count:
+                type: integer
+        total_zones:
+          type: integer
+        global_power_watts:
+          type: number
+        timestamp:
+          type: string
+          format: date-time
+
+    SankeyNode:
+      type: object
+      properties:
+        id:
+          type: string
+        label:
+          type: string
+        value:
+          type: number
+        color:
+          type: string
+        category:
+          type: string
+
+    SankeyFlow:
+      type: object
+      properties:
+        source:
+          type: string
+        target:
+          type: string
+        value:
+          type: number
+
+    SankeyDataResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        title:
+          type: string
+        unit:
+          type: string
+        nodes:
+          type: array
+          items:
+            $ref: '#/components/schemas/SankeyNode'
+        flows:
+          type: array
+          items:
+            $ref: '#/components/schemas/SankeyFlow'
+        summary:
+          type: object
+          properties:
+            total_consumption_kwh:
+              type: number
+            total_production_kwh:
+              type: number
+            grid_kwh:
+              type: number
+        timestamp:
+          type: string
+          format: date-time
+
+    # ---------- COMMON ----------
+    ErrorResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [error]
+        message:
+          type: string
+        code:
+          type: string
+
+    # ---------- NEURONS ----------
+    NeuronsResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            context:
+              type: object
+            state:
+              type: object
+            mood:
+              type: object
+            total_count:
+              type: integer
+
+    NeuronState:
+      type: object
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+        state:
+          type: object
+        config:
+          type: object
+
+    NeuronEvaluateRequest:
+      type: object
+      properties:
+        states:
+          type: object
+        context:
+          type: object
+        trigger:
+          type: string
+
+    NeuronEvaluateResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            timestamp:
+              type: string
+            context_values:
+              type: object
+            state_values:
+              type: object
+            mood_values:
+              type: object
+            dominant_mood:
+              type: string
+            mood_confidence:
+              type: number
+            suggestions:
+              type: array
+              items:
+                type: string
+            neuron_count:
+              type: integer
+
+    SuggestionsResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            suggestions:
+              type: array
+              items:
+                type: string
+            mood:
+              type: string
+            timestamp:
+              type: string
+
+    # ---------- VECTOR ----------
+    VectorEmbeddingRequest:
+      type: object
+      required:
+        - type
+        - id
+      properties:
+        type:
+          type: string
+          enum: [entity, user_preference, pattern]
+        id:
+          type: string
+        domain:
+          type: string
+        area:
+          type: string
+        capabilities:
+          type: array
+          items:
+            type: string
+        tags:
+          type: array
+          items:
+            type: string
+        state:
+          type: object
+        preferences:
+          type: object
+        pattern_type:
+          type: string
+        entities:
+          type: array
+          items:
+            type: string
+        conditions:
+          type: object
+        confidence:
+          type: number
+        metadata:
+          type: object
+
+    VectorEmbeddingResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        entry:
+          type: object
+          properties:
+            id:
+              type: string
+            type:
+              type: string
+            created_at:
+              type: string
+            metadata:
+              type: object
+
+    VectorBulkRequest:
+      type: object
+      properties:
+        entities:
+          type: array
+          items:
+            $ref: '#/components/schemas/VectorEmbeddingRequest'
+        user_preferences:
+          type: array
+          items:
+            $ref: '#/components/schemas/VectorEmbeddingRequest'
+        patterns:
+          type: array
+          items:
+            $ref: '#/components/schemas/VectorEmbeddingRequest'
+
+    VectorBulkResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        results:
+          type: object
+          properties:
+            entities:
+              type: object
+              properties:
+                created:
+                  type: integer
+                failed:
+                  type: integer
+            user_preferences:
+              type: object
+              properties:
+                created:
+                  type: integer
+                failed:
+                  type: integer
+            patterns:
+              type: object
+              properties:
+                created:
+                  type: integer
+                failed:
+                  type: integer
+
+    SimilarResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        query_id:
+          type: string
+        query_type:
+          type: string
+        results:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              similarity:
+                type: number
+              type:
+                type: string
+              metadata:
+                type: object
+        count:
+          type: integer
+
+    VectorsListResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        entries:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              type:
+                type: string
+              created_at:
+                type: string
+              updated_at:
+                type: string
+              metadata:
+                type: object
+        count:
+          type: integer
+
+    VectorsClearResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        deleted_count:
+          type: integer
+        type:
+          type: string
+
+    VectorDetailResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        entry:
+          type: object
+          properties:
+            id:
+              type: string
+            type:
+              type: string
+            vector:
+              type: array
+              items:
+                type: number
+            dimension:
+              type: integer
+            created_at:
+              type: string
+            updated_at:
+              type: string
+            metadata:
+              type: object
+
+    VectorDeleteResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        deleted:
+          type: string
+
+    VectorStatsResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        stats:
+          type: object
+          properties:
+            total_vectors:
+              type: integer
+            by_type:
+              type: object
+            dimension:
+              type: integer
+
+    SimilarityRequest:
+      type: object
+      properties:
+        id1:
+          type: string
+        id2:
+          type: string
+        vector1:
+          type: array
+          items:
+            type: number
+        vector2:
+          type: array
+          items:
+            type: number
+
+    SimilarityResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        similarity:
+          type: number
+        dimension:
+          type: integer
+
+    # ---------- WEATHER ----------
+    WeatherResponse:
+      type: object
+      properties:
+        status:
+          type: string
+        weather:
+          type: object
+          properties:
+            temperature:
+              type: number
+            humidity:
+              type: number
+            condition:
+              type: string
+            wind_speed:
+              type: number
+            pressure:
+              type: number
+
+    WeatherForecastResponse:
+      type: object
+      properties:
+        status:
+          type: string
+        forecast:
+          type: array
+          items:
+            type: object
+            properties:
+              date:
+                type: string
+              temp_high:
+                type: number
+              temp_low:
+                type: number
+              condition:
+                type: string
+              precipitation:
+                type: number
+
+    PvRecommendationsResponse:
+      type: object
+      properties:
+        status:
+          type: string
+        recommendations:
+          type: array
+          items:
+            type: object
+            properties:
+              type:
+                type: string
+              message:
+                type: string
+              priority:
+                type: string
+
+    # ---------- VOICE ----------
+    VoiceContextResponse:
+      type: object
+      properties:
+        status:
+          type: string
+        context:
+          type: object
+          properties:
+            mood:
+              type: string
+            activity:
+              type: string
+            location:
+              type: string
+            time_context:
+              type: string
+
+    VoiceContextUpdateResponse:
+      type: object
+      properties:
+        status:
+          type: string
+        message:
+          type: string
+
+    VoicePromptResponse:
+      type: object
+      properties:
+        status:
+          type: string
+        prompt:
+          type: string
+
+    VoiceMoodHistoryResponse:
+      type: object
+      properties:
+        status:
+          type: string
+        history:
+          type: array
+          items:
+            type: object
+            properties:
+              timestamp:
+                type: string
+              mood:
+                type: string
+              confidence:
+                type: number
+
+    VoiceSuggestionsResponse:
+      type: object
+      properties:
+        status:
+          type: string
+        suggestions:
+          type: array
+          items:
+            type: object
+            properties:
+              type:
+                type: string
+              message:
+                type: string
+              priority:
+                type: string
+
+  responses:
+    ErrorResponse:
+      description: Error response
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-Auth-Token
+
+security:
+  - ApiKeyAuth: []

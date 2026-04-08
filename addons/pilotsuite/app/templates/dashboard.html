@@ -1,0 +1,2546 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PilotSuite — Styx</title>
+<style>
+:root{--bg:#0a0e14;--surface:#12171f;--card:#171d27;--border:#1e2a3a;--text:#e0e6ed;--dim:#6b7a8d;--accent:#7c6aef;--accent2:#9b8afb;--green:#34d399;--yellow:#fbbf24;--red:#f87171;--blue:#60a5fa;--cyan:#22d3ee;--orange:#fb923c;--pink:#f472b6;--radius:12px;--shadow:0 4px 20px rgba(0,0,0,.5)}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
+a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
+::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:var(--bg)}::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+
+/* Header */
+.header{background:linear-gradient(180deg,var(--surface) 0%,rgba(18,23,31,.95) 100%);border-bottom:1px solid var(--border);padding:12px 20px;display:flex;align-items:center;gap:14px;position:sticky;top:0;z-index:100;backdrop-filter:blur(12px)}
+.header .logo{width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,var(--accent),#5b4cd4);display:flex;align-items:center;justify-content:center;font-size:20px;box-shadow:0 2px 12px rgba(124,106,239,.3)}
+.header h1{font-size:18px;font-weight:700;flex:1;background:linear-gradient(135deg,var(--accent2),var(--cyan));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.header .status-pill{display:flex;align-items:center;gap:6px;font-size:12px;padding:5px 12px;border-radius:20px;border:1px solid var(--border);background:var(--card)}
+.header .dot{width:7px;height:7px;border-radius:50%;animation:pulse 2s infinite}
+.dot-green{background:var(--green)}.dot-yellow{background:var(--yellow)}.dot-red{background:var(--red)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.header .ver{font-size:11px;color:var(--dim);padding:3px 8px;border-radius:12px;border:1px solid var(--border)}
+
+/* Nav */
+.nav{background:var(--surface);border-bottom:1px solid var(--border);display:flex;overflow-x:auto;padding:0 12px;gap:2px}
+.nav button{background:none;border:none;color:var(--dim);padding:10px 16px;font-size:12px;font-weight:500;cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;transition:.2s;letter-spacing:.3px;text-transform:uppercase}
+.nav button:hover{color:var(--text)}.nav button.active{color:var(--accent2);border-bottom-color:var(--accent)}
+
+/* Layout */
+.page{display:none;padding:16px;max-width:1600px;margin:0 auto}.page.active{display:block}
+.grid{display:grid;gap:14px}.g2{grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}.g3{grid-template-columns:repeat(auto-fit,minmax(250px,1fr))}.g4{grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow);transition:border-color .2s}
+.card:hover{border-color:rgba(124,106,239,.3)}
+.card h2{font-size:13px;font-weight:600;margin-bottom:10px;display:flex;align-items:center;gap:7px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px}
+.card h2 .ic{font-size:16px}
+
+/* Stat */
+.stat{text-align:center;padding:12px 8px}.stat .v{font-size:32px;font-weight:800;background:linear-gradient(135deg,var(--accent2),var(--cyan));-webkit-background-clip:text;-webkit-text-fill-color:transparent}.stat .l{font-size:10px;color:var(--dim);margin-top:3px;text-transform:uppercase;letter-spacing:.8px}
+
+/* Badge */
+.b{display:inline-block;padding:2px 8px;border-radius:8px;font-size:10px;font-weight:600;letter-spacing:.3px}
+.b-g{background:rgba(52,211,153,.12);color:var(--green)}.b-y{background:rgba(251,191,36,.12);color:var(--yellow)}
+.b-r{background:rgba(248,113,113,.12);color:var(--red)}.b-b{background:rgba(96,165,250,.12);color:var(--blue)}
+.b-p{background:rgba(124,106,239,.12);color:var(--accent2)}.b-c{background:rgba(34,211,238,.12);color:var(--cyan)}
+
+/* Table */
+.tbl{width:100%;border-collapse:collapse;font-size:12px}
+.tbl th{text-align:left;padding:6px 10px;color:var(--dim);font-weight:500;border-bottom:1px solid var(--border);font-size:10px;text-transform:uppercase;letter-spacing:.5px}
+.tbl td{padding:7px 10px;border-bottom:1px solid rgba(30,42,58,.5)}
+
+/* Gauge */
+.gauge{margin:6px 0}.gauge-hd{display:flex;justify-content:space-between;font-size:11px;color:var(--dim);margin-bottom:3px}
+.gauge-hd .gv{color:var(--text);font-weight:600}
+.gauge-bar{height:5px;background:var(--border);border-radius:3px;overflow:hidden}
+.gauge-fill{height:100%;border-radius:3px;transition:width .8s ease}
+
+/* Pattern */
+.pat{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;margin:6px 0;display:flex;align-items:center;gap:10px;font-size:12px}
+.pat .arr{color:var(--accent2);font-weight:700;flex-shrink:0}.pat .meta{margin-left:auto;color:var(--dim);font-size:11px;white-space:nowrap}
+
+/* ============== STYX PAGE: Brain + Chat + History ============== */
+.styx-layout{display:grid;grid-template-columns:1fr 380px;grid-template-rows:auto 1fr auto;gap:14px;height:calc(100vh - 120px);min-height:500px}
+.styx-brain{grid-column:1;grid-row:1/4;display:flex;flex-direction:column;gap:12px}
+.styx-right{grid-column:2;grid-row:1/4;display:flex;flex-direction:column;gap:12px;min-height:0}
+
+/* Brain container */
+.brain-wrap{flex:1;min-height:300px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);position:relative;overflow:hidden}
+.brain-wrap svg{width:100%;height:100%;display:block}
+.brain-legend{position:absolute;top:10px;left:10px;display:flex;flex-wrap:wrap;gap:6px;z-index:5}
+.brain-legend .leg{font-size:9px;display:flex;align-items:center;gap:4px;background:rgba(10,14,20,.8);padding:3px 8px;border-radius:6px;border:1px solid var(--border)}
+.brain-legend .leg .dot-lg{width:8px;height:8px;border-radius:50%}
+.brain-controls{position:absolute;top:10px;right:10px;display:flex;gap:4px;z-index:5}
+.brain-controls button{background:var(--card);border:1px solid var(--border);color:var(--dim);width:28px;height:28px;border-radius:6px;cursor:pointer;font-size:12px}
+.brain-controls button:hover{color:var(--text);border-color:var(--accent)}
+
+/* Module pipeline indicators */
+.pipelines{display:flex;gap:6px;flex-wrap:wrap;padding:4px 0}
+.pipe{display:flex;align-items:center;gap:5px;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:5px 10px;font-size:10px;cursor:pointer;transition:.2s}
+.pipe:hover{border-color:var(--accent)}
+.pipe .pd{width:6px;height:6px;border-radius:50%}
+.pipe-active .pd{background:var(--green)}.pipe-learning .pd{background:var(--yellow);animation:pulse 1.5s infinite}.pipe-off .pd{background:var(--dim)}
+.pipe-error .pd{background:var(--red)}.pipe-unknown .pd{background:var(--dim);opacity:.4}
+.pipe span{color:var(--dim)}.pipe-active span{color:var(--green)}.pipe-learning span{color:var(--yellow)}
+.pipe-error span{color:var(--red)}.pipe-unknown span{color:var(--dim);opacity:.5}
+
+/* Chat panel */
+.chat-panel{display:flex;flex-direction:column;flex:1;min-height:0;background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+.chat-hd{padding:10px 14px;border-bottom:1px solid var(--border);font-size:12px;font-weight:600;display:flex;align-items:center;gap:8px;color:var(--accent2);flex-shrink:0}
+.chat-hd select{margin-left:4px;background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:11px;padding:2px 6px;max-width:180px}
+.chat-msgs{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px;min-height:0}
+.msg{max-width:85%;padding:8px 12px;border-radius:10px;font-size:13px;line-height:1.5;word-wrap:break-word}
+.msg.u{align-self:flex-end;background:linear-gradient(135deg,var(--accent),#5b4cd4);color:#fff;border-bottom-right-radius:3px}
+.msg.a{align-self:flex-start;background:var(--surface);border:1px solid var(--border);border-bottom-left-radius:3px}
+.chat-in{display:flex;gap:6px;padding:10px;border-top:1px solid var(--border);flex-shrink:0}
+.chat-in input{flex:1;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:13px;outline:none}
+.chat-in input:focus{border-color:var(--accent)}
+.chat-in button{background:linear-gradient(135deg,var(--accent),#5b4cd4);color:#fff;border:none;border-radius:8px;padding:8px 16px;cursor:pointer;font-size:12px;font-weight:600}
+.chat-in button:disabled{opacity:.4;cursor:not-allowed}
+
+/* History panel */
+.history-panel{max-height:180px;overflow-y:auto;background:var(--card);border:1px solid var(--border);border-radius:var(--radius);flex-shrink:0}
+.history-panel .hd{padding:8px 14px;font-size:11px;font-weight:600;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--card);z-index:1}
+.hist-item{padding:6px 14px;font-size:11px;border-bottom:1px solid rgba(30,42,58,.3);display:flex;gap:8px;align-items:center}
+.hist-item .ht{color:var(--dim);font-size:10px;flex-shrink:0;width:40px}
+
+/* Suggestions bar (legacy compat) */
+.suggest-bar{display:flex;gap:8px;overflow-x:auto;padding:8px 0;flex-shrink:0}
+.suggest-btn{background:var(--card);border:1px solid var(--border);color:var(--text);padding:6px 14px;border-radius:20px;font-size:11px;cursor:pointer;white-space:nowrap;transition:.2s}
+.suggest-btn:hover{border-color:var(--accent);background:rgba(124,106,239,.08)}
+
+/* Suggestion Inbox */
+.sugg-inbox{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);flex-shrink:0;max-height:260px;display:flex;flex-direction:column}
+.sugg-inbox .sugg-hd{display:flex;align-items:center;justify-content:space-between;padding:8px 14px;border-bottom:1px solid var(--border);font-size:11px;font-weight:600;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;flex-shrink:0}
+.sugg-inbox .sugg-hd .sugg-count{font-size:10px;color:var(--accent2);font-weight:700}
+.sugg-batch{display:flex;gap:6px;align-items:center}
+.sugg-batch button{background:none;border:1px solid var(--border);color:var(--dim);padding:3px 10px;border-radius:6px;font-size:10px;cursor:pointer;transition:.2s}
+.sugg-batch button:hover{border-color:var(--accent);color:var(--text)}
+.sugg-batch .sugg-accept-all{border-color:rgba(52,211,153,.3);color:var(--green)}
+.sugg-batch .sugg-accept-all:hover{background:rgba(52,211,153,.1);border-color:var(--green)}
+.sugg-batch .sugg-reject-all{border-color:rgba(248,113,113,.3);color:var(--red)}
+.sugg-batch .sugg-reject-all:hover{background:rgba(248,113,113,.1);border-color:var(--red)}
+.sugg-list{overflow-y:auto;flex:1;min-height:0}
+.sugg-item{display:flex;align-items:center;gap:8px;padding:7px 14px;border-bottom:1px solid rgba(30,42,58,.3);font-size:12px;transition:background .15s}
+.sugg-item:hover{background:rgba(124,106,239,.04)}
+.sugg-item.accepted{background:rgba(52,211,153,.06);opacity:.7}
+.sugg-item.rejected{background:rgba(248,113,113,.04);opacity:.4;text-decoration:line-through}
+.sugg-check{width:14px;height:14px;border-radius:3px;border:1.5px solid var(--border);background:none;cursor:pointer;flex-shrink:0;transition:.2s;appearance:none;-webkit-appearance:none}
+.sugg-check:checked{background:var(--accent);border-color:var(--accent)}
+.sugg-check:checked::after{content:'\2713';color:#fff;font-size:10px;display:flex;align-items:center;justify-content:center}
+.sugg-body{flex:1;min-width:0}
+.sugg-rule{display:flex;align-items:center;gap:5px;font-size:12px}
+.sugg-rule .arr{color:var(--accent2);font-weight:700}
+.sugg-zone{font-size:9px;color:var(--dim);margin-top:2px;display:flex;gap:4px;align-items:center}
+.sugg-zone .zone-tag{background:rgba(34,211,238,.08);color:var(--cyan);padding:1px 6px;border-radius:4px;font-size:9px}
+.sugg-conf{font-size:10px;color:var(--dim);white-space:nowrap;flex-shrink:0;width:40px;text-align:right}
+.sugg-actions{display:flex;gap:4px;flex-shrink:0}
+.sugg-act{width:24px;height:24px;border-radius:6px;border:1px solid var(--border);background:none;cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center;transition:.2s;color:var(--dim)}
+.sugg-act.accept:hover{background:rgba(52,211,153,.15);border-color:var(--green);color:var(--green)}
+.sugg-act.reject:hover{background:rgba(248,113,113,.1);border-color:var(--red);color:var(--red)}
+.sugg-empty{text-align:center;padding:20px;color:var(--dim);font-size:11px}
+
+/* Brain edge animation */
+@keyframes edgePulse{0%{stroke-opacity:0;stroke-width:0}30%{stroke-opacity:1;stroke-width:4}100%{stroke-opacity:.4;stroke-width:1.5}}
+.brain-edge-new{animation:edgePulse 1.2s ease-out forwards;stroke:var(--green);filter:url(#glow)}
+
+/* ============== MODULE PAGE ============== */
+.mod-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px;display:flex;align-items:center;gap:12px}
+.mod-icon{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
+.mod-info{flex:1;min-width:0}.mod-info h3{font-size:13px;font-weight:600}.mod-info p{font-size:11px;color:var(--dim);margin-top:2px}
+.mod-status{display:flex;flex-direction:column;align-items:flex-end;gap:4px}
+.mod-toggle{width:36px;height:20px;border-radius:10px;border:none;cursor:pointer;position:relative;transition:.2s}
+.mod-toggle.on{background:var(--green)}.mod-toggle.learn{background:var(--yellow)}.mod-toggle.off{background:var(--dim)}
+.mod-toggle::after{content:'';position:absolute;width:16px;height:16px;border-radius:50%;background:#fff;top:2px;transition:.2s}
+.mod-toggle.on::after,.mod-toggle.learn::after{left:18px}.mod-toggle.off::after{left:2px}
+
+/* ============== HABITUS PAGE ============== */
+.zone-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px}
+.zone-card h3{font-size:14px;font-weight:600;margin-bottom:8px;display:flex;align-items:center;gap:8px}
+.zone-entities{display:flex;flex-wrap:wrap;gap:4px;margin-top:8px}
+.zone-entities .ze{font-size:10px;background:var(--surface);border:1px solid var(--border);padding:3px 8px;border-radius:6px;color:var(--dim)}
+.btn-scene{background:var(--surface);border:1px solid var(--border);color:var(--accent2);font-size:11px;padding:5px 12px;border-radius:6px;cursor:pointer;transition:all .2s}.btn-scene:hover{background:var(--accent);color:#fff;border-color:var(--accent)}
+.scene-item{display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--surface);border:1px solid var(--border);border-radius:8px;margin-bottom:6px;transition:border-color .2s}.scene-item:hover{border-color:var(--accent)}
+.scene-item .scene-name{flex:1;font-size:12px;font-weight:600}.scene-item .scene-meta{font-size:10px;color:var(--dim)}
+.scene-item .scene-actions{display:flex;gap:4px}
+.scene-item .scene-actions button{background:none;border:1px solid var(--border);color:var(--dim);font-size:10px;padding:3px 8px;border-radius:4px;cursor:pointer}.scene-item .scene-actions button:hover{color:var(--accent2);border-color:var(--accent)}
+.preset-chip{background:var(--card);border:1px solid var(--border);color:var(--text);font-size:11px;padding:5px 12px;border-radius:16px;cursor:pointer;transition:all .2s;display:inline-flex;align-items:center;gap:4px}.preset-chip:hover{background:var(--accent);color:#fff;border-color:var(--accent)}
+
+/* ============== TREND CHART ============== */
+.trend-chart{width:100%;height:120px;position:relative}
+.trend-chart canvas{width:100%;height:100%}
+/* ============== HAUSHALT PAGE ============== */
+.btn-sm{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 14px;color:var(--text);cursor:pointer;font-size:11px;font-weight:600;transition:background .15s}
+.btn-sm:hover{background:var(--accent);color:#fff;border-color:var(--accent)}
+.sugg-group{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;margin:6px 0}
+.sugg-group-hd{display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;font-weight:600}
+.sugg-group-body{margin-top:8px;display:none}
+/* ============== PRESENCE ============== */
+.presence-grid{display:flex;flex-wrap:wrap;gap:10px;margin-top:8px}
+.presence-person{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 14px;display:flex;align-items:center;gap:10px;min-width:160px;flex:1}
+.presence-person.home{border-left:3px solid var(--green)}
+.presence-person.away{border-left:3px solid var(--dim);opacity:.6}
+.presence-avatar{width:36px;height:36px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700}
+.presence-info{flex:1}
+.presence-name{font-size:13px;font-weight:600}
+.presence-detail{font-size:10px;color:var(--dim)}
+.cam-event{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)}
+.cam-event:last-child{border-bottom:none}
+.cam-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.cam-dot.person{background:var(--green)}
+.cam-dot.motion{background:var(--yellow)}
+.sugg-group-body.open{display:block}
+.sugg-entity{font-size:11px;color:var(--dim);padding:2px 6px;background:var(--card);border-radius:4px;margin:2px;display:inline-block}
+.conf-bar{display:inline-block;height:6px;border-radius:3px;background:var(--accent);vertical-align:middle;margin-left:6px}
+.waste-icon{font-size:18px;margin-right:6px}
+.birthday-row{display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--border)}
+.birthday-row:last-child{border-bottom:none}
+
+/* Loading / Empty */
+.loading{display:flex;align-items:center;justify-content:center;padding:30px;color:var(--dim);font-size:12px}
+.spinner{width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .6s linear infinite;margin-right:8px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.empty{text-align:center;padding:30px;color:var(--dim);font-size:12px;line-height:1.6}
+
+/* Responsive */
+@media(max-width:900px){
+  .styx-layout{grid-template-columns:1fr;grid-template-rows:auto auto auto;height:auto}
+  .styx-brain{grid-column:1;grid-row:1}
+  .styx-right{grid-column:1;grid-row:2/4}
+  .brain-wrap{min-height:250px}
+}
+@media(max-width:600px){.g2,.g3,.g4{grid-template-columns:1fr}.header h1{font-size:15px}}
+
+/* Onboard */
+.onboard{background:linear-gradient(135deg,rgba(124,106,239,.08),rgba(34,211,238,.05));border:1px solid rgba(124,106,239,.25);border-radius:var(--radius);padding:20px;margin-bottom:14px}
+.onboard h2{font-size:16px;font-weight:700;margin-bottom:6px;background:linear-gradient(135deg,var(--accent2),var(--cyan));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.onboard p{color:var(--dim);font-size:13px;line-height:1.6}
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+<div class="logo">&#x2726;</div>
+<h1 id="app-title">Styx — PilotSuite</h1>
+<span class="status-pill" id="provider-status"><span class="dot dot-yellow" id="status-dot"></span><span id="status-text">Verbinde...</span></span>
+<span class="ver" id="ver-badge">--</span>
+</div>
+
+<!-- Navigation -->
+<div class="nav" id="nav">
+<button class="active" data-page="styx">Styx</button>
+<button data-page="habitus">Habitus</button>
+<button data-page="mood">Stimmung</button>
+<button data-page="modules">Module</button>
+<button data-page="haushalt">&#x1f3e0; Haushalt</button>
+<button data-page="settings">Einstellungen</button>
+</div>
+
+<!-- ========== STYX PAGE: Brain + Chat + History ========== -->
+<div class="page active" id="page-styx">
+<!-- Module Pipelines -->
+<div class="pipelines" id="pipelines"></div>
+<!-- Main Layout -->
+<div class="styx-layout">
+  <!-- LEFT: Brain Graph -->
+  <div class="styx-brain">
+    <div class="brain-wrap" id="brain-canvas">
+      <div class="brain-legend" id="brain-legend"></div>
+      <div class="brain-controls"><button onclick="reloadBrain()" title="Neu laden">&#x21bb;</button></div>
+      <div class="loading"><div class="spinner"></div>Brain Graph laden...</div>
+    </div>
+    <!-- Suggestion Inbox -->
+    <div class="sugg-inbox" id="sugg-inbox">
+      <div class="sugg-hd">
+        <span>Vorschlaege <span class="sugg-count" id="sugg-count">0</span></span>
+        <div class="sugg-batch" id="sugg-batch" style="display:none">
+          <button class="sugg-accept-all" onclick="batchAccept()" title="Alle markierten annehmen">&#x2713; Annehmen</button>
+          <button class="sugg-reject-all" onclick="batchReject()" title="Alle markierten ablehnen">&#x2717; Ablehnen</button>
+        </div>
+      </div>
+      <div class="sugg-list" id="sugg-list">
+        <div class="sugg-empty">Lade Vorschlaege...</div>
+      </div>
+    </div>
+    <!-- Quick navigation -->
+    <div class="suggest-bar">
+      <span class="suggest-btn" onclick="navigateTo('habitus')">Habitus erkunden</span>
+      <span class="suggest-btn" onclick="navigateTo('mood')">Stimmung pruefen</span>
+      <span class="suggest-btn" onclick="navigateTo('modules')">Module verwalten</span>
+    </div>
+  </div>
+  <!-- RIGHT: Chat + History -->
+  <div class="styx-right">
+    <!-- Chat -->
+    <div class="chat-panel">
+      <div class="chat-hd">
+        <span>&#x2726;</span>
+        <span id="assistant-name">Styx</span>
+        <span class="b b-p" id="chat-model">--</span>
+        <select id="chat-model-select" title="Chat-Modell waehlen"></select>
+        <button onclick="clearChatHistory()" title="Chatverlauf loeschen" style="margin-left:auto;background:transparent;border:1px solid var(--border);color:var(--dim);border-radius:6px;padding:2px 8px;cursor:pointer;font-size:11px">&#x1f5d1;</button>
+      </div>
+      <div class="chat-msgs" id="chat-msgs">
+        <div class="msg a" id="styx-greeting">Hallo! Ich bin <strong>Styx</strong>, dein PilotSuite Assistent. Ich verbinde dein Smart Home mit lokaler KI. Wie kann ich helfen?</div>
+      </div>
+      <div class="chat-in">
+        <input type="text" id="chat-input" placeholder="Frag Styx..." autocomplete="off">
+        <button id="chat-send" onclick="sendChat()">&#x2728;</button>
+      </div>
+    </div>
+    <!-- History -->
+    <div class="history-panel" id="history-panel">
+      <div class="hd">Verlauf &amp; Aktivitaet</div>
+      <div id="history-items"><div class="hist-item"><span class="ht">jetzt</span><span>PilotSuite gestartet</span></div></div>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- ========== HABITUS PAGE ========== -->
+<div class="page" id="page-habitus">
+<div class="grid g2" style="margin-bottom:14px">
+  <div class="card">
+    <h2><span class="ic">&#x1f50d;</span> Verhaltens-Muster</h2>
+    <div class="b b-b" id="hab-count" style="margin-bottom:10px">-- Regeln</div>
+    <div id="hab-rules"><div class="loading"><div class="spinner"></div>Lade...</div></div>
+  </div>
+  <div class="card">
+    <h2><span class="ic">&#x1f3e0;</span> Habitus-Zonen</h2>
+    <div id="hab-zones"><div class="loading"><div class="spinner"></div>Lade Zonen...</div></div>
+    <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+      <div style="font-size:11px;color:var(--dim);margin-bottom:6px">Zone hinzufuegen</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <input type="text" id="new-zone-name" placeholder="Zonen-Name" style="flex:1 1 180px;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text);font-size:12px;outline:none">
+        <select id="new-zone-rooms" multiple size="4" style="flex:2 1 260px;min-height:94px;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px;color:var(--text);font-size:11px;outline:none"></select>
+        <input type="text" id="new-zone-entities" placeholder="Optional: entity_id, entity_id, ..." style="flex:2 1 260px;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text);font-size:12px;outline:none">
+        <button onclick="reloadZoneRoomOptions()" style="background:var(--surface);border:1px solid var(--border);color:var(--dim);border-radius:6px;padding:6px 10px;cursor:pointer;font-size:11px;font-weight:600;white-space:nowrap">&#x21bb; Raeume</button>
+        <button onclick="addZone()" style="background:var(--accent);color:#fff;border:none;border-radius:6px;padding:6px 14px;cursor:pointer;font-size:11px;font-weight:600;white-space:nowrap">+ Zone</button>
+      </div>
+      <div id="new-zone-room-hint" style="margin-top:6px;font-size:10px;color:var(--dim)">Lade Raumliste...</div>
+    </div>
+  </div>
+</div>
+<div class="card">
+  <h2><span class="ic">&#x1f4c8;</span> Pattern Trend (letzte 24h)</h2>
+  <div class="trend-chart" id="hab-trend"><canvas id="hab-trend-canvas"></canvas></div>
+</div>
+<div class="card" style="margin-top:14px">
+  <h2><span class="ic">&#x1f3ac;</span> Zonen-Szenen</h2>
+  <p style="font-size:11px;color:var(--dim);margin-bottom:10px">Gespeicherte Szenen pro Habituszone — speichern, anwenden, löschen.</p>
+  <div id="hab-scenes"><div class="loading"><div class="spinner"></div>Lade Szenen...</div></div>
+  <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+    <div style="font-size:11px;color:var(--dim);margin-bottom:6px">Presets</div>
+    <div id="hab-presets" style="display:flex;flex-wrap:wrap;gap:6px"></div>
+  </div>
+</div>
+<div class="card" style="margin-top:14px">
+  <h2><span class="ic">&#x1f4a1;</span> Entitäts-Zuordnungsvorschläge</h2>
+  <p style="font-size:11px;color:var(--dim);margin-bottom:10px">Erkannte Entitätsgruppen — mögliche Habituszonen. Klicke auf eine Gruppe um Details zu sehen.</p>
+  <div id="hab-entity-suggestions"><div class="loading"><div class="spinner"></div>Analysiere...</div></div>
+</div>
+</div>
+
+<!-- ========== MOOD PAGE ========== -->
+<div class="page" id="page-mood">
+<div class="card" style="margin-bottom:14px">
+  <h2><span class="ic">&#x1f3b5;</span> Stimmungs-Zonen</h2>
+  <div id="mood-zones"><div class="loading"><div class="spinner"></div>Lade...</div></div>
+</div>
+<div class="grid g3" id="mood-stats"></div>
+<div class="card" style="margin-top:14px">
+  <h2><span class="ic">&#x1f4ca;</span> Mood Trend</h2>
+  <div class="trend-chart" id="mood-trend"><canvas id="mood-trend-canvas"></canvas></div>
+</div>
+</div>
+
+<!-- ========== MODULES PAGE ========== -->
+<div class="page" id="page-modules">
+<div class="card" style="margin-bottom:14px">
+  <h2><span class="ic">&#x2699;&#xfe0f;</span> Neurale Pipeline</h2>
+  <p style="font-size:12px;color:var(--dim);margin-bottom:12px">Module steuern wie Styx dein Zuhause wahrnimmt. Toggles steuern den echten Backend-Zustand.</p>
+  <div style="display:flex;gap:8px;margin-top:6px">
+    <span class="b b-g">Aktiv = Auto-Apply (beide Module aktiv = doppelte Sicherheit)</span>
+    <span class="b b-y">Lernen = Vorschlaege zur manuellen Uebernahme</span>
+    <span class="b b-r">Aus = deaktiviert</span>
+  </div>
+</div>
+<div class="grid g2" id="module-list"></div>
+<div class="card" style="margin-top:14px">
+  <h2><span class="ic">&#9881;</span> Modul-Konfiguration</h2>
+  <p style="font-size:11px;color:var(--dim);margin-bottom:10px">Runtime-Parameter fuer konfigurierbare Module. Quelle ist die Core-API.</p>
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+    <label for="module-config-select" style="font-size:11px;color:var(--dim)">Modul</label>
+    <select id="module-config-select" style="min-width:220px;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px;color:var(--text);font-size:12px;outline:none"></select>
+    <button onclick="loadSelectedModuleConfig(true)" style="background:var(--surface);border:1px solid var(--border);color:var(--dim);border-radius:6px;padding:6px 10px;cursor:pointer;font-size:11px;font-weight:600">&#x21bb; Reload</button>
+  </div>
+  <div id="module-config-body"><div class="empty">Waehle ein Modul.</div></div>
+</div>
+<div class="card" style="margin-top:14px">
+  <h2><span class="ic">&#x1f3b5;</span> Media Zonen &amp; Musikwolke</h2>
+  <p style="font-size:11px;color:var(--dim);margin-bottom:10px">Zone-Player-Zuordnung und Musikwolke Smart Audio Follow</p>
+  <div id="media-zones-panel"><div class="loading"><div class="spinner"></div>Lade Media Zonen...</div></div>
+</div>
+<div class="card" style="margin-top:14px">
+  <h2><span class="ic">&#x1f30d;</span> Web &amp; News</h2>
+  <p style="font-size:11px;color:var(--dim);margin-bottom:10px">Aktuelle Nachrichten und Warnungen im LLM-Kontext</p>
+  <div id="news-warnings-panel"><div class="loading"><div class="spinner"></div>Lade Nachrichten...</div></div>
+</div>
+<div class="card" style="margin-top:14px">
+  <h2><span class="ic">&#x267b;</span> Müllabfuhr</h2>
+  <p style="font-size:11px;color:var(--dim);margin-bottom:10px">Waste Collection Schedule + Erinnerungen mit TTS</p>
+  <div id="waste-panel"><div class="loading"><div class="spinner"></div>Lade Müllabfuhr...</div></div>
+</div>
+<div class="card" style="margin-top:14px">
+  <h2><span class="ic">&#x1f382;</span> Geburtstage</h2>
+  <p style="font-size:11px;color:var(--dim);margin-bottom:10px">Kalender-basierte Geburtstags-Erinnerungen</p>
+  <div id="birthday-panel"><div class="loading"><div class="spinner"></div>Lade Geburtstage...</div></div>
+</div>
+<div class="card" style="margin-top:14px">
+  <h2><span class="ic">&#x1f916;</span> Erstellte Automationen</h2>
+  <p style="font-size:11px;color:var(--dim);margin-bottom:10px">Aus akzeptierten Vorschlaegen erstellte HA-Automationen</p>
+  <div id="automation-list"><div class="loading"><div class="spinner"></div>Lade Automationen...</div></div>
+</div>
+</div>
+
+<!-- ========== HAUSHALT PAGE ========== -->
+<div class="page" id="page-haushalt">
+<div class="grid g2" style="margin-bottom:14px">
+  <!-- Müllabfuhr Card -->
+  <div class="card">
+    <h2><span class="ic">&#x267b;</span> Müllabfuhr</h2>
+    <div id="haushalt-waste-alerts" style="margin-bottom:10px"></div>
+    <div id="haushalt-waste"><div class="loading"><div class="spinner"></div>Lade...</div></div>
+    <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border);display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn-sm" onclick="haushaltRemind('waste')" title="Erinnerung jetzt per TTS senden">&#x1f4e2; Erinnerung senden</button>
+    </div>
+  </div>
+  <!-- Geburtstage Card -->
+  <div class="card">
+    <h2><span class="ic">&#x1f382;</span> Geburtstage</h2>
+    <div id="haushalt-birthday-alerts" style="margin-bottom:10px"></div>
+    <div id="haushalt-birthdays"><div class="loading"><div class="spinner"></div>Lade...</div></div>
+    <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border);display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn-sm" onclick="haushaltRemind('birthday')" title="Geburtstags-Erinnerung per TTS senden">&#x1f382; Gratulation senden</button>
+    </div>
+  </div>
+</div>
+<!-- Entity Suggestions Card -->
+<div class="card" style="margin-bottom:14px">
+  <h2><span class="ic">&#x1f4a1;</span> Entitäts-Zuordnungsvorschläge</h2>
+  <p style="font-size:11px;color:var(--dim);margin-bottom:10px">Erkannte Entitätsgruppen nach Raumname — Vorschläge für Habitus-Zonen. Entitäten ohne Zone werden hier angezeigt.</p>
+  <div id="haushalt-suggestions"><div class="loading"><div class="spinner"></div>Analysiere Entitäten...</div></div>
+</div>
+<!-- Presence Card: Wer ist zuhause? -->
+<div class="grid g2" style="margin-bottom:14px">
+  <div class="card">
+    <h2><span class="ic">&#x1f465;</span> Wer ist zuhause?</h2>
+    <div id="haushalt-presence"><div class="loading"><div class="spinner"></div>Lade Anwesenheit...</div></div>
+  </div>
+  <div class="card">
+    <h2><span class="ic">&#x1f4f9;</span> Kamera-Ereignisse</h2>
+    <div id="haushalt-camera-events"><div class="empty">Keine Kamera-Ereignisse</div></div>
+  </div>
+</div>
+<!-- Calendar + Shopping + Reminders (v3.5.0) -->
+<div class="grid g2" style="margin-bottom:14px">
+  <div class="card">
+    <h2><span class="ic">&#x1f4c5;</span> Kalender</h2>
+    <p style="font-size:11px;color:var(--dim);margin-bottom:10px">Termine aus allen HA-Kalendern</p>
+    <div id="haushalt-calendar"><div class="loading"><div class="spinner"></div>Lade Kalender...</div></div>
+  </div>
+  <div class="card">
+    <h2><span class="ic">&#x1f6d2;</span> Einkaufsliste</h2>
+    <p style="font-size:11px;color:var(--dim);margin-bottom:10px">Artikel verwalten — oder sage Styx: "Milch auf die Liste"</p>
+    <div id="haushalt-shopping"><div class="loading"><div class="spinner"></div>Lade...</div></div>
+    <div style="margin-top:10px;display:flex;gap:6px">
+      <input type="text" id="shop-input" placeholder="Artikel hinzufuegen..." style="flex:1;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--fg);font-size:13px">
+      <button class="btn-sm" onclick="addShoppingItem()">+</button>
+    </div>
+  </div>
+</div>
+<div class="card" style="margin-bottom:14px">
+  <h2><span class="ic">&#x23f0;</span> Erinnerungen</h2>
+  <p style="font-size:11px;color:var(--dim);margin-bottom:10px">Aktive Erinnerungen — oder sage Styx: "Erinnere mich an..."</p>
+  <div id="haushalt-reminders"><div class="loading"><div class="spinner"></div>Lade...</div></div>
+  <div style="margin-top:10px;display:flex;gap:6px">
+    <input type="text" id="rem-input" placeholder="Neue Erinnerung..." style="flex:1;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--fg);font-size:13px">
+    <button class="btn-sm" onclick="addReminderFromInput()">+</button>
+  </div>
+</div>
+</div>
+
+<!-- ========== SETTINGS PAGE ========== -->
+<div class="page" id="page-settings">
+<div class="grid g2">
+  <div class="card">
+    <h2><span class="ic">&#x1f9e0;</span> LLM &amp; KI</h2>
+    <table class="tbl" id="set-llm"></table>
+  </div>
+  <div class="card">
+    <h2><span class="ic">&#9881;</span> LLM Routing</h2>
+    <div id="set-routing"><div class="loading"><div class="spinner"></div>Lade...</div></div>
+  </div>
+  <div class="card">
+    <h2><span class="ic">&#x1f4e6;</span> Verfuegbare Modelle</h2>
+    <div id="set-models"><div class="loading"><div class="spinner"></div>Lade...</div></div>
+  </div>
+  <div class="card">
+    <h2><span class="ic">&#x1f4f1;</span> System Status</h2>
+    <table class="tbl" id="set-system"></table>
+  </div>
+  <div class="card">
+    <h2><span class="ic">&#x1f517;</span> API Endpoints</h2>
+    <table class="tbl">
+      <tr><td>Chat (OpenAI)</td><td><code>/v1/chat/completions</code></td></tr>
+      <tr><td>Modelle</td><td><code>/v1/models</code></td></tr>
+      <tr><td>MCP Server</td><td><code>/mcp</code></td></tr>
+      <tr><td>Brain Graph</td><td><code>/api/v1/graph/state</code></td></tr>
+      <tr><td>Habitus</td><td><code>/api/v1/habitus/rules</code></td></tr>
+      <tr><td>Vorschlaege</td><td><code>/api/v1/hints</code></td></tr>
+      <tr><td>Kandidaten</td><td><code>/api/v1/candidates</code></td></tr>
+      <tr><td>Mood</td><td><code>/api/v1/mood</code></td></tr>
+      <tr><td>Neuronen</td><td><code>/api/v1/neurons</code></td></tr>
+      <tr><td>Telegram</td><td><code>/telegram/status</code></td></tr>
+      <tr><td>Module Control</td><td><code>/api/v1/modules</code></td></tr>
+      <tr><td>Automationen</td><td><code>/api/v1/automations</code></td></tr>
+      <tr><td>Media Zonen</td><td><code>/api/v1/media/zones</code></td></tr>
+      <tr><td>Musikwolke</td><td><code>/api/v1/media/musikwolke</code></td></tr>
+      <tr><td>Proaktiv</td><td><code>/api/v1/media/proactive/zone-entry</code></td></tr>
+      <tr><td>Erklaerungen</td><td><code>/api/v1/explain</code></td></tr>
+      <tr><td>Vorhersagen</td><td><code>/api/v1/predict</code></td></tr>
+    </table>
+  </div>
+  <div class="card">
+    <h2><span class="ic">&#x1f4da;</span> Gedaechtnis</h2>
+    <div id="set-memory"><div class="loading"><div class="spinner"></div>Lade...</div></div>
+  </div>
+  <div class="card">
+    <h2><span class="ic">&#x1f916;</span> Empfohlene Modelle</h2>
+    <div id="set-rec"><div class="loading"><div class="spinner"></div>Lade...</div></div>
+  </div>
+</div>
+</div>
+
+<script>
+// ==================================================
+// PilotSuite Dashboard — Styx
+// XSS-safe | Resilient | Real Module Health | Module Control API
+// ==================================================
+const DASHBOARD_AUTH_TOKEN={{ dashboard_auth_token|tojson }};
+function detectIngressBasePath(){
+  try{
+    const p=(window.location&&window.location.pathname)||'';
+    const patterns=[
+      /^(.*\/api\/hassio_ingress\/[^/]+)(?:\/.*)?$/,
+      /^(.*\/hassio\/ingress\/[^/]+)(?:\/.*)?$/,
+      /^(.*\/ingress\/[^/]+)(?:\/.*)?$/,
+    ];
+    for(const pattern of patterns){
+      const m=p.match(pattern);
+      if(m&&m[1])return m[1];
+    }
+  }catch(_err){}
+  return '';
+}
+const API=detectIngressBasePath();
+const API_MODE=API?'ingress':'direct';
+let currentModel='';
+const DOMAIN_COLORS={
+  sensor:'#34d399',light:'#fbbf24',switch:'#7c6aef',binary_sensor:'#60a5fa',
+  climate:'#f87171',media_player:'#fb923c',automation:'#9b8afb',camera:'#f472b6',
+  cover:'#22d3ee',fan:'#34d399',input_boolean:'#818cf8',script:'#a78bfa',
+  person:'#fbbf24',weather:'#60a5fa',scene:'#f472b6',default:'#6b7a8d'
+};
+const MODULE_DEFS=[
+  {id:'brain_graph',name:'Brain Graph',desc:'Entity-Beziehungen erkennen',icon:'&#x1f9e0;',color:'var(--accent)'},
+  {id:'habitus_miner',name:'Habitus Miner',desc:'A->B Muster finden',icon:'&#x1f50d;',color:'var(--cyan)'},
+  {id:'mood_engine',name:'Mood Engine',desc:'Comfort/Joy/Frugality bewerten',icon:'&#x1f3b5;',color:'var(--yellow)'},
+  {id:'event_forwarder',name:'Event Bridge',desc:'HA-Events an Core weiterleiten',icon:'&#x26a1;',color:'var(--green)'},
+  {id:'neurons',name:'Neuronen (14x)',desc:'Kontext-Signale (Presence, Energy...)',icon:'&#x1f4a1;',color:'var(--orange)'},
+  {id:'knowledge_graph',name:'Knowledge Graph',desc:'Semantisches Entity-Netzwerk',icon:'&#x1f310;',color:'var(--blue)'},
+  {id:'conversation_memory',name:'Gedaechtnis',desc:'Lifelong Learning SQLite',icon:'&#x1f4da;',color:'var(--pink)'},
+  {id:'media_zones',name:'Media Zonen',desc:'Musikwolke + Zonen-Player',icon:'&#x1f3b6;',color:'var(--orange)'},
+  {id:'energy_context',name:'Energie',desc:'PV, Grid, Verbrauch',icon:'&#x26a1;',color:'var(--green)'},
+  {id:'weather_context',name:'Wetter',desc:'Wetter + DWD Warnungen',icon:'&#x26c5;',color:'var(--blue)'},
+  {id:'network',name:'Netzwerk',desc:'WLAN/LAN-Qualitaet (UniFi wenn vorhanden)',icon:'&#x1f4f6;',color:'var(--cyan)'},
+  {id:'camera_context',name:'Kamera',desc:'Bewegung & Praesenz',icon:'&#x1f4f7;',color:'var(--pink)'},
+  {id:'user_preferences',name:'Nutzer-Profile',desc:'Multi-User Learning + Autonomie',icon:'&#x1f464;',color:'var(--accent2)'},
+  {id:'proactive',name:'Proaktiv',desc:'Kontext-Vorschlaege bei Raum-Eintritt',icon:'&#x1f4ac;',color:'var(--yellow)'},
+  {id:'web_search',name:'Web & News',desc:'Recherche, Nachrichten, NINA-Warnungen',icon:'&#x1f310;',color:'var(--blue)'},
+  {id:'telegram_bot',name:'Telegram Bot',desc:'Chat-Bridge + Notifications',icon:'&#x2709;',color:'var(--blue)'},
+  {id:'mcp_server',name:'MCP Server',desc:'Skills fuer externe KI-Clients',icon:'&#x1f50c;',color:'var(--accent)'},
+  {id:'waste_reminder',name:'Müllabfuhr',desc:'Abfuhr-Erinnerungen + TTS',icon:'&#x267b;',color:'var(--green)'},
+  {id:'birthday_reminder',name:'Geburtstage',desc:'Kalender-Erinnerungen + TTS',icon:'&#x1f382;',color:'var(--pink)'},
+];
+const MODULE_CONFIG_SPECS={
+  habitus_miner:{
+    label:'Habitus Miner',
+    getPath:'/api/v1/habitus/config',
+    postPath:'/api/v1/habitus/config',
+    parseGet:(raw)=>raw?.config||null,
+    fields:[
+      {key:'min_support_A',label:'Min Support A',type:'number',step:'0.001',min:0,max:1},
+      {key:'min_support_B',label:'Min Support B',type:'number',step:'0.001',min:0,max:1},
+      {key:'min_hits',label:'Min Hits',type:'number',step:'1',min:1,max:10000},
+      {key:'min_confidence',label:'Min Confidence',type:'number',step:'0.01',min:0,max:1},
+      {key:'min_lift',label:'Min Lift',type:'number',step:'0.1',min:0,max:100},
+      {key:'max_rules',label:'Max Rules',type:'number',step:'1',min:1,max:5000},
+      {key:'default_cooldown',label:'Default Cooldown (s)',type:'number',step:'1',min:0,max:86400},
+      {key:'include_domains',label:'Include Domains (CSV)',type:'array'},
+      {key:'exclude_domains',label:'Exclude Domains (CSV)',type:'array'},
+      {key:'exclude_same_entity',label:'Exclude Same Entity',type:'boolean'},
+      {key:'anonymize_entity_ids',label:'Anonymize Entity IDs',type:'boolean'},
+    ],
+  },
+  brain_graph:{
+    label:'Brain Activity',
+    getPath:'/api/v1/hub/brain/activity',
+    postPath:'/api/v1/hub/brain/activity/config',
+    parseGet:(raw)=>raw?{
+      idle_timeout:raw.idle_timeout_seconds,
+      sleep_timeout:raw.sleep_timeout_seconds,
+    }:null,
+    fields:[
+      {key:'idle_timeout',label:'Idle Timeout (s)',type:'number',step:'1',min:30,max:3600},
+      {key:'sleep_timeout',label:'Sleep Timeout (s)',type:'number',step:'1',min:60,max:86400},
+    ],
+  },
+};
+
+// State
+let chatHistory=[];
+let historyLog=[];
+let moduleStates=JSON.parse(localStorage.getItem('styx_module_states')||'{}');
+let _moduleHealth=null;
+let _healthTs=0;
+let _hubRoomsCache=[];
+let _roomsAutofilled=false;
+let _moduleStatesSyncedAt=0;
+let _selectedModuleConfig='habitus_miner';
+let _chatStatus=null;
+const CHAT_MODEL_STORAGE_KEY='styx_chat_model';
+
+// -- Helpers --
+function $(id){return document.getElementById(id)}
+function escapeHtml(s){if(s===null||s===undefined)return'';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')}
+function withAuth(init={}){
+  const headers={...(init.headers||{})};
+  if(DASHBOARD_AUTH_TOKEN&&!headers.Authorization&&!headers['X-Auth-Token']){
+    headers.Authorization='Bearer '+DASHBOARD_AUTH_TOKEN;
+  }
+  return {...init,headers};
+}
+async function api(path){
+  try{
+    const r=await fetch(API+path,withAuth());
+    if(!r.ok)return null;
+    return await r.json();
+  }catch(e){
+    return null;
+  }
+}
+async function apiTry(paths){
+  for(const p of paths){
+    const data=await api(p);
+    if(data)return {path:p,data};
+  }
+  return null;
+}
+async function syncModuleStates(force=false){
+  const now=Date.now();
+  if(!force&&(now-_moduleStatesSyncedAt)<15000)return moduleStates;
+  const remote=await api('/api/v1/modules/');
+  if(remote&&remote.ok&&remote.modules&&typeof remote.modules==='object'){
+    moduleStates={...moduleStates,...remote.modules};
+    localStorage.setItem('styx_module_states',JSON.stringify(moduleStates));
+    _moduleStatesSyncedAt=now;
+  }
+  return moduleStates;
+}
+function _configInputValue(raw,field){
+  if(raw===null||raw===undefined){
+    if(field.type==='boolean')return 'false';
+    return '';
+  }
+  if(field.type==='array'){
+    return Array.isArray(raw)?raw.join(', '):String(raw);
+  }
+  if(field.type==='boolean'){
+    return raw?'true':'false';
+  }
+  return String(raw);
+}
+function _parseConfigInput(input,field){
+  if(field.type==='number'){
+    const v=Number(input.value);
+    return Number.isFinite(v)?v:null;
+  }
+  if(field.type==='boolean'){
+    return input.value==='true';
+  }
+  if(field.type==='array'){
+    return String(input.value||'').split(',').map(s=>s.trim()).filter(Boolean);
+  }
+  return String(input.value||'').trim();
+}
+function badge(t,c){return`<span class="b b-${c}">${escapeHtml(t)}</span>`}
+function el(tag,cls,html){const e=document.createElement(tag);if(cls)e.className=cls;if(html)e.innerHTML=html;return e}
+function _chatModelLabel(model){
+  const value=String(model||'').trim();
+  if(!value)return '--';
+  if(value==='primary')return 'auto(primary)';
+  if(value==='secondary')return 'auto(secondary)';
+  if(value.startsWith('offline:'))return value.slice('offline:'.length);
+  if(value.startsWith('cloud:'))return value.slice('cloud:'.length)+' (cloud)';
+  return value;
+}
+function _chatModelOptionsFromStatus(status){
+  const out=[{value:'primary',label:'Auto (Primary Routing)'}];
+  if(status?.secondary_provider)out.push({value:'secondary',label:'Auto (Secondary/Fallback)'});
+  const seen=new Set(out.map((o)=>o.value));
+  const offline=status?.model_catalog?.offline?.models||status?.installed_models||[];
+  const cloud=status?.model_catalog?.cloud?.models||status?.cloud_models||[];
+  offline.forEach((m)=>{
+    const v=String(m||'').trim();
+    if(!v)return;
+    const key='offline:'+v;
+    if(seen.has(key))return;
+    seen.add(key);
+    out.push({value:key,label:'Offline · '+v});
+  });
+  cloud.forEach((m)=>{
+    const v=String(m||'').trim();
+    if(!v)return;
+    const key='cloud:'+v;
+    if(seen.has(key))return;
+    seen.add(key);
+    out.push({value:key,label:'Cloud · '+v});
+  });
+  return out;
+}
+function _restoreChatModel(defaultModel,options){
+  const preferred=String(localStorage.getItem(CHAT_MODEL_STORAGE_KEY)||'').trim();
+  const values=new Set((options||[]).map((o)=>String(o.value||'')));
+  if(preferred&&values.has(preferred))return preferred;
+  return String(defaultModel||'primary').trim()||'primary';
+}
+function _setChatModel(model,{persist=true,announce=false}={}){
+  const next=String(model||'').trim();
+  currentModel=next;
+  $('chat-model').textContent=escapeHtml(_chatModelLabel(next));
+  if(persist){
+    if(next)localStorage.setItem(CHAT_MODEL_STORAGE_KEY,next);
+    else localStorage.removeItem(CHAT_MODEL_STORAGE_KEY);
+  }
+  if(announce&&next)addHistory('Chat-Modell gesetzt: '+_chatModelLabel(next));
+}
+function _renderChatModelSelector(options,activeModel){
+  const sel=$('chat-model-select');
+  if(!sel)return;
+  sel.innerHTML='';
+  if(!Array.isArray(options)||!options.length){
+    sel.disabled=true;
+    sel.appendChild(new Option('kein Modell',''));
+    return;
+  }
+  sel.disabled=false;
+  options.forEach((opt)=>{
+    const value=String(opt?.value||'').trim();
+    const label=String(opt?.label||value||'');
+    sel.appendChild(new Option(label,value,false,value===activeModel));
+  });
+}
+
+// -- Real Module Health (cached 30s) --
+async function fetchModuleHealth(){
+  const now=Date.now();
+  if(_moduleHealth&&(now-_healthTs)<30000)return _moduleHealth;
+  const settled=await Promise.allSettled([
+    api('/api/v1/graph/stats'),                         // [0] brain_graph
+    apiTry(['/api/v1/habitus/health','/api/v1/habitus/status']), // [1]
+    apiTry(['/api/v1/mood','/api/v1/mood/state']),      // [2] mood
+    api('/chat/status'),                                 // [3]
+    apiTry(['/api/v1/neurons','/api/v1/hub/brain/activity']), // [4]
+    api('/chat/memory'),                                 // [5]
+    api('/api/v1/energy/health'),                        // [6]
+    api('/api/v1/weather/health'),                       // [7]
+    api('/api/v1/unifi/health'),                         // [8]
+    api('/telegram/status'),                             // [9]
+    api('/api/v1/capabilities'),                         // [10]
+    api('/api/v1/media/zones'),                          // [11]
+    api('/api/v1/media/musikwolke'),                     // [12]
+    api('/api/v1/waste/status'),                         // [13]
+    api('/api/v1/birthday/status'),                      // [14]
+  ]);
+  const v=r=>r.status==='fulfilled'?r.value:null;
+  const [gr,hrWrap,mrWrap,sr,nrWrap,memr,er,wr,ur,tgr,capr,mzr,mkr,wastr,bdayr]=settled.map(v);
+  const hr=hrWrap?.data||null;
+  const mr=mrWrap?.data||null;
+  const nr=nrWrap?.data||null;
+  const caps=capr?.capabilities||[];
+  const feats=capr?.features||{};
+  const neuronCount=(nr?.neurons?.length)||(nr?.total_pulses)||0;
+  const moodZones=mr?.moods||mr?.zones||{};
+  const zoneCount=mzr?.zones?Object.keys(mzr.zones).length:0;
+  const mkSessions=mkr?.sessions||[];
+  _moduleHealth={
+    brain_graph:  gr?.ok&&(gr?.nodes||0)>0?'active':gr?.ok?'learning':'off',
+    habitus_miner:hr?.status==='ok'?'active':hr?'learning':'off',
+    mood_engine:  Object.keys(moodZones||{}).length>0?'active':mr?'learning':'off',
+    event_forwarder:sr?.available?'active':'off',
+    neurons:      neuronCount>0?'active':'learning',
+    knowledge_graph:caps.includes('knowledge_graph')||feats.knowledge_graph?'active':'learning',
+    conversation_memory:memr?.stats?.total_messages>0?'active':memr?'learning':'off',
+    media_zones:  zoneCount>0?'active':mzr?'learning':'off',
+    energy_context:er?.status==='ok'||er?.ok?'active':er?'learning':'off',
+    weather_context:wr?.status==='ok'||wr?.ok?'active':wr?'learning':'off',
+    network:      ur?.status==='healthy'?'active':ur?.status==='degraded'?'learning':'off',
+    camera_context:caps.includes('camera')||caps.includes('events')?'learning':'off',
+    user_preferences:caps.includes('user_preferences')||feats.multi_user_learning?'active':'learning',
+    proactive:    'learning',  // Always learning until user promotes
+    web_search:   'active',    // Web search is always active when available
+    telegram_bot:  tgr?.running?'active':'off',
+    mcp_server:    capr?.ok?'active':'off',
+    waste_reminder:wastr?.ok&&wastr?.total>0?'active':wastr?.ok?'learning':'off',
+    birthday_reminder:bdayr?.ok&&(bdayr?.today?.length>0||bdayr?.upcoming?.length>0)?'active':bdayr?.ok?'learning':'off',
+    _details:{
+      brain_graph: gr?.ok?`${gr?.nodes||0} Nodes, ${gr?.edges||0} Edges`:'API offline',
+      habitus_miner:hr?.status==='ok'?`${hr?.rules_count||0} Regeln`:(hr?'Kein Output':'API offline'),
+      mood_engine:  mr?`${Object.keys(moodZones||{}).length} Zonen`:'API offline',
+      neurons:      neuronCount>0?`${neuronCount} Signale aktiv`:'Warte auf Events',
+      conversation_memory:memr?.stats?`${memr.stats.total_messages||0} Nachrichten`:'Leer',
+      media_zones:  zoneCount>0?`${zoneCount} Zonen, ${mkSessions.length} Musikwolke`:(mzr?'Bereit':'Nicht gestartet'),
+      energy_context:er?.status==='ok'?'Online':(er?'Degradiert':'Nicht konfiguriert'),
+      weather_context:wr?.status==='ok'?'Online':(wr?'Degradiert':'Nicht konfiguriert'),
+      network:      ur?.status||'Nicht konfiguriert',
+      camera_context:'Bewegungserkennung',
+      user_preferences:'Multi-User Learning',
+      proactive:    'Kontext-Vorschlaege bei Zone-Eintritt',
+      web_search:   'DDG + Tagesschau + NINA/DWD',
+      telegram_bot:tgr?.running?'Polling aktiv':'Nicht konfiguriert',
+      mcp_server:capr?.ok?'Aktiv':'Nicht erreichbar',
+      waste_reminder:wastr?.ok?`${wastr?.total||0} Typen, ${(wastr?.today||[]).length} heute, ${(wastr?.tomorrow||[]).length} morgen`:'Nicht konfiguriert',
+      birthday_reminder:bdayr?.ok?`${(bdayr?.today||[]).length} heute, ${(bdayr?.upcoming||[]).length} bevorstehend`:'Nicht konfiguriert',
+    }
+  };
+  _healthTs=Date.now();
+  return _moduleHealth;
+}
+function addHistory(text){
+  const now=new Date();const t=now.getHours().toString().padStart(2,'0')+':'+now.getMinutes().toString().padStart(2,'0');
+  historyLog.unshift({time:t,text});
+  renderHistory();
+}
+function renderHistory(){
+  const c=$('history-items');if(!c)return;
+  c.innerHTML=historyLog.slice(0,30).map(h=>`<div class="hist-item"><span class="ht">${h.time}</span><span>${h.text}</span></div>`).join('');
+}
+
+// -- Navigation --
+document.querySelectorAll('.nav button').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('.nav button').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+    btn.classList.add('active');$('page-'+btn.dataset.page).classList.add('active');
+    loadPage(btn.dataset.page);
+  });
+});
+function navigateTo(p){
+  document.querySelectorAll('.nav button').forEach(b=>b.classList.toggle('active',b.dataset.page===p));
+  document.querySelectorAll('.page').forEach(pg=>pg.classList.remove('active'));
+  $('page-'+p).classList.add('active');loadPage(p);
+}
+
+// ==================================================
+// STYX PAGE (Brain + Chat + History)
+// ==================================================
+async function loadStyx(){
+  try{
+    // Load status
+    const status=await api('/chat/status');
+    _chatStatus=status;
+    const dot=$('status-dot'),txt=$('status-text');
+    if(status){
+      if(status.available){dot.className='dot dot-green';txt.textContent='Online'}
+      else{dot.className='dot dot-yellow';txt.textContent='Bereit'}
+      const modelOptions=_chatModelOptionsFromStatus(status);
+      const preferredModel=_restoreChatModel('primary',modelOptions);
+      const optionValues=new Set(modelOptions.map((opt)=>opt.value));
+      const selectedModel=optionValues.has(preferredModel)?preferredModel:'primary';
+      _setChatModel(selectedModel,{persist:true,announce:false});
+      _renderChatModelSelector(modelOptions,selectedModel);
+      $('ver-badge').textContent=status.version?('v'+status.version):'--';
+      const name=status.assistant_name||'Styx';
+      $('assistant-name').textContent=escapeHtml(name);
+      $('app-title').textContent=escapeHtml(name)+' \u2014 PilotSuite';
+      document.title='PilotSuite \u2014 '+escapeHtml(name);
+      addHistory('API-Modus: '+API_MODE+(API?(' ('+API+')'):''));
+      await loadChatHistory();
+    }else{
+      dot.className='dot dot-red';txt.textContent='API offline';
+      addHistory('\u26a0\ufe0f Core API nicht erreichbar');
+      renderChatMessages(chatHistory);
+    }
+    // Load pipelines (real health)
+    loadPipelines();
+    // Load brain
+    loadBrainGraph();
+    // Load suggestion inbox
+    loadSuggestionInbox();
+    addHistory('Dashboard geladen');
+  }catch(e){
+    console.error('loadStyx error:',e);
+    const dot=$('status-dot'),txt=$('status-text');
+    if(dot)dot.className='dot dot-red';
+    if(txt)txt.textContent='Fehler';
+  }
+}
+
+async function loadPipelines(){
+  const c=$('pipelines');if(!c)return;
+  c.innerHTML='<div style="font-size:10px;color:var(--dim);padding:5px 0">Module pruefen...</div>';
+  try{
+    await syncModuleStates();
+    const health=await fetchModuleHealth();
+    c.innerHTML='';
+    MODULE_DEFS.forEach(m=>{
+      const detected=health[m.id]||'unknown';
+      const st=moduleStates[m.id]||detected;
+      const detail=health._details?.[m.id]||'';
+      const d=el('div','pipe pipe-'+st,`<span class="pd"></span><span>${escapeHtml(m.name)}</span>`);
+      if(detail)d.title=detail;
+      d.onclick=()=>navigateTo('modules');
+      c.appendChild(d);
+    });
+  }catch(e){
+    c.innerHTML='<div style="font-size:10px;color:var(--red);padding:5px 0">\u26a0\ufe0f Modul-Status nicht ladbar</div>';
+  }
+}
+
+// -- Brain Graph --
+let brainNodes=[],brainEdges=[];
+async function loadBrainGraph(){
+  const data=await api('/api/v1/graph/state?limitNodes=120&limitEdges=300');
+  const c=$('brain-canvas');
+  if(!data||!data.nodes||!data.nodes.length){
+    const inner=c.querySelector('.loading');
+    if(inner)inner.innerHTML='<div class="empty">Brain Graph ist noch leer.<br>Events von HA werden automatisch verarbeitet.</div>';
+    return;
+  }
+  brainNodes=data.nodes;brainEdges=data.edges||[];
+  addHistory(brainNodes.length+' Brain-Nodes geladen');
+  renderBrain(c,brainNodes,brainEdges);
+  renderLegend();
+}
+function reloadBrain(){loadBrainGraph()}
+
+function renderBrain(container,nodes,edges){
+  const rect=container.getBoundingClientRect();
+  const W=rect.width||800,H=rect.height||500;
+  const nodeMap={};
+  nodes.forEach(n=>{
+    n.x=W/2+(Math.random()-.5)*W*.7;n.y=H/2+(Math.random()-.5)*H*.7;n.vx=0;n.vy=0;
+    nodeMap[n.id||n.entity_id]=n;
+  });
+  // Force simulation
+  for(let iter=0;iter<120;iter++){
+    for(let i=0;i<nodes.length;i++){
+      for(let j=i+1;j<nodes.length;j++){
+        let dx=nodes[j].x-nodes[i].x,dy=nodes[j].y-nodes[i].y;
+        let d=Math.sqrt(dx*dx+dy*dy)||1;
+        let f=1000/(d*d);
+        nodes[i].vx-=dx/d*f;nodes[i].vy-=dy/d*f;
+        nodes[j].vx+=dx/d*f;nodes[j].vy+=dy/d*f;
+      }
+    }
+    edges.forEach(e=>{
+      const s=nodeMap[e.source||e.from],t=nodeMap[e.target||e.to];
+      if(!s||!t)return;
+      let dx=t.x-s.x,dy=t.y-s.y,d=Math.sqrt(dx*dx+dy*dy)||1;
+      let f=(d-90)*.008;
+      s.vx+=dx/d*f;s.vy+=dy/d*f;t.vx-=dx/d*f;t.vy-=dy/d*f;
+    });
+    nodes.forEach(n=>{
+      n.vx+=(W/2-n.x)*.0008;n.vy+=(H/2-n.y)*.0008;
+      n.vx*=.82;n.vy*=.82;
+      n.x+=n.vx;n.y+=n.vy;
+      n.x=Math.max(25,Math.min(W-25,n.x));n.y=Math.max(25,Math.min(H-25,n.y));
+    });
+  }
+  // SVG
+  let svg=`<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">`;
+  svg+=`<defs><filter id="glow"><feGaussianBlur stdDeviation="2" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>`;
+  // Edges
+  edges.forEach(e=>{
+    const s=nodeMap[e.source||e.from],t=nodeMap[e.target||e.to];
+    if(!s||!t)return;
+    const w=Math.max(.3,Math.min(2.5,(e.weight||.5)*3));
+    svg+=`<line x1="${s.x}" y1="${s.y}" x2="${t.x}" y2="${t.y}" stroke="#1e2a3a" stroke-width="${w}" stroke-opacity=".4"/>`;
+  });
+  // Nodes
+  nodes.forEach(n=>{
+    const domain=(n.id||n.entity_id||'').split('.')[0];
+    const color=DOMAIN_COLORS[domain]||DOMAIN_COLORS.default;
+    const r=4+Math.min(10,(n.score||.5)*7);
+    const label=escapeHtml((n.id||n.entity_id||'').split('.').pop().replace(/_/g,' ').slice(0,18));
+    svg+=`<circle cx="${n.x}" cy="${n.y}" r="${r}" fill="${color}" opacity=".8" filter="url(#glow)"/>`;
+    if(r>6)svg+=`<text x="${n.x}" y="${n.y+r+10}" text-anchor="middle" fill="#6b7a8d" font-size="7.5" font-family="Inter,sans-serif">${label}</text>`;
+  });
+  svg+='</svg>';
+  // Keep legend and controls
+  const legend=container.querySelector('.brain-legend');
+  const controls=container.querySelector('.brain-controls');
+  container.innerHTML=svg;
+  if(legend)container.appendChild(legend);
+  if(controls)container.appendChild(controls);
+}
+
+function renderLegend(){
+  const c=$('brain-legend');if(!c)return;
+  const domains={};
+  brainNodes.forEach(n=>{const d=(n.id||n.entity_id||'').split('.')[0];domains[d]=(domains[d]||0)+1});
+  c.innerHTML='';
+  Object.entries(domains).sort((a,b)=>b[1]-a[1]).slice(0,8).forEach(([d,cnt])=>{
+    const color=DOMAIN_COLORS[d]||DOMAIN_COLORS.default;
+    c.innerHTML+=`<div class="leg"><span class="dot-lg" style="background:${color}"></span>${d} (${cnt})</div>`;
+  });
+}
+
+// -- Chat --
+const chatInput=$('chat-input');
+chatInput.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendChat()}});
+const chatModelSelect=$('chat-model-select');
+chatModelSelect?.addEventListener('change',(ev)=>{
+  const next=String(ev?.target?.value||'').trim();
+  if(!next)return;
+  _setChatModel(next,{persist:true,announce:true});
+});
+function renderChatMessages(messages){
+  const msgs=$('chat-msgs');
+  if(!msgs)return;
+  msgs.innerHTML='';
+  if(!messages.length){
+    msgs.appendChild(el('div','msg a','Hallo! Ich bin <strong>Styx</strong>, dein PilotSuite Assistent. Ich verbinde dein Smart Home mit lokaler KI. Wie kann ich helfen?'));
+    return;
+  }
+  messages.forEach(m=>{
+    const cls=m.role==='user'?'u':'a';
+    const content=m.role==='assistant'
+      ?escapeHtml(m.content||'').replace(/\n/g,'<br>')
+      :escapeHtml(m.content||'');
+    msgs.appendChild(el('div','msg '+cls,content));
+  });
+  msgs.scrollTop=msgs.scrollHeight;
+}
+async function persistChatMessage(role,content){
+  try{
+    await fetch(API+'/api/v1/hub/brain/activity/chat',withAuth({
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({role,content,metadata:{source:'dashboard',api_mode:API_MODE}}),
+    }));
+  }catch(_err){}
+}
+async function loadChatHistory(){
+  const loaded=await api('/api/v1/hub/brain/activity/chat?limit=40');
+  if(loaded&&loaded.ok&&Array.isArray(loaded.messages)){
+    chatHistory=loaded.messages
+      .filter(m=>m&&m.role&&m.content!==undefined)
+      .map(m=>({role:m.role,content:String(m.content||'')}));
+    renderChatMessages(chatHistory);
+    return true;
+  }
+  renderChatMessages(chatHistory);
+  return false;
+}
+async function clearChatHistory(){
+  const ok=window.confirm('Chatverlauf wirklich loeschen?');
+  if(!ok)return;
+  try{
+    await fetch(API+'/api/v1/hub/brain/activity/chat/clear',withAuth({
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:'{}',
+    }));
+  }catch(_err){}
+  chatHistory=[];
+  renderChatMessages(chatHistory);
+  addHistory('Chatverlauf geloescht');
+}
+
+async function sendChat(){
+  const input=$('chat-input'),msg=input.value.trim();
+  if(!msg)return;
+  input.value='';
+  const msgs=$('chat-msgs');
+  msgs.appendChild(el('div','msg u',msg));msgs.scrollTop=msgs.scrollHeight;
+  chatHistory.push({role:'user',content:msg});
+  addHistory('Chat: '+msg.slice(0,40)+(msg.length>40?'...':''));
+  const btn=$('chat-send');btn.disabled=true;
+  const typing=el('div','msg a','<div class="spinner" style="display:inline-block;width:12px;height:12px;margin-right:6px"></div>Denkt nach...');
+  msgs.appendChild(typing);msgs.scrollTop=msgs.scrollHeight;
+  persistChatMessage('user',msg);
+  try{
+    const r=await fetch(API+'/v1/chat/completions',withAuth({
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({model:currentModel||'primary',messages:chatHistory.slice(-10),stream:false})
+    }));
+    let data={};
+    try{data=await r.json()}catch(_parseErr){data={error:{message:'Antwort konnte nicht gelesen werden'}}}
+    if(!r.ok){
+      const errMsg=data?.error?.message||('HTTP '+r.status);
+      throw new Error(errMsg);
+    }
+    const reply=data?.choices?.[0]?.message?.content||data?.error?.message||'Keine Antwort.';
+    // XSS-safe: escape first, then convert newlines to <br>
+    typing.innerHTML=escapeHtml(reply).replace(/\n/g,'<br>');
+    chatHistory.push({role:'assistant',content:reply});
+    persistChatMessage('assistant',reply);
+    addHistory('Styx: '+reply.slice(0,40)+(reply.length>40?'...':''));
+  }catch(e){typing.textContent='Fehler: '+e.message}
+  btn.disabled=false;msgs.scrollTop=msgs.scrollHeight;
+}
+
+// -- Suggestion Inbox --
+let suggestionItems=[];
+let dismissedSuggestions=JSON.parse(localStorage.getItem('styx_dismissed_sugg')||'[]');
+
+async function loadSuggestionInbox(){
+  const list=$('sugg-list');
+  if(!list)return;
+  // Resilient: allSettled means one failing API doesn't block others
+  const settled=await Promise.allSettled([
+    api('/api/v1/habitus/rules?limit=15'),
+    api('/api/v1/candidates/graph_candidates?limit=10'),
+    api('/api/v1/hints?status=pending')
+  ]);
+  const [rulesRes,candidatesRes,hintsRes]=settled.map(r=>r.status==='fulfilled'?r.value:null);
+  const rulesData=rulesRes,candidatesData=candidatesRes,hintsData=hintsRes;
+  suggestionItems=[];
+  // 1. Pending hints (already in the system)
+  const hints=hintsData?.hints||[];
+  hints.forEach(h=>{
+    if(dismissedSuggestions.includes(h.id))return;
+    // Parse consequent from text if present (format: "X -> Y")
+    let ant=h.text||h.title||'?',cons=h.consequent||h.then||'';
+    if(!cons&&ant.includes(' -> ')){const parts=ant.split(' -> ');ant=parts[0];cons=parts.slice(1).join(' -> ')}
+    suggestionItems.push({
+      id:h.id,type:'hint',status:h.status||'pending',
+      antecedent:ant,consequent:cons,
+      confidence:h.confidence||0,zone:h.zone||'',
+      source:'hints',raw:h
+    });
+  });
+  // 2. Habitus rules as suggestions
+  const rules=rulesData?.rules||rulesData?.data||[];
+  rules.forEach(r=>{
+    const m=r.metadata||r;
+    const ant=m.antecedent?.full||m.antecedent||'?';
+    const cons=m.consequent?.full||m.consequent||'?';
+    const sid='rule_'+btoa(ant+'->'+cons).slice(0,16);
+    if(dismissedSuggestions.includes(sid))return;
+    suggestionItems.push({
+      id:sid,type:'rule',status:'pending',
+      antecedent:ant,consequent:cons,
+      confidence:m.confidence||0,lift:m.lift||0,support:m.support||0,
+      zone:m.zone||'',source:'habitus',raw:m
+    });
+  });
+  // 3. Graph candidates (Brain Graph edges)
+  const candidates=candidatesData?.items||[];
+  candidates.forEach(c=>{
+    if(dismissedSuggestions.includes(c.candidate_id))return;
+    const d=c.data||{};
+    const fromId=(d.from||'').replace('ha.entity:','');
+    const toId=(d.to||'').replace('ha.entity:','');
+    suggestionItems.push({
+      id:c.candidate_id,type:'graph',status:'pending',
+      antecedent:fromId||c.title||'?',consequent:toId||'',
+      confidence:d.evidence?.weight||0,zone:'',
+      edgeType:d.edge_type||'observed_with',
+      source:'brain_graph',raw:c
+    });
+  });
+  // Limit to 15, sort by confidence
+  suggestionItems.sort((a,b)=>(b.confidence||0)-(a.confidence||0));
+  suggestionItems=suggestionItems.slice(0,15);
+  renderSuggestionInbox();
+}
+
+function renderSuggestionInbox(){
+  const list=$('sugg-list');
+  const countEl=$('sugg-count');
+  const pending=suggestionItems.filter(s=>s.status==='pending');
+  if(countEl)countEl.textContent=pending.length;
+  if(!pending.length&&!suggestionItems.length){
+    list.innerHTML='<div class="sugg-empty">Noch keine Vorschlaege. Styx lernt aus Events und erstellt automatisch Muster.</div>';
+    return;
+  }
+  list.innerHTML='';
+  suggestionItems.forEach((s,i)=>{
+    if(s.status==='rejected')return;// hide rejected
+    const item=document.createElement('div');
+    item.className='sugg-item'+(s.status==='accepted'?' accepted':'');
+    item.dataset.idx=i;
+    // Source icon + color
+    const srcIcon=s.source==='brain_graph'?'\u{1F9E0}':s.source==='habitus'?'\u{1F50D}':'\u{1F4A1}';
+    const srcColor=s.source==='brain_graph'?'var(--accent)':s.source==='habitus'?'var(--cyan)':'var(--yellow)';
+    // Zone tag (escaped)
+    const zoneTag=s.zone?`<span class="zone-tag">${escapeHtml(s.zone)}</span>`:'';
+    // Source tag
+    const srcLabel=s.source==='brain_graph'?'Graph':s.source==='habitus'?'Habitus':'Hint';
+    const srcTag=`<span class="zone-tag" style="background:${srcColor}15;color:${srcColor}">${srcLabel}</span>`;
+    const confPct=s.type==='graph'?((s.confidence||0)*10).toFixed(0)+'w':((s.confidence||0)*100).toFixed(0)+'%';
+    const antEsc=escapeHtml(s.antecedent);
+    const consEsc=escapeHtml(s.consequent);
+    item.innerHTML=`
+      <input type="checkbox" class="sugg-check" data-idx="${i}" onchange="updateBatchBar()">
+      <span style="font-size:14px;flex-shrink:0">${srcIcon}</span>
+      <div class="sugg-body">
+        <div class="sugg-rule"><span>${antEsc}</span>${consEsc?'<span class="arr">\u2192</span><span>'+consEsc+'</span>':''}</div>
+        <div class="sugg-zone">${srcTag}${zoneTag}</div>
+      </div>
+      <span class="sugg-conf">${confPct}</span>
+      <div class="sugg-actions">
+        ${s.status==='pending'?`
+          <button class="sugg-act accept" onclick="acceptSuggestion(${i})" title="Annehmen">\u2713</button>
+          <button class="sugg-act reject" onclick="rejectSuggestion(${i})" title="Ablehnen">\u2717</button>
+        `:`<span class="b b-g" style="font-size:9px">\u2713</span>`}
+      </div>`;
+    list.appendChild(item);
+  });
+}
+
+function updateBatchBar(){
+  const checked=document.querySelectorAll('.sugg-check:checked');
+  const bar=$('sugg-batch');
+  if(bar)bar.style.display=checked.length>0?'flex':'none';
+}
+
+async function acceptSuggestion(idx){
+  const s=suggestionItems[idx];if(!s||s.status!=='pending')return;
+  s.status='accepted';
+  addHistory('Vorschlag angenommen: '+s.antecedent+(s.consequent?' \u2192 '+s.consequent:''));
+  // 1. Create hint in backend
+  try{
+    const hintRes=await fetch(API+'/api/v1/hints',withAuth({
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({text:s.antecedent+(s.consequent?' -> '+s.consequent:''),type:'automation'})
+    }));
+    const hintData=await hintRes.json();
+    const hintId=hintData?.hint?.id||s.id;
+    // 2. Accept the hint
+    await fetch(
+      API+'/api/v1/hints/'+hintId+'/accept',
+      withAuth({method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})
+    );
+  }catch(e){console.warn('Hint accept error:',e)}
+  // 3. Create HA Automation via Automation Creator API (v1.3.0)
+  try{
+    const autoRes=await fetch(API+'/api/v1/automations/create',withAuth({
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({antecedent:s.antecedent,consequent:s.consequent,confidence:s.confidence,zone:s.zone,source:s.source,type:s.type})
+    }));
+    const autoData=await autoRes.json();
+    if(autoData?.ok){
+      addHistory('\u2705 HA-Automation erstellt: '+escapeHtml(autoData.alias||s.antecedent));
+    }
+  }catch(e){console.warn('Automation create error:',e)}
+  // 4. Touch edge in Brain Graph (visual connection)
+  if(s.consequent&&s.antecedent){
+    const fromNode=s.raw?.data?.from||'ha.entity:'+s.antecedent;
+    const toNode=s.raw?.data?.to||'ha.entity:'+s.consequent;
+    try{
+      await fetch(API+'/api/v1/graph/ops',withAuth({
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({op:'touch_edge',from:fromNode,to:toNode,type:s.edgeType||'controls',delta:1.0})
+      }));
+    }catch(e){console.warn('Graph ops error:',e)}
+    // 4. Animate edge in Brain SVG
+    animateBrainEdge(s.antecedent,s.consequent);
+  }
+  renderSuggestionInbox();
+}
+
+async function rejectSuggestion(idx){
+  const s=suggestionItems[idx];if(!s||s.status!=='pending')return;
+  s.status='rejected';
+  dismissedSuggestions.push(s.id);
+  // Keep only last 100 dismissed
+  if(dismissedSuggestions.length>100)dismissedSuggestions=dismissedSuggestions.slice(-100);
+  localStorage.setItem('styx_dismissed_sugg',JSON.stringify(dismissedSuggestions));
+  addHistory('Vorschlag abgelehnt: '+s.antecedent);
+  // Backend reject if it's a hint
+  if(s.type==='hint'){
+    try{
+      await fetch(
+        API+'/api/v1/hints/'+s.id+'/reject',
+        withAuth({method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})
+      )
+    }catch(e){}
+  }
+  renderSuggestionInbox();
+}
+
+async function batchAccept(){
+  const checked=document.querySelectorAll('.sugg-check:checked');
+  const indices=[...checked].map(c=>parseInt(c.dataset.idx));
+  for(const idx of indices)await acceptSuggestion(idx);
+  updateBatchBar();
+  addHistory(indices.length+' Vorschlaege angenommen (Batch)');
+}
+
+async function batchReject(){
+  const checked=document.querySelectorAll('.sugg-check:checked');
+  const indices=[...checked].map(c=>parseInt(c.dataset.idx));
+  for(const idx of indices)await rejectSuggestion(idx);
+  updateBatchBar();
+  addHistory(indices.length+' Vorschlaege abgelehnt (Batch)');
+}
+
+function animateBrainEdge(fromEntity,toEntity){
+  const svg=document.querySelector('#brain-canvas svg');
+  if(!svg||!brainNodes.length)return;
+  // Find matching nodes
+  const fromNode=brainNodes.find(n=>{const id=n.id||n.entity_id||'';return id.includes(fromEntity)});
+  const toNode=brainNodes.find(n=>{const id=n.id||n.entity_id||'';return id.includes(toEntity)});
+  if(!fromNode||!toNode)return;
+  // Create animated edge
+  const line=document.createElementNS('http://www.w3.org/2000/svg','line');
+  line.setAttribute('x1',fromNode.x);line.setAttribute('y1',fromNode.y);
+  line.setAttribute('x2',toNode.x);line.setAttribute('y2',toNode.y);
+  line.setAttribute('class','brain-edge-new');
+  line.setAttribute('stroke','#34d399');line.setAttribute('stroke-width','3');
+  svg.appendChild(line);
+  // Pulse circles at endpoints
+  [fromNode,toNode].forEach(n=>{
+    const circ=document.createElementNS('http://www.w3.org/2000/svg','circle');
+    circ.setAttribute('cx',n.x);circ.setAttribute('cy',n.y);circ.setAttribute('r','8');
+    circ.setAttribute('fill','none');circ.setAttribute('stroke','#34d399');circ.setAttribute('stroke-width','2');
+    circ.setAttribute('opacity','1');
+    svg.appendChild(circ);
+    // Animate expand + fade
+    let frame=0;
+    const anim=()=>{frame++;const r=8+frame*.5;const op=Math.max(0,1-frame/30);
+      circ.setAttribute('r',r);circ.setAttribute('opacity',op);
+      if(frame<30)requestAnimationFrame(anim);else circ.remove();
+    };requestAnimationFrame(anim);
+  });
+  // Remove animated line after 3s (it stays as a regular edge)
+  setTimeout(()=>{line.classList.remove('brain-edge-new');line.setAttribute('stroke','#34d399');line.setAttribute('stroke-opacity','.6');line.setAttribute('stroke-width','1.5')},3000);
+}
+
+// ==================================================
+// HABITUS
+// ==================================================
+function _slugifyId(value){
+  const cleaned=String(value||'').trim().toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'');
+  return cleaned||'zone';
+}
+
+async function _autoImportRoomsFromSuggestions(){
+  const suggestions=await api('/api/v1/entity-assignment/suggestions');
+  if(!suggestions?.ok||!Array.isArray(suggestions.suggestions)||!suggestions.suggestions.length)return 0;
+  let imported=0;
+  const touched=new Set();
+  for(const s of suggestions.suggestions.slice(0,12)){
+    const roomName=String(s.room_hint||s.suggested_zone_id||'raum').replace(/^zone:/,'').trim();
+    const entities=(s.entities||[]).map(e=>e?.entity_id).filter(Boolean);
+    if(!roomName||!entities.length)continue;
+    const roomId='room:'+_slugifyId(roomName);
+    if(touched.has(roomId))continue;
+    touched.add(roomId);
+    try{
+      const resp=await fetch(API+'/api/v1/hub/zones/rooms',withAuth({
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          room_id:roomId,
+          name:roomName,
+          entities,
+        }),
+      }));
+      if(resp.ok)imported++;
+    }catch(_e){}
+  }
+  return imported;
+}
+
+async function loadZoneRoomOptions(forceImport=false){
+  const sel=$('new-zone-rooms');
+  const hint=$('new-zone-room-hint');
+  if(!sel)return;
+
+  let roomsResp=await api('/api/v1/hub/zones/rooms');
+  let rooms=Array.isArray(roomsResp?.rooms)?roomsResp.rooms:[];
+
+  if(!rooms.length&&(forceImport||!_roomsAutofilled)){
+    const imported=await _autoImportRoomsFromSuggestions();
+    if(imported>0){
+      _roomsAutofilled=true;
+      roomsResp=await api('/api/v1/hub/zones/rooms');
+      rooms=Array.isArray(roomsResp?.rooms)?roomsResp.rooms:[];
+    }
+  }
+
+  _hubRoomsCache=rooms;
+  sel.innerHTML='';
+
+  if(!rooms.length){
+    const opt=document.createElement('option');
+    opt.value='';
+    opt.textContent='Keine Räume verfügbar';
+    opt.disabled=true;
+    sel.appendChild(opt);
+    if(hint)hint.textContent='Keine Räume registriert. Optional Entitäten unten eintragen.';
+    return;
+  }
+
+  rooms
+    .slice()
+    .sort((a,b)=>String(a.name||a.room_id).localeCompare(String(b.name||b.room_id),'de'))
+    .forEach(room=>{
+      const opt=document.createElement('option');
+      opt.value=String(room.room_id||'');
+      opt.textContent=`${room.name||room.room_id} (${room.entity_count||0})`;
+      sel.appendChild(opt);
+    });
+
+  if(hint)hint.textContent=`${rooms.length} Räume verfügbar. Mehrfachauswahl mit Ctrl/Cmd möglich.`;
+}
+
+async function reloadZoneRoomOptions(){
+  await loadZoneRoomOptions(true);
+}
+
+async function loadHabitus(){
+  const data=await api('/api/v1/habitus/rules?limit=50');
+  const rules=data?.rules||data?.data||[];
+  $('hab-count').textContent=rules.length+' Regeln';
+  const c=$('hab-rules');
+  if(!rules.length){c.innerHTML='<div class="empty">Noch keine Muster. PilotSuite lernt automatisch aus Events.</div>';return}
+  c.innerHTML='';
+  rules.forEach(r=>{
+    const m=r.metadata||r;
+    const ant=escapeHtml(m.antecedent?.full||m.antecedent||'?');
+    const cons=escapeHtml(m.consequent?.full||m.consequent||'?');
+    const conf=((m.confidence||0)*100).toFixed(0);
+    const supp=((m.support||0)*100).toFixed(1);
+    const lift=(m.lift||0).toFixed(2);
+    c.appendChild(el('div','pat',
+      `<span>${ant}</span><span class="arr">\u2192</span><span>${cons}</span><span class="meta">${conf}% | ${supp}% Supp | Lift ${lift}</span>`));
+  });
+  // Zones (Hub Zone API)
+  const zones=await api('/api/v1/hub/zones');
+  const zc=$('hab-zones');
+  if(zones&&Array.isArray(zones.zones)){
+    zc.innerHTML='';
+    const zoneList=zones.zones;
+    const details=await Promise.allSettled(
+      zoneList.map(z=>api('/api/v1/hub/zones/'+encodeURIComponent(String(z.zone_id||''))))
+    );
+    const detailMap=new Map();
+    details.forEach((item,idx)=>{
+      if(item.status!=='fulfilled')return;
+      const zid=String(zoneList[idx]?.zone_id||'');
+      if(!zid)return;
+      detailMap.set(zid,item.value||{});
+    });
+
+    zoneList.forEach(z=>{
+      const zid=String(z.zone_id||'');
+      const detail=detailMap.get(zid)||{};
+      const zoneName=String(z.name||detail.name||zid||'Zone');
+      const ents=Array.isArray(detail.entities)?detail.entities:[];
+      const rooms=Array.isArray(detail.rooms)?detail.rooms:[];
+      const roomNames=rooms.map(r=>String(r?.name||r?.room_id||'')).filter(Boolean);
+      const roomSummary=roomNames.length>3?roomNames.slice(0,3).join(', ')+` +${roomNames.length-3}`:(roomNames.join(', ')||'keine Räume');
+      const zoneIdJson=JSON.stringify(zid);
+      const zoneNameJson=JSON.stringify(zoneName);
+      const entsJson=JSON.stringify(ents);
+      const card=el('div','zone-card',
+        `<h3><span style="color:var(--cyan)">&#x1f3e0;</span> ${escapeHtml(zoneName)}</h3>
+        <p style="font-size:11px;color:var(--dim)">Räume: ${escapeHtml(roomSummary)} · Entitäten: ${ents.length}</p>
+        <div class="zone-entities">${ents.map(e=>`<span class="ze">${escapeHtml(e)}</span>`).join('')}</div>
+        <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
+          <button onclick='saveZoneScene(${zoneIdJson},${zoneNameJson},${entsJson})' class="btn-scene" title="Aktuelle Zustände als Szene speichern">&#x1f3ac; Szene speichern</button>
+          <button onclick='toggleHomeKit(${zoneIdJson},${zoneNameJson},${entsJson})' class="btn-scene" title="Zone zu HomeKit hinzufügen">&#x1f34e; HomeKit</button>
+        </div>`);
+      zc.appendChild(card);
+    });
+  }else{
+    zc.innerHTML='<div class="empty">Hub-Zonen API nicht erreichbar oder keine Zonen vorhanden.</div>';
+  }
+
+  await loadZoneRoomOptions();
+
+  // Trend from real rule confidence values
+  const trendData=rules.map(r=>(r.metadata||r).confidence||0);
+  drawTrend('hab-trend-canvas',rules.length,trendData.length>=2?trendData:null);
+}
+
+// -- Add Habitus Zone --
+async function addZone(){
+  const name=$('new-zone-name').value.trim();
+  const roomSelect=$('new-zone-rooms');
+  const ents=$('new-zone-entities').value.trim();
+  if(!name){$('new-zone-name').style.borderColor='var(--red)';return}
+  $('new-zone-name').style.borderColor='var(--border)';
+
+  let roomIds=roomSelect?[...roomSelect.options].filter(o=>o.selected&&o.value).map(o=>o.value):[];
+  const entities=ents?ents.split(',').map(e=>e.trim()).filter(Boolean):[];
+  if(!roomIds.length&&!entities.length){
+    const hint=$('new-zone-room-hint');
+    if(hint)hint.textContent='Bitte mindestens einen Raum auswählen oder Entitäten eintragen.';
+    return;
+  }
+
+  const zoneId='zone:'+_slugifyId(name);
+
+  try{
+    // If no rooms are selected, register a synthetic room from explicit entities.
+    if(!roomIds.length&&entities.length){
+      const syntheticRoomId='room:'+_slugifyId(name)+'_'+Date.now().toString(36);
+      const regResp=await fetch(API+'/api/v1/hub/zones/rooms',withAuth({
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          room_id:syntheticRoomId,
+          name:`${name} (manuell)`,
+          entities,
+        }),
+      }));
+      if(!regResp.ok){
+        const body=(await regResp.text()).slice(0,180);
+        addHistory('Room-Fehler: '+regResp.status+' '+body);
+        return;
+      }
+      roomIds=[syntheticRoomId];
+    }
+
+    const existing=await api('/api/v1/hub/zones/'+encodeURIComponent(zoneId));
+    if(existing&&existing.ok){
+      await fetch(API+'/api/v1/hub/zones/'+encodeURIComponent(zoneId),withAuth({method:'DELETE'}));
+    }
+
+    const r=await fetch(API+'/api/v1/hub/zones',withAuth({
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        zone_id:zoneId,
+        name,
+        room_ids:roomIds,
+        icon:'mdi:home-floor-1',
+      }),
+    }));
+
+    if(r.ok){
+      $('new-zone-name').value='';
+      $('new-zone-entities').value='';
+      if(roomSelect)[...roomSelect.options].forEach(o=>{o.selected=false;});
+      addHistory('Zone erstellt: '+name+' ('+zoneId+')');
+      await loadHabitus();
+    }else{
+      const body=(await r.text()).slice(0,180);
+      addHistory('Zone-Fehler: '+r.status+' '+body);
+    }
+  }catch(e){addHistory('Zone-Fehler: '+e.message)}
+}
+
+// ==================================================
+// ENTITY ASSIGNMENT SUGGESTIONS
+// ==================================================
+async function loadEntitySuggestions(targetId){
+  const c=$(targetId||'hab-entity-suggestions');if(!c)return;
+  try{
+    const r=await api('/api/v1/entity-assignment/suggestions');
+    if(!r?.ok||!r.suggestions?.length){
+      c.innerHTML='<div class="empty">Keine Vorschläge verfügbar. Stelle sicher, dass Entitäten in HA vorhanden sind.</div>';
+      return;
+    }
+    let html='<div style="font-size:11px;color:var(--dim);margin-bottom:8px">'+r.suggestion_count+' Gruppen gefunden — klicke zum Aufklappen</div>';
+    r.suggestions.forEach((s,i)=>{
+      const pct=Math.round(s.confidence*100);
+      const barW=Math.round(s.confidence*60);
+      const domBadges=s.domains.map(d=>`<span class="b b-b" style="font-size:9px">${escapeHtml(d)}</span>`).join(' ');
+      html+=`<div class="sugg-group" id="sg-${i}">
+        <div class="sugg-group-hd" onclick="toggleSuggGroup(${i})">
+          <span>&#x1f3e0; ${escapeHtml(s.room_hint)}</span>
+          <span style="color:var(--dim);font-size:11px;font-weight:400">${s.entity_count} Entitäten</span>
+          <span class="conf-bar" style="width:${barW}px" title="${pct}% Konfidenz"></span>
+          <span style="font-size:10px;color:var(--dim)">${pct}%</span>
+          <span style="margin-left:auto">${domBadges}</span>
+        </div>
+        <div class="sugg-group-body" id="sgb-${i}">
+          <div style="margin-bottom:6px;font-size:11px;color:var(--cyan)">Vorgeschlagene Zone: <code>${escapeHtml(s.suggested_zone_id)}</code></div>
+          <div>${s.entities.map(e=>`<span class="sugg-entity" title="${escapeHtml(e.state)}">${escapeHtml(e.friendly_name||e.entity_id)}</span>`).join('')}</div>
+          <div style="margin-top:8px">
+            <button class="btn-sm" onclick="copyZoneSuggestion('${escapeHtml(s.room_hint)}','${escapeHtml(s.suggested_zone_id)}')" title="Zone-Name in Zwischenablage">&#x1f4cb; ID kopieren</button>
+          </div>
+        </div>
+      </div>`;
+    });
+    c.innerHTML=html;
+  }catch(e){c.innerHTML='<div class="empty">Entity Assignment API nicht erreichbar</div>'}
+}
+function toggleSuggGroup(i){
+  const b=$('sgb-'+i);if(b)b.classList.toggle('open');
+}
+
+// ==================================================
+// PRESENCE + CAMERA
+// ==================================================
+async function loadPresence(targetId){
+  const c=$(targetId||'haushalt-presence');
+  if(!c)return;
+  try{
+    const r=await api('/api/v1/presence/status');
+    if(!r?.ok){c.innerHTML='<div class="empty">Presence API nicht verfügbar</div>';return}
+    let html='<div class="presence-grid">';
+    const all=[...(r.persons_home||[]),...(r.persons_away||[])];
+    if(!all.length){c.innerHTML='<div class="empty">Keine Personen getrackt. Konfiguriere person.*-Entitäten in HA.</div>';return}
+    all.forEach(p=>{
+      const isHome=p.state&&p.state!=='not_home'&&p.state!=='unknown';
+      const cls=isHome?'home':'away';
+      const initials=(p.name||'?').split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
+      const zone=p.zone||p.state||'?';
+      const since=p.since?_relTime(p.since):'';
+      html+=`<div class="presence-person ${cls}">
+        <div class="presence-avatar">${initials}</div>
+        <div class="presence-info">
+          <div class="presence-name">${escapeHtml(p.name||p.person_id||'?')}</div>
+          <div class="presence-detail">${isHome?escapeHtml(zone):'Unterwegs'}${since?' &middot; seit '+since:''}</div>
+        </div>
+      </div>`;
+    });
+    html+='</div>';
+    if(r.total_home!==undefined){
+      html+=`<div style="margin-top:10px;font-size:11px;color:var(--dim)">${r.total_home} von ${r.total_tracked} Personen zuhause</div>`;
+    }
+    c.innerHTML=html;
+  }catch(e){c.innerHTML='<div class="empty">Presence nicht verfügbar</div>'}
+}
+async function loadCameraEvents(targetId){
+  const c=$(targetId||'haushalt-camera-events');
+  if(!c)return;
+  try{
+    const r=await api('/api/v1/presence/history?limit=15');
+    if(!r?.ok||!r.events||!r.events.length){c.innerHTML='<div class="empty">Keine kürzlichen Ereignisse</div>';return}
+    let html='';
+    r.events.slice(0,15).forEach(ev=>{
+      const t=ev.event_type||'?';
+      const dotCls=t==='arrived'?'person':t==='departed'?'motion':'person';
+      const icon=t==='arrived'?'&#x1f3e0;':t==='departed'?'&#x1f6b6;':'&#x1f504;';
+      const label=t==='arrived'?'angekommen':t==='departed'?'gegangen':'Zone gewechselt';
+      const ts=ev.timestamp?_relTime(ev.timestamp):'';
+      html+=`<div class="cam-event">
+        <span class="cam-dot ${dotCls}"></span>
+        <span style="font-size:12px">${icon} <strong>${escapeHtml(ev.person_name||'?')}</strong> ${label}</span>
+        ${ev.zone?`<span style="font-size:10px;color:var(--dim)">${escapeHtml(ev.zone)}</span>`:''}
+        <span style="margin-left:auto;font-size:10px;color:var(--dim)">${ts}</span>
+      </div>`;
+    });
+    c.innerHTML=html;
+  }catch(e){c.innerHTML='<div class="empty">Ereignisse nicht verfügbar</div>'}
+}
+function _relTime(ts){
+  const now=Date.now()/1000;
+  const diff=now-(typeof ts==='number'?ts:new Date(ts).getTime()/1000);
+  if(diff<60)return 'gerade eben';
+  if(diff<3600)return Math.floor(diff/60)+' Min';
+  if(diff<86400)return Math.floor(diff/3600)+' Std';
+  return Math.floor(diff/86400)+' Tage';
+}
+function copyZoneSuggestion(hint,zoneId){
+  try{navigator.clipboard.writeText(zoneId);addHistory('Zone-ID kopiert: '+zoneId)}
+  catch(e){addHistory('Zone-ID: '+zoneId)}
+}
+
+// ==================================================
+// HAUSHALT PAGE
+// ==================================================
+async function loadHaushalt(){
+  await Promise.allSettled([loadHaushaltData(), loadEntitySuggestions('haushalt-suggestions'), loadPresence('haushalt-presence'), loadCameraEvents('haushalt-camera-events'), loadCalendar(), loadShopping(), loadReminders()]);
+}
+
+// Calendar (v3.5.0)
+async function loadCalendar(){
+  const c=$('haushalt-calendar');if(!c)return;
+  try{
+    const d=await api('/api/v1/calendar/events/today');
+    if(!d||!d.events||d.events.length===0){c.innerHTML='<div class="empty">Keine Termine heute</div>';return}
+    let h='';
+    for(const ev of d.events.slice(0,8)){
+      const s=ev.start||{};const t=s.dateTime?new Date(s.dateTime).toLocaleTimeString('de',{hour:'2-digit',minute:'2-digit'}):'Ganztaegig';
+      h+=`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border)"><span>${escapeHtml(ev.summary||'?')}</span><span style="color:var(--dim);font-size:12px">${t}</span></div>`;
+    }
+    if(d.events.length>8)h+=`<div style="font-size:11px;color:var(--dim);margin-top:4px">+${d.events.length-8} weitere</div>`;
+    c.innerHTML=h;
+  }catch(e){c.innerHTML='<div class="empty">Kalender nicht verfuegbar</div>'}
+}
+
+// Shopping List (v3.5.0)
+async function loadShopping(){
+  const c=$('haushalt-shopping');if(!c)return;
+  try{
+    const d=await api('/api/v1/shopping?completed=0');
+    if(!d||!d.items||d.items.length===0){c.innerHTML='<div class="empty">Einkaufsliste leer</div>';return}
+    let h='';
+    for(const it of d.items){
+      const qty=it.quantity?` (${escapeHtml(it.quantity)})`:'';
+      h+=`<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--border)"><span>${escapeHtml(it.name)}${qty}</span><button class="btn-sm" onclick="completeShoppingItem('${it.id}')" style="font-size:11px;padding:2px 8px">&#x2714;</button></div>`;
+    }
+    c.innerHTML=h;
+  }catch(e){c.innerHTML='<div class="empty">Einkaufsliste nicht verfuegbar</div>'}
+}
+async function addShoppingItem(){
+  const inp=$('shop-input');if(!inp||!inp.value.trim())return;
+  try{
+    await api('/api/v1/shopping','POST',{name:inp.value.trim()});
+    inp.value='';loadShopping();addHistory('Artikel hinzugefuegt');
+  }catch(e){addHistory('Fehler: '+e.message)}
+}
+async function completeShoppingItem(id){
+  try{await api(`/api/v1/shopping/${id}/complete`,'POST');loadShopping()}catch(e){}
+}
+
+// Reminders (v3.5.0)
+async function loadReminders(){
+  const c=$('haushalt-reminders');if(!c)return;
+  try{
+    const d=await api('/api/v1/reminders?completed=0');
+    if(!d||!d.reminders||d.reminders.length===0){c.innerHTML='<div class="empty">Keine aktiven Erinnerungen</div>';return}
+    let h='';
+    for(const r of d.reminders){
+      const due=r.due_at?new Date(r.due_at*1000).toLocaleString('de',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'';
+      const overdue=r.due_at&&r.due_at<Date.now()/1000?' style="color:var(--red)"':'';
+      h+=`<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--border)"><div><span${overdue}>${escapeHtml(r.title)}</span>${due?` <span style="font-size:11px;color:var(--dim)">${due}</span>`:''}</div><div style="display:flex;gap:4px"><button class="btn-sm" onclick="completeReminder('${r.id}')" style="font-size:11px;padding:2px 8px">&#x2714;</button><button class="btn-sm" onclick="snoozeReminder('${r.id}')" style="font-size:11px;padding:2px 8px">&#x1f4a4;</button></div></div>`;
+    }
+    c.innerHTML=h;
+  }catch(e){c.innerHTML='<div class="empty">Erinnerungen nicht verfuegbar</div>'}
+}
+async function addReminderFromInput(){
+  const inp=$('rem-input');if(!inp||!inp.value.trim())return;
+  try{
+    await api('/api/v1/reminders','POST',{title:inp.value.trim()});
+    inp.value='';loadReminders();addHistory('Erinnerung erstellt');
+  }catch(e){addHistory('Fehler: '+e.message)}
+}
+async function completeReminder(id){
+  try{await api(`/api/v1/reminders/${id}/complete`,'POST');loadReminders()}catch(e){}
+}
+async function snoozeReminder(id){
+  try{await api(`/api/v1/reminders/${id}/snooze`,'POST',{minutes:30});loadReminders();addHistory('Erinnerung gesnoozed (30 Min)')}catch(e){}
+}
+async function loadHaushaltData(){
+  try{
+    const r=await api('/api/v1/haushalt/overview');
+    if(!r?.ok){
+      $('haushalt-waste').innerHTML='<div class="empty">Haushalt API nicht verfügbar</div>';
+      $('haushalt-birthdays').innerHTML='<div class="empty">Haushalt API nicht verfügbar</div>';
+      return;
+    }
+    // -- Alerts strip (separated by type) --
+    const alerts=r.alerts||{};
+    let wasteAlertHtml='';
+    if(alerts.waste_today){wasteAlertHtml+=badge('&#x267b; Abfuhr heute!','r')+' '}
+    if(alerts.waste_tomorrow){wasteAlertHtml+=badge('&#x267b; Abfuhr morgen','y')+' '}
+    let bdayAlertHtml='';
+    if(alerts.birthday_today){bdayAlertHtml+=badge('&#x1f382; Geburtstag heute!','g')+' '}
+    if(alerts.upcoming_birthdays_7d>0){bdayAlertHtml+=badge('&#x1f382; '+alerts.upcoming_birthdays_7d+' diese Woche','b')+' '}
+    $('haushalt-waste-alerts').innerHTML=wasteAlertHtml;
+    $('haushalt-birthday-alerts').innerHTML=bdayAlertHtml;
+
+    // -- Waste --
+    const waste=r.waste||{};
+    const cols=waste.collections||[];
+    const wToday=waste.today||[];
+    const wTomorrow=waste.tomorrow||[];
+    let wHtml='';
+    if(!cols.length){
+      wHtml='<div class="empty">Keine Abfuhrtermine vorhanden. Konfiguriere waste_collection_schedule und Waste-Entities.</div>';
+    } else {
+      const WASTE_ICONS={'restm':'&#x1f5d1;','bio':'&#x1f33f;','papier':'&#x1f4e6;','gelb':'&#x1f7e1;','glas':'&#x1f37e;','sperrm':'&#x1f69a;'};
+      function getWIcon(t){const k=Object.keys(WASTE_ICONS).find(k=>t.toLowerCase().includes(k));return k?WASTE_ICONS[k]:'&#x267b;'}
+      wHtml='<div style="display:flex;flex-direction:column;gap:8px">';
+      cols.forEach(c=>{
+        const days=c.days_to??'?';
+        const cls=days===0?'var(--red)':days===1?'var(--yellow)':'var(--dim)';
+        const urgency=days===0?'HEUTE':days===1?'MORGEN':days+' Tage';
+        wHtml+=`<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--surface);border-radius:8px;border-left:3px solid ${cls}">
+          <span style="font-size:18px">${getWIcon(c.waste_type||'')}</span>
+          <div style="flex:1"><div style="font-size:13px;font-weight:600">${escapeHtml(c.waste_type||'?')}</div>
+          <div style="font-size:10px;color:var(--dim)">${escapeHtml(c.next_date||'')}</div></div>
+          <span style="font-size:11px;font-weight:700;color:${cls}">${urgency}</span>
+        </div>`;
+      });
+      wHtml+='</div>';
+    }
+    $('haushalt-waste').innerHTML=wHtml;
+
+    // -- Birthdays --
+    const bdays=r.birthdays||{};
+    const bToday=bdays.today||[];
+    const bUpcoming=bdays.upcoming||[];
+    let bHtml='';
+    if(bToday.length){
+      bHtml+='<div style="margin-bottom:10px">';
+      bToday.forEach(b=>{
+        const age=b.age?` wird ${b.age}`:'';
+        bHtml+=`<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--surface);border-radius:8px;border-left:3px solid var(--green);margin-bottom:6px">
+          <span style="font-size:22px">&#x1f382;</span>
+          <div><div style="font-size:13px;font-weight:700">${escapeHtml(b.name||'?')}${age}</div>
+          <div style="font-size:11px;color:var(--green);font-weight:600">&#x1f389; Heute!</div></div>
+        </div>`;
+      });
+      bHtml+='</div>';
+    }
+    if(bUpcoming.length){
+      bHtml+='<div style="font-size:11px;color:var(--dim);font-weight:600;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">Bald</div>';
+      bUpcoming.forEach(b=>{
+        const age=b.age?` (wird ${b.age})`:'';
+        const d=b.days_until;
+        const cls=d<=3?'var(--yellow)':d<=7?'var(--cyan)':'var(--dim)';
+        bHtml+=`<div class="birthday-row">
+          <span style="font-size:16px">&#x1f37e;</span>
+          <div style="flex:1"><span style="font-size:12px;font-weight:600">${escapeHtml(b.name||'?')}</span>${age?`<span style="font-size:10px;color:var(--dim)"> ${age}</span>`:''}</div>
+          <div style="text-align:right"><div style="font-size:11px;font-weight:700;color:${cls}">${d===0?'Heute':d===1?'Morgen':'in '+d+' Tagen'}</div>
+          <div style="font-size:10px;color:var(--dim)">${escapeHtml(b.date||'')}</div></div>
+        </div>`;
+      });
+    }
+    if(!bToday.length&&!bUpcoming.length){
+      bHtml='<div class="empty">Keine Geburtstage in den nächsten 14 Tagen. Konfiguriere Kalender-Entities in den Einstellungen.</div>';
+    }
+    $('haushalt-birthdays').innerHTML=bHtml;
+  }catch(e){
+    $('haushalt-waste').innerHTML='<div class="empty">Haushalt-Daten nicht ladbar</div>';
+    $('haushalt-birthdays').innerHTML='<div class="empty">Haushalt-Daten nicht ladbar</div>';
+  }
+}
+async function haushaltRemind(type){
+  try{
+    const r=await fetch(
+      API+'/api/v1/haushalt/remind/'+type,
+      withAuth({method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})
+    );
+    const d=await r.json();
+    addHistory((d?.ok?'✅':'⚠️')+' Erinnerung: '+(d?.message||d?.error||type));
+  }catch(e){addHistory('⚠️ Fehler: '+e.message)}
+}
+
+// ==================================================
+// MOOD
+// ==================================================
+async function loadMood(){
+  const wrapped=await apiTry(['/api/v1/mood','/api/v1/mood/state']);
+  const data=wrapped?.data||null;
+  const c=$('mood-zones'),sc=$('mood-stats');
+  if(!data){c.innerHTML='<div class="empty">Noch keine Stimmungsdaten. Mood Engine benoetigt Events aus Zonen.</div>';return}
+  let zonesData=data.zones||data.moods||null;
+  if(!zonesData&&data.mood){
+    zonesData={global:data.mood};
+  }
+  if(!zonesData||typeof zonesData!=='object'){c.innerHTML='<div class="empty">Keine Stimmungsdaten verfuegbar.</div>';return}
+  c.innerHTML='';
+  const zones=Object.entries(zonesData||{});
+  if(!zones.length){c.innerHTML='<div class="empty">Keine Zonen konfiguriert.</div>';return}
+  zones.forEach(([name,z])=>{
+    const comfort=z.comfort||0,joy=z.joy||0,frug=z.frugality||0;
+    c.appendChild(el('div','',
+      `<h3 style="font-size:13px;margin:12px 0 6px;font-weight:600">${escapeHtml(name)}</h3>`+
+      gaugeHTML('Comfort',comfort,'var(--green)')+gaugeHTML('Joy',joy,'var(--yellow)')+gaugeHTML('Frugality',frug,'var(--accent)')));
+  });
+  if(data.summary){
+    sc.innerHTML=
+      `<div class="card stat"><div class="v">${(data.summary.average_comfort||0).toFixed(1)}</div><div class="l">Avg Comfort</div></div>`+
+      `<div class="card stat"><div class="v">${(data.summary.average_joy||0).toFixed(1)}</div><div class="l">Avg Joy</div></div>`+
+      `<div class="card stat"><div class="v">${(data.summary.average_frugality||0).toFixed(1)}</div><div class="l">Avg Frugality</div></div>`;
+  }else{
+    const comforts=zones.map(([_,z])=>Number(z.comfort||0));
+    const joys=zones.map(([_,z])=>Number(z.joy||0));
+    const frugs=zones.map(([_,z])=>Number(z.frugality||0));
+    const avg=a=>a.length?a.reduce((x,y)=>x+y,0)/a.length:0;
+    sc.innerHTML=
+      `<div class="card stat"><div class="v">${avg(comforts).toFixed(2)}</div><div class="l">Avg Comfort</div></div>`+
+      `<div class="card stat"><div class="v">${avg(joys).toFixed(2)}</div><div class="l">Avg Joy</div></div>`+
+      `<div class="card stat"><div class="v">${avg(frugs).toFixed(2)}</div><div class="l">Avg Frugality</div></div>`;
+  }
+  // Mood trend from real comfort values per zone
+  const moodTrend=zones.map(([_,z])=>z.comfort||0);
+  drawTrend('mood-trend-canvas',zones.length*3,moodTrend.length>=2?moodTrend:null);
+}
+function gaugeHTML(label,val,color){
+  const pct=Math.max(0,Math.min(100,val*100));
+  return `<div class="gauge"><div class="gauge-hd"><span>${label}</span><span class="gv">${pct.toFixed(0)}%</span></div><div class="gauge-bar"><div class="gauge-fill" style="width:${pct}%;background:${color}"></div></div></div>`;
+}
+
+// ==================================================
+// MODULES
+// ==================================================
+function initModuleConfigSelect(){
+  const sel=$('module-config-select');
+  if(!sel)return;
+  const opts=Object.entries(MODULE_CONFIG_SPECS).map(([moduleId,spec])=>
+    `<option value="${escapeHtml(moduleId)}">${escapeHtml(spec.label||moduleId)}</option>`);
+  sel.innerHTML=opts.join('');
+  if(!MODULE_CONFIG_SPECS[_selectedModuleConfig]){
+    _selectedModuleConfig=Object.keys(MODULE_CONFIG_SPECS)[0]||'';
+  }
+  sel.value=_selectedModuleConfig||'';
+  sel.onchange=()=>{
+    _selectedModuleConfig=sel.value;
+    loadSelectedModuleConfig(false);
+  };
+}
+async function loadSelectedModuleConfig(force=false){
+  const body=$('module-config-body');
+  if(!body)return;
+  const moduleId=_selectedModuleConfig;
+  const spec=MODULE_CONFIG_SPECS[moduleId];
+  if(!spec){
+    body.innerHTML='<div class="empty">Dieses Modul hat aktuell keine Runtime-Konfiguration.</div>';
+    return;
+  }
+  if(force)body.innerHTML='<div class="loading"><div class="spinner"></div>Lade Konfiguration...</div>';
+  const data=await api(spec.getPath);
+  const cfg=spec.parseGet?spec.parseGet(data):data;
+  if(!cfg||typeof cfg!=='object'){
+    body.innerHTML=
+      '<div class="empty">Konfiguration nicht verfuegbar. Endpoint: <code>'+escapeHtml(spec.getPath)+
+      '</code></div>';
+    return;
+  }
+  const rows=spec.fields.map(field=>{
+    const inputId='cfg_'+moduleId+'_'+field.key;
+    const value=_configInputValue(cfg[field.key],field);
+    let inputHtml='';
+    if(field.type==='boolean'){
+      inputHtml=`<select id="${inputId}" data-key="${field.key}" data-type="${field.type}" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px;color:var(--text);font-size:12px;outline:none">
+        <option value="true"${value==='true'?' selected':''}>true</option>
+        <option value="false"${value==='false'?' selected':''}>false</option>
+      </select>`;
+    }else{
+      const step=field.step!==undefined?` step="${field.step}"`:'';
+      const min=field.min!==undefined?` min="${field.min}"`:'';
+      const max=field.max!==undefined?` max="${field.max}"`:'';
+      const inputType=field.type==='number'?'number':'text';
+      inputHtml=`<input id="${inputId}" data-key="${field.key}" data-type="${field.type}" type="${inputType}" value="${escapeHtml(value)}"${step}${min}${max} style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text);font-size:12px;outline:none">`;
+    }
+    return `<div style="display:grid;grid-template-columns:220px 1fr;gap:8px;align-items:center;margin-bottom:8px">
+      <label for="${inputId}" style="font-size:11px;color:var(--dim)">${escapeHtml(field.label||field.key)}</label>
+      ${inputHtml}
+    </div>`;
+  }).join('');
+  body.innerHTML=
+    `<div style="font-size:11px;color:var(--dim);margin-bottom:8px">Quelle: <code>${escapeHtml(spec.getPath)}</code></div>`+
+    rows+
+    `<div style="display:flex;gap:8px;margin-top:10px">
+      <button id="module-config-save" style="background:var(--accent);color:#fff;border:none;border-radius:6px;padding:7px 12px;cursor:pointer;font-size:11px;font-weight:600">Speichern</button>
+      <button id="module-config-reset" style="background:var(--surface);border:1px solid var(--border);color:var(--dim);border-radius:6px;padding:7px 12px;cursor:pointer;font-size:11px;font-weight:600">Reset</button>
+    </div>`;
+  $('module-config-save')?.addEventListener('click',()=>saveSelectedModuleConfig());
+  $('module-config-reset')?.addEventListener('click',()=>loadSelectedModuleConfig(true));
+}
+async function saveSelectedModuleConfig(){
+  const moduleId=_selectedModuleConfig;
+  const spec=MODULE_CONFIG_SPECS[moduleId];
+  if(!spec)return;
+  const body=$('module-config-body');
+  if(!body)return;
+  const payload={};
+  spec.fields.forEach(field=>{
+    const input=body.querySelector('[data-key="'+field.key+'"]');
+    if(!input)return;
+    const parsed=_parseConfigInput(input,field);
+    if(parsed!==null&&parsed!==undefined&&parsed!=='')payload[field.key]=parsed;
+  });
+  try{
+    const resp=await fetch(API+spec.postPath,withAuth({
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(payload),
+    }));
+    const data=await resp.json().catch(()=>null);
+    if(!resp.ok||(data&&data.ok===false)||data?.status==='error'){
+      throw new Error(data?.error||data?.message||('HTTP '+resp.status));
+    }
+    addHistory('Konfiguration gespeichert: '+escapeHtml(spec.label||moduleId));
+    await loadSelectedModuleConfig(true);
+  }catch(e){
+    addHistory('\u26a0\ufe0f Konfig-Fehler '+escapeHtml(spec.label||moduleId)+': '+escapeHtml(e.message||'unbekannt'));
+  }
+}
+async function loadModules(){
+  const c=$('module-list');if(!c)return;
+  c.innerHTML='<div class="loading"><div class="spinner"></div>Lade Modul-Status...</div>';
+  try{
+    initModuleConfigSelect();
+    await syncModuleStates();
+    const health=await fetchModuleHealth();
+    c.innerHTML='';
+    MODULE_DEFS.forEach(m=>{
+      // Detected state from APIs
+      const detected=health[m.id]||'unknown';
+      const detail=health._details?.[m.id]||'Status unbekannt';
+      const st=moduleStates[m.id]||detected;
+      const toggleCls=st==='active'?'on':st==='learning'?'learn':'off';
+      const badgeCls=st==='active'?'g':st==='learning'?'y':st==='off'?'r':'b';
+      const stTitles={active:'Aktiv: Auto-Apply (wenn beide Module aktiv)',learning:'Learning: Vorschlaege zur manuellen Uebernahme',off:'Deaktiviert'};
+      const card=el('div','mod-card',
+        `<div class="mod-icon" style="background:${m.color}20;color:${m.color}">${m.icon}</div>
+        <div class="mod-info"><h3>${escapeHtml(m.name)}</h3><p>${escapeHtml(m.desc)}</p>
+        <div style="margin-top:4px">${badge(detail,badgeCls)}</div></div>
+        <div class="mod-status">
+          <button class="mod-toggle ${toggleCls}" data-mod="${m.id}" title="${stTitles[st]||st}"></button>
+          <span class="mod-st-label" style="font-size:9px;color:var(--dim)">${escapeHtml(st)}</span>
+          ${detected!==st?`<span style="font-size:8px;color:var(--yellow)" title="Konfigurierter Modulstatus">\u2699</span>`:''}
+        </div>`);
+      card.querySelector('.mod-toggle').addEventListener('click',function(){toggleModule(this,m.id)});
+      card.addEventListener('click',ev=>{
+        if(ev.target&&ev.target.closest&&ev.target.closest('.mod-toggle'))return;
+        if(MODULE_CONFIG_SPECS[m.id]){
+          _selectedModuleConfig=m.id;
+          const sel=$('module-config-select');
+          if(sel)sel.value=m.id;
+          loadSelectedModuleConfig(false);
+        }
+      });
+      c.appendChild(card);
+    });
+    loadSelectedModuleConfig(false);
+  }catch(e){
+    c.innerHTML='<div class="empty">\u26a0\ufe0f Modul-Status konnte nicht geladen werden.<br>'+escapeHtml(e.message)+'</div>';
+  }
+}
+
+// -- Module Toggle (calls Module Control API + persists + syncs pipeline) --
+async function toggleModule(btn,modId){
+  const states=['on','learn','off'];
+  const labels=['active','learning','off'];
+  const current=[...btn.classList].find(c=>states.includes(c))||'off';
+  const previousState=labels[Math.max(0,states.indexOf(current))]||'off';
+  let idx=states.indexOf(current);
+  idx=(idx+1)%3;
+  const newState=labels[idx];
+  btn.className='mod-toggle '+states[idx];
+  btn.title=newState;
+  const stLabel=btn.parentElement.querySelector('.mod-st-label');
+  if(stLabel)stLabel.textContent=newState;
+
+  // Call Module Control API (v1.3.0)
+  try{
+    const res=await fetch(API+'/api/v1/modules/'+encodeURIComponent(modId)+'/configure',withAuth({
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({state:newState})
+    }));
+    const data=await res.json().catch(()=>null);
+    if(!res.ok||!data?.ok){
+      throw new Error(data?.error||('HTTP '+res.status));
+    }
+    const persistedState=data?.state||newState;
+    moduleStates[modId]=persistedState;
+    localStorage.setItem('styx_module_states',JSON.stringify(moduleStates));
+    _moduleStatesSyncedAt=Date.now();
+    if(stLabel)stLabel.textContent=persistedState;
+    addHistory('Modul '+escapeHtml(MODULE_DEFS.find(m=>m.id===modId)?.name||modId)+' \u2192 '+persistedState+' (Backend)');
+  }catch(e){
+    // Roll back optimistic UI change when backend write failed
+    const rollbackClass=states[labels.indexOf(previousState)]||'off';
+    btn.className='mod-toggle '+rollbackClass;
+    btn.title=previousState;
+    if(stLabel)stLabel.textContent=previousState;
+    addHistory('\u26a0\ufe0f Modul '+escapeHtml(MODULE_DEFS.find(m=>m.id===modId)?.name||modId)+' konnte nicht gespeichert werden: '+escapeHtml(e.message||'API offline'));
+    return;
+  }
+  // Invalidate health cache so next load re-evaluates
+  _moduleHealth=null;_healthTs=0;
+  // Update pipeline indicator on Styx page
+  const pipes=document.querySelectorAll('#pipelines .pipe');
+  pipes.forEach(p=>{
+    const span=p.querySelector('span:last-child');
+    const def=MODULE_DEFS.find(m=>m.name===span?.textContent);
+    if(def&&def.id===modId)p.className='pipe pipe-'+newState;
+  });
+}
+
+// -- Automation List Loader (v1.3.0) --
+async function loadAutomations(){
+  const c=$('automation-list');if(!c)return;
+  try{
+    const data=await api('/api/v1/automations');
+    const items=data?.automations||[];
+    if(!items.length){c.innerHTML='<div class="empty">Noch keine Automationen erstellt. Akzeptiere Vorschlaege um HA-Automationen zu erzeugen.</div>';return}
+    c.innerHTML='';
+    items.forEach(a=>{
+      c.appendChild(el('div','pat',
+        `<span>${escapeHtml(a.alias||a.id||'?')}</span><span class="meta">${escapeHtml(a.created_at||'')}</span>`));
+    });
+  }catch(e){c.innerHTML='<div class="empty">Automationen-API nicht erreichbar</div>'}
+}
+
+// -- Media Zones & Musikwolke Panel (v3.1.0) --
+async function loadMediaZones(){
+  const c=$('media-zones-panel');if(!c)return;
+  try{
+    const [zonesRes,mkRes]=await Promise.allSettled([api('/api/v1/media/zones'),api('/api/v1/media/musikwolke')]);
+    const zones=(zonesRes.status==='fulfilled'?zonesRes.value:null);
+    const mk=(mkRes.status==='fulfilled'?mkRes.value:null);
+    const zoneData=zones?.zones||{};
+    const zoneIds=Object.keys(zoneData);
+    const sessions=mk?.sessions||[];
+    let html='';
+    if(zoneIds.length){
+      html+='<table class="tbl"><tr><th>Zone</th><th>Player</th></tr>';
+      zoneIds.forEach(z=>{
+        const players=zoneData[z];
+        const pList=Array.isArray(players)?players.map(p=>escapeHtml(typeof p==='string'?p:p.entity_id||'?')).join(', '):'--';
+        html+=`<tr><td>${escapeHtml(z)}</td><td>${pList}</td></tr>`;
+      });
+      html+='</table>';
+    }else{
+      html+='<div style="font-size:11px;color:var(--dim);margin-bottom:8px">Keine Zonen konfiguriert. Weise Media Player ueber die API Zonen zu.</div>';
+    }
+    if(sessions.length){
+      html+='<div style="margin-top:10px;font-size:11px"><strong>Musikwolke Sessions:</strong></div>';
+      sessions.forEach(s=>{
+        const sid=escapeHtml(s.session_id||'?');
+        const pid=escapeHtml(s.person_id||'?');
+        const zone=escapeHtml(s.current_zone||s.source_zone||'?');
+        html+=`<div class="pat"><span>${pid}</span><span class="arr">&rarr;</span><span>${zone}</span><span class="meta">${sid}</span></div>`;
+      });
+    }else{
+      html+='<div style="margin-top:8px;font-size:11px;color:var(--dim)">Keine aktiven Musikwolke-Sessions. Starte via Chat: &quot;Musikwolke starten&quot;</div>';
+    }
+    c.innerHTML=html;
+  }catch(e){c.innerHTML='<div class="empty">Media Zones nicht erreichbar</div>'}
+}
+
+// -- Waste Collection Panel (v3.2.0) --
+async function loadWastePanel(){
+  const c=$('waste-panel');if(!c)return;
+  try{
+    const r=await api('/api/v1/waste/status');
+    if(!r?.ok){c.innerHTML='<div class="empty">Müllabfuhr-Modul nicht aktiv. Konfiguriere waste_collection_schedule + Waste-Entities in den Einstellungen.</div>';return}
+    const cols=r.collections||[];
+    const today=r.today||[];
+    const tomorrow=r.tomorrow||[];
+    let html='';
+    if(today.length){html+=`<div style="margin-bottom:8px">${badge('Heute: '+today.join(', '),'r')}</div>`}
+    if(tomorrow.length){html+=`<div style="margin-bottom:8px">${badge('Morgen: '+tomorrow.join(', '),'y')}</div>`}
+    if(cols.length){
+      html+='<table class="tbl"><tr><th>Typ</th><th>In Tagen</th><th>Datum</th></tr>';
+      cols.forEach(c=>{
+        const cls=c.days_to===0?'style="color:var(--red);font-weight:700"':c.days_to===1?'style="color:var(--yellow);font-weight:600"':'';
+        html+=`<tr><td ${cls}>${escapeHtml(c.waste_type||'?')}</td><td ${cls}>${c.days_to}</td><td>${escapeHtml(c.next_date||'')}</td></tr>`;
+      });
+      html+='</table>';
+    }else{
+      html+='<div class="empty">Keine Abfuhrtermine geladen. Sensordaten werden automatisch von der HACS-Integration gesendet.</div>';
+    }
+    c.innerHTML=html;
+  }catch(e){c.innerHTML='<div class="empty">Müllabfuhr-API nicht erreichbar</div>'}
+}
+
+// -- Birthday Panel (v3.2.0) --
+async function loadBirthdayPanel(){
+  const c=$('birthday-panel');if(!c)return;
+  try{
+    const r=await api('/api/v1/birthday/status');
+    if(!r?.ok){c.innerHTML='<div class="empty">Geburtstags-Modul nicht aktiv. Konfiguriere Kalender-Entities in den Einstellungen.</div>';return}
+    const today=r.today||[];
+    const upcoming=r.upcoming||[];
+    let html='';
+    if(today.length){
+      html+='<div style="margin-bottom:8px">';
+      today.forEach(b=>{
+        const age=b.age?` (wird ${b.age})`:'';
+        html+=badge(b.name+age+' - Heute!','g')+' ';
+      });
+      html+='</div>';
+    }
+    if(upcoming.length){
+      html+='<table class="tbl"><tr><th>Name</th><th>In Tagen</th><th>Datum</th><th>Alter</th></tr>';
+      upcoming.forEach(b=>{
+        html+=`<tr><td>${escapeHtml(b.name||'?')}</td><td>${b.days_until}</td><td>${escapeHtml(b.date||'')}</td><td>${b.age||'--'}</td></tr>`;
+      });
+      html+='</table>';
+    }else if(!today.length){
+      html+='<div class="empty">Keine bevorstehenden Geburtstage in den naechsten 14 Tagen.</div>';
+    }
+    c.innerHTML=html;
+  }catch(e){c.innerHTML='<div class="empty">Geburtstags-API nicht erreichbar</div>'}
+}
+
+// -- News & Warnings Panel (v3.1.0) --
+async function loadNewsWarnings(){
+  const c=$('news-warnings-panel');if(!c)return;
+  try{
+    const [newsRes,warnRes]=await Promise.allSettled([
+      api('/api/v1/capabilities'),
+      fetch(API+'/api/v1/media/proactive/zone-entry',withAuth({method:'GET'}))
+        .then(r=>r.ok?r.json():null)
+        .catch(()=>null)
+    ]);
+    const caps=(newsRes.status==='fulfilled'?newsRes.value:null);
+    let html='<div style="font-size:11px;color:var(--dim)">';
+    html+='<p><strong>DuckDuckGo-Suche:</strong> Styx kann das Web durchsuchen (kein API-Key noetig)</p>';
+    html+='<p style="margin-top:4px"><strong>Nachrichten:</strong> Tagesschau + Spiegel via RSS (15-Min-Cache)</p>';
+    html+='<p style="margin-top:4px"><strong>Regionale Warnungen:</strong> NINA/BBK + DWD mit AGS-Regionalfilter</p>';
+    if(caps?.features?.web_search){
+      html+='<p style="margin-top:6px">'+badge('Web-Suche aktiv','g')+'</p>';
+    }
+    html+='<p style="margin-top:6px">Frage Styx z.B.: &quot;Aktuelle Nachrichten&quot; oder &quot;Gibt es Warnungen?&quot;</p>';
+    html+='</div>';
+    c.innerHTML=html;
+  }catch(e){c.innerHTML='<div class="empty">Info nicht verfuegbar</div>'}
+}
+
+// ==================================================
+// SETTINGS
+// ==================================================
+function _routingProviderLabel(provider){
+  const p=String(provider||'').toLowerCase();
+  return p==='cloud'?'Cloud':'Offline';
+}
+function _renderRoutingControls(status){
+  const mount=$('set-routing');
+  if(!mount)return;
+  if(!status){
+    mount.innerHTML='<div class="empty">Routing nicht verfuegbar (API offline)</div>';
+    return;
+  }
+  const offlineModels=status?.model_catalog?.offline?.models||status?.installed_models||[];
+  const cloudModels=status?.model_catalog?.cloud?.models||status?.cloud_models||[];
+  const primary=String(status.primary_provider||'offline');
+  const secondary=String(status.secondary_provider|| (primary==='offline'?'cloud':'offline'));
+  const offlineCurrent=String(status.model_catalog?.offline?.active_model||status.model||'');
+  const cloudCurrent=String(status.model_catalog?.cloud?.active_model||status.cloud_model||'');
+  const cloudConfigured=!!status.cloud_configured;
+  const providerOptions=`<option value="offline"${primary==='offline'?' selected':''}>Offline</option><option value="cloud"${primary==='cloud'?' selected':''}${cloudConfigured?'':' disabled'}>Cloud</option>`;
+  const secondaryOptions=`<option value="offline"${secondary==='offline'?' selected':''}>Offline</option><option value="cloud"${secondary==='cloud'?' selected':''}${cloudConfigured?'':' disabled'}>Cloud</option>`;
+  let html='';
+  html+='<div style="display:grid;gap:8px">';
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">';
+  html+='<label style="font-size:11px;color:var(--dim)">Primary Provider<select id="llm-primary-provider" style="width:100%;margin-top:4px;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px;color:var(--text);font-size:12px">'+providerOptions+'</select></label>';
+  html+='<label style="font-size:11px;color:var(--dim)">Secondary Provider<select id="llm-secondary-provider" style="width:100%;margin-top:4px;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px;color:var(--text);font-size:12px">'+secondaryOptions+'</select></label>';
+  html+='</div>';
+  html+='<label style="font-size:11px;color:var(--dim)">Offline Modell<select id="llm-offline-model" style="width:100%;margin-top:4px;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px;color:var(--text);font-size:12px">';
+  if(!offlineModels.length)html+='<option value="">kein Modell</option>';
+  offlineModels.forEach((m)=>{const v=String(m||'').trim();if(!v)return;html+=`<option value="${escapeHtml(v)}"${v===offlineCurrent?' selected':''}>${escapeHtml(v)}</option>`});
+  html+='</select></label>';
+  html+='<label style="font-size:11px;color:var(--dim)">Cloud Modell<select id="llm-cloud-model" style="width:100%;margin-top:4px;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px;color:var(--text);font-size:12px"'+(cloudConfigured?'':' disabled')+'>';
+  if(!cloudModels.length)html+='<option value="">kein Modell</option>';
+  cloudModels.forEach((m)=>{const v=String(m||'').trim();if(!v)return;html+=`<option value="${escapeHtml(v)}"${v===cloudCurrent?' selected':''}>${escapeHtml(v)}</option>`});
+  html+='</select></label>';
+  html+='<div style="display:flex;gap:8px;align-items:center">';
+  html+='<button onclick="saveRoutingConfig()" style="background:var(--accent);color:#fff;border:none;border-radius:6px;padding:6px 10px;cursor:pointer;font-size:11px;font-weight:600">Routing speichern</button>';
+  html+='<span style="font-size:10px;color:var(--dim)">'+(cloudConfigured?'Fallback aktiv bei Ausfall':'Cloud nicht konfiguriert (nur Offline)')+'</span>';
+  html+='</div>';
+  html+='</div>';
+  mount.innerHTML=html;
+}
+async function saveRoutingConfig(){
+  const primaryEl=$('llm-primary-provider');
+  const secondaryEl=$('llm-secondary-provider');
+  const offlineEl=$('llm-offline-model');
+  const cloudEl=$('llm-cloud-model');
+  if(!primaryEl||!secondaryEl||!offlineEl||!cloudEl)return;
+  const primary=String(primaryEl.value||'offline');
+  let secondary=String(secondaryEl.value||'cloud');
+  if(secondary===primary)secondary=(primary==='offline'?'cloud':'offline');
+  const payload={
+    primary_provider:primary,
+    secondary_provider:secondary,
+    offline_model:String(offlineEl.value||''),
+    cloud_model:String(cloudEl.value||''),
+    persist:true,
+  };
+  try{
+    const r=await fetch(API+'/chat/routing',withAuth({
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(payload),
+    }));
+    let data={};
+    try{data=await r.json()}catch(_err){data={}}
+    if(!r.ok||!data?.ok){
+      throw new Error(data?.error||data?.message||('HTTP '+r.status));
+    }
+    addHistory('LLM-Routing aktualisiert: '+_routingProviderLabel(primary)+' -> '+_routingProviderLabel(secondary));
+    await loadStyx();
+    await loadSettings();
+  }catch(e){
+    addHistory('\u26a0\ufe0f Routing-Update fehlgeschlagen: '+(e.message||'unbekannt'));
+  }
+}
+async function loadSettings(){
+  // Load all in parallel, resilient
+  const settled=await Promise.allSettled([
+    api('/chat/status'),
+    api('/telegram/status'),
+    api('/chat/memory'),
+    api('/chat/models/recommended'),
+    api('/api/v1/capabilities'),
+  ]);
+  const [statusRes,tgRes,memRes,recRes,capsRes]=settled.map(r=>r.status==='fulfilled'?r.value:null);
+  const status=statusRes,tg=tgRes,mem=memRes,rec=recRes,caps=capsRes;
+  if(status){
+    $('set-llm').innerHTML=
+      `<tr><td>Provider</td><td>${badge(status.active_provider||'--','p')}</td></tr>`+
+      `<tr><td>Chat Modell</td><td><strong>${escapeHtml(_chatModelLabel(currentModel||'primary'))}</strong></td></tr>`+
+      `<tr><td>Assistent</td><td><strong>${escapeHtml(status.assistant_name||'Styx')}</strong></td></tr>`+
+      `<tr><td>Ollama</td><td>${status.ollama_available?badge('Online','g'):badge('Offline','r')}</td></tr>`+
+      `<tr><td>Cloud API</td><td>${status.cloud_configured?badge('Konfiguriert','b'):badge('Nicht konfiguriert','y')}</td></tr>`+
+      `<tr><td>Primary</td><td>${badge(_routingProviderLabel(status.primary_provider||'offline'),'g')} · ${escapeHtml(status.primary_model||'--')}</td></tr>`+
+      `<tr><td>Secondary</td><td>${badge(_routingProviderLabel(status.secondary_provider||'cloud'),'y')} · ${escapeHtml(status.secondary_model||'--')}</td></tr>`+
+      `<tr><td>Charakter</td><td>${escapeHtml(status.character||'copilot')}</td></tr>`+
+      `<tr><td>Anfragen/h</td><td>${status.calls_this_hour||0} / ${status.max_calls_per_hour||60}</td></tr>`;
+    _renderRoutingControls(status);
+    // Models
+    const models=status?.model_catalog?.offline?.models||status.installed_models||[];
+    const cloudModels=status?.model_catalog?.cloud?.models||status.cloud_models||[];
+    const mc=$('set-models');
+    if(!models.length&&!cloudModels.length){mc.innerHTML='<div class="empty">Keine Modelle gefunden</div>'}
+    else{
+      mc.innerHTML='';
+      models.forEach((m)=>{
+        const v=String(m||'');
+        const active=v===String(status.model_catalog?.offline?.active_model||status.model||'');
+        mc.appendChild(el('div','pat',`<span>${escapeHtml(v)}</span><span class="meta">${badge('Offline','b')}${active?(' '+badge('Aktiv','g')):''}</span>`));
+      });
+      cloudModels.forEach((m)=>{
+        const v=String(m||'');
+        const active=v===String(status.model_catalog?.cloud?.active_model||status.cloud_model||'');
+        mc.appendChild(el('div','pat',`<span>${escapeHtml(v)}</span><span class="meta">${badge('Cloud','p')}${active?(' '+badge('Aktiv','g')):''}</span>`));
+      });
+    }
+    // System (real MCP status from capabilities)
+    const mcpOk=caps?.ok===true;
+    $('set-system').innerHTML=
+      `<tr><td>Version</td><td>${status.version?badge('v'+status.version,'p'):badge('--','y')}</td></tr>`+
+      `<tr><td>API Route</td><td><code>${escapeHtml(API||'(direct)')}</code> ${badge(API_MODE==='ingress'?'Ingress':'Direct','b')}</td></tr>`+
+      `<tr><td>Ollama URL</td><td><code>${escapeHtml(status.ollama_url||'localhost:11434')}</code></td></tr>`+
+      `<tr><td>Cloud URL</td><td><code>${escapeHtml(status.cloud_api_url||'--')}</code></td></tr>`+
+      `<tr><td>Telegram</td><td>${tg?.running?badge('Aktiv','g'):badge('Aus','y')}</td></tr>`+
+      `<tr><td>MCP Server</td><td>${mcpOk?badge('Aktiv','g'):badge('Offline','r')}</td></tr>`+
+      (caps?.capabilities?.length?`<tr><td>Features</td><td style="font-size:10px;color:var(--dim)">${escapeHtml(caps.capabilities.slice(0,5).join(', '))}${caps.capabilities.length>5?'…':''}</td></tr>`:'');
+  }else{
+    $('set-llm').innerHTML='<tr><td colspan="2" style="color:var(--red)">\u26a0\ufe0f Core API nicht erreichbar</td></tr>';
+    _renderRoutingControls(null);
+  }
+  // Memory
+  const mc2=$('set-memory');
+  if(mem&&mem.stats){
+    mc2.innerHTML=`<table class="tbl">
+      <tr><td>Nachrichten</td><td><strong>${mem.stats.total_messages||0}</strong></td></tr>
+      <tr><td>Praeferenzen</td><td><strong>${(mem.preferences||[]).length}</strong></td></tr>
+      <tr><td>Themen</td><td><strong>${mem.stats.topics_count||0}</strong></td></tr>
+      <tr><td>RAG</td><td>${mem.rag_active?badge('Aktiv','g'):badge('Inaktiv','y')}</td></tr>
+      <tr><td>Speicher</td><td>${mem.stats.db_size_mb?mem.stats.db_size_mb.toFixed(1)+' MB':'--'}</td></tr>
+    </table>`;
+  }else{mc2.innerHTML='<div class="empty">Gedaechtnis nicht initialisiert oder API offline</div>'}
+  // Recommended
+  const rc=$('set-rec');
+  if(rec&&rec.models){
+    rc.innerHTML='';
+    rec.models.forEach(m=>{
+      const mbadges=[m.installed?badge('Installiert','g'):badge((m.size_mb||'?')+'MB','y')];
+      if(m.active)mbadges.push(badge('Aktiv','p'));
+      if(m.supports_tools)mbadges.push(badge('Tools','b'));
+      mbadges.push(badge('Offline','b'));
+      rc.appendChild(el('div','pat',
+        `<div><strong>${escapeHtml(m.name||'')}</strong><br><span style="font-size:10px;color:var(--dim)">${escapeHtml(m.description||'')}</span></div>
+        <div class="meta">${mbadges.join(' ')}</div>`));
+    });
+    (rec.cloud_models||[]).forEach(m=>{
+      const mbadges=[badge('Cloud','p')];
+      if(m.active)mbadges.push(badge('Aktiv','g'));
+      rc.appendChild(el('div','pat',
+        `<div><strong>${escapeHtml(m.name||m.id||'')}</strong><br><span style="font-size:10px;color:var(--dim)">${escapeHtml(m.description||'Cloud fallback Modell')}</span></div>
+        <div class="meta">${mbadges.join(' ')}</div>`));
+    });
+  }else{rc.innerHTML='<div class="empty">Keine Empfehlungen verfuegbar</div>'}
+}
+
+// ==================================================
+// TREND CHART (mini canvas)
+// ==================================================
+function drawTrend(canvasId,dataPoints,realData){
+  const canvas=$(canvasId);if(!canvas||!canvas.getContext)return;
+  const ctx=canvas.getContext('2d');
+  const W=Math.max(canvas.parentElement.clientWidth||200,100);const H=120;
+  canvas.width=W;canvas.height=H;
+  ctx.clearRect(0,0,W,H);
+  if(!realData||realData.length<2){
+    // No fake data — show honest "insufficient data" message
+    ctx.fillStyle='#1e2a3a';ctx.fillRect(0,0,W,H);
+    ctx.strokeStyle='#1e2a3a';ctx.lineWidth=.5;
+    for(let y=0;y<H;y+=30){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke()}
+    ctx.fillStyle='#6b7a8d';ctx.font='11px Inter,sans-serif';ctx.textAlign='center';
+    ctx.fillText('Noch nicht genug Daten',W/2,H/2-8);
+    ctx.font='9px Inter,sans-serif';
+    ctx.fillText('Styx sammelt automatisch Verlaufsdaten',W/2,H/2+8);
+    ctx.textAlign='left';
+    return;
+  }
+  const pts=Math.min(realData.length,48);
+  const data=[];
+  for(let i=0;i<pts;i++){
+    const idx=Math.floor(i*realData.length/pts);
+    data.push(Math.max(0,Math.min(1,realData[idx])));
+  }
+  // Grid
+  ctx.strokeStyle='#1e2a3a';ctx.lineWidth=.5;
+  for(let y=0;y<H;y+=30){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke()}
+  // Line
+  const grad=ctx.createLinearGradient(0,0,W,0);
+  grad.addColorStop(0,'#7c6aef');grad.addColorStop(.5,'#22d3ee');grad.addColorStop(1,'#34d399');
+  ctx.strokeStyle=grad;ctx.lineWidth=2;ctx.beginPath();
+  data.forEach((v,i)=>{
+    const x=(i/(pts-1))*W;const y=H-v*H*.8-H*.1;
+    i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+  });
+  ctx.stroke();
+  // Fill area
+  ctx.lineTo(W,H);ctx.lineTo(0,H);ctx.closePath();
+  const fillGrad=ctx.createLinearGradient(0,0,0,H);
+  fillGrad.addColorStop(0,'rgba(124,106,239,.15)');fillGrad.addColorStop(1,'rgba(124,106,239,0)');
+  ctx.fillStyle=fillGrad;ctx.fill();
+  // Labels
+  ctx.fillStyle='#6b7a8d';ctx.font='9px Inter,sans-serif';
+  ctx.fillText(pts+'pts',4,H-4);ctx.fillText('jetzt',W-28,H-4);
+}
+
+// ==================================================
+// SCENE MANAGEMENT (v3.4.0)
+// ==================================================
+async function loadScenes(){
+  const c=$('hab-scenes');if(!c)return;
+  try{
+    const r=await api('/api/v1/scenes');
+    const scenes=r?.scenes||[];
+    if(!scenes.length){
+      c.innerHTML='<div class="empty">Noch keine Szenen gespeichert. Nutze den Button auf einer Zone oder sage Styx "Szene speichern".</div>';
+    }else{
+      let html='';
+      // Group by zone
+      const byZone={};
+      scenes.forEach(s=>{const z=s.zone_name||s.zone_id||'?';(byZone[z]=byZone[z]||[]).push(s)});
+      Object.entries(byZone).forEach(([zname,zscenes])=>{
+        html+=`<div style="font-size:11px;color:var(--cyan);margin:8px 0 4px;font-weight:600">${escapeHtml(zname)}</div>`;
+        zscenes.forEach(s=>{
+          const cnt=Object.keys(s.entity_states||{}).length;
+          const applied=s.applied_count||0;
+          const src=s.source==='learned'?' [gelernt]':s.source==='preset'?' [preset]':'';
+          html+=`<div class="scene-item">
+            <div class="scene-name">${escapeHtml(s.name)}${src}</div>
+            <div class="scene-meta">${cnt} Entitäten | ${applied}x angewendet</div>
+            <div class="scene-actions">
+              <button onclick="applyScene('${escapeHtml(s.scene_id)}')" title="Szene anwenden">&#x25b6;</button>
+              <button onclick="deleteScene('${escapeHtml(s.scene_id)}')" title="Szene löschen" style="color:var(--red)">&#x2715;</button>
+            </div>
+          </div>`;
+        });
+      });
+      c.innerHTML=html;
+    }
+  }catch(e){c.innerHTML='<div class="empty">Fehler beim Laden der Szenen.</div>'}
+  // Presets
+  const pc=$('hab-presets');if(!pc)return;
+  try{
+    const pr=await api('/api/v1/scenes/presets');
+    const presets=pr?.presets||[];
+    pc.innerHTML=presets.map(p=>`<span class="preset-chip" title="${escapeHtml(p.description)}">${escapeHtml(p.name)}</span>`).join('');
+  }catch(e){pc.innerHTML=''}
+}
+
+async function saveZoneScene(zoneId,zoneName,entityIds){
+  const name=prompt('Szenen-Name (optional):','');
+  try{
+    const r=await fetch(API+'/api/v1/scenes/create',withAuth({
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({zone_id:zoneId,zone_name:zoneName,name:name||undefined,entity_ids:entityIds})
+    }));
+    const d=await r.json();
+    if(d.success){
+      addHistory('Szene gespeichert: '+(d.scene?.name||zoneId));
+      loadScenes();
+    }else{addHistory('Szene-Fehler: '+(d.error||'unbekannt'))}
+  }catch(e){addHistory('Szene-Fehler: '+e.message)}
+}
+
+async function applyScene(sceneId){
+  try{
+    const r=await fetch(
+      API+'/api/v1/scenes/'+sceneId+'/apply',
+      withAuth({method:'POST',headers:{'Content-Type':'application/json'}})
+    );
+    const d=await r.json();
+    if(d.success){
+      addHistory('Szene angewendet: '+(d.scene?.name||sceneId));
+      loadScenes();
+    }else{addHistory('Szene-Fehler: '+(d.error||'unbekannt'))}
+  }catch(e){addHistory('Szene-Fehler: '+e.message)}
+}
+
+async function deleteScene(sceneId){
+  if(!confirm('Szene wirklich löschen?'))return;
+  try{
+    const r=await fetch(API+'/api/v1/scenes/'+sceneId,withAuth({method:'DELETE'}));
+    const d=await r.json();
+    if(d.success){addHistory('Szene gelöscht');loadScenes()}
+    else{addHistory('Lösch-Fehler: '+(d.error||'unbekannt'))}
+  }catch(e){addHistory('Lösch-Fehler: '+e.message)}
+}
+
+// ==================================================
+// HOMEKIT BRIDGE (v3.4.0)
+// ==================================================
+async function toggleHomeKit(zoneId,zoneName,entityIds){
+  const action=confirm(`Zone "${zoneName}" zu HomeKit hinzufügen?\n\n${entityIds.length} Entitäten werden exponiert.\nAbbrechen = HomeKit für Zone deaktivieren.`);
+  try{
+    const r=await fetch(API+'/api/v1/homekit/toggle',withAuth({
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({zone_id:zoneId,zone_name:zoneName,entity_ids:entityIds,enabled:action})
+    }));
+    const d=await r.json();
+    if(d.success){
+      const msg=action?`HomeKit aktiviert: ${zoneName} (${d.entities_exposed} Entitäten)`:`HomeKit deaktiviert: ${zoneName}`;
+      addHistory(msg);
+    }else{addHistory('HomeKit-Fehler: '+(d.error||'unbekannt'))}
+  }catch(e){addHistory('HomeKit-Fehler: '+e.message)}
+}
+
+// ==================================================
+// PAGE LOADER — Resilient wrapper
+// ==================================================
+const _loaders={styx:loadStyx,habitus:async()=>{await loadHabitus();loadEntitySuggestions('hab-entity-suggestions');loadScenes();},mood:loadMood,modules:async()=>{await loadModules();loadAutomations();loadMediaZones();loadNewsWarnings();loadWastePanel();loadBirthdayPanel()},haushalt:loadHaushalt,settings:loadSettings};
+function loadPage(p){
+  const fn=_loaders[p];
+  if(!fn)return;
+  fn().catch(e=>{
+    console.error('Page load error ['+p+']:',e);
+    const pg=$('page-'+p);
+    if(pg&&!pg.querySelector('.page-error')){
+      const err=el('div','card page-error',
+        `<p style="color:var(--red)">\u26a0\ufe0f Fehler beim Laden: ${escapeHtml(e.message)}</p>
+         <button onclick="loadPage('${escapeHtml(p)}')" style="margin-top:8px;padding:6px 14px;background:var(--accent);color:#fff;border:none;border-radius:6px;cursor:pointer">Erneut versuchen</button>`);
+      err.style.margin='16px';
+      pg.insertBefore(err,pg.firstChild);
+    }
+  });
+}
+
+// Boot — resilient startup
+loadStyx().catch(e=>console.error('Boot error:',e));
+// Auto-refresh Styx every 30s
+setInterval(()=>{
+  try{
+    if(document.querySelector('.nav button.active')?.dataset.page==='styx')loadStyx().catch(()=>{});
+  }catch(e){}
+},30000);
+</script>
+</body>
+</html>

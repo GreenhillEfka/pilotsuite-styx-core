@@ -1,0 +1,91 @@
+{
+  "schema_version": "0.1",
+  "reserved_namespaces": ["sys", "aicp", "user"],
+  "tags": [
+    {
+      "id": "aicp.kind.light",
+      "type": "tag",
+      "icon": "mdi:lightbulb-on",
+      "color": "#FDD835",
+      "display": {
+        "de": "Licht",
+        "en": "Light"
+      },
+      "description": {
+        "de": "Allgemeine Lichtquellen (Schalter, Deckenlampen, Spots).",
+        "en": "General lighting entities (switches, ceiling, spots)."
+      },
+      "governance": {
+        "visibility": "public",
+        "source": "system"
+      },
+      "ha": {
+        "materialize_as_label": true
+      }
+    },
+    {
+      "id": "aicp.role.safety_critical",
+      "type": "role",
+      "icon": "mdi:shield-alert",
+      "color": "#D32F2F",
+      "aliases": ["aicp.role.critical"],
+      "display": {
+        "de": "Sicherheitskritisch",
+        "en": "Safety critical"
+      },
+      "description": {
+        "de": "Darf nicht automatisch deaktiviert werden, zusätzlich bestätigen.",
+        "en": "Must never be disabled automatically; require confirmation."
+      },
+      "governance": {
+        "visibility": "public",
+        "source": "system",
+        "pii_risk": "none"
+      },
+      "ha": {
+        "materialize_as_label": true
+      }
+    },
+    {
+      "id": "aicp.state.needs_repair",
+      "type": "state",
+      "icon": "mdi:tools",
+      "color": "#FFA000",
+      "display": {
+        "de": "Reparatur nötig",
+        "en": "Needs repair"
+      },
+      "description": {
+        "de": "Von Prüfungen/Candidates markiert, verlangt Eingriff.",
+        "en": "Flagged by diagnostics/candidates and needs intervention."
+      },
+      "governance": {
+        "visibility": "public",
+        "source": "system"
+      },
+      "ha": {
+        "materialize_as_label": true
+      }
+    },
+    {
+      "id": "sys.debug.no_export",
+      "type": "tag",
+      "icon": "mdi:lock",
+      "display": {
+        "de": "(intern)",
+        "en": "(internal)"
+      },
+      "description": {
+        "de": "Nur intern sichtbar; wird nie als Label angelegt.",
+        "en": "Internal-only marker; never materialized in HA."
+      },
+      "governance": {
+        "visibility": "internal",
+        "source": "system"
+      },
+      "ha": {
+        "materialize_as_label": false
+      }
+    }
+  ]
+}
