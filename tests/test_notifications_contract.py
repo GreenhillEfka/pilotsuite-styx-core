@@ -308,6 +308,44 @@ def test_notifications_subscription_update_contract_mutates_one_device_and_keeps
     assert refreshed_list.get_json()["subscriptions"][0]["preferences"]["notify_system"] is True
 
 
+def test_notifications_unsubscribe_contract_removes_one_device_and_keeps_list_projection_in_sync(client):
+    response = client.post(
+        "/api/v1/notifications/unsubscribe",
+        json={"device_id": "wallpanel_kitchen"},
+    )
+    assert response.status_code == 200
+    assert response.get_json() == {
+        "ok": True,
+        "unsubscribed": {
+            "id": "sub_wallpanel_kitchen",
+            "device_id": "wallpanel_kitchen",
+            "device_name": "Kitchen Wall Panel",
+            "device_type": "tablet",
+            "push_token": "expo_kitch...",
+            "enabled": True,
+            "preferences": {
+                "notify_mood": False,
+                "notify_alerts": True,
+                "notify_suggestions": True,
+                "notify_system": False,
+            },
+            "ha_entity_id": "notify.kitchen_wallpanel",
+            "last_seen": "2026-04-08T04:39:00+00:00",
+            "created_at": "2026-04-08T02:55:00+00:00",
+        },
+    }
+
+    refreshed_list = client.get("/api/v1/notifications/subscriptions")
+    assert refreshed_list.status_code == 200
+    assert refreshed_list.get_json()["count"] == 2
+    assert refreshed_list.get_json()["enabled_count"] == 1
+    assert {subscription["device_id"] for subscription in refreshed_list.get_json()["subscriptions"]} == {
+        "mobile_andreas_iphone",
+        "voice_hub_livingroom",
+    }
+
+
+
 def test_notifications_subscription_update_contract_rejects_invalid_payloads_and_unknown_devices(client):
     invalid_body = client.put("/api/v1/notifications/subscriptions/mobile_andreas_iphone")
     assert invalid_body.status_code == 400
@@ -341,6 +379,27 @@ def test_notifications_subscription_update_contract_rejects_invalid_payloads_and
     not_found = client.put(
         "/api/v1/notifications/subscriptions/unknown_device",
         json={"enabled": True},
+    )
+    assert not_found.status_code == 404
+    assert not_found.get_json()["error"] == "device_not_found"
+
+
+
+def test_notifications_unsubscribe_contract_rejects_invalid_payloads_and_unknown_devices(client):
+    invalid_body = client.post("/api/v1/notifications/unsubscribe")
+    assert invalid_body.status_code == 400
+    assert invalid_body.get_json()["error"] == "invalid_body"
+
+    invalid_device_id = client.post(
+        "/api/v1/notifications/unsubscribe",
+        json={"device_id": "   "},
+    )
+    assert invalid_device_id.status_code == 400
+    assert invalid_device_id.get_json()["error"] == "invalid_device_id"
+
+    not_found = client.post(
+        "/api/v1/notifications/unsubscribe",
+        json={"device_id": "unknown_device"},
     )
     assert not_found.status_code == 404
     assert not_found.get_json()["error"] == "device_not_found"

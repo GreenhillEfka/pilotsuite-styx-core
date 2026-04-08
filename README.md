@@ -7,7 +7,7 @@
 ## Overview
 
 PilotSuite Core ist der aktuelle `v20.0.0`-Runtime-Baum des Add-ons.
-Der gelandete Scope ist derzeit bewusst schmal: Health-Endpoint, `/version`, read-only `/api/v1/presence`, read-only `/api/v1/analytics`, read-only `/api/v1/notifications`, read-only `/api/v1/notifications/digest`, read-only `/api/v1/notifications/pending`, read-only `/api/v1/notifications/stats`, read-only `/api/v1/notifications/subscriptions`, minimaler Single-Device-Write auf `/api/v1/notifications/subscriptions/{device_id}`, read-only `/api/v1/zones`, plus `widget_positions`-API mit lokaler Persistenz.
+Der gelandete Scope ist derzeit bewusst schmal: Health-Endpoint, `/version`, read-only `/api/v1/presence`, read-only `/api/v1/analytics`, read-only `/api/v1/notifications`, read-only `/api/v1/notifications/digest`, read-only `/api/v1/notifications/pending`, read-only `/api/v1/notifications/stats`, read-only `/api/v1/notifications/subscriptions`, minimaler Single-Device-Write auf `/api/v1/notifications/subscriptions/{device_id}`, minimaler Subscription-Remove auf `/api/v1/notifications/unsubscribe`, read-only `/api/v1/zones`, plus `widget_positions`-API mit lokaler Persistenz.
 Frühere Legacy-Endpunkte werden in diesem Worktree erst wieder öffentlich geführt, wenn sie gegen die echte Runtime neu gelandet sind.
 
 ## Architecture
@@ -60,6 +60,7 @@ ollama_port: 11434       # Ollama server port
 | `/api/v1/notifications/stats` | GET | Read-only Notification-Statistik als kleinster Metrics-Follow-up-Slice aus dem historischen `v20`-Contract |
 | `/api/v1/notifications/subscriptions` | GET | Read-only Device-Subscription-Snapshot als kleinster Subscription-Follow-up-Slice aus dem historischen `v20`-Contract |
 | `/api/v1/notifications/subscriptions/{device_id}` | PUT | Minimales Update für `enabled` und bekannte Preference-Flags eines bestehenden Subscription-Devices |
+| `/api/v1/notifications/unsubscribe` | POST | Minimaler Remove eines bestehenden Subscription-Devices über `device_id` |
 | `/api/v1/zones` | GET | Read-only Habitus-Zonenkatalog aus dem historischen `v20`-Bestand |
 | `/api/v1/widgets/positions` | GET, POST | Liste aller Widget-Positionen, Einzelposition speichern |
 | `/api/v1/widgets/positions/bulk` | POST | Mehrere Widget-Positionen gesammelt speichern |
@@ -84,7 +85,8 @@ Nicht Teil der aktuellen `v20`-Runtime bleiben weiterhin nur nicht inventarisier
 - ✅ **Notifications Pending Queue** — `/api/v1/notifications/pending` liefert den kleinsten read-only Delivery-Follow-up-Slice für noch ausstehende Zustellungen
 - ✅ **Notifications Stats** — `/api/v1/notifications/stats` liefert den kleinsten read-only Statistik-Slice auf Basis desselben historischen Notifications-Bestands
 - ✅ **Notifications Subscriptions** — `/api/v1/notifications/subscriptions` liefert den kleinsten read-only Device-Subscription-Snapshot aus demselben historischen Notifications-Contract
-- ✅ **Notifications Subscription Update** — `/api/v1/notifications/subscriptions/{device_id}` aktualisiert minimal `enabled` und bekannte Preference-Flags für bestehende Geräte, ohne Subscribe-/Unsubscribe- oder HA-Registration-Surface mitzuziehen
+- ✅ **Notifications Subscription Update** — `/api/v1/notifications/subscriptions/{device_id}` aktualisiert minimal `enabled` und bekannte Preference-Flags für bestehende Geräte, ohne Subscribe-, Register- oder Manager-Surface mitzuziehen
+- ✅ **Notifications Unsubscribe** — `/api/v1/notifications/unsubscribe` entfernt minimal bestehende Geräte-Subscriptions per `device_id`, ohne die größere Subscribe-/HA-Registration-Surface wieder einzuführen
 - ✅ **Zones Catalog** — `/api/v1/zones` liefert den kleinsten read-only Habitus-Zonenkatalog aus dem historischen `v20`-Bestand
 - ✅ **Widget Positions API** — CRUD, Bulk, History, Undo, Redo und Reset unter `/api/v1/widgets/positions*`
 - ✅ **Contract/OpenAPI-Inventur** — `docs/openapi.*` und Guard gegen Runtime-Drift

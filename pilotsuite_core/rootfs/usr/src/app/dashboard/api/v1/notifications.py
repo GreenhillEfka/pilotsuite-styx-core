@@ -207,6 +207,13 @@ def _get_subscription(device_id: str) -> dict | None:
     return next((subscription for subscription in _SUBSCRIPTIONS if subscription["device_id"] == device_id), None)
 
 
+def _pop_subscription(device_id: str) -> dict | None:
+    for index, subscription in enumerate(_SUBSCRIPTIONS):
+        if subscription["device_id"] == device_id:
+            return _SUBSCRIPTIONS.pop(index)
+    return None
+
+
 def _validated_subscription_preferences(preferences: object) -> dict:
     if not isinstance(preferences, dict):
         raise ValueError("invalid_preferences")
@@ -391,5 +398,52 @@ def update_notification_subscription(device_id: str):
         {
             "ok": True,
             "subscription": deepcopy(subscription),
+        }
+    )
+
+
+@notifications_bp.post("/unsubscribe")
+def unsubscribe_notification_device():
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        return (
+            jsonify(
+                {
+                    "error": "invalid_body",
+                    "message": "JSON object body required",
+                }
+            ),
+            400,
+        )
+
+    device_id = body.get("device_id")
+    if not isinstance(device_id, str) or not device_id.strip():
+        return (
+            jsonify(
+                {
+                    "error": "invalid_device_id",
+                    "message": "device_id must be a non-empty string",
+                }
+            ),
+            400,
+        )
+
+    normalized_device_id = device_id.strip()
+    removed_subscription = _pop_subscription(normalized_device_id)
+    if removed_subscription is None:
+        return (
+            jsonify(
+                {
+                    "error": "device_not_found",
+                    "message": f"subscription for device '{normalized_device_id}' not found",
+                }
+            ),
+            404,
+        )
+
+    return jsonify(
+        {
+            "ok": True,
+            "unsubscribed": deepcopy(removed_subscription),
         }
     )

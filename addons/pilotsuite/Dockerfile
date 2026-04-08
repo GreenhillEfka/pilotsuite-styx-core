@@ -10,7 +10,7 @@ WORKDIR /app/app
 # Install system dependencies
 RUN apk add --no-cache python3 py3-pip
 
-# Install Python packages via pip (PEP 668 workaround: --break-system-packages)
+# Install Python packages via pip (PEP 668 workaround)
 RUN pip3 install --no-cache-dir --break-system-packages \
     aiohttp \
     fastapi \
@@ -19,6 +19,13 @@ RUN pip3 install --no-cache-dir --break-system-packages \
     requests \
     numpy \
     scipy
+
+# Create persistent data directory
+RUN mkdir -p /data && chmod 755 /data
+
+# Set environment variable for data storage
+ENV DATA_DIR=/data
+ENV PYTHONPATH=/app
 
 # Expose API port
 EXPOSE 8909
