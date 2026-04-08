@@ -359,6 +359,17 @@ def update_notification_subscription(device_id: str):
             400,
         )
 
+    if "enabled" not in body and preferences == {}:
+        return (
+            jsonify(
+                {
+                    "error": "empty_update",
+                    "message": "enabled and/or non-empty preferences must be provided",
+                }
+            ),
+            400,
+        )
+
     subscription = _get_subscription(device_id)
     if subscription is None:
         return (

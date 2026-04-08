@@ -2,7 +2,7 @@ openapi: 3.0.3
 info:
   title: "PilotSuite Core API"
   version: 20.0.0
-  description: "OpenAPI-Inventur des aktuellen v20-Core-Baums. Öffentliche Runtime-Surface derzeit `/health`, `/version`, `/api/v1/presence`, `/api/v1/analytics`, `/api/v1/notifications`, `/api/v1/notifications/digest`, `/api/v1/notifications/pending`, `/api/v1/notifications/stats`, `/api/v1/notifications/subscriptions`, `/api/v1/zones` und `/api/v1/widgets/positions*`; Legacy-Endpunkte außerhalb dieser inventarisierten Surface sind bewusst nicht Teil dieser Runtime."
+  description: "OpenAPI-Inventur des aktuellen v20-Core-Baums. Öffentliche Runtime-Surface derzeit `/health`, `/version`, `/api/v1/presence`, `/api/v1/analytics`, `/api/v1/notifications`, `/api/v1/notifications/digest`, `/api/v1/notifications/pending`, `/api/v1/notifications/stats`, `/api/v1/notifications/subscriptions`, `/api/v1/notifications/subscriptions/{device_id}`, `/api/v1/zones` und `/api/v1/widgets/positions*`; Legacy-Endpunkte außerhalb dieser inventarisierten Surface sind bewusst nicht Teil dieser Runtime."
 servers:
   -
     url: "http://localhost:8000"
@@ -142,6 +142,27 @@ paths:
       responses:
         200:
           description: "Read-only notification subscription snapshot"
+  /api/v1/notifications/subscriptions/{device_id}:
+    parameters:
+      -
+        name: device_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: "Stable device subscription id"
+    put:
+      tags:
+        - Notifications
+      summary: "Update one notification subscription"
+      operationId: updateNotificationSubscription
+      responses:
+        200:
+          description: "Notification subscription updated"
+        400:
+          description: "Invalid subscription update payload"
+        404:
+          description: "Device subscription not found"
   /api/v1/zones:
     get:
       tags:

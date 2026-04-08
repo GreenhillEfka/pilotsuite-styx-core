@@ -324,6 +324,13 @@ def test_notifications_subscription_update_contract_rejects_invalid_payloads_and
     assert invalid_enabled.status_code == 400
     assert invalid_enabled.get_json()["error"] == "invalid_enabled"
 
+    empty_preferences = client.put(
+        "/api/v1/notifications/subscriptions/mobile_andreas_iphone",
+        json={"preferences": {}},
+    )
+    assert empty_preferences.status_code == 400
+    assert empty_preferences.get_json()["error"] == "empty_update"
+
     invalid_preferences = client.put(
         "/api/v1/notifications/subscriptions/mobile_andreas_iphone",
         json={"preferences": {"notify_unknown": True}},

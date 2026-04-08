@@ -1,7 +1,7 @@
 # TASKBOARD — pilotsuite-styx-core-current
 
 ## Aktiver Stand
-- [x] Slice 110 `/api/v1/notifications/subscriptions` als kleinsten noch offenen read-only Subscription-Follow-up der aktiven Notifications-Contract-Surface gelandet.
+- [x] Slice 111 `/api/v1/notifications/subscriptions/<device_id>` als kleinsten noch offenen Subscription-Write-Follow-up der aktiven Notifications-Contract-Surface gelandet.
 
 ## Artefakte
 - `pilotsuite_core/rootfs/usr/src/app/dashboard/api/v1/notifications.py`
@@ -9,7 +9,7 @@
 - `README.md`
 - `docs/openapi.json`
 - `docs/openapi.yaml`
-- `docs/analysis/PS_CORE_SLICE_110_NOTIFICATIONS_SUBSCRIPTIONS_ENDPOINT_2026-04-08.md`
+- `docs/analysis/PS_CORE_SLICE_111_NOTIFICATIONS_SUBSCRIPTION_UPDATE_ENDPOINT_2026-04-08.md`
 - `tests/test_notifications_contract.py`
 - `tests/test_contract_inventory_check.py`
 - `tests/test_public_api_docs_alignment.py`
@@ -22,4 +22,4 @@
 - `/config/clawd/.venv_smoke_gate/bin/python scripts/contract_inventory_check.py --repo .`
 
 ## Nächster exakter Task
-- Slice 111 — `/api/v1/notifications/subscriptions/<device_id>` als nächsten kleinsten Subscription-Follow-up gegen den historischen Notifications-Contract auditieren und nur den minimalen landingfähigen Scope ziehen.
+- Slice 112 — `POST /api/v1/notifications/unsubscribe` als nächsten kleinsten Subscription-Write-Follow-up gegen den historischen Notifications-Contract auditieren und nur den minimalen landingfähigen Scope ziehen.
