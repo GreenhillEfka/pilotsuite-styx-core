@@ -7,11 +7,11 @@ COPY . /app
 # Working directory where main.py lives
 WORKDIR /app/app
 
-# Install system dependencies first
+# Install system dependencies
 RUN apk add --no-cache python3 py3-pip
 
-# Install Python packages via pip (not apk - some don't exist)
-RUN pip3 install --no-cache-dir \
+# Install Python packages via pip (PEP 668 workaround: --break-system-packages)
+RUN pip3 install --no-cache-dir --break-system-packages \
     aiohttp \
     fastapi \
     uvicorn \
