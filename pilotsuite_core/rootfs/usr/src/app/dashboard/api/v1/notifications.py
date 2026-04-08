@@ -98,6 +98,71 @@ _PENDING_NOTIFICATIONS = [
     },
 ]
 
+_DEFAULT_SUBSCRIPTIONS = [
+    {
+        "id": "sub_mobile_andreas",
+        "device_id": "mobile_andreas_iphone",
+        "device_name": "Andreas iPhone",
+        "device_type": "mobile",
+        "push_token": "expo_andre...",
+        "enabled": True,
+        "preferences": {
+            "notify_mood": True,
+            "notify_alerts": True,
+            "notify_suggestions": True,
+            "notify_system": False,
+        },
+        "ha_entity_id": "notify.mobile_app_andreas_iphone",
+        "last_seen": "2026-04-08T04:44:00+00:00",
+        "created_at": "2026-04-08T03:10:00+00:00",
+    },
+    {
+        "id": "sub_wallpanel_kitchen",
+        "device_id": "wallpanel_kitchen",
+        "device_name": "Kitchen Wall Panel",
+        "device_type": "tablet",
+        "push_token": "expo_kitch...",
+        "enabled": True,
+        "preferences": {
+            "notify_mood": False,
+            "notify_alerts": True,
+            "notify_suggestions": True,
+            "notify_system": False,
+        },
+        "ha_entity_id": "notify.kitchen_wallpanel",
+        "last_seen": "2026-04-08T04:39:00+00:00",
+        "created_at": "2026-04-08T02:55:00+00:00",
+    },
+    {
+        "id": "sub_voice_hub_livingroom",
+        "device_id": "voice_hub_livingroom",
+        "device_name": "Living Room Voice Hub",
+        "device_type": "speaker",
+        "push_token": "local_voice...",
+        "enabled": False,
+        "preferences": {
+            "notify_mood": False,
+            "notify_alerts": True,
+            "notify_suggestions": False,
+            "notify_system": True,
+        },
+        "ha_entity_id": "notify.living_room_voice_hub",
+        "last_seen": "2026-04-08T03:58:00+00:00",
+        "created_at": "2026-04-08T01:40:00+00:00",
+    },
+]
+
+_SUBSCRIPTION_PREFERENCE_KEYS = frozenset(
+    {
+        "notify_mood",
+        "notify_alerts",
+        "notify_suggestions",
+        "notify_system",
+    }
+)
+
+_SUBSCRIPTIONS = deepcopy(_DEFAULT_SUBSCRIPTIONS)
+
 
 def _parse_limit(raw_limit: str) -> int:
     try:
@@ -136,6 +201,24 @@ def _notification_stats(notifications: list[dict]) -> dict:
         "by_priority": dict(Counter(notification["priority"] for notification in notifications)),
         "by_type": dict(Counter(notification["type"] for notification in notifications)),
     }
+
+
+def _get_subscription(device_id: str) -> dict | None:
+    return next((subscription for subscription in _SUBSCRIPTIONS if subscription["device_id"] == device_id), None)
+
+
+def _validated_subscription_preferences(preferences: object) -> dict:
+    if not isinstance(preferences, dict):
+        raise ValueError("invalid_preferences")
+
+    invalid_keys = sorted(set(preferences) - _SUBSCRIPTION_PREFERENCE_KEYS)
+    if invalid_keys:
+        raise ValueError("invalid_preferences")
+
+    if any(not isinstance(value, bool) for value in preferences.values()):
+        raise ValueError("invalid_preferences")
+
+    return preferences
 
 
 @notifications_bp.get("")
@@ -206,5 +289,96 @@ def get_pending_notifications():
             "ok": True,
             "count": len(pending),
             "pending": pending,
+        }
+    )
+
+
+@notifications_bp.get("/subscriptions")
+def get_notification_subscriptions():
+    subscriptions = deepcopy(_SUBSCRIPTIONS)
+    return jsonify(
+        {
+            "ok": True,
+            "count": len(subscriptions),
+            "enabled_count": sum(1 for subscription in subscriptions if subscription["enabled"]),
+            "subscriptions": subscriptions,
+        }
+    )
+
+
+@notifications_bp.put("/subscriptions/<device_id>")
+def update_notification_subscription(device_id: str):
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        return (
+            jsonify(
+                {
+                    "error": "invalid_body",
+                    "message": "JSON object body required",
+                }
+            ),
+            400,
+        )
+
+    if "enabled" not in body and "preferences" not in body:
+        return (
+            jsonify(
+                {
+                    "error": "empty_update",
+                    "message": "enabled and/or preferences must be provided",
+                }
+            ),
+            400,
+        )
+
+    if "enabled" in body and not isinstance(body["enabled"], bool):
+        return (
+            jsonify(
+                {
+                    "error": "invalid_enabled",
+                    "message": "enabled must be a boolean",
+                }
+            ),
+            400,
+        )
+
+    try:
+        preferences = (
+            _validated_subscription_preferences(body["preferences"])
+            if "preferences" in body
+            else None
+        )
+    except ValueError:
+        return (
+            jsonify(
+                {
+                    "error": "invalid_preferences",
+                    "message": "preferences must be a JSON object with known boolean flags",
+                }
+            ),
+            400,
+        )
+
+    subscription = _get_subscription(device_id)
+    if subscription is None:
+        return (
+            jsonify(
+                {
+                    "error": "device_not_found",
+                    "message": f"subscription for device '{device_id}' not found",
+                }
+            ),
+            404,
+        )
+
+    if "enabled" in body:
+        subscription["enabled"] = body["enabled"]
+    if preferences is not None:
+        subscription["preferences"].update(preferences)
+
+    return jsonify(
+        {
+            "ok": True,
+            "subscription": deepcopy(subscription),
         }
     )

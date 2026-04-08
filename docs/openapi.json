@@ -3,7 +3,7 @@
   "info": {
     "title": "PilotSuite Core API",
     "version": "20.0.0",
-    "description": "OpenAPI-Inventur des aktuellen v20-Core-Baums. Öffentliche Runtime-Surface derzeit `/health`, `/version`, `/api/v1/presence`, `/api/v1/analytics`, `/api/v1/notifications`, `/api/v1/notifications/digest`, `/api/v1/notifications/pending`, `/api/v1/notifications/stats`, `/api/v1/zones` und `/api/v1/widgets/positions*`; Legacy-Endpunkte außerhalb dieser inventarisierten Surface sind bewusst nicht Teil dieser Runtime."
+    "description": "OpenAPI-Inventur des aktuellen v20-Core-Baums. Öffentliche Runtime-Surface derzeit `/health`, `/version`, `/api/v1/presence`, `/api/v1/analytics`, `/api/v1/notifications`, `/api/v1/notifications/digest`, `/api/v1/notifications/pending`, `/api/v1/notifications/stats`, `/api/v1/notifications/subscriptions`, `/api/v1/zones` und `/api/v1/widgets/positions*`; Legacy-Endpunkte außerhalb dieser inventarisierten Surface sind bewusst nicht Teil dieser Runtime."
   },
   "servers": [
     {
@@ -190,6 +190,20 @@
         "responses": {
           "200": {
             "description": "Read-only notification stats snapshot"
+          }
+        }
+      }
+    },
+    "/api/v1/notifications/subscriptions": {
+      "get": {
+        "tags": [
+          "Notifications"
+        ],
+        "summary": "Read-only notification subscriptions",
+        "operationId": "getNotificationSubscriptions",
+        "responses": {
+          "200": {
+            "description": "Read-only notification subscription snapshot"
           }
         }
       }

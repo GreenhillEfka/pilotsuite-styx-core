@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 import sys
 from pathlib import Path
 
@@ -8,7 +9,13 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "pilotsuite_core" / "rootfs" / "usr" / "src" / "app"))
 
+from dashboard.api.v1 import notifications as notifications_module
 from main import create_app
+
+
+@pytest.fixture(autouse=True)
+def reset_notifications_runtime_state():
+    notifications_module._SUBSCRIPTIONS[:] = deepcopy(notifications_module._DEFAULT_SUBSCRIPTIONS)
 
 
 @pytest.fixture()
@@ -195,3 +202,138 @@ def test_notifications_pending_contract_exposes_minimal_delivery_queue_follow_up
             },
         ],
     }
+
+
+def test_notifications_subscriptions_contract_exposes_minimal_read_only_subscription_slice(client):
+    response = client.get("/api/v1/notifications/subscriptions")
+    assert response.status_code == 200
+
+    assert response.get_json() == {
+        "ok": True,
+        "count": 3,
+        "enabled_count": 2,
+        "subscriptions": [
+            {
+                "id": "sub_mobile_andreas",
+                "device_id": "mobile_andreas_iphone",
+                "device_name": "Andreas iPhone",
+                "device_type": "mobile",
+                "push_token": "expo_andre...",
+                "enabled": True,
+                "preferences": {
+                    "notify_mood": True,
+                    "notify_alerts": True,
+                    "notify_suggestions": True,
+                    "notify_system": False,
+                },
+                "ha_entity_id": "notify.mobile_app_andreas_iphone",
+                "last_seen": "2026-04-08T04:44:00+00:00",
+                "created_at": "2026-04-08T03:10:00+00:00",
+            },
+            {
+                "id": "sub_wallpanel_kitchen",
+                "device_id": "wallpanel_kitchen",
+                "device_name": "Kitchen Wall Panel",
+                "device_type": "tablet",
+                "push_token": "expo_kitch...",
+                "enabled": True,
+                "preferences": {
+                    "notify_mood": False,
+                    "notify_alerts": True,
+                    "notify_suggestions": True,
+                    "notify_system": False,
+                },
+                "ha_entity_id": "notify.kitchen_wallpanel",
+                "last_seen": "2026-04-08T04:39:00+00:00",
+                "created_at": "2026-04-08T02:55:00+00:00",
+            },
+            {
+                "id": "sub_voice_hub_livingroom",
+                "device_id": "voice_hub_livingroom",
+                "device_name": "Living Room Voice Hub",
+                "device_type": "speaker",
+                "push_token": "local_voice...",
+                "enabled": False,
+                "preferences": {
+                    "notify_mood": False,
+                    "notify_alerts": True,
+                    "notify_suggestions": False,
+                    "notify_system": True,
+                },
+                "ha_entity_id": "notify.living_room_voice_hub",
+                "last_seen": "2026-04-08T03:58:00+00:00",
+                "created_at": "2026-04-08T01:40:00+00:00",
+            },
+        ],
+    }
+
+
+def test_notifications_subscription_update_contract_mutates_one_device_and_keeps_list_projection_in_sync(client):
+    response = client.put(
+        "/api/v1/notifications/subscriptions/mobile_andreas_iphone",
+        json={
+            "enabled": False,
+            "preferences": {
+                "notify_mood": False,
+                "notify_system": True,
+            },
+        },
+    )
+    assert response.status_code == 200
+    assert response.get_json() == {
+        "ok": True,
+        "subscription": {
+            "id": "sub_mobile_andreas",
+            "device_id": "mobile_andreas_iphone",
+            "device_name": "Andreas iPhone",
+            "device_type": "mobile",
+            "push_token": "expo_andre...",
+            "enabled": False,
+            "preferences": {
+                "notify_mood": False,
+                "notify_alerts": True,
+                "notify_suggestions": True,
+                "notify_system": True,
+            },
+            "ha_entity_id": "notify.mobile_app_andreas_iphone",
+            "last_seen": "2026-04-08T04:44:00+00:00",
+            "created_at": "2026-04-08T03:10:00+00:00",
+        },
+    }
+
+    refreshed_list = client.get("/api/v1/notifications/subscriptions")
+    assert refreshed_list.status_code == 200
+    assert refreshed_list.get_json()["enabled_count"] == 1
+    assert refreshed_list.get_json()["subscriptions"][0]["enabled"] is False
+    assert refreshed_list.get_json()["subscriptions"][0]["preferences"]["notify_system"] is True
+
+
+def test_notifications_subscription_update_contract_rejects_invalid_payloads_and_unknown_devices(client):
+    invalid_body = client.put("/api/v1/notifications/subscriptions/mobile_andreas_iphone")
+    assert invalid_body.status_code == 400
+    assert invalid_body.get_json()["error"] == "invalid_body"
+
+    empty_update = client.put("/api/v1/notifications/subscriptions/mobile_andreas_iphone", json={})
+    assert empty_update.status_code == 400
+    assert empty_update.get_json()["error"] == "empty_update"
+
+    invalid_enabled = client.put(
+        "/api/v1/notifications/subscriptions/mobile_andreas_iphone",
+        json={"enabled": "yes"},
+    )
+    assert invalid_enabled.status_code == 400
+    assert invalid_enabled.get_json()["error"] == "invalid_enabled"
+
+    invalid_preferences = client.put(
+        "/api/v1/notifications/subscriptions/mobile_andreas_iphone",
+        json={"preferences": {"notify_unknown": True}},
+    )
+    assert invalid_preferences.status_code == 400
+    assert invalid_preferences.get_json()["error"] == "invalid_preferences"
+
+    not_found = client.put(
+        "/api/v1/notifications/subscriptions/unknown_device",
+        json={"enabled": True},
+    )
+    assert not_found.status_code == 404
+    assert not_found.get_json()["error"] == "device_not_found"

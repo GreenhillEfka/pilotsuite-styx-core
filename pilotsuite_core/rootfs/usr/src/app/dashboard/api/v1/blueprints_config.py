@@ -26,6 +26,8 @@ BLUEPRINT_CONTRACT_INVENTORY = [
             "/api/v1/notifications/digest": ["get"],
             "/api/v1/notifications/pending": ["get"],
             "/api/v1/notifications/stats": ["get"],
+            "/api/v1/notifications/subscriptions": ["get"],
+            "/api/v1/notifications/subscriptions/{device_id}": ["put"],
         },
     },
     {

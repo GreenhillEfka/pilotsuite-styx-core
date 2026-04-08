@@ -40,6 +40,7 @@ def test_openapi_inventory_documents_public_paths_and_methods():
     assert sorted(paths["/api/v1/notifications/digest"].keys()) == ["get"]
     assert sorted(paths["/api/v1/notifications/pending"].keys()) == ["get"]
     assert sorted(paths["/api/v1/notifications/stats"].keys()) == ["get"]
+    assert sorted(paths["/api/v1/notifications/subscriptions"].keys()) == ["get"]
     assert sorted(paths["/api/v1/zones"].keys()) == ["get"]
     assert sorted(paths["/api/v1/widgets/positions"].keys()) == ["get", "post"]
     assert sorted(paths["/api/v1/widgets/positions/bulk"].keys()) == ["post"]

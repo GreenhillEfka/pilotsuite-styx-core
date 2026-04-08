@@ -1,7 +1,10 @@
-app/__pycache__/
-app/*.pyc
-app/tests/
-app/docs/
-app/*.md
-.git/
-.github/
+.git
+.github
+.gitignore
+*.md
+docs/
+tests/
+test_*
+__pycache__
+*.pyc
+*.log

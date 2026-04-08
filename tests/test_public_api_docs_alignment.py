@@ -15,6 +15,7 @@ PUBLIC_RUNTIME_ENDPOINTS = [
     "/api/v1/notifications/digest",
     "/api/v1/notifications/pending",
     "/api/v1/notifications/stats",
+    "/api/v1/notifications/subscriptions",
     "/api/v1/zones",
     "/api/v1/widgets/positions",
     "/api/v1/widgets/positions/bulk",
@@ -42,6 +43,7 @@ def test_readme_api_table_matches_current_public_runtime_and_marks_remaining_leg
     assert "/api/v1/notifications/digest" not in note_text
     assert "/api/v1/notifications/pending" not in note_text
     assert "/api/v1/notifications/stats" not in note_text
+    assert "/api/v1/notifications/subscriptions" not in note_text
     assert "/api/v1/zones" not in note_text
     for endpoint in LEGACY_ENDPOINTS:
         assert endpoint not in table_text
@@ -67,6 +69,7 @@ def test_openapi_public_surface_matches_current_runtime_and_excludes_legacy_path
     assert "`/api/v1/notifications/digest`" in spec["info"]["description"]
     assert "`/api/v1/notifications/pending`" in spec["info"]["description"]
     assert "`/api/v1/notifications/stats`" in spec["info"]["description"]
+    assert "`/api/v1/notifications/subscriptions`" in spec["info"]["description"]
     assert "`/api/v1/zones`" in spec["info"]["description"]
 
     for endpoint in LEGACY_ENDPOINTS:
