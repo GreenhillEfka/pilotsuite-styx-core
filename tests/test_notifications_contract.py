@@ -307,17 +307,18 @@ def test_notifications_send_contract_creates_one_notification_and_keeps_read_mod
     }
 
 
-def test_notifications_root_create_alias_accepts_legacy_data_and_channel_hint_without_reintroducing_delivery_surface(client):
+def test_notifications_root_create_alias_accepts_legacy_data_channel_and_source_hints_without_reintroducing_delivery_surface(client):
     response = client.post(
         "/api/v1/notifications",
         json={
             "title": "Legacy-Payload bleibt kompatibel",
-            "message": "Der Root-Write akzeptiert weiter data und channel als historische Hints.",
+            "message": "Der Root-Write akzeptiert weiter data, channel und source als historische Hints.",
             "priority": "normal",
             "type": "system",
             "channel": "telegram",
+            "source": "Manual_Audit",
             "data": {
-                "slice": 118,
+                "slice": 119,
                 "legacy": True,
             },
             "tags": ["legacy", "compat"],
@@ -329,20 +330,20 @@ def test_notifications_root_create_alias_accepts_legacy_data_and_channel_hint_wi
     created_notification = payload["notification"]
     assert payload["ok"] is True
     assert created_notification["title"] == "Legacy-Payload bleibt kompatibel"
-    assert created_notification["message"] == "Der Root-Write akzeptiert weiter data und channel als historische Hints."
+    assert created_notification["message"] == "Der Root-Write akzeptiert weiter data, channel und source als historische Hints."
     assert created_notification["priority"] == "normal"
     assert created_notification["type"] == "system"
     assert created_notification["action_data"] == {
-        "slice": 118,
+        "slice": 119,
         "legacy": True,
     }
     assert "channel" not in created_notification
     assert created_notification["target_devices"] == []
     assert created_notification["target_users"] == []
     assert created_notification["tags"] == ["legacy", "compat"]
-    assert created_notification["source"] == "api"
+    assert created_notification["source"] == "manual_audit"
 
-    refreshed_feed = client.get("/api/v1/notifications?source=api")
+    refreshed_feed = client.get("/api/v1/notifications?source=manual_audit")
     assert refreshed_feed.status_code == 200
     assert refreshed_feed.get_json()["count"] == 1
     assert refreshed_feed.get_json()["notifications"][0] == created_notification
@@ -365,7 +366,7 @@ def test_notifications_root_create_alias_accepts_legacy_data_and_channel_hint_wi
             "suggestion": 1,
         },
         "by_source": {
-            "api": 1,
+            "manual_audit": 1,
             "presence": 1,
             "dashboard_layout": 1,
             "zone_truth": 1,
@@ -385,7 +386,7 @@ def test_notifications_root_create_alias_accepts_legacy_data_and_channel_hint_wi
         "total_notifications": 4,
         "unread_count": 3,
         "by_source": {
-            "api": 1,
+            "manual_audit": 1,
             "presence": 1,
             "dashboard_layout": 1,
             "zone_truth": 1,
@@ -894,6 +895,13 @@ def test_notifications_send_contract_rejects_invalid_payloads(client):
     )
     assert invalid_channel.status_code == 400
     assert invalid_channel.get_json()["error"] == "invalid_channel"
+
+    invalid_source = client.post(
+        "/api/v1/notifications",
+        json={"title": "Test", "message": "ok", "source": ["presence"]},
+    )
+    assert invalid_source.status_code == 400
+    assert invalid_source.get_json()["error"] == "invalid_source"
 
 
 def test_notifications_subscribe_contract_rejects_invalid_payloads(client):

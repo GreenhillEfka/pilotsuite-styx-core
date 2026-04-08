@@ -289,6 +289,17 @@ def _validated_notification_channel_alias(body: dict) -> str | None:
     return channel.strip()
 
 
+def _validated_notification_source_alias(body: dict) -> str:
+    if "source" not in body or body.get("source") is None:
+        return "api"
+
+    source = body.get("source")
+    if not isinstance(source, str) or not source.strip():
+        raise ValueError("invalid_source")
+
+    return source.strip().lower()
+
+
 def _create_notification_from_request():
     body = request.get_json(silent=True)
     if not isinstance(body, dict):
@@ -353,11 +364,13 @@ def _create_notification_from_request():
     try:
         action_data = _validated_notification_action_data(body)
         _validated_notification_channel_alias(body)
+        source = _validated_notification_source_alias(body)
     except ValueError as error:
         error_code = str(error)
         error_messages = {
             "invalid_action_data": "action_data or legacy data must be a JSON object",
             "invalid_channel": "channel must be a non-empty string when provided",
+            "invalid_source": "source must be a non-empty string when provided",
         }
         return (
             jsonify(
@@ -416,7 +429,7 @@ def _create_notification_from_request():
         "read": False,
         "dismissed": False,
         "sent": True,
-        "source": "api",
+        "source": source,
         "tags": tags,
     }
     _NOTIFICATIONS.insert(0, notification)
