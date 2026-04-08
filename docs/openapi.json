@@ -3,7 +3,7 @@
   "info": {
     "title": "PilotSuite Core API",
     "version": "20.0.0",
-    "description": "OpenAPI-Inventur des aktuellen v20-Core-Baums. Öffentliche Runtime-Surface derzeit `/health`, `/version`, `/api/v1/presence`, `/api/v1/analytics`, `/api/v1/notifications`, `/api/v1/notifications/digest`, `/api/v1/notifications/pending`, `/api/v1/notifications/stats`, `/api/v1/notifications/subscriptions`, `/api/v1/notifications/subscriptions/{device_id}`, `/api/v1/notifications/unsubscribe`, `/api/v1/zones` und `/api/v1/widgets/positions*`; Legacy-Endpunkte außerhalb dieser inventarisierten Surface sind bewusst nicht Teil dieser Runtime."
+    "description": "OpenAPI-Inventur des aktuellen v20-Core-Baums. \u00d6ffentliche Runtime-Surface derzeit `/health`, `/version`, `/api/v1/presence`, `/api/v1/analytics`, `/api/v1/notifications`, `/api/v1/notifications/send`, `/api/v1/notifications/digest`, `/api/v1/notifications/pending`, `/api/v1/notifications/stats`, `/api/v1/notifications/{notification_id}`, `/api/v1/notifications/{notification_id}/read`, `/api/v1/notifications/subscribe`, `/api/v1/notifications/subscriptions`, `/api/v1/notifications/subscriptions/{device_id}`, `/api/v1/notifications/unsubscribe`, `/api/v1/zones` und `/api/v1/widgets/positions*`; Legacy-Endpunkte au\u00dferhalb dieser inventarisierten Surface sind bewusst nicht Teil dieser Runtime."
   },
   "servers": [
     {
@@ -150,6 +150,38 @@
             "description": "Invalid limit parameter"
           }
         }
+      },
+      "post": {
+        "tags": [
+          "Notifications"
+        ],
+        "summary": "Create one notification via root alias with legacy data/channel compatibility",
+        "operationId": "createNotification",
+        "responses": {
+          "200": {
+            "description": "Notification created and added to the runtime feed via the root alias; historical `data` and `channel` payload hints stay accepted without reintroducing delivery routing"
+          },
+          "400": {
+            "description": "Invalid notification payload"
+          }
+        }
+      }
+    },
+    "/api/v1/notifications/send": {
+      "post": {
+        "tags": [
+          "Notifications"
+        ],
+        "summary": "Send one notification with legacy data/channel compatibility",
+        "operationId": "sendNotification",
+        "responses": {
+          "200": {
+            "description": "Notification created and added to the runtime feed; historical `data` and `channel` payload hints stay accepted without reintroducing delivery routing"
+          },
+          "400": {
+            "description": "Invalid notification payload"
+          }
+        }
       }
     },
     "/api/v1/notifications/digest": {
@@ -190,6 +222,79 @@
         "responses": {
           "200": {
             "description": "Read-only notification stats snapshot"
+          }
+        }
+      }
+    },
+    "/api/v1/notifications/{notification_id}": {
+      "parameters": [
+        {
+          "name": "notification_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          },
+          "description": "Stable notification id"
+        }
+      ],
+      "delete": {
+        "tags": [
+          "Notifications"
+        ],
+        "summary": "Dismiss one notification",
+        "operationId": "dismissNotification",
+        "responses": {
+          "200": {
+            "description": "Notification marked as dismissed"
+          },
+          "404": {
+            "description": "Notification not found"
+          }
+        }
+      }
+    },
+    "/api/v1/notifications/{notification_id}/read": {
+      "parameters": [
+        {
+          "name": "notification_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          },
+          "description": "Stable notification id"
+        }
+      ],
+      "post": {
+        "tags": [
+          "Notifications"
+        ],
+        "summary": "Mark one notification as read",
+        "operationId": "markNotificationRead",
+        "responses": {
+          "200": {
+            "description": "Notification marked as read"
+          },
+          "404": {
+            "description": "Notification not found"
+          }
+        }
+      }
+    },
+    "/api/v1/notifications/subscribe": {
+      "post": {
+        "tags": [
+          "Notifications"
+        ],
+        "summary": "Subscribe, refresh or re-enable one notification device",
+        "operationId": "subscribeNotificationDevice",
+        "responses": {
+          "200": {
+            "description": "Notification subscription created, refreshed or re-enabled"
+          },
+          "400": {
+            "description": "Invalid subscribe payload"
           }
         }
       }

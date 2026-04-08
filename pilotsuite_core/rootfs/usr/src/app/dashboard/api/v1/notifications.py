@@ -2,13 +2,15 @@ from __future__ import annotations
 
 from collections import Counter
 from copy import deepcopy
+from datetime import datetime, timezone
+import uuid
 
 from flask import Blueprint, jsonify, request
 
 
 notifications_bp = Blueprint("notifications_v1", __name__, url_prefix="/api/v1/notifications")
 
-_NOTIFICATIONS = [
+_DEFAULT_NOTIFICATIONS = [
     {
         "id": "notif_presence_hold_office",
         "title": "Presence Hold aktiv",
@@ -68,6 +70,8 @@ _NOTIFICATIONS = [
         "tags": ["zones", "review"],
     },
 ]
+
+_NOTIFICATIONS = deepcopy(_DEFAULT_NOTIFICATIONS)
 
 _PENDING_NOTIFICATIONS = [
     {
@@ -161,6 +165,10 @@ _SUBSCRIPTION_PREFERENCE_KEYS = frozenset(
     }
 )
 
+_SUBSCRIPTION_DEVICE_TYPES = frozenset({"mobile", "tablet", "watch", "speaker"})
+_NOTIFICATION_PRIORITY_VALUES = frozenset({"low", "normal", "high", "urgent"})
+_NOTIFICATION_TYPE_VALUES = frozenset({"mood_change", "alert", "suggestion", "system", "info", "warning"})
+
 _SUBSCRIPTIONS = deepcopy(_DEFAULT_SUBSCRIPTIONS)
 
 
@@ -203,6 +211,10 @@ def _notification_stats(notifications: list[dict]) -> dict:
     }
 
 
+def _get_notification(notification_id: str) -> dict | None:
+    return next((notification for notification in _NOTIFICATIONS if notification["id"] == notification_id), None)
+
+
 def _get_subscription(device_id: str) -> dict | None:
     return next((subscription for subscription in _SUBSCRIPTIONS if subscription["device_id"] == device_id), None)
 
@@ -226,6 +238,205 @@ def _validated_subscription_preferences(preferences: object) -> dict:
         raise ValueError("invalid_preferences")
 
     return preferences
+
+
+def _utcnow_iso() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
+
+def _masked_push_token(push_token: str) -> str:
+    normalized_push_token = push_token.strip()
+    if not normalized_push_token:
+        return ""
+    return f"{normalized_push_token[:10]}..."
+
+
+def _validated_string_list(raw_value: object, *, error_code: str) -> list[str]:
+    if raw_value is None:
+        return []
+
+    if not isinstance(raw_value, list):
+        raise ValueError(error_code)
+
+    normalized_values = []
+    for value in raw_value:
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError(error_code)
+        normalized_values.append(value.strip())
+
+    return normalized_values
+
+
+def _validated_notification_action_data(body: dict) -> dict:
+    action_data = body.get("action_data")
+    if action_data is None and "data" in body:
+        action_data = body.get("data")
+    if action_data is None:
+        action_data = {}
+    if not isinstance(action_data, dict):
+        raise ValueError("invalid_action_data")
+    return action_data
+
+
+def _validated_notification_channel_alias(body: dict) -> str | None:
+    if "channel" not in body or body.get("channel") is None:
+        return None
+
+    channel = body.get("channel")
+    if not isinstance(channel, str) or not channel.strip():
+        raise ValueError("invalid_channel")
+
+    return channel.strip()
+
+
+def _create_notification_from_request():
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        return (
+            jsonify(
+                {
+                    "error": "invalid_body",
+                    "message": "JSON object body required",
+                }
+            ),
+            400,
+        )
+
+    title = body.get("title")
+    if not isinstance(title, str) or not title.strip():
+        return (
+            jsonify(
+                {
+                    "error": "invalid_title",
+                    "message": "title must be a non-empty string",
+                }
+            ),
+            400,
+        )
+
+    message = body.get("message")
+    if not isinstance(message, str) or not message.strip():
+        return (
+            jsonify(
+                {
+                    "error": "invalid_message",
+                    "message": "message must be a non-empty string",
+                }
+            ),
+            400,
+        )
+
+    priority = body.get("priority", "normal")
+    if not isinstance(priority, str) or priority.strip() not in _NOTIFICATION_PRIORITY_VALUES:
+        return (
+            jsonify(
+                {
+                    "error": "invalid_priority",
+                    "message": "priority must be one of low, normal, high or urgent",
+                }
+            ),
+            400,
+        )
+
+    notification_type = body.get("type", "info")
+    if not isinstance(notification_type, str) or notification_type.strip() not in _NOTIFICATION_TYPE_VALUES:
+        return (
+            jsonify(
+                {
+                    "error": "invalid_type",
+                    "message": "type must be one of mood_change, alert, suggestion, system, info or warning",
+                }
+            ),
+            400,
+        )
+
+    try:
+        action_data = _validated_notification_action_data(body)
+        _validated_notification_channel_alias(body)
+    except ValueError as error:
+        error_code = str(error)
+        error_messages = {
+            "invalid_action_data": "action_data or legacy data must be a JSON object",
+            "invalid_channel": "channel must be a non-empty string when provided",
+        }
+        return (
+            jsonify(
+                {
+                    "error": error_code,
+                    "message": error_messages[error_code],
+                }
+            ),
+            400,
+        )
+
+    action_url = body.get("action_url", "")
+    if not isinstance(action_url, str):
+        return (
+            jsonify(
+                {
+                    "error": "invalid_action_url",
+                    "message": "action_url must be a string",
+                }
+            ),
+            400,
+        )
+
+    try:
+        target_devices = _validated_string_list(body.get("target_devices"), error_code="invalid_target_devices")
+        target_users = _validated_string_list(body.get("target_users"), error_code="invalid_target_users")
+        tags = _validated_string_list(body.get("tags"), error_code="invalid_tags")
+    except ValueError as error:
+        error_code = str(error)
+        error_messages = {
+            "invalid_target_devices": "target_devices must be an array of non-empty strings",
+            "invalid_target_users": "target_users must be an array of non-empty strings",
+            "invalid_tags": "tags must be an array of non-empty strings",
+        }
+        return (
+            jsonify(
+                {
+                    "error": error_code,
+                    "message": error_messages[error_code],
+                }
+            ),
+            400,
+        )
+
+    notification = {
+        "id": f"notif_api_{uuid.uuid4().hex[:12]}",
+        "title": title.strip(),
+        "message": message.strip(),
+        "priority": priority.strip(),
+        "type": notification_type.strip(),
+        "timestamp": _utcnow_iso(),
+        "action_data": deepcopy(action_data),
+        "action_url": action_url.strip(),
+        "target_devices": target_devices,
+        "target_users": target_users,
+        "read": False,
+        "dismissed": False,
+        "sent": True,
+        "source": "api",
+        "tags": tags,
+    }
+    _NOTIFICATIONS.insert(0, notification)
+
+    return jsonify(
+        {
+            "ok": True,
+            "notification": deepcopy(notification),
+        }
+    )
+
+
+@notifications_bp.post("")
+def create_notification():
+    return _create_notification_from_request()
+
+
+@notifications_bp.post("/send")
+def send_notification():
+    return _create_notification_from_request()
 
 
 @notifications_bp.get("")
@@ -296,6 +507,194 @@ def get_pending_notifications():
             "ok": True,
             "count": len(pending),
             "pending": pending,
+        }
+    )
+
+
+@notifications_bp.post("/<notification_id>/read")
+def mark_notification_read(notification_id: str):
+    notification = _get_notification(notification_id)
+    if notification is None:
+        return (
+            jsonify(
+                {
+                    "error": "notification_not_found",
+                    "message": f"notification '{notification_id}' not found",
+                }
+            ),
+            404,
+        )
+
+    notification["read"] = True
+
+    return jsonify(
+        {
+            "ok": True,
+            "notification": deepcopy(notification),
+        }
+    )
+
+
+@notifications_bp.delete("/<notification_id>")
+def dismiss_notification(notification_id: str):
+    notification = _get_notification(notification_id)
+    if notification is None:
+        return (
+            jsonify(
+                {
+                    "error": "notification_not_found",
+                    "message": f"notification '{notification_id}' not found",
+                }
+            ),
+            404,
+        )
+
+    notification["dismissed"] = True
+
+    return jsonify(
+        {
+            "ok": True,
+            "notification": deepcopy(notification),
+        }
+    )
+
+
+@notifications_bp.post("/subscribe")
+def subscribe_notification_device():
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        return (
+            jsonify(
+                {
+                    "error": "invalid_body",
+                    "message": "JSON object body required",
+                }
+            ),
+            400,
+        )
+
+    device_id = body.get("device_id")
+    if not isinstance(device_id, str) or not device_id.strip():
+        return (
+            jsonify(
+                {
+                    "error": "invalid_device_id",
+                    "message": "device_id must be a non-empty string",
+                }
+            ),
+            400,
+        )
+
+    device_name = body.get("device_name", "")
+    if not isinstance(device_name, str):
+        return (
+            jsonify(
+                {
+                    "error": "invalid_device_name",
+                    "message": "device_name must be a string",
+                }
+            ),
+            400,
+        )
+
+    device_type = body.get("device_type", "mobile")
+    if not isinstance(device_type, str) or device_type.strip() not in _SUBSCRIPTION_DEVICE_TYPES:
+        return (
+            jsonify(
+                {
+                    "error": "invalid_device_type",
+                    "message": "device_type must be one of mobile, tablet, watch or speaker",
+                }
+            ),
+            400,
+        )
+
+    push_token = body.get("push_token", "")
+    if not isinstance(push_token, str):
+        return (
+            jsonify(
+                {
+                    "error": "invalid_push_token",
+                    "message": "push_token must be a string",
+                }
+            ),
+            400,
+        )
+
+    ha_entity_id = body.get("ha_entity_id", "")
+    if not isinstance(ha_entity_id, str):
+        return (
+            jsonify(
+                {
+                    "error": "invalid_ha_entity_id",
+                    "message": "ha_entity_id must be a string",
+                }
+            ),
+            400,
+        )
+
+    try:
+        preferences = (
+            _validated_subscription_preferences(body["preferences"])
+            if "preferences" in body
+            else None
+        )
+    except ValueError:
+        return (
+            jsonify(
+                {
+                    "error": "invalid_preferences",
+                    "message": "preferences must be a JSON object with known boolean flags",
+                }
+            ),
+            400,
+        )
+
+    normalized_device_id = device_id.strip()
+    normalized_device_type = device_type.strip()
+    subscription = _get_subscription(normalized_device_id)
+    created = subscription is None
+
+    if created:
+        timestamp = _utcnow_iso()
+        subscription = {
+            "id": f"sub_{normalized_device_id}",
+            "device_id": normalized_device_id,
+            "device_name": device_name.strip(),
+            "device_type": normalized_device_type,
+            "push_token": _masked_push_token(push_token),
+            "enabled": True,
+            "preferences": {
+                "notify_mood": True,
+                "notify_alerts": True,
+                "notify_suggestions": True,
+                "notify_system": False,
+            },
+            "ha_entity_id": ha_entity_id.strip(),
+            "last_seen": timestamp,
+            "created_at": timestamp,
+        }
+        if preferences is not None:
+            subscription["preferences"].update(preferences)
+        _SUBSCRIPTIONS.append(subscription)
+    else:
+        subscription["enabled"] = True
+        subscription["last_seen"] = _utcnow_iso()
+        if device_name.strip():
+            subscription["device_name"] = device_name.strip()
+        subscription["device_type"] = normalized_device_type
+        if push_token.strip():
+            subscription["push_token"] = _masked_push_token(push_token)
+        if "ha_entity_id" in body:
+            subscription["ha_entity_id"] = ha_entity_id.strip()
+        if preferences is not None:
+            subscription["preferences"].update(preferences)
+
+    return jsonify(
+        {
+            "ok": True,
+            "created": created,
+            "subscription": deepcopy(subscription),
         }
     )
 
