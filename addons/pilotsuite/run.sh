@@ -2,7 +2,7 @@
 set -e
 
 # Log startup
-bashio::log.info "Starting PilotSuite Core v20.0.0..."
+bashio::log.info "Starting PilotSuite Core..."
 
 # Get configuration
 LOG_LEVEL=$(bashio::config 'log_level')
@@ -15,5 +15,5 @@ export OLLAMA_HOST="${OLLAMA_HOST:-localhost}"
 export OLLAMA_PORT="${OLLAMA_PORT:-11434}"
 
 # Start the application
-cd /app
+cd /app/app
 exec python3 main.py

@@ -1,0 +1,10 @@
+.git
+.github
+.gitignore
+*.md
+docs/
+tests/
+test_*
+__pycache__
+*.pyc
+*.log
