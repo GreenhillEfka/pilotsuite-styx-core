@@ -3,22 +3,15 @@ FROM $BUILD_FROM
 
 WORKDIR /app
 
-# Install system dependencies
-RUN apk add --no-cache --virtual .build-deps gcc musl-dev libffi-dev \
-    && apk add --no-cache python3 py3-pip py3-aiohttp py3-fastapi py3-uvicorn py3-pydantic py3-requests py3-numpy py3-scipy \
-    && apk del .build-deps
-
-# Copy requirements
+# Copy requirements and install
 COPY app/requirements.txt .
-
-# Install Python dependencies
 RUN pip3 install --no-cache-dir -r requirements.txt
 
-# Copy application (includes copilot_core/ subfolder)
+# Copy application (main.py + copilot_core/ package)
 COPY app/ .
 
-# Set Python path to include copilot_core
-ENV PYTHONPATH=/app:/app/copilot_core
+# Set Python path
+ENV PYTHONPATH=/app
 
 EXPOSE 8909
 
