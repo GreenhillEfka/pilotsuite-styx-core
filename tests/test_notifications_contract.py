@@ -307,6 +307,129 @@ def test_notifications_send_contract_creates_one_notification_and_keeps_read_mod
     }
 
 
+def test_notifications_send_contract_accepts_legacy_data_channel_source_and_integer_priority_hints_without_reintroducing_delivery_surface(client):
+    response = client.post(
+        "/api/v1/notifications/send",
+        json={
+            "title": "Send-Alias bleibt zum Root kompatibel",
+            "message": "Historische data-, channel-, source- und Integer-priority-Hints bleiben auch auf /send explizit abgesichert.",
+            "priority": 1,
+            "type": "system",
+            "channel": "telegram",
+            "source": "Legacy_Send",
+            "data": {
+                "slice": 121,
+                "parity_guard": True,
+            },
+            "tags": ["legacy", "send"],
+        },
+    )
+    assert response.status_code == 200
+
+    payload = response.get_json()
+    created_notification = payload["notification"]
+    assert payload["ok"] is True
+    assert created_notification["title"] == "Send-Alias bleibt zum Root kompatibel"
+    assert created_notification["message"] == "Historische data-, channel-, source- und Integer-priority-Hints bleiben auch auf /send explizit abgesichert."
+    assert created_notification["priority"] == "urgent"
+    assert created_notification["type"] == "system"
+    assert created_notification["action_data"] == {
+        "slice": 121,
+        "parity_guard": True,
+    }
+    assert "channel" not in created_notification
+    assert created_notification["source"] == "legacy_send"
+    assert created_notification["tags"] == ["legacy", "send"]
+
+    refreshed_feed = client.get("/api/v1/notifications?source=legacy_send")
+    assert refreshed_feed.status_code == 200
+    assert refreshed_feed.get_json()["count"] == 1
+    assert refreshed_feed.get_json()["notifications"][0] == created_notification
+    assert refreshed_feed.get_json()["unread_count"] == 3
+    assert refreshed_feed.get_json()["total_count"] == 4
+
+    refreshed_digest = client.get("/api/v1/notifications/digest")
+    assert refreshed_digest.status_code == 200
+    assert refreshed_digest.get_json()["digest"] == {
+        "period": "last_24h",
+        "total": 4,
+        "unread": 3,
+        "read": 1,
+        "dismissed": 0,
+        "sent": 4,
+        "by_type": {
+            "system": 1,
+            "alert": 1,
+            "info": 1,
+            "suggestion": 1,
+        },
+        "by_source": {
+            "legacy_send": 1,
+            "presence": 1,
+            "dashboard_layout": 1,
+            "zone_truth": 1,
+        },
+        "by_priority": {
+            "urgent": 1,
+            "high": 1,
+            "normal": 1,
+            "low": 1,
+        },
+        "latest_timestamp": created_notification["timestamp"],
+    }
+
+    refreshed_stats = client.get("/api/v1/notifications/stats")
+    assert refreshed_stats.status_code == 200
+    assert refreshed_stats.get_json() == {
+        "ok": True,
+        "total_notifications": 4,
+        "unread_count": 3,
+        "by_source": {
+            "legacy_send": 1,
+            "presence": 1,
+            "dashboard_layout": 1,
+            "zone_truth": 1,
+        },
+        "by_priority": {
+            "urgent": 1,
+            "high": 1,
+            "normal": 1,
+            "low": 1,
+        },
+        "by_type": {
+            "system": 1,
+            "alert": 1,
+            "info": 1,
+            "suggestion": 1,
+        },
+    }
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "error_code"),
+    [
+        ("channel", ["push"], "invalid_channel"),
+        ("channel", "   ", "invalid_channel"),
+        ("source", ["presence"], "invalid_source"),
+        ("source", "   ", "invalid_source"),
+    ],
+)
+def test_notifications_send_contract_rejects_invalid_legacy_channel_and_source_hints_with_root_parity(client, field, value, error_code):
+    response = client.post(
+        "/api/v1/notifications/send",
+        json={
+            "title": "Send-Alias bleibt strikt",
+            "message": "Fehlerhafte Legacy-Hints dürfen den Alias-Pfad nicht vom Root-Write entkoppeln.",
+            field: value,
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.get_json()["error"] == error_code
+    assert len(notifications_module._NOTIFICATIONS) == len(notifications_module._DEFAULT_NOTIFICATIONS)
+
+
+
 def test_notifications_root_create_alias_accepts_legacy_data_channel_and_source_hints_without_reintroducing_delivery_surface(client):
     response = client.post(
         "/api/v1/notifications",

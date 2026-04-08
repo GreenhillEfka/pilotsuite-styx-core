@@ -293,3 +293,120 @@ def match_room(room_name: str) -> MatchResult:
 def match_rooms(room_names: List[str]) -> List[MatchResult]:
     """Convenience-Funktion für multiples Room-Matching."""
     return get_matcher().match_multiple_rooms(room_names)
+
+
+def map_homeassistant_topology(areas: List[Dict], entities: List[Dict]) -> Dict:
+    """Map Home Assistant areas/entities onto Habitus zones.
+
+    Low-confidence mappings are kept in an explicit ``ungeordnet`` bucket so the
+    runtime can stay functional without silently inventing zone assignments.
+    """
+
+    matcher = get_matcher()
+    threshold = max(matcher.REVIEW_THRESHOLD, 90.0)
+    area_by_id = {
+        str(area.get("area_id") or ""): area
+        for area in areas
+        if isinstance(area, dict) and area.get("area_id")
+    }
+    area_matches: Dict[str, MatchResult] = {}
+    zone_entries: Dict[str, Dict] = {}
+    ungeordnet_areas: List[Dict] = []
+    ungeordnet_entities: List[Dict] = []
+
+    def _zone_entry(match: MatchResult) -> Dict:
+        zone_type = match.zone.zone_type.value
+        return zone_entries.setdefault(
+            zone_type,
+            {
+                "zone_type": zone_type,
+                "zone_name_de": match.zone.name_de,
+                "zone_name_en": match.zone.name_en,
+                "confidence": match.confidence,
+                "areas": [],
+                "entities": [],
+                "area_count": 0,
+                "entity_count": 0,
+            },
+        )
+
+    for area in areas:
+        if not isinstance(area, dict):
+            continue
+        area_id = str(area.get("area_id") or "")
+        area_name = str(area.get("name") or area_id or "")
+        match = matcher.match_room_to_zone(area_name)
+        area_matches[area_id] = match
+
+        area_payload = {
+            "area_id": area_id,
+            "name": area_name,
+            "confidence": match.confidence,
+            "matched_keyword": match.matched_keyword,
+            "needs_review": match.needs_review,
+        }
+
+        if match.confidence < threshold or match.needs_review:
+            ungeordnet_areas.append(area_payload)
+            continue
+
+        zone = _zone_entry(match)
+        zone["confidence"] = max(zone["confidence"], match.confidence)
+        zone["areas"].append(area_payload)
+        zone["area_count"] = len(zone["areas"])
+
+    for entity in entities:
+        if not isinstance(entity, dict):
+            continue
+        attrs = entity.get("attributes") if isinstance(entity.get("attributes"), dict) else {}
+        area_id = str(attrs.get("area_id") or entity.get("area_id") or "")
+        area = area_by_id.get(area_id, {})
+        room_name = str(
+            area.get("name")
+            or attrs.get("friendly_name")
+            or entity.get("name")
+            or entity.get("entity_id")
+            or area_id
+        )
+        match = area_matches.get(area_id) or matcher.match_room_to_zone(room_name)
+
+        entity_payload = {
+            "entity_id": entity.get("entity_id"),
+            "name": attrs.get("friendly_name") or entity.get("name") or entity.get("entity_id"),
+            "area_id": area_id or None,
+            "confidence": match.confidence,
+            "matched_keyword": match.matched_keyword,
+            "needs_review": match.needs_review,
+        }
+
+        if match.confidence < threshold or match.needs_review:
+            ungeordnet_entities.append(entity_payload)
+            continue
+
+        zone = _zone_entry(match)
+        zone["confidence"] = max(zone["confidence"], match.confidence)
+        zone["entities"].append(entity_payload)
+        zone["entity_count"] = len(zone["entities"])
+
+    zones = sorted(
+        zone_entries.values(),
+        key=lambda zone: (-zone["entity_count"], -zone["area_count"], zone["zone_type"]),
+    )
+
+    return {
+        "summary": {
+            "area_count": len([area for area in areas if isinstance(area, dict)]),
+            "entity_count": len([entity for entity in entities if isinstance(entity, dict)]),
+            "zone_count": len(zones),
+        },
+        "zones": zones,
+        "ungeordnet": {
+            "zone_type": "ungeordnet",
+            "zone_name_de": "Ungeordnet",
+            "zone_name_en": "Unassigned",
+            "area_count": len(ungeordnet_areas),
+            "entity_count": len(ungeordnet_entities),
+            "areas": ungeordnet_areas,
+            "entities": ungeordnet_entities,
+        },
+    }

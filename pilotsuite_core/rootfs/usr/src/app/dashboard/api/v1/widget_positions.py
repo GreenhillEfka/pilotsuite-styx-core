@@ -90,10 +90,99 @@ def _positions() -> dict[str, dict[str, Any]]:
     return _state()["positions"]
 
 
-def _coerce_position(data: dict[str, Any], *, require_widget_id: bool = True) -> tuple[dict[str, Any] | None, str | None]:
+def _latest_position_update(positions: dict[str, dict[str, Any]]) -> str | None:
+    return max(
+        (
+            last_update
+            for entry in positions.values()
+            if isinstance(entry, dict)
+            for last_update in [entry.get("last_update")]
+            if isinstance(last_update, str)
+        ),
+        default=None,
+    )
+
+
+def _error_widget_id(data: Any) -> str:
+    if not isinstance(data, dict):
+        return "unknown"
+
+    widget_id = data.get("widget_id")
+    if isinstance(widget_id, str) and widget_id:
+        return widget_id
+
+    return "unknown"
+
+
+def _coerce_stack_entry(entry: Any, *, field: str) -> tuple[dict[str, Any] | None, str | None]:
+    if not isinstance(entry, dict):
+        return None, f"Invalid {field} entry"
+
+    for required_field in ("x", "y"):
+        if required_field not in entry:
+            return None, f"Invalid {field} entry"
+
+    try:
+        x = int(entry["x"])
+        y = int(entry["y"])
+        width = int(entry["width"]) if "width" in entry else None
+        height = int(entry["height"]) if "height" in entry else None
+    except (TypeError, ValueError):
+        return None, f"Invalid {field} entry"
+
+    if x < 0 or y < 0:
+        return None, f"Invalid {field} entry"
+    if width is not None and width < 1:
+        return None, f"Invalid {field} entry"
+    if height is not None and height < 1:
+        return None, f"Invalid {field} entry"
+
+    normalized = deepcopy(entry)
+    normalized["x"] = x
+    normalized["y"] = y
+    if width is not None:
+        normalized["width"] = width
+    if height is not None:
+        normalized["height"] = height
+
+    return normalized, None
+
+
+def _coerce_stack_entries(values: Any, *, field: str) -> tuple[list[dict[str, Any]] | None, str | None]:
+    if not isinstance(values, list):
+        return None, f"Invalid {field}"
+
+    normalized_entries: list[dict[str, Any]] = []
+    for entry in values:
+        normalized_entry, error = _coerce_stack_entry(entry, field=field)
+        if error:
+            return None, error
+        normalized_entries.append(normalized_entry)
+
+    return normalized_entries, None
+
+
+def _coerce_position(data: Any, *, require_widget_id: bool = True) -> tuple[dict[str, Any] | None, str | None]:
+    if not isinstance(data, dict):
+        return None, "Invalid position payload"
+
     widget_id = data.get("widget_id")
     if require_widget_id and not widget_id:
         return None, "Missing required field: widget_id"
+    if widget_id is not None and not isinstance(widget_id, str):
+        return None, "Invalid widget_id"
+
+    history = []
+    if "history" in data:
+        history, error = _coerce_stack_entries(data["history"], field="history")
+        if error:
+            return None, error
+
+    redo_stack = []
+    if "redo_stack" in data:
+        redo_stack, error = _coerce_stack_entries(data["redo_stack"], field="redo_stack")
+        if error:
+            return None, error
 
     for field in ("x", "y"):
         if field not in data:
@@ -118,8 +207,8 @@ def _coerce_position(data: dict[str, Any], *, require_widget_id: bool = True) ->
         "height": height,
         "zone_id": data.get("zone_id", "global"),
         "snap_to_grid": bool(data.get("snap_to_grid", True)),
-        "history": deepcopy(data.get("history", [])),
-        "redo_stack": deepcopy(data.get("redo_stack", [])),
+        "history": history,
+        "redo_stack": redo_stack,
         "last_update": _utc_now(),
     }, None
 
@@ -133,10 +222,7 @@ def get_all_positions():
         {
             "positions": positions,
             "total": len(positions),
-            "last_update": max(
-                (entry.get("last_update") for entry in positions.values()),
-                default=None,
-            ),
+            "last_update": _latest_position_update(positions),
         }
     )
 
@@ -203,13 +289,18 @@ def save_bulk_positions():
     if not data or "positions" not in data:
         return jsonify({"error": "No positions provided"}), 400
 
+    raw_positions = data["positions"]
+    if not isinstance(raw_positions, list):
+        return jsonify({"error": "Invalid positions payload"}), 400
+
     saved_count = 0
     errors: list[dict[str, str]] = []
+    emitted_updates: list[dict[str, Any]] = []
 
     with _STORE_LOCK:
-        for raw_position in data["positions"]:
+        for raw_position in raw_positions:
             position, error = _coerce_position(raw_position)
-            widget_id = raw_position.get("widget_id", "unknown")
+            widget_id = _error_widget_id(raw_position)
             if error:
                 errors.append({"widget_id": widget_id, "error": error})
                 continue
@@ -219,16 +310,21 @@ def save_bulk_positions():
                 position["history"] = deepcopy(existing.get("history", []))
                 position["redo_stack"] = []
             _positions()[widget_id] = position
+            emitted_updates.append({"widget_id": widget_id, "position": deepcopy(position)})
             saved_count += 1
 
         _persist()
+        total_positions = len(_positions())
+
+    for payload in emitted_updates:
+        _emit("widget_position_update", payload)
 
     return jsonify(
         {
             "success": True,
             "saved_count": saved_count,
             "errors": errors,
-            "total_positions": len(_positions()),
+            "total_positions": total_positions,
             "timestamp": _utc_now(),
         }
     )

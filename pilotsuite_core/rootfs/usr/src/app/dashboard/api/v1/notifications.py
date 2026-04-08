@@ -174,6 +174,11 @@ _LEGACY_INTEGER_NOTIFICATION_PRIORITY_MAP = {
     3: "normal",
     4: "low",
 }
+_NOTIFICATION_CREATE_ERROR_MESSAGES = {
+    "invalid_action_data": "action_data or legacy data must be a JSON object",
+    "invalid_channel": "channel must be a non-empty string when provided",
+    "invalid_source": "source must be a non-empty string when provided",
+}
 
 _SUBSCRIPTIONS = deepcopy(_DEFAULT_SUBSCRIPTIONS)
 
@@ -316,6 +321,13 @@ def _validated_notification_priority(raw_priority: object) -> str:
     return raw_priority.strip()
 
 
+def _validated_notification_legacy_hints(body: dict) -> tuple[dict, str]:
+    action_data = _validated_notification_action_data(body)
+    _validated_notification_channel_alias(body)
+    source = _validated_notification_source_alias(body)
+    return action_data, source
+
+
 def _create_notification_from_request():
     body = request.get_json(silent=True)
     if not isinstance(body, dict):
@@ -379,21 +391,14 @@ def _create_notification_from_request():
         )
 
     try:
-        action_data = _validated_notification_action_data(body)
-        _validated_notification_channel_alias(body)
-        source = _validated_notification_source_alias(body)
+        action_data, source = _validated_notification_legacy_hints(body)
     except ValueError as error:
         error_code = str(error)
-        error_messages = {
-            "invalid_action_data": "action_data or legacy data must be a JSON object",
-            "invalid_channel": "channel must be a non-empty string when provided",
-            "invalid_source": "source must be a non-empty string when provided",
-        }
         return (
             jsonify(
                 {
                     "error": error_code,
-                    "message": error_messages[error_code],
+                    "message": _NOTIFICATION_CREATE_ERROR_MESSAGES[error_code],
                 }
             ),
             400,
