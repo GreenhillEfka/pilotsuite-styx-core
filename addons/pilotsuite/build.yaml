@@ -1,6 +1,10 @@
 build_from:
-  amd64: ghcr.io/home-assistant/amd64-base-python:latest
-  aarch64: ghcr.io/home-assistant/aarch64-base-python:latest
-codenotary:
-  signer: notary@home-assistant.io
-  base_image: notary@home-assistant.io
+  amd64: ghcr.io/home-assistant/amd64-base-python:3.11
+  aarch64: ghcr.io/home-assistant/aarch64-base-python:3.11
+
+# Force build context to be addon directory
+context: addons/pilotsuite
+
+# Build args
+build_args:
+  BUILD_FROM: ghcr.io/home-assistant/amd64-base-python:3.11

@@ -1,0 +1,12 @@
+# Ignore large directories
+__pycache__/
+*.pyc
+*.pyo
+.git/
+.github/
+tests/
+test_*
+.venv/
+*.md
+docs/
+*.log
