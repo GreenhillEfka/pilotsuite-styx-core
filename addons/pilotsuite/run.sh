@@ -1,7 +1,19 @@
-#!/bin/bash
+#!/usr/bin/with-contenv bashio
 set -e
-echo "PilotSuite Core v16.0.0 starting..."
-export PILOTSUITE_VERSION="16.0.0"
-export PILOTSUITE_PORT="8909"
-export PILOTSUITE_HOST="localhost"
-exec python3 -m uvicorn copilot_core.api.rest_server:app --host 0.0.0.0 --port 8909 --workers 4
+
+# Log startup
+bashio::log.info "Starting PilotSuite Core v20.0.0..."
+
+# Get configuration
+LOG_LEVEL=$(bashio::config 'log_level')
+OLLAMA_HOST=$(bashio::config 'ollama_host')
+OLLAMA_PORT=$(bashio::config 'ollama_port')
+
+# Export environment variables
+export LOG_LEVEL="${LOG_LEVEL:-info}"
+export OLLAMA_HOST="${OLLAMA_HOST:-localhost}"
+export OLLAMA_PORT="${OLLAMA_PORT:-11434}"
+
+# Start the application
+cd /app
+exec python3 main.py

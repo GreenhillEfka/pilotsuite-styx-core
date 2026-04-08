@@ -1,32 +1,21 @@
 ARG BUILD_FROM
 FROM $BUILD_FROM
 
-# Set version
-ENV PILOTSUITE_VERSION=1.0.2
-ENV PILOTSUITE_PORT=8909
+# Install dependencies
+RUN apk add --no-cache python3 py3-pip py3-aiohttp py3-fastapi py3-uvicorn py3-pydantic py3-requests py3-numpy py3-scipy
 
-# Install system dependencies
-RUN apk add --no-cache \
-    python3 \
-    py3-pip \
-    redis \
-    && rm -rf /var/cache/apk/*
-
-# Copy application code
-COPY copilot_core /app/copilot_core
-COPY requirements.txt /app/
-
+# Copy application
+COPY pilotsuite_core/rootfs/usr/src/app /app
 WORKDIR /app
 
-# Install Python dependencies
+# Install Python requirements
 RUN pip3 install --no-cache-dir -r requirements.txt
 
-# Expose port
+# Expose API port
 EXPOSE 8909
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8909/health || exit 1
+  CMD python3 -c "import requests; requests.get('http://localhost:8909/health')" || exit 1
 
-# Run application
-CMD ["python3", "-m", "uvicorn", "copilot_core.api.rest_server:app", "--host", "0.0.0.0", "--port", "8909"]
+CMD ["python3", "main.py"]
