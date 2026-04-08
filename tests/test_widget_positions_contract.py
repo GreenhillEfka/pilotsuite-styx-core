@@ -587,6 +587,53 @@ def test_widget_positions_contract_treats_invalid_persisted_redo_container_as_no
     }
 
 
+def test_widget_positions_contract_treats_invalid_persisted_history_container_as_not_found_for_overwrite_save(tmp_path):
+    persisted_file = tmp_path / "widget_positions.json"
+    persisted_file.write_text(
+        json.dumps(
+            {
+                "weather": {
+                    "x": 4,
+                    "y": 2,
+                    "width": 3,
+                    "height": 2,
+                    "history": {},
+                    "redo_stack": [{"x": 8, "y": 9, "width": 3, "height": 2}],
+                    "last_update": "2026-04-08T06:22:00+00:00",
+                }
+            }
+        )
+    )
+
+    app = create_app(
+        {
+            "TESTING": True,
+            "WIDGET_POSITIONS_FILE": str(persisted_file),
+        }
+    )
+    client = app.test_client()
+
+    response = client.post(
+        "/api/v1/widgets/positions",
+        json={"widget_id": "weather", "x": 9, "y": 8, "width": 5, "height": 4},
+    )
+    assert response.status_code == 404
+    assert response.get_json() == {"error": "Widget position not found"}
+
+    fetched = client.get("/api/v1/widgets/positions/weather")
+    assert fetched.status_code == 200
+    assert fetched.get_json()["position"] == {
+        "widget_id": "weather",
+        "x": 4,
+        "y": 2,
+        "width": 3,
+        "height": 2,
+        "history": {},
+        "redo_stack": [{"x": 8, "y": 9, "width": 3, "height": 2}],
+        "last_update": "2026-04-08T06:22:00+00:00",
+    }
+
+
 def test_widget_positions_contract_treats_invalid_persisted_redo_container_as_not_found_for_overwrite_save(tmp_path):
     persisted_file = tmp_path / "widget_positions.json"
     persisted_file.write_text(
@@ -630,6 +677,60 @@ def test_widget_positions_contract_treats_invalid_persisted_redo_container_as_no
         "height": 2,
         "history": [{"x": 1, "y": 0, "width": 3, "height": 2}],
         "redo_stack": {},
+        "last_update": "2026-04-08T06:22:00+00:00",
+    }
+
+
+def test_widget_positions_contract_reports_invalid_persisted_history_container_for_bulk_overwrite_save(tmp_path):
+    persisted_file = tmp_path / "widget_positions.json"
+    persisted_file.write_text(
+        json.dumps(
+            {
+                "weather": {
+                    "x": 4,
+                    "y": 2,
+                    "width": 3,
+                    "height": 2,
+                    "history": {},
+                    "redo_stack": [{"x": 8, "y": 9, "width": 3, "height": 2}],
+                    "last_update": "2026-04-08T06:22:00+00:00",
+                }
+            }
+        )
+    )
+
+    app = create_app(
+        {
+            "TESTING": True,
+            "WIDGET_POSITIONS_FILE": str(persisted_file),
+        }
+    )
+    client = app.test_client()
+
+    response = client.post(
+        "/api/v1/widgets/positions/bulk",
+        json={
+            "positions": [
+                {"widget_id": "weather", "x": 9, "y": 8, "width": 5, "height": 4},
+            ]
+        },
+    )
+    assert response.status_code == 200
+    assert response.get_json()["saved_count"] == 0
+    assert response.get_json()["errors"] == [
+        {"widget_id": "weather", "error": "Widget position not found"}
+    ]
+
+    fetched = client.get("/api/v1/widgets/positions/weather")
+    assert fetched.status_code == 200
+    assert fetched.get_json()["position"] == {
+        "widget_id": "weather",
+        "x": 4,
+        "y": 2,
+        "width": 3,
+        "height": 2,
+        "history": {},
+        "redo_stack": [{"x": 8, "y": 9, "width": 3, "height": 2}],
         "last_update": "2026-04-08T06:22:00+00:00",
     }
 

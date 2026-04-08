@@ -1,5 +1,4 @@
-ARG BUILD_FROM
-FROM $BUILD_FROM
+FROM ghcr.io/home-assistant/amd64-base:latest
 
 # Copy app directory
 COPY . /app
@@ -24,7 +23,18 @@ RUN pip3 install --no-cache-dir --break-system-packages \
     pydantic \
     requests \
     numpy \
-    scipy
+    scipy \
+    flask \
+    flask-socketio \
+    flask-compress \
+    python-ulid \
+    pyyaml \
+    psutil \
+    neo4j \
+    python-dotenv \
+    prometheus-client \
+    python-socketio \
+    qrcode
 
 # Create data directory for persistence
 RUN mkdir -p /data && chmod 755 /data

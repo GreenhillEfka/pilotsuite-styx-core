@@ -264,6 +264,8 @@ def save_position():
     with _STORE_LOCK:
         existing = _positions().get(widget_id)
         if existing:
+            if "history" in existing and not isinstance(existing.get("history"), list):
+                return jsonify({"error": "Widget position not found"}), 404
             if "redo_stack" in existing and not isinstance(existing.get("redo_stack"), list):
                 return jsonify({"error": "Widget position not found"}), 404
             position["history"] = deepcopy(existing.get("history", []))
@@ -331,6 +333,9 @@ def save_bulk_positions():
 
             existing = _positions().get(widget_id)
             if existing:
+                if "history" in existing and not isinstance(existing.get("history"), list):
+                    errors.append({"widget_id": widget_id, "error": "Widget position not found"})
+                    continue
                 if "redo_stack" in existing and not isinstance(existing.get("redo_stack"), list):
                     errors.append({"widget_id": widget_id, "error": "Widget position not found"})
                     continue
