@@ -532,12 +532,14 @@ class HybridCacheManager:
         if not self._config.cache_enabled:
             return
         
+        ttl_seconds = ttl if ttl is not None else self._default_ttl
+        
         # Write to local cache (always)
-        await self._set_local(key, value, ttl)
+        await self._set_local(key, value, ttl_seconds)
         
         # Write to Redis (if enabled and write_through)
         if self._config.write_through and self._redis_connected:
-            await self._set_to_redis(key, value, ttl)
+            await self._set_to_redis(key, value, ttl_seconds)
         
         _LOGGER.debug("Hybrid cache set: %s", key)
     

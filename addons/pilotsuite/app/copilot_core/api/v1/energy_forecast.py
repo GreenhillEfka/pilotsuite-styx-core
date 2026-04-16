@@ -16,6 +16,7 @@ POST /api/v1/energy/load-shifting/devices
 
 from __future__ import annotations
 
+import inspect
 import logging
 from datetime import datetime
 from typing import Optional
@@ -58,6 +59,14 @@ def _get_energy_service():
         return None
 
 
+def _resolve_weather_forecast_result(result):
+    """Resolve sync or async weather-service forecast results."""
+    if inspect.isawaitable(result):
+        import asyncio
+        return asyncio.run(result)
+    return result
+
+
 def _fetch_weather_forecast(hours: int = 48) -> list[dict]:
     """Hole Wetterdaten von Weather Service oder generiere Defaults.
 
@@ -66,11 +75,12 @@ def _fetch_weather_forecast(hours: int = 48) -> list[dict]:
     """
     weather_service = _get_weather_service()
 
-    # Try services dict first (sync call with hourly data)
+    # Try services dict first (sync or async call with daily forecast data)
     if weather_service and hasattr(weather_service, "get_forecast"):
         try:
-            import asyncio
-            forecast_raw = asyncio.run(weather_service.get_forecast(days=max(1, hours // 24)))
+            forecast_raw = _resolve_weather_forecast_result(
+                weather_service.get_forecast(days=max(1, hours // 24))
+            )
             daily = forecast_raw.get("forecast", []) if isinstance(forecast_raw, dict) else []
             # Expand daily → hourly (interpolate for each day)
             hourly: list[dict] = []
@@ -208,7 +218,12 @@ def get_consumption_forecast():
     }
     """
     try:
-        hours = min(int(request.args.get("hours", 48)), 168)
+        hours_raw = request.args.get("hours", "48")
+        try:
+            hours = int(hours_raw)
+        except (ValueError, TypeError):
+            return jsonify({"status": "error", "message": "Query parameter 'hours' must be an integer"}), 400
+        hours = min(max(hours, 1), 168)
         include_weather = request.args.get("include_weather", "true").lower() == "true"
         
         # Engine initialisieren
@@ -274,10 +289,27 @@ def get_pv_forecast():
     }
     """
     try:
-        hours = min(int(request.args.get("hours", 48)), 168)
-        peak_kw = float(request.args.get("peak_kw", 10.0))
-        azimuth = float(request.args.get("azimuth", 180.0))
-        tilt = float(request.args.get("tilt", 30.0))
+        hours_raw = request.args.get("hours", "48")
+        try:
+            hours = int(hours_raw)
+        except (ValueError, TypeError):
+            return jsonify({"status": "error", "message": "Query parameter 'hours' must be an integer"}), 400
+        hours = min(max(hours, 1), 168)
+        peak_kw_raw = request.args.get("peak_kw", "10.0")
+        try:
+            peak_kw = float(peak_kw_raw)
+        except (ValueError, TypeError):
+            return jsonify({"status": "error", "message": "Query parameter 'peak_kw' must be a number"}), 400
+        azimuth_raw = request.args.get("azimuth", "180.0")
+        try:
+            azimuth = float(azimuth_raw)
+        except (ValueError, TypeError):
+            return jsonify({"status": "error", "message": "Query parameter 'azimuth' must be a number"}), 400
+        tilt_raw = request.args.get("tilt", "30.0")
+        try:
+            tilt = float(tilt_raw)
+        except (ValueError, TypeError):
+            return jsonify({"status": "error", "message": "Query parameter 'tilt' must be a number"}), 400
         
         # Engine initialisieren
         engine = PVPredictionEngine(
@@ -347,7 +379,12 @@ def get_combined_forecast():
     }
     """
     try:
-        hours = min(int(request.args.get("hours", 48)), 168)
+        hours_raw = request.args.get("hours", "48")
+        try:
+            hours = int(hours_raw)
+        except (ValueError, TypeError):
+            return jsonify({"status": "error", "message": "Query parameter 'hours' must be an integer"}), 400
+        hours = min(max(hours, 1), 168)
         include_shifting = request.args.get("include_load_shifting", "true").lower() == "true"
         
         # Hole Einzelprognosen
@@ -460,7 +497,12 @@ def get_load_shifting_recommendations():
     }
     """
     try:
-        hours = min(int(request.args.get("hours", 24)), 48)
+        hours_raw = request.args.get("hours", "24")
+        try:
+            hours = int(hours_raw)
+        except (ValueError, TypeError):
+            return jsonify({"status": "error", "message": "Query parameter 'hours' must be an integer"}), 400
+        hours = min(max(hours, 1), 48)
         
         # Daten holen
         pv_raw = _fetch_weather_forecast(hours)
@@ -527,11 +569,16 @@ def get_optimization_windows():
     }
     """
     try:
-        hours = min(int(request.args.get("hours", 24)), 48)
-        
+        hours_raw = request.args.get("hours", "24")
+        try:
+            hours = int(hours_raw)
+        except (ValueError, TypeError):
+            return jsonify({"status": "error", "message": "Query parameter 'hours' must be an integer"}), 400
+        hours = min(max(hours, 1), 48)
+
         # Engine mit minimalen Daten
         engine = LoadShiftingEngine()
-        
+
         # Wetter für PV
         weather_raw = _fetch_weather_forecast(hours)
         if weather_raw:

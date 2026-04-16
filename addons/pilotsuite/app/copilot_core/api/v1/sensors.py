@@ -278,7 +278,7 @@ class SensorService:
             await self._cache.delete(f"sensor:{entity_id}")
             await self._cache.delete("sensors:all")
         else:
-            await self._cache.clear()
+            await self._cache.invalidate_all()
         
         _LOGGER.info("Sensor cache invalidated: %s", entity_id or "all")
 
@@ -301,8 +301,10 @@ def get_sensors():
     try:
         service = _get_service()
         
-        # Check if cache should be bypassed
-        use_cache = request.args.get("cache", "true").lower() != "false"
+        use_cache_raw = request.args.get("cache", "true")
+        if use_cache_raw.lower() not in ("true", "false"):
+            return jsonify({"status": "error", "message": "Query parameter 'cache' must be 'true' or 'false'"}), 400
+        use_cache = use_cache_raw.lower() != "false"
         
         sensors = asyncio.run(service.get_all_sensors(use_cache=use_cache))
         
@@ -322,9 +324,14 @@ def get_sensors():
 def get_sensor(entity_id: str):
     """Get specific sensor data."""
     try:
+        if not entity_id or not entity_id.strip():
+            return jsonify({"status": "error", "message": "Path parameter 'entity_id' must not be blank"}), 400
         service = _get_service()
         
-        use_cache = request.args.get("cache", "true").lower() != "false"
+        use_cache_raw = request.args.get("cache", "true")
+        if use_cache_raw.lower() not in ("true", "false"):
+            return jsonify({"status": "error", "message": "Query parameter 'cache' must be 'true' or 'false'"}), 400
+        use_cache = use_cache_raw.lower() != "false"
         
         sensor = asyncio.run(service.get_sensor(entity_id, use_cache=use_cache))
         
@@ -426,9 +433,21 @@ def get_cache_stats():
 def clear_cache():
     """Clear sensor cache."""
     try:
+        data = request.get_json(silent=True)
+        if data is None and request.content_length and request.content_length > 0:
+            # Body was sent but is not a valid JSON object (e.g., null, array, string)
+            return jsonify({"status": "error", "message": "Request body must be a JSON object"}), 400
+        if data is None:
+            data = {}
+        elif not isinstance(data, dict):
+            return jsonify({"status": "error", "message": "Request body must be a JSON object"}), 400
+        entity_id = None
+        if data:
+            entity_id = data.get("entity_id")
+            if entity_id is not None and not isinstance(entity_id, str):
+                return jsonify({"status": "error", "message": "Request body field 'entity_id' must be a string"}), 400
         cache = get_sensor_cache()
-        asyncio.run(cache.clear())
-        
+        asyncio.run(cache.invalidate_all())
         return jsonify({
             "status": "ok",
             "message": "Sensor cache cleared",
