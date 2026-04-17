@@ -663,6 +663,129 @@ def get_supported_intents():
         }), 500
 
 
+def _get_dialog_machine():
+    """Get or create dialog state machine."""
+    from copilot_core.voice.dialog_state import get_dialog_machine
+    return get_dialog_machine()
+
+
+@bp.route("/dialog/state", methods=["GET"])
+def get_dialog_state():
+    """Get current dialog state."""
+    try:
+        machine = _get_dialog_machine()
+        state = machine.get_state()
+        timed_out = machine.check_timeout()
+        if timed_out:
+            machine.decay()
+            state = machine.get_state()
+        return jsonify({
+            "status": "ok",
+            "state": state.state,
+            "active_intent": state.active_intent,
+            "slot_values": state.slot_values,
+            "context_stack_size": len(state.context_stack),
+            "last_activity_ts": state.last_activity_ts,
+            "session_id": state.session_id,
+            "user_id": state.user_id,
+            "timed_out": timed_out,
+            "confirmation_question": machine.generate_confirmation_question(),
+            "clarification_question": machine.generate_clarification_question(),
+        })
+    except Exception as e:
+        _LOGGER.exception("Failed to get dialog state")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@bp.route("/dialog/activate", methods=["POST"])
+def activate_dialog_intent():
+    """Activate a new dialog intent, preserving any current active context."""
+    try:
+        data = request.get_json(silent=True) or {}
+        intent = data.get("intent")
+        if not intent:
+            return jsonify({"status": "error", "message": "Missing 'intent'"}), 400
+        machine = _get_dialog_machine()
+        state = machine.activate_intent(
+            intent=str(intent),
+            slots=data.get("slots") if isinstance(data.get("slots"), dict) else {},
+            session_id=data.get("session_id"),
+            user_id=data.get("user_id"),
+        )
+        return jsonify({
+            "status": "ok",
+            "state": state.state,
+            "active_intent": state.active_intent,
+            "slot_values": state.slot_values,
+            "context_stack_size": len(state.context_stack),
+            "last_activity_ts": state.last_activity_ts,
+            "session_id": state.session_id,
+            "user_id": state.user_id,
+        })
+    except Exception as e:
+        _LOGGER.exception("Failed to activate dialog intent")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@bp.route("/dialog/confirm", methods=["POST"])
+def confirm_dialog_action():
+    """Confirm or cancel the pending dialog action."""
+    try:
+        data = request.get_json(silent=True) or {}
+        confirmed = bool(data.get("confirmed", False))
+        machine = _get_dialog_machine()
+        state = machine.confirm_action() if confirmed else machine.cancel_action()
+        return jsonify({
+            "status": "ok",
+            "state": state.state,
+            "active_intent": state.active_intent,
+            "slot_values": state.slot_values,
+            "context_stack_size": len(state.context_stack),
+            "last_activity_ts": state.last_activity_ts,
+            "session_id": state.session_id,
+            "user_id": state.user_id,
+        })
+    except Exception as e:
+        _LOGGER.exception("Failed to confirm dialog action")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@bp.route("/dialog/clarify", methods=["POST"])
+def clarify_dialog():
+    """Set a clarification prompt and transition to clarifying state."""
+    try:
+        data = request.get_json(silent=True) or {}
+        clarification_text = str(data.get("clarification_text", "Kannst du das bitte genauer beschreiben?"))
+        machine = _get_dialog_machine()
+        state = machine.set_clarifying(clarification_text)
+        return jsonify({
+            "status": "ok",
+            "state": state.state,
+            "active_intent": state.active_intent,
+            "slot_values": state.slot_values,
+            "context_stack_size": len(state.context_stack),
+            "last_activity_ts": state.last_activity_ts,
+            "session_id": state.session_id,
+            "user_id": state.user_id,
+            "clarification_question": machine.generate_clarification_question(),
+        })
+    except Exception as e:
+        _LOGGER.exception("Failed to clarify dialog")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@bp.route("/dialog/reset", methods=["POST"])
+def reset_dialog():
+    """Reset dialog state to IDLE."""
+    try:
+        machine = _get_dialog_machine()
+        state = machine.reset()
+        return jsonify({"status": "ok", "state": state.state})
+    except Exception as e:
+        _LOGGER.exception("Failed to reset dialog state")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
 # Register blueprint with app
 def init_voice_api(app):
     """Initialize voice API endpoints."""
