@@ -228,6 +228,7 @@ class VoiceContextBuilder:
         zone_name: Optional[str] = None,
         sensor_data: Optional[Dict[str, Any]] = None,
         user_preferences: Optional[Dict[str, Any]] = None,
+        active_devices: Optional[List[Dict[str, Any]]] = None,
         force_refresh: bool = False,
     ) -> VoiceContext:
         """Build comprehensive voice context.
@@ -269,9 +270,21 @@ class VoiceContextBuilder:
             sensor_data,
         )
         
-        # Build device context
-        active_devices = self._build_device_context(sensor_data)
-        
+        # Build device context — use replay data if provided, otherwise build from sensor_data
+        if active_devices is not None:
+            device_contexts = []
+            for d in active_devices:
+                if isinstance(d, dict):
+                    device_contexts.append(DeviceContext(
+                        device_name=d.get("device_name", ""),
+                        device_type=d.get("device_type", ""),
+                        state=d.get("state", "unknown"),
+                        attributes=d.get("attributes", {}),
+                    ))
+            active_devices_out = device_contexts
+        else:
+            active_devices_out = self._build_device_context(sensor_data)
+
         # Get relevant habitus patterns
         relevant_patterns = self._get_relevant_patterns(
             habitus_service,
@@ -289,7 +302,7 @@ class VoiceContextBuilder:
             time_context=time_context,
             current_zone=zone_context,
             zone_name=zone_name or zone_context.zone_name if zone_context else "unknown",
-            active_devices=active_devices,
+            active_devices=active_devices_out,
             recent_actions=self._get_recent_actions(),
             user_preferences=user_preferences or {},
             language_preference=language,

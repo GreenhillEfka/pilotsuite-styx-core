@@ -168,24 +168,22 @@ def process_intent():
         
         language = data.get("language")
         zone = data.get("zone")
-        
-        # Get handler and parse intent
+
         handler = _get_intent_handler()
         intent = handler.parse_intent(text, language)
-        
-        # Build or use existing context
-        context_builder = _get_context_builder()
-        
-        # Build or use existing context
-        context_builder = _get_context_builder()
 
         # Extract accepted context replay fields from request body
-        req_context = data.get("context", {})
-        if not isinstance(req_context, dict):
-            req_context = {}
+        req_context = data.get("context", {}) if isinstance(data.get("context"), dict) else {}
         user_prefs = req_context.get("user_preferences")
-        # NOTE: active_devices replay requires a separate fix — build_context does not accept it
-        # and the existing active_devices to_dict() assumes DeviceContext objects, not raw strings
+        active_devs = req_context.get("active_devices")
+
+        # Fall back to zone_name from context if zone not explicitly provided
+        if not zone and isinstance(req_context, dict):
+            zone = req_context.get("zone_name")
+        # Canonicalize zone name to lowercase
+        zone = zone.lower() if zone else zone
+
+        context_builder = _get_context_builder()
 
         if "context" in data and isinstance(data["context"], dict):
             # Use provided context (simplified reconstruction)
@@ -195,6 +193,7 @@ def process_intent():
                 zone_name=zone,
                 force_refresh=True,
                 user_preferences=user_prefs,
+                active_devices=active_devs,
             )
         else:
             # Build fresh context
@@ -204,6 +203,7 @@ def process_intent():
                 zone_name=zone,
                 force_refresh=data.get("force_context", False),
                 user_preferences=user_prefs,
+                active_devices=active_devs,
             )
         
         # Handle intent
