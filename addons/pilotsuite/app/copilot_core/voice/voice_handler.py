@@ -729,15 +729,28 @@ class VoiceIntentHandler:
         # Add mood info
         if context.mood_state:
             parts.append(f"Stimmung: {context.mood_state.value}.")
-        
+
         # Add zone info
-        if context.current_zone != "unknown":
-            parts.append(f"Zone: {context.current_zone}.")
-        
+        if context.zone_name and context.zone_name != "unknown":
+            parts.append(f"Zone: {context.zone_name}.")
+
         # Add active devices
         if context.active_devices:
-            parts.append(f"Aktive Geräte: {', '.join(context.active_devices[:3])}.")
-        
+            device_names = []
+            for device in context.active_devices[:3]:
+                if hasattr(device, "device_name"):
+                    name = getattr(device, "device_name", "")
+                elif isinstance(device, dict):
+                    name = device.get("device_name") or device.get("entity_id") or device.get("name") or ""
+                else:
+                    name = str(device)
+
+                if name:
+                    device_names.append(name)
+
+            if device_names:
+                parts.append(f"Aktive Geräte: {', '.join(device_names)}.")
+
         return " ".join(parts)
     
     def _handle_mood_query(

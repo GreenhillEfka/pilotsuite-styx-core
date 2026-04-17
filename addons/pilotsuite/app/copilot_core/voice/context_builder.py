@@ -220,6 +220,18 @@ class VoiceContextBuilder:
         """Initialize context builder."""
         self._cache: Dict[str, VoiceContext] = {}
         self._cache_ttl_seconds = 60  # 1 minute cache
+
+    @staticmethod
+    def _resolve_language_preference(user_preferences: Optional[Dict[str, Any]]) -> str:
+        """Resolve language preference from replayed user preferences."""
+        if not isinstance(user_preferences, dict):
+            return "de"
+
+        language = user_preferences.get("language") or user_preferences.get("preferred_language")
+        if isinstance(language, str) and language:
+            return language.lower()
+
+        return "de"
     
     def build_context(
         self,
@@ -292,7 +304,7 @@ class VoiceContextBuilder:
         )
         
         # Determine language preference
-        language = (user_preferences or {}).get("language", "de")
+        language = self._resolve_language_preference(user_preferences)
         
         # Build final context
         context = VoiceContext(

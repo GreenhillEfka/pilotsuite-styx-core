@@ -126,3 +126,71 @@ class TestHAAssistBridge:
         payload = response.get_json()
         # zone_name canonicalized in context
         assert payload["context"]["zone_name"] == "wohnzimmer"
+
+    def test_ha_assist_replays_nested_context_zone_name_without_top_level_zone(self, monkeypatch):
+        """Nested replayed context.zone.zone_name is used when top-level zone is absent."""
+        monkeypatch.setattr(voice_api, "_validate_token", lambda request: True)
+        app = _make_app()
+        client = app.test_client()
+
+        response = client.post(
+            "/api/v1/voice/ha/assist",
+            json={
+                "text": "Status",
+                "context": {
+                    "zone": {"zone_name": "Schlafzimmer"},
+                    "active_devices": [],
+                },
+            },
+        )
+
+        assert response.status_code == 200, f"got {response.status_code}: {response.get_json()}"
+        payload = response.get_json()
+        assert payload["context"]["zone_name"] == "schlafzimmer"
+        assert payload["context"]["zone"]["zone_name"] == "schlafzimmer"
+
+    def test_ha_assist_prefers_explicit_zone_name_over_nested_replayed_zone_name(self, monkeypatch):
+        """Explicit replayed context.zone_name stays authoritative over nested zone.zone_name."""
+        monkeypatch.setattr(voice_api, "_validate_token", lambda request: True)
+        app = _make_app()
+        client = app.test_client()
+
+        response = client.post(
+            "/api/v1/voice/ha/assist",
+            json={
+                "text": "Status",
+                "context": {
+                    "zone_name": "Kueche",
+                    "zone": {"zone_name": "Schlafzimmer"},
+                },
+            },
+        )
+
+        assert response.status_code == 200, f"got {response.status_code}: {response.get_json()}"
+        payload = response.get_json()
+        assert payload["context"]["zone_name"] == "kueche"
+        assert payload["context"]["zone"]["zone_name"] == "kueche"
+
+    def test_language_preference_from_user_preferences_propagates_to_response(self, monkeypatch):
+        """preferred_language in user_preferences overrides response.language."""
+        monkeypatch.setattr(voice_api, "_validate_token", lambda request: True)
+        app = _make_app()
+        client = app.test_client()
+
+        response = client.post(
+            "/api/v1/voice/ha/assist",
+            json={
+                "text": "Status",
+                "context": {
+                    "zone_name": "wohnzimmer",
+                    "user_preferences": {"preferred_language": "en"},
+                },
+            },
+        )
+
+        assert response.status_code == 200
+        payload = response.get_json()
+        # context.language_preference should reflect the preferred_language
+        assert payload["context"]["language_preference"] == "en"
+        # response.language should honor context.language_preference
+        assert payload["response"]["language"] == "en"
