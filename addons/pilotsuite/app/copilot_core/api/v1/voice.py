@@ -120,6 +120,22 @@ def _get_proactive_hints() -> ProactiveVoiceHints:
     return current_app._voice_proactive_hints
 
 
+def _resolve_requested_zone(
+    explicit_zone: Optional[str],
+    req_context: Optional[Dict[str, Any]],
+) -> Optional[str]:
+    """Resolve the canonical requested zone from explicit or replayed context."""
+    zone = explicit_zone
+    if not zone and isinstance(req_context, dict):
+        zone = req_context.get("zone_name")
+        if not zone:
+            nested_zone = req_context.get("zone")
+            if isinstance(nested_zone, dict):
+                zone = nested_zone.get("zone_name")
+
+    return zone.lower() if isinstance(zone, str) and zone else zone
+
+
 @bp.route("/intent", methods=["POST"])
 def process_intent():
     """Process voice intent and return response.
@@ -177,11 +193,7 @@ def process_intent():
         user_prefs = req_context.get("user_preferences")
         active_devs = req_context.get("active_devices")
 
-        # Fall back to zone_name from context if zone not explicitly provided
-        if not zone and isinstance(req_context, dict):
-            zone = req_context.get("zone_name")
-        # Canonicalize zone name to lowercase
-        zone = zone.lower() if zone else zone
+        zone = _resolve_requested_zone(zone, req_context)
 
         context_builder = _get_context_builder()
 
@@ -208,7 +220,12 @@ def process_intent():
         
         # Handle intent
         response = handler.handle_intent(intent, context)
-        
+
+        # Honor language_preference from context (e.g., preferred_language from HA user profile)
+        ctx_lang = getattr(context, 'language_preference', None)
+        if ctx_lang:
+            response.language = ctx_lang
+
         return jsonify({
             "status": "ok",
             "intent": intent.to_dict(),
@@ -718,9 +735,7 @@ def ha_assist_intent():
         user_prefs = req_context.get("user_preferences")
         active_devs = req_context.get("active_devices")
 
-        if not zone and isinstance(req_context, dict):
-            zone = req_context.get("zone_name")
-        zone = zone.lower() if zone else zone
+        zone = _resolve_requested_zone(zone, req_context)
 
         context_builder = _get_context_builder()
 
@@ -744,6 +759,11 @@ def ha_assist_intent():
             )
 
         response = handler.handle_intent(intent, context)
+
+        # Honor language_preference from context
+        ctx_lang = getattr(context, 'language_preference', None)
+        if ctx_lang:
+            response.language = ctx_lang
 
         return jsonify({
             "status": "ok",
