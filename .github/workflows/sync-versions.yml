@@ -25,7 +25,8 @@ jobs:
       - name: Checkout HA repository
         uses: actions/checkout@v4
         with:
-          repository: 'GreenhillEfka/Home-Assistant-Copilot'
+          repository: ${{ github.repository_owner }}/pilotsuite-styx-ha
+          ref: main
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
           path: ha-repo
@@ -34,17 +35,39 @@ jobs:
         id: check
         run: |
           cd $GITHUB_WORKSPACE/main-repo
-          CORE_VER=$(cat VERSION | tr -d '[:space:]')
-          HA_VER=$(cat ../ha-repo/VERSION | tr -d '[:space:]')
-          
-          echo "Core version: $CORE_VER"
-          echo "HA version: $HA_VER"
-          
-          if [ "$CORE_VER" != "$HA_VER" ]; then
-            echo "::warning::Version mismatch! Core: $CORE_VER, HA: $HA_VER"
-            echo "::warning::Auto-fixing HA version..."
+          CORE_VER=$(tr -d '[:space:]' < addons/pilotsuite/app/VERSION)
+          CORE_CONFIG_VER=$(python3 - <<'PY'
+          import re
+          text = open('addons/pilotsuite/config.yaml', encoding='utf-8').read()
+          match = re.search(r'(?m)^version:\s*"([^"]+)"\s*$', text)
+          print(match.group(1) if match else '')
+          PY
+          )
+          HA_ROOT_VER=$(tr -d '[:space:]' < ../ha-repo/VERSION)
+          HA_MANIFEST_VER=$(python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path('../ha-repo/custom_components/pilotsuite/manifest.json')
+          print(json.loads(path.read_text(encoding='utf-8'))['version'])
+          PY
+          )
+
+          echo "Core app version:      $CORE_VER"
+          echo "Core config version:   $CORE_CONFIG_VER"
+          echo "HA root version:       $HA_ROOT_VER"
+          echo "HA manifest version:   $HA_MANIFEST_VER"
+          echo "TARGET_VERSION=$CORE_VER" >> $GITHUB_OUTPUT
+
+          if [ "$CORE_VER" != "$CORE_CONFIG_VER" ]; then
+            echo "::error::Core add-on version surfaces are divergent: app=$CORE_VER config=$CORE_CONFIG_VER"
+            exit 1
+          fi
+
+          if [ "$CORE_VER" != "$HA_ROOT_VER" ] || [ "$CORE_VER" != "$HA_MANIFEST_VER" ] || [ "$HA_ROOT_VER" != "$HA_MANIFEST_VER" ]; then
+            echo "::warning::Version mismatch! Core: $CORE_VER, HA root: $HA_ROOT_VER, HA manifest: $HA_MANIFEST_VER"
+            echo "::warning::Auto-fixing HA version surfaces..."
             echo "MISMATCH=true" >> $GITHUB_OUTPUT
-            echo "TARGET_VERSION=$CORE_VER" >> $GITHUB_OUTPUT
           else
             echo "✅ Versions synchron: v$CORE_VER"
             echo "MISMATCH=false" >> $GITHUB_OUTPUT
@@ -52,19 +75,27 @@ jobs:
 
       - name: Sync HA Version
         if: steps.check.outputs.MISMATCH == 'true' || github.event.inputs.force == 'true'
+        env:
+          TARGET_VER: ${{ steps.check.outputs.TARGET_VERSION }}
         run: |
-          TARGET_VER="${{ steps.check.outputs.TARGET_VERSION }}"
-          
           cd $GITHUB_WORKSPACE/ha-repo
-          
-          # Update VERSION files
+
+          # Update authoritative HA version surfaces
           echo "$TARGET_VER" > VERSION
-          echo "$TARGET_VER" > copilot_core/VERSION
-          
-          # Update manifest.json version
-          CURRENT_MANIFEST=$(grep -o '"version": "[^"]*"' copilot_core/manifest.json | head -1 | cut -d'"' -f4)
-          sed -i "s/\"version\": \"$CURRENT_MANIFEST\"/\"version\": \"$TARGET_VER\"/" copilot_core/manifest.json
-          
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          version = os.environ['TARGET_VER']
+          path = Path('custom_components/pilotsuite/manifest.json')
+          data = json.loads(path.read_text(encoding='utf-8'))
+          old = data.get('version', '?')
+          data['version'] = version
+          path.write_text(json.dumps(data, indent=2) + '\n', encoding='utf-8')
+          print(f'manifest: {old} -> {version}')
+          PY
+
           # Sync CHANGELOG if exists in main repo
           if [ -f ../main-repo/CHANGELOG.md ]; then
             cp ../main-repo/CHANGELOG.md CHANGELOG.md
@@ -79,8 +110,8 @@ jobs:
           
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action (Auto-Sync)"
-          
-          git add VERSION copilot_core/VERSION copilot_core/manifest.json CHANGELOG.md 2>/dev/null || true
+
+          git add VERSION custom_components/pilotsuite/manifest.json CHANGELOG.md 2>/dev/null || true
           
           if ! git diff --cached --quiet; then
             git commit -m "chore: Auto-sync HA version to Core v${{ steps.check.outputs.TARGET_VERSION }}"

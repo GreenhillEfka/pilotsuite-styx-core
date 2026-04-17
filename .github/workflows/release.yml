@@ -11,6 +11,8 @@ on:
 jobs:
   release:
     runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ github.event.inputs.version }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -18,77 +20,52 @@ jobs:
 
       - name: Validate version input
         run: |
-          if ! echo "${{ github.event.inputs.version }}" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+          if ! printf '%s\n' "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
             echo "Error: Version must match X.Y.Z format"
             exit 1
           fi
 
-      - name: Bump ALL version files
+      - name: Bump add-on version files
         run: |
-          VERSION="${{ github.event.inputs.version }}"
           echo "Bumping to: $VERSION"
           echo "$VERSION" > VERSION
-          echo "$VERSION" > copilot_core/VERSION
-          echo "$VERSION" > copilot_core/rootfs/usr/src/app/VERSION
-          python3 - <<PY
+          echo "$VERSION" > addons/pilotsuite/app/VERSION
+          python3 - <<'PY'
           import os, re
           from pathlib import Path
           version = os.environ['VERSION']
-          path = Path('copilot_core/config.yaml')
-          text = path.read_text()
+          path = Path('addons/pilotsuite/config.yaml')
+          text = path.read_text(encoding='utf-8')
           text, count = re.subn(r'(?m)^version:\s*"[^"]+"\s*$', f'version: "{version}"', text, count=1)
           if count != 1:
-              raise SystemExit('Failed to update version in copilot_core/config.yaml')
-          path.write_text(text)
+              raise SystemExit('Failed to update version in addons/pilotsuite/config.yaml')
+          path.write_text(text, encoding='utf-8')
           print(f'config.yaml -> {version}')
           PY
           echo "VERSION files updated:"
           cat VERSION
-          cat copilot_core/VERSION
-          cat copilot_core/rootfs/usr/src/app/VERSION
-          grep '^version:' copilot_core/config.yaml
+          cat addons/pilotsuite/app/VERSION
+          grep '^version:' addons/pilotsuite/config.yaml
 
-      - name: Bump manifest version
+      - name: Verify add-on version files match
         run: |
-          VERSION="${{ github.event.inputs.version }}"
-          python3 - <<PY
-          import json, os
-          version = os.environ['VERSION']
-          with open('copilot_core/manifest.json', 'r+') as f:
-              data = json.load(f)
-              old = data.get('version', '?')
-              data['version'] = version
-              f.seek(0)
-              json.dump(data, f, indent=2)
-              f.write('\n')
-              f.truncate()
-          print(f'manifest: {old} -> {version}')
-          PY
-
-      - name: Verify ALL version files match
-        run: |
-          VERSION="${{ github.event.inputs.version }}"
           V_ROOT=$(cat VERSION)
-          V_CORE=$(cat copilot_core/VERSION)
-          V_ADDON=$(cat copilot_core/rootfs/usr/src/app/VERSION)
-          V_CONFIG=$(python3 - <<PY
+          V_ADDON=$(cat addons/pilotsuite/app/VERSION)
+          V_CONFIG=$(python3 - <<'PY'
           import re
-          text=open('copilot_core/config.yaml').read()
+          text=open('addons/pilotsuite/config.yaml', encoding='utf-8').read()
           m=re.search(r'(?m)^version:\s*"([^"]+)"\s*$', text)
           print(m.group(1) if m else '')
           PY
           )
-          V_MANIFEST=$(python3 -c "import json; print(json.load(open('copilot_core/manifest.json'))['version'])")
           echo "root VERSION:      $V_ROOT"
-          echo "copilot_core/VER:  $V_CORE"
-          echo "addon VERSION:     $V_ADDON"
+          echo "app VERSION:       $V_ADDON"
           echo "config.yaml ver:   $V_CONFIG"
-          echo "manifest version:  $V_MANIFEST"
-          if [ "$V_ROOT" != "$VERSION" ] || [ "$V_CORE" != "$VERSION" ] || [ "$V_ADDON" != "$VERSION" ] || [ "$V_CONFIG" != "$VERSION" ] || [ "$V_MANIFEST" != "$VERSION" ]; then
+          if [ "$V_ROOT" != "$VERSION" ] || [ "$V_ADDON" != "$VERSION" ] || [ "$V_CONFIG" != "$VERSION" ]; then
             echo "ERROR: At least one version file does not match $VERSION"
             exit 1
           fi
-          echo "ALL VERSION FILES CONSISTENT ✓"
+          echo "ALL ADD-ON VERSION FILES CONSISTENT ✓"
 
       - name: Commit version bump
         run: |
@@ -103,22 +80,39 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "v${{ github.event.inputs.version }}" \
-            --title "PilotSuite Core v${{ github.event.inputs.version }}" \
-            --notes "Release v${{ github.event.inputs.version }}" \
+          gh release create "v$VERSION" \
+            --title "PilotSuite Core v$VERSION" \
+            --notes "Release v$VERSION" \
             --clobber
 
       - name: Build and upload ZIP asset
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          git archive --format=zip --prefix=pilotsuite-styx-core/ -o "v${{ github.event.inputs.version }}.zip" HEAD
-          gh release upload "v${{ github.event.inputs.version }}" "v${{ github.event.inputs.version }}.zip" --clobber
+          git archive --format=zip --prefix=pilotsuite-styx-core/ -o "v$VERSION.zip" HEAD
+          gh release upload "v$VERSION" "v$VERSION.zip" --clobber
 
       - name: Verify ZIP contents
         run: |
-          unzip -p "v${{ github.event.inputs.version }}.zip" pilotsuite-styx-core/VERSION
-          unzip -p "v${{ github.event.inputs.version }}.zip" pilotsuite-styx-core/copilot_core/VERSION
-          unzip -p "v${{ github.event.inputs.version }}.zip" pilotsuite-styx-core/copilot_core/rootfs/usr/src/app/VERSION
-          unzip -p "v${{ github.event.inputs.version }}.zip" pilotsuite-styx-core/copilot_core/config.yaml | grep '^version:'
-          unzip -p "v${{ github.event.inputs.version }}.zip" pilotsuite-styx-core/copilot_core/manifest.json | python3 -c "import json,sys; print('manifest:', json.load(sys.stdin)['version'])"
+          ROOT_ZIP_VERSION=$(unzip -p "v$VERSION.zip" pilotsuite-styx-core/VERSION | tr -d '[:space:]')
+          APP_ZIP_VERSION=$(unzip -p "v$VERSION.zip" pilotsuite-styx-core/addons/pilotsuite/app/VERSION | tr -d '[:space:]')
+          CONFIG_ZIP_VERSION=$(python3 - <<'PY'
+          import re
+          import subprocess
+
+          text = subprocess.check_output(
+              ['unzip', '-p', f'v{__import__("os").environ["VERSION"]}.zip', 'pilotsuite-styx-core/addons/pilotsuite/config.yaml'],
+              text=True,
+          )
+          match = re.search(r'(?m)^version:\s*"([^"]+)"\s*$', text)
+          print(match.group(1) if match else '')
+          PY
+          )
+          echo "zip root VERSION:  $ROOT_ZIP_VERSION"
+          echo "zip app VERSION:   $APP_ZIP_VERSION"
+          echo "zip config.yaml:   $CONFIG_ZIP_VERSION"
+          if [ "$ROOT_ZIP_VERSION" != "$VERSION" ] || [ "$APP_ZIP_VERSION" != "$VERSION" ] || [ "$CONFIG_ZIP_VERSION" != "$VERSION" ]; then
+            echo "ERROR: ZIP contents do not match $VERSION"
+            exit 1
+          fi
+          echo "ZIP VERSION SURFACES CONSISTENT ✓"
