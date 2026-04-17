@@ -39,6 +39,20 @@ class AutomationSuggestion:
 class AutomationSuggestionEngine:
     """Generate automation suggestions from PilotSuite data."""
 
+    _ENTITY_MAP = {
+        "washer": "switch.washing_machine",
+        "dryer": "switch.dryer",
+        "dishwasher": "switch.dishwasher",
+        "ev_charger": "switch.ev_charger",
+    }
+
+    _DEVICE_NAMES = {
+        "washer": "Waschmaschine",
+        "dryer": "Trockner",
+        "dishwasher": "Geschirrspueler",
+        "ev_charger": "E-Auto Laden",
+    }
+
     def __init__(self):
         self._suggestions: dict[str, AutomationSuggestion] = {}
         self._counter = 0
@@ -60,21 +74,8 @@ class AutomationSuggestionEngine:
             else ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
         )
 
-        entity_map = {
-            "washer": "switch.washing_machine",
-            "dryer": "switch.dryer",
-            "dishwasher": "switch.dishwasher",
-            "ev_charger": "switch.ev_charger",
-        }
-        entity = entity_map.get(device_type, f"switch.{device_type}")
-
-        device_names = {
-            "washer": "Waschmaschine",
-            "dryer": "Trockner",
-            "dishwasher": "Geschirrspueler",
-            "ev_charger": "E-Auto Laden",
-        }
-        name = device_names.get(device_type, device_type.title())
+        entity = self._resolve_entity_id(device_type=device_type)
+        name = self._resolve_device_name(device_type=device_type)
 
         automation = {
             "alias": f"PilotSuite: {name} automatisch starten",
@@ -131,20 +132,8 @@ class AutomationSuggestionEngine:
         self._counter += 1
         sid = f"auto-solar-{self._counter:04d}"
 
-        entity_map = {
-            "washer": "switch.washing_machine",
-            "dryer": "switch.dryer",
-            "dishwasher": "switch.dishwasher",
-            "ev_charger": "switch.ev_charger",
-        }
-        entity = entity_map.get(device_type, f"switch.{device_type}")
-        device_names = {
-            "washer": "Waschmaschine",
-            "dryer": "Trockner",
-            "dishwasher": "Geschirrspueler",
-            "ev_charger": "E-Auto Laden",
-        }
-        name = device_names.get(device_type, device_type.title())
+        entity = self._resolve_entity_id(device_type=device_type)
+        name = self._resolve_device_name(device_type=device_type)
 
         automation = {
             "alias": f"PilotSuite: {name} bei Solarueberschuss",
@@ -184,6 +173,103 @@ class AutomationSuggestionEngine:
             estimated_savings_eur=0.25,
             automation_yaml=automation,
             source_pattern=f"solar:{device_type}:>{surplus_threshold_kwh}kwh",
+        )
+
+        self._suggestions[sid] = suggestion
+        return suggestion
+
+    def suggest_from_solar_surplus_recommendation(
+        self,
+        recommendation: dict[str, Any],
+        *,
+        device_type: str | None = None,
+        entity_id: str | None = None,
+    ) -> AutomationSuggestion:
+        """Generate a recurring automation suggestion from one solar-surplus action."""
+        self._counter += 1
+        sid = f"auto-solar-{self._counter:04d}"
+
+        device_id = str(recommendation.get("device_id") or device_type or "device")
+        name = self._resolve_device_name(
+            device_type=device_type,
+            device_name=recommendation.get("device_name"),
+            device_id=device_id,
+        )
+        entity = self._resolve_entity_id(
+            device_type=device_type,
+            entity_id=entity_id,
+            device_id=device_id,
+        )
+        trigger_dt = self._parse_recommendation_time(
+            recommendation.get("recommended_start") or recommendation.get("slot_timestamp")
+        )
+        trigger_time = trigger_dt.strftime("%H:%M:%S")
+        trigger_label = trigger_dt.strftime("%H:%M")
+        surplus_threshold_kwh = max(
+            0.25,
+            round(float(recommendation.get("expected_grid_relief_kwh") or 0.0), 2),
+        )
+        action_kind = str(recommendation.get("action") or "schedule_at")
+        expected_savings_eur = round(float(recommendation.get("expected_savings_eur") or 0.0), 2)
+        coverage_pct = round(float(recommendation.get("expected_self_consumption_gain_pct") or 0.0), 1)
+        reason = str(recommendation.get("reason") or "")
+
+        conditions: list[dict[str, Any]] = [
+            {
+                "condition": "numeric_state",
+                "entity_id": "sensor.pilotsuite_solar_surplus_kwh",
+                "above": surplus_threshold_kwh,
+            }
+        ]
+        if entity.startswith(("switch.", "light.", "fan.", "input_boolean.")):
+            conditions.append(
+                {
+                    "condition": "state",
+                    "entity_id": entity,
+                    "state": "off",
+                }
+            )
+
+        automation = {
+            "alias": f"PilotSuite: {name} im PV-Fenster starten",
+            "description": (
+                f"Prueft taeglich um {trigger_label} auf mindestens {surplus_threshold_kwh} kWh "
+                f"Solarueberschuss und startet {name}."
+            ),
+            "trigger": [
+                {
+                    "platform": "time",
+                    "at": trigger_time,
+                }
+            ],
+            "condition": conditions,
+            "action": [
+                {
+                    "service": "homeassistant.turn_on",
+                    "target": {"entity_id": entity},
+                }
+            ],
+            "mode": "single",
+        }
+
+        description = (
+            f"Aus dem Solar-Ueberschussplan abgeleitet: {name} wird taeglich um {trigger_label} "
+            f"vorgeschlagen, wenn mindestens {surplus_threshold_kwh} kWh Ueberschuss verfuegbar sind."
+        )
+        if coverage_pct > 0:
+            description += f" Erwartete PV-Abdeckung: {coverage_pct:.0f}%."
+        if reason:
+            description += f" Grund: {reason}."
+
+        suggestion = AutomationSuggestion(
+            id=sid,
+            title=f"{name} im PV-Fenster um {trigger_label} starten",
+            description=description,
+            category="energy",
+            confidence=float(recommendation.get("confidence") or 0.75),
+            estimated_savings_eur=expected_savings_eur or None,
+            automation_yaml=automation,
+            source_pattern=f"solar-surplus:{device_id}:{action_kind}:{trigger_label}",
         )
 
         self._suggestions[sid] = suggestion
@@ -361,6 +447,52 @@ class AutomationSuggestionEngine:
         if s:
             return s.automation_yaml
         return None
+
+    @classmethod
+    def _resolve_entity_id(
+        cls,
+        *,
+        device_type: str | None = None,
+        entity_id: str | None = None,
+        device_id: str | None = None,
+    ) -> str:
+        if entity_id:
+            return entity_id
+        if device_type:
+            return cls._ENTITY_MAP.get(device_type, f"switch.{device_type}")
+        if device_id:
+            return f"switch.{device_id.replace('-', '_')}"
+        return "switch.device"
+
+    @classmethod
+    def _resolve_device_name(
+        cls,
+        *,
+        device_type: str | None = None,
+        device_name: Any = None,
+        device_id: str | None = None,
+    ) -> str:
+        if isinstance(device_name, str) and device_name.strip():
+            return device_name.strip()
+        if device_type:
+            return cls._DEVICE_NAMES.get(device_type, device_type.replace("_", " ").title())
+        if device_id:
+            return device_id.replace("-", " ").replace("_", " ").title()
+        return "Geraet"
+
+    @staticmethod
+    def _parse_recommendation_time(value: Any) -> datetime:
+        if isinstance(value, datetime):
+            if value.tzinfo is None:
+                return value.replace(tzinfo=timezone.utc)
+            return value.astimezone(timezone.utc)
+        if isinstance(value, str) and value.strip():
+            normalized = value.strip().replace("Z", "+00:00")
+            dt = datetime.fromisoformat(normalized)
+            if dt.tzinfo is None:
+                return dt.replace(tzinfo=timezone.utc)
+            return dt.astimezone(timezone.utc)
+        return datetime.now(tz=timezone.utc)
 
     @staticmethod
     def _to_dict(s: AutomationSuggestion) -> dict[str, Any]:

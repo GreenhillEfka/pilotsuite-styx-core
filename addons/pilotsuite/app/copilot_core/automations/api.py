@@ -1,14 +1,75 @@
 """Automation Suggestions API (v5.9.0)."""
 
+from __future__ import annotations
+
+from datetime import datetime, timezone
+from typing import Any
+
 import yaml
 from flask import Blueprint, Response, jsonify, request
 
 from ..api.security import require_api_key
+from ..energy.solar_surplus_optimizer import SolarSurplusOptimizer
 from .suggestion_engine import AutomationSuggestionEngine
 
 automations_bp = Blueprint("automations_suggestions", __name__)
 
 _engine: AutomationSuggestionEngine | None = None
+
+
+def _parse_optional_timestamp(value: Any) -> datetime | None:
+    if isinstance(value, datetime):
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc)
+    if isinstance(value, str) and value.strip():
+        normalized = value.strip().replace("Z", "+00:00")
+        try:
+            dt = datetime.fromisoformat(normalized)
+        except ValueError:
+            return None
+        if dt.tzinfo is None:
+            return dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc)
+    return None
+
+
+def _generate_solar_surplus_batch(batch: dict[str, Any]) -> dict[str, Any]:
+    optimizer = SolarSurplusOptimizer()
+    report = optimizer.get_recommendations_as_dict(
+        pv_forecast=batch.get("pv_forecast") or [],
+        shiftable_devices=batch.get("shiftable_devices") or [],
+        load_forecast=batch.get("load_forecast") or [],
+        price_forecast=batch.get("price_forecast") or [],
+        reference_time=_parse_optional_timestamp(batch.get("reference_time")),
+        now=_parse_optional_timestamp(batch.get("now")),
+        default_import_price_ct_kwh=float(batch.get("default_import_price_ct_kwh", 30.0)),
+        default_export_price_ct_kwh=float(batch.get("default_export_price_ct_kwh", 8.0)),
+    )
+
+    suggestion_ids: list[str] = []
+    shiftable_by_id = {
+        str(item.get("device_id")): item
+        for item in (batch.get("shiftable_devices") or [])
+        if isinstance(item, dict) and item.get("device_id")
+    }
+
+    for recommendation in report["recommendations"]:
+        if recommendation.get("action") not in {"schedule_now", "schedule_at"}:
+            continue
+        device = shiftable_by_id.get(str(recommendation.get("device_id")), {})
+        suggestion = _engine.suggest_from_solar_surplus_recommendation(
+            recommendation,
+            device_type=device.get("device_type"),
+            entity_id=device.get("entity_id"),
+        )
+        suggestion_ids.append(suggestion.id)
+
+    return {
+        **report,
+        "suggestion_ids": suggestion_ids,
+        "generated": len(suggestion_ids),
+    }
 
 
 def init_automations_api(engine: AutomationSuggestionEngine) -> None:
@@ -82,7 +143,7 @@ def get_suggestion_yaml(suggestion_id: str):
 def generate_suggestions():
     """Generate suggestions from current data.
 
-    Body: {"schedule": [...], "comfort": {...}, "presence": {...}}
+    Body: {"schedule": [...], "solar": [...], "solar_surplus_batches": [...], ...}
     """
     if not _engine:
         return jsonify({"error": "Automation engine not initialized"}), 503
@@ -108,6 +169,14 @@ def generate_suggestions():
         )
         generated.append(s.id)
 
+    solar_surplus_batches = []
+    for batch in body.get("solar_surplus_batches", []):
+        if not isinstance(batch, dict):
+            continue
+        result = _generate_solar_surplus_batch(batch)
+        solar_surplus_batches.append(result)
+        generated.extend(result["suggestion_ids"])
+
     # Comfort-based suggestions
     for item in body.get("comfort", []):
         s = _engine.suggest_from_comfort(
@@ -127,4 +196,7 @@ def generate_suggestions():
         )
         generated.append(s.id)
 
-    return jsonify({"ok": True, "generated": len(generated), "ids": generated}), 201
+    response = {"ok": True, "generated": len(generated), "ids": generated}
+    if solar_surplus_batches:
+        response["solar_surplus_batches"] = solar_surplus_batches
+    return jsonify(response), 201
