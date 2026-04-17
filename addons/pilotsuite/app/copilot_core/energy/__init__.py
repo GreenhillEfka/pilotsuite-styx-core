@@ -12,6 +12,13 @@ from .load_shifting import (
     OptimizationWindow,
     LoadShiftSummary,
 )
+from .solar_surplus_optimizer import (
+    SolarSurplusAction,
+    SolarSurplusCandidate,
+    SolarSurplusOptimizer,
+    SolarSurplusSlot,
+    SolarSurplusSummary,
+)
 
 # Global service instance for API access
 _energy_service = None
@@ -49,5 +56,11 @@ __all__ = [
     "LoadShiftRecommendation",
     "OptimizationWindow",
     "LoadShiftSummary",
+    # Solar surplus optimizer
+    "SolarSurplusAction",
+    "SolarSurplusCandidate",
+    "SolarSurplusOptimizer",
+    "SolarSurplusSlot",
+    "SolarSurplusSummary",
 ]
 __version__ = "0.5.0"
