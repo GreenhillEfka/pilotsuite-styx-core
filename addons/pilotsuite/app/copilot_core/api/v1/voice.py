@@ -176,6 +176,10 @@ def process_intent():
         # Build or use existing context
         context_builder = _get_context_builder()
         
+        # Extract user_preferences from request body context
+        req_context = data.get("context", {})
+        user_prefs = req_context.get("user_preferences") if isinstance(req_context, dict) else None
+
         if "context" in data and isinstance(data["context"], dict):
             # Use provided context (simplified reconstruction)
             context = context_builder.build_context(
@@ -183,6 +187,7 @@ def process_intent():
                 habitus_service=handler.habitus_service,
                 zone_name=zone,
                 force_refresh=True,
+                user_preferences=user_prefs,
             )
         else:
             # Build fresh context
@@ -191,6 +196,7 @@ def process_intent():
                 habitus_service=handler.habitus_service,
                 zone_name=zone,
                 force_refresh=data.get("force_context", False),
+                user_preferences=user_prefs,
             )
         
         # Handle intent
