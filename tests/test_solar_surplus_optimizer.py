@@ -9,7 +9,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 ADDON_APP = ROOT / "addons" / "pilotsuite" / "app"
 if str(ADDON_APP) not in sys.path:
-    sys.path.insert(0, str(ADDON_APP))
+    sys.path.append(str(ADDON_APP))
 
 from copilot_core.energy.forecast import ForecastDataPoint  # noqa: E402
 from copilot_core.energy.load_shifting import ShiftableDevice  # noqa: E402

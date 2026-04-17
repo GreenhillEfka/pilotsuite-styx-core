@@ -11,9 +11,12 @@ class TestEndToEnd:
     """End-to-end integration tests."""
 
     @pytest.fixture
-    async def pilotsuite_client(self):
+    def pilotsuite_client(self):
         """Create full integration test client."""
-        from fastapi.testclient import TestClient
+        TestClient = pytest.importorskip(
+            "fastapi.testclient",
+            reason="fastapi not installed in smoke-gate environment",
+        ).TestClient
         from copilot_core.api.rest_server import create_app, APIConfig
         
         config = APIConfig(debug=True, host="127.0.0.1", port=8080)

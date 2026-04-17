@@ -9,7 +9,7 @@ from flask import Flask
 ROOT = Path(__file__).resolve().parents[1]
 ADDON_APP = ROOT / "addons" / "pilotsuite" / "app"
 if str(ADDON_APP) not in sys.path:
-    sys.path.insert(0, str(ADDON_APP))
+    sys.path.append(str(ADDON_APP))
 
 from copilot_core.api.v1 import voice as voice_api  # noqa: E402
 

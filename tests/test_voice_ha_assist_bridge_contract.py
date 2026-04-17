@@ -9,15 +9,22 @@ from flask import Flask
 ROOT = Path(__file__).resolve().parents[1]
 ADDON_APP = ROOT / "addons" / "pilotsuite" / "app"
 if str(ADDON_APP) not in sys.path:
-    sys.path.insert(0, str(ADDON_APP))
+    sys.path.append(str(ADDON_APP))
 
 from copilot_core.api.v1 import voice as voice_api  # noqa: E402
+from copilot_core.voice.dialog_state import DialogStateMachine  # noqa: E402
 
 
 def _make_app():
     app = Flask(__name__)
     app.register_blueprint(voice_api.bp)
     return app
+
+
+def _isolated_dialog_machine(tmp_path):
+    machine = DialogStateMachine(data_dir=str(tmp_path / "dialog-data"))
+    machine.reset()
+    return machine
 
 
 class TestHAAssistBridge:
@@ -194,3 +201,38 @@ class TestHAAssistBridge:
         assert payload["context"]["language_preference"] == "en"
         # response.language should honor context.language_preference
         assert payload["response"]["language"] == "en"
+
+    def test_command_state_surface_exposes_ha_bridge_field_projection(self, monkeypatch, tmp_path):
+        """The HA bridge can bind to a thin command-state surface without slot introspection."""
+        monkeypatch.setattr(voice_api, "_validate_token", lambda request: True)
+        machine = _isolated_dialog_machine(tmp_path)
+        monkeypatch.setattr(voice_api, "_get_dialog_machine", lambda: machine)
+        app = _make_app()
+        client = app.test_client()
+
+        client.post(
+            "/api/v1/voice/command",
+            json={
+                "session_id": "sess-ha-bridge-state",
+                "utterance": "Garage öffnen",
+                "confidence": 0.93,
+            },
+        )
+
+        response = client.get(
+            "/api/v1/voice/command/state",
+            query_string={"session_id": "sess-ha-bridge-state"},
+        )
+
+        assert response.status_code == 200, f"got {response.status_code}: {response.get_json()}"
+        payload = response.get_json()
+        assert payload["status"] == "ok"
+        assert set(payload["state"].keys()) == {
+            "last_status",
+            "pending_confirmation",
+            "pending_action_label",
+            "confirmation_expires_at",
+        }
+        assert payload["state"]["last_status"] == "confirmation_required"
+        assert payload["state"]["pending_confirmation"] is True
+        assert payload["state"]["pending_action_label"] == "lock.unlock"

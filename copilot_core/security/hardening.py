@@ -154,10 +154,12 @@ class EncryptionAtRest:
         Initialize encryption.
         
         Args:
-            key: Encryption key (32 bytes, generated if not provided)
+            key: Encryption key. Accepts either a Fernet key or raw 32 bytes.
         """
         if key is None:
             key = Fernet.generate_key()
+        elif isinstance(key, bytes) and len(key) == 32:
+            key = base64.urlsafe_b64encode(key)
         
         self._fernet = Fernet(key)
         self._key_hash = hashlib.sha256(key).hexdigest()[:16]

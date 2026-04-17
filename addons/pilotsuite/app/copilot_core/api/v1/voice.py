@@ -17,11 +17,14 @@ Features:
 - Integration mit Mood Engine und Habitus
 """
 import asyncio
+from datetime import datetime, timezone
 import logging
+import time
 from typing import Any, Dict, Optional
 
 from flask import Blueprint, current_app, jsonify, request
 
+from copilot_core.voice.command_router import VoiceCommandRouter
 from copilot_core.voice.voice_handler import VoiceIntentHandler, VoiceIntent, IntentType, VoiceResponse
 from copilot_core.voice.context_builder import VoiceContextBuilder, VoiceContext
 from copilot_core.voice.proactive import ProactiveVoiceHints, HintConfig, HintPriority
@@ -118,6 +121,119 @@ def _get_proactive_hints() -> ProactiveVoiceHints:
         )
     
     return current_app._voice_proactive_hints
+
+
+def _serialize_dialog_state(state) -> Dict[str, Any]:
+    """Serialize dialog state with router-facing metadata."""
+    slot_values = dict(state.slot_values)
+    return {
+        "dialog_state": state.state,
+        "active_intent": state.active_intent,
+        "slot_values": slot_values,
+        "session_id": state.session_id,
+        "user_id": state.user_id,
+        "last_status": slot_values.get("_last_status"),
+        "pending_confirmation": state.state == "CONFIRMING" and bool(slot_values.get("_confirmation_token")),
+        "pending_action_label": slot_values.get("_pending_action_label"),
+        "pending_action_payload": slot_values.get("_pending_action_payload"),
+        "clarification_question": slot_values.get("_clarification"),
+        "confirmation_token": slot_values.get("_confirmation_token"),
+        "confirmation_expires_at": slot_values.get("_confirmation_expires_at"),
+    }
+
+
+def _normalize_last_status(state) -> str:
+    """Project dialog state into the public voice-command status vocabulary."""
+    slot_values = dict(state.slot_values)
+    explicit = slot_values.get("_last_status")
+    if isinstance(explicit, str) and explicit.strip():
+        return explicit.strip()
+
+    fallback = {
+        "ACTIVE": "executed",
+        "CONFIRMING": "confirmation_required",
+        "CLARIFYING": "clarification_required",
+        "IDLE": "idle",
+    }
+    return fallback.get(state.state, "idle")
+
+
+def _format_command_state_timestamp(value: Optional[Any]) -> Optional[str]:
+    """Normalize optional epoch timestamps to ISO 8601 UTC for API consumers."""
+    if value is None:
+        return None
+    try:
+        return datetime.fromtimestamp(float(value), tz=timezone.utc).isoformat().replace("+00:00", "Z")
+    except (TypeError, ValueError, OSError, OverflowError):
+        return None
+
+
+def _build_idle_command_state() -> Dict[str, Any]:
+    """Return the truthful empty command-state shape."""
+    return {
+        "last_status": "idle",
+        "pending_confirmation": False,
+        "pending_action_label": None,
+        "confirmation_expires_at": None,
+    }
+
+
+def _serialize_command_state(state, *, session_id: str) -> Dict[str, Any]:
+    """Serialize the session-scoped command-state surface for HA consumers."""
+    if not state.session_id or state.session_id != session_id:
+        return _build_idle_command_state()
+
+    slot_values = dict(state.slot_values)
+    pending_confirmation = state.state == "CONFIRMING" and bool(slot_values.get("_confirmation_token"))
+    return {
+        "last_status": _normalize_last_status(state),
+        "pending_confirmation": pending_confirmation,
+        "pending_action_label": slot_values.get("_pending_action_label"),
+        "confirmation_expires_at": _format_command_state_timestamp(slot_values.get("_confirmation_expires_at")),
+    }
+
+
+def _build_command_follow_through_response(action_payload: Optional[Dict[str, Any]]) -> VoiceResponse:
+    """Build the first bounded execution payload for a confirmed action."""
+    actions = [dict(action_payload)] if action_payload else []
+    return VoiceResponse(
+        tts_text="Bestätigt. Ich führe die Aktion jetzt aus.",
+        actions=actions,
+        confidence=1.0,
+        language="de",
+    )
+
+
+def _validate_pending_confirmation(
+    machine,
+    *,
+    session_id: Optional[str],
+    confirmation_token: Optional[str],
+) -> Optional[Dict[str, Any]]:
+    """Validate the currently persisted pending confirmation state."""
+    if machine.check_timeout():
+        machine.decay()
+        return None
+
+    state = machine.get_state()
+    if state.state != "CONFIRMING":
+        return None
+
+    slot_values = dict(state.slot_values)
+    pending_token = slot_values.get("_confirmation_token")
+    pending_session_id = state.session_id
+
+    if not confirmation_token or confirmation_token != pending_token:
+        return None
+    if pending_session_id and session_id and session_id != pending_session_id:
+        return None
+
+    return {
+        "state": state,
+        "slot_values": slot_values,
+        "action_payload": slot_values.get("_pending_action_payload"),
+        "action_label": slot_values.get("_pending_action_label") or slot_values.get("_pending_action"),
+    }
 
 
 def _resolve_requested_zone(
@@ -235,6 +351,142 @@ def process_intent():
     
     except Exception as e:
         _LOGGER.exception("Voice intent processing failed")
+        return jsonify({
+            "status": "error",
+            "message": str(e)
+        }), 500
+
+
+@bp.route("/command", methods=["POST"])
+def process_command():
+    """Route full voice commands through safe / clarify / confirm / reject policy."""
+    try:
+        data = request.get_json(silent=True) or {}
+
+        utterance = data.get("utterance") or data.get("text")
+        if not utterance:
+            return jsonify({
+                "status": "error",
+                "message": "Missing 'utterance' in request body"
+            }), 400
+
+        confidence = data.get("confidence")
+        if confidence is not None:
+            try:
+                confidence = float(confidence)
+            except (TypeError, ValueError):
+                return jsonify({
+                    "status": "error",
+                    "message": "Field 'confidence' must be numeric"
+                }), 400
+
+        intent_candidates = data.get("intent_candidates")
+        if intent_candidates is not None and not isinstance(intent_candidates, list):
+            return jsonify({
+                "status": "error",
+                "message": "Field 'intent_candidates' must be a list"
+            }), 400
+
+        session_id = data.get("session_id")
+        user_id = data.get("user_id")
+        zone = data.get("zone_id") or data.get("zone")
+        req_context = data.get("context", {}) if isinstance(data.get("context"), dict) else {}
+        user_prefs = req_context.get("user_preferences")
+        active_devs = req_context.get("active_devices")
+        zone = _resolve_requested_zone(zone, req_context)
+
+        handler = _get_intent_handler()
+        context_builder = _get_context_builder()
+        context = context_builder.build_context(
+            mood_engine=handler.mood_engine,
+            habitus_service=handler.habitus_service,
+            zone_name=zone,
+            force_refresh=bool(req_context),
+            user_preferences=user_prefs,
+            active_devices=active_devs,
+        )
+
+        router = VoiceCommandRouter(handler)
+        routed = router.route(
+            utterance=utterance,
+            stt_confidence=confidence,
+            context=context,
+            intent_candidates=intent_candidates,
+            session_id=session_id,
+            user_id=user_id,
+            zone_id=zone,
+        )
+
+        decision = routed["decision"]
+        normalized_intent = routed["normalized_intent"]
+        intent_name = normalized_intent.value if hasattr(normalized_intent, "value") else str(normalized_intent)
+
+        machine = _get_dialog_machine()
+        if decision.status == "executed":
+            state = machine.activate_intent(
+                intent=decision.action or intent_name,
+                slots={"_last_utterance": utterance},
+                session_id=session_id,
+                user_id=user_id,
+            )
+        elif decision.status == "confirmation_required":
+            machine.activate_intent(
+                intent=decision.action or intent_name,
+                slots={"_last_utterance": utterance},
+                session_id=session_id,
+                user_id=user_id,
+            )
+            confirmation_metadata = {
+                "_last_utterance": utterance,
+                "_pending_action": decision.action,
+                "_pending_action_label": decision.action,
+                "_pending_action_payload": decision.action_payload,
+                "_confirmation_prompt": decision.message,
+                "_confirmation_expires_at": time.time() + machine.TIMEOUT_SECONDS,
+                "_confirmation_token": decision.confirmation_token,
+            }
+            state = machine.set_confirming(metadata={
+                **confirmation_metadata,
+            })
+        elif decision.status == "clarification_required":
+            machine.activate_intent(
+                intent=intent_name,
+                slots={"_last_utterance": utterance},
+                session_id=session_id,
+                user_id=user_id,
+            )
+            state = machine.set_clarifying(
+                decision.message,
+                metadata={
+                    "_last_utterance": utterance,
+                    "_intent": intent_name,
+                },
+            )
+        else:
+            state = machine.reset(session_id=session_id, user_id=user_id)
+
+        state = machine.merge_metadata({"_last_status": decision.status})
+
+        session_state = dict(decision.session_state)
+        session_state.update(_serialize_dialog_state(state))
+
+        response_payload = {
+            "status": decision.status,
+            "action": decision.action,
+            "message": decision.message,
+            "confirmation_token": decision.confirmation_token,
+            "session_state": session_state,
+            "intent": routed["intent"].to_dict(),
+            "context": context.to_dict(),
+            "effective_confidence": routed["effective_confidence"],
+        }
+        if routed.get("response") is not None:
+            response_payload["response"] = routed["response"].to_dict()
+
+        return jsonify(response_payload)
+
+    except Exception as e:
+        _LOGGER.exception("Voice command routing failed")
         return jsonify({
             "status": "error",
             "message": str(e)
@@ -794,6 +1046,7 @@ def get_dialog_state():
         return jsonify({
             "status": "ok",
             "state": state.state,
+            "last_status": _normalize_last_status(state),
             "active_intent": state.active_intent,
             "slot_values": state.slot_values,
             "context_stack_size": len(state.context_stack),
@@ -803,9 +1056,124 @@ def get_dialog_state():
             "timed_out": timed_out,
             "confirmation_question": machine.generate_confirmation_question(),
             "clarification_question": machine.generate_clarification_question(),
+            "pending_confirmation": state.state == "CONFIRMING" and bool(state.slot_values.get("_confirmation_token")),
+            "pending_action_label": state.slot_values.get("_pending_action_label"),
+            "pending_action_payload": state.slot_values.get("_pending_action_payload"),
+            "confirmation_token": state.slot_values.get("_confirmation_token"),
+            "confirmation_expires_at": state.slot_values.get("_confirmation_expires_at"),
         })
     except Exception as e:
         _LOGGER.exception("Failed to get dialog state")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@bp.route("/command/state", methods=["GET"])
+def get_command_state():
+    """Read the thin session-scoped state surface for the voice command router."""
+    try:
+        session_id = request.args.get("session_id")
+        if not session_id:
+            return jsonify({
+                "status": "error",
+                "message": "Query parameter 'session_id' is required",
+            }), 400
+
+        machine = _get_dialog_machine()
+        if machine.check_timeout():
+            machine.decay()
+        state = machine.get_state()
+
+        return jsonify({
+            "status": "ok",
+            "session_id": session_id,
+            "state": _serialize_command_state(state, session_id=str(session_id)),
+        })
+    except Exception as e:
+        _LOGGER.exception("Failed to get command state")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@bp.route("/command/confirm", methods=["POST"])
+def confirm_command_action():
+    """Confirm the currently pending /command action and emit its execution payload."""
+    try:
+        data = request.get_json(silent=True) or {}
+        session_id = data.get("session_id")
+        confirmation_token = data.get("confirmation_token")
+        if not session_id or not confirmation_token:
+            return jsonify({
+                "status": "error",
+                "message": "Fields 'session_id' and 'confirmation_token' are required",
+            }), 400
+
+        machine = _get_dialog_machine()
+        pending = _validate_pending_confirmation(
+            machine,
+            session_id=str(session_id),
+            confirmation_token=str(confirmation_token),
+        )
+        if pending is None:
+            return jsonify({
+                "status": "error",
+                "message": "No matching pending confirmation found",
+            }), 400
+
+        action_payload = pending["action_payload"]
+        action_label = pending["action_label"]
+        state = machine.confirm_action()
+        state = machine.merge_metadata({"_last_status": "executed"})
+        response = _build_command_follow_through_response(action_payload)
+
+        return jsonify({
+            "status": "executed",
+            "action": action_label,
+            "message": response.tts_text,
+            "confirmation_token": confirmation_token,
+            "session_state": _serialize_dialog_state(state),
+            "response": response.to_dict(),
+        })
+    except Exception as e:
+        _LOGGER.exception("Failed to confirm command action")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@bp.route("/command/reject", methods=["POST"])
+def reject_command_action():
+    """Reject the currently pending /command action and clear confirmation state."""
+    try:
+        data = request.get_json(silent=True) or {}
+        session_id = data.get("session_id")
+        confirmation_token = data.get("confirmation_token")
+        if not session_id or not confirmation_token:
+            return jsonify({
+                "status": "error",
+                "message": "Fields 'session_id' and 'confirmation_token' are required",
+            }), 400
+
+        machine = _get_dialog_machine()
+        pending = _validate_pending_confirmation(
+            machine,
+            session_id=str(session_id),
+            confirmation_token=str(confirmation_token),
+        )
+        if pending is None:
+            return jsonify({
+                "status": "error",
+                "message": "No matching pending confirmation found",
+            }), 400
+
+        action_label = pending["action_label"]
+        state = machine.cancel_action()
+        state = machine.merge_metadata({"_last_status": "rejected"})
+        return jsonify({
+            "status": "rejected",
+            "action": action_label,
+            "message": "Okay, ich verwerfe die angefragte Aktion.",
+            "confirmation_token": confirmation_token,
+            "session_state": _serialize_dialog_state(state),
+        })
+    except Exception as e:
+        _LOGGER.exception("Failed to reject command action")
         return jsonify({"status": "error", "message": str(e)}), 500
 
 

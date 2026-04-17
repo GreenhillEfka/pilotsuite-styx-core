@@ -112,19 +112,31 @@ class DialogStateMachine:
         self._persist()
         return self.state
     
-    def set_confirming(self, missing_slots: Optional[List[str]] = None) -> DialogState:
+    def set_confirming(
+        self,
+        missing_slots: Optional[List[str]] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> DialogState:
         """Transition to CONFIRMING state (awaiting user confirmation)."""
         if missing_slots:
             self.state.slot_values['_missing'] = list(missing_slots)
-        
+        if metadata:
+            self.state.slot_values.update(dict(metadata))
+
         self.state.state = 'CONFIRMING'
         self.state.last_activity_ts = time.time()
         self._persist()
         return self.state
-    
-    def set_clarifying(self, clarification_text: str) -> DialogState:
+
+    def set_clarifying(
+        self,
+        clarification_text: str,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> DialogState:
         """Transition to CLARIFYING state (asking clarification question)."""
         self.state.slot_values['_clarification'] = clarification_text
+        if metadata:
+            self.state.slot_values.update(dict(metadata))
         self.state.state = 'CLARIFYING'
         self.state.last_activity_ts = time.time()
         self._persist()
@@ -200,6 +212,10 @@ class DialogStateMachine:
         """
         if self.state.state != 'CONFIRMING':
             return None
+
+        explicit_prompt = self.state.slot_values.get('_confirmation_prompt')
+        if isinstance(explicit_prompt, str) and explicit_prompt.strip():
+            return explicit_prompt
         
         intent_desc = self._describe_intent(self.state.active_intent)
         slots_desc = self._describe_slots(self.state.slot_values)
@@ -310,17 +326,29 @@ class DialogStateMachine:
     def get_state(self) -> DialogState:
         """Get current dialog state."""
         return self.state
-    
-    def reset(self) -> DialogState:
-        """Reset to IDLE state."""
+
+    def merge_metadata(self, metadata: Optional[Dict[str, Any]] = None) -> DialogState:
+        """Merge lightweight metadata into the current state and persist it."""
+        if metadata:
+            self.state.slot_values.update(dict(metadata))
+            self._persist()
+        return self.state
+
+    def reset(
+        self,
+        metadata: Optional[Dict[str, Any]] = None,
+        session_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+    ) -> DialogState:
+        """Reset to IDLE state, optionally preserving lightweight metadata."""
         self.state = DialogState(
             state='IDLE',
             active_intent=None,
-            slot_values={},
+            slot_values=dict(metadata or {}),
             context_stack=[],
-            last_activity_ts=None,
-            session_id=None,
-            user_id=None,
+            last_activity_ts=time.time(),
+            session_id=session_id,
+            user_id=user_id,
         )
         self._persist()
         return self.state

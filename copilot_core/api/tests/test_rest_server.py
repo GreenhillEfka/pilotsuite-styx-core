@@ -12,7 +12,10 @@ class TestRESTAPIServer:
     @pytest.fixture
     def api_client(self):
         """Create test API client."""
-        from fastapi.testclient import TestClient
+        TestClient = pytest.importorskip(
+            "fastapi.testclient",
+            reason="fastapi not installed in smoke-gate environment",
+        ).TestClient
         from copilot_core.api.rest_server import create_app, APIConfig
         
         config = APIConfig(debug=True, host="127.0.0.1", port=8080)
