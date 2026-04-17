@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import inspect
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from flask import Blueprint, jsonify, request, current_app
@@ -27,6 +27,7 @@ from copilot_core.api.security import require_token
 from copilot_core.energy.forecast import EnergyForecastEngine
 from copilot_core.energy.pv_prediction import PVPredictionEngine
 from copilot_core.energy.load_shifting import LoadShiftingEngine, ShiftableDevice
+from copilot_core.energy.solar_surplus_optimizer import SolarSurplusOptimizer
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -142,6 +143,28 @@ def _fetch_price_forecast(hours: int = 48) -> list[dict]:
     except Exception as e:
         _LOGGER.warning("Price forecast fetch error: %s", e)
         return []
+
+
+def _parse_request_datetime(value: object, field_name: str) -> datetime | None:
+    """Parse optional ISO timestamps from JSON bodies."""
+    if value in (None, ""):
+        return None
+    if isinstance(value, datetime):
+        dt = value
+    elif isinstance(value, str):
+        raw = value.strip()
+        if not raw:
+            return None
+        try:
+            dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise ValueError(f"Field '{field_name}' must be a valid ISO-8601 timestamp") from exc
+    else:
+        raise ValueError(f"Field '{field_name}' must be a valid ISO-8601 timestamp")
+
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
 
 
 @energy_forecast_bp.route("/", methods=["GET"])
@@ -681,6 +704,81 @@ def register_shiftable_device():
     
     except Exception as e:
         _LOGGER.error("Register device error: %s", e)
+        return jsonify({
+            "ok": False,
+            "error": str(e),
+        }), 500
+
+
+@energy_forecast_bp.route("/solar-surplus/recommendations", methods=["POST"])
+@require_token
+def get_solar_surplus_recommendations():
+    """Return one normalized solar-surplus recommendation batch."""
+    try:
+        body = request.get_json(silent=True)
+        if not isinstance(body, dict):
+            return jsonify({
+                "ok": False,
+                "error": "JSON object body required",
+            }), 400
+
+        pv_forecast = body.get("pv_forecast")
+        load_forecast = body.get("load_forecast")
+        price_forecast = body.get("price_forecast")
+        shiftable_devices = body.get("shiftable_devices", body.get("devices"))
+
+        if not isinstance(pv_forecast, list):
+            return jsonify({
+                "ok": False,
+                "error": "Field 'pv_forecast' must be a list",
+            }), 400
+        if not isinstance(shiftable_devices, list):
+            return jsonify({
+                "ok": False,
+                "error": "Field 'shiftable_devices' must be a list",
+            }), 400
+        if load_forecast is not None and not isinstance(load_forecast, list):
+            return jsonify({
+                "ok": False,
+                "error": "Field 'load_forecast' must be a list when provided",
+            }), 400
+        if price_forecast is not None and not isinstance(price_forecast, list):
+            return jsonify({
+                "ok": False,
+                "error": "Field 'price_forecast' must be a list when provided",
+            }), 400
+
+        reference_time = _parse_request_datetime(body.get("reference_time"), "reference_time")
+        now = _parse_request_datetime(body.get("now"), "now")
+
+        optimizer = SolarSurplusOptimizer(
+            minimum_surplus_kwh=float(body.get("minimum_surplus_kwh", 0.25)),
+            minimum_recommendation_coverage=float(body.get("minimum_recommendation_coverage", 0.35)),
+            schedule_now_window_minutes=int(body.get("schedule_now_window_minutes", 30)),
+        )
+        batch = optimizer.get_recommendations_as_dict(
+            pv_forecast=pv_forecast,
+            load_forecast=load_forecast,
+            price_forecast=price_forecast,
+            shiftable_devices=shiftable_devices,
+            reference_time=reference_time,
+            now=now,
+            default_import_price_ct_kwh=float(body.get("default_import_price_ct_kwh", 30.0)),
+            default_export_price_ct_kwh=float(body.get("default_export_price_ct_kwh", 8.0)),
+        )
+
+        return jsonify({
+            "ok": True,
+            **batch,
+        })
+
+    except ValueError as e:
+        return jsonify({
+            "ok": False,
+            "error": str(e),
+        }), 400
+    except Exception as e:
+        _LOGGER.error("Solar surplus recommendation error: %s", e)
         return jsonify({
             "ok": False,
             "error": str(e),
