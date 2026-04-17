@@ -78,6 +78,61 @@ def get_model_store() -> ModelStore:
     return _model_store
 
 
+def _bad_request(message: str, error: str = "invalid_request"):
+    """Return a consistent 400 JSON response."""
+    return jsonify({"error": error, "message": message}), 400
+
+
+def _get_json_object(*, required: bool = False) -> tuple[Optional[Dict[str, Any]], Optional[Any]]:
+    """Safely parse a JSON object body without raising 415 for non-JSON input."""
+    data = request.get_json(silent=True)
+    raw_body = request.get_data(cache=True)
+
+    if data is None:
+        if raw_body:
+            return None, _bad_request("Request body must be a valid JSON object")
+        if required:
+            return None, _bad_request("Request body must be JSON")
+        return {}, None
+
+    if not isinstance(data, dict):
+        return None, _bad_request("Request body must be a JSON object")
+
+    return data, None
+
+
+def _parse_int_param(value: Any, field_name: str) -> tuple[Optional[int], Optional[Any]]:
+    """Safely parse an integer request parameter."""
+    try:
+        return int(value), None
+    except (TypeError, ValueError):
+        return None, _bad_request(f"'{field_name}' must be an integer")
+
+
+def _parse_float_param(value: Any, field_name: str) -> tuple[Optional[float], Optional[Any]]:
+    """Safely parse a float request parameter."""
+    try:
+        return float(value), None
+    except (TypeError, ValueError):
+        return None, _bad_request(f"'{field_name}' must be a number")
+
+
+def _parse_numeric_array(values: Any, field_name: str) -> tuple[Optional[np.ndarray], Optional[Any]]:
+    """Safely parse a numeric array from request data."""
+    if isinstance(values, (str, bytes)) or values is None:
+        return None, _bad_request(f"'{field_name}' must be an array of numbers")
+
+    try:
+        parsed = np.array(values, dtype=np.float64)
+    except (TypeError, ValueError):
+        return None, _bad_request(f"'{field_name}' must be an array of numbers")
+
+    if parsed.size == 0:
+        return None, _bad_request(f"'{field_name}' must not be empty")
+
+    return parsed, None
+
+
 @anomaly_bp.route("/anomaly/detect", methods=["POST"])
 def detect_anomalies():
     """
@@ -111,29 +166,33 @@ def detect_anomalies():
     }
     """
     try:
-        data = request.get_json()
-        
-        if not data:
-            return jsonify({
-                "error": "invalid_request",
-                "message": "Request body must be JSON",
-            }), 400
-        
+        data, error_response = _get_json_object(required=True)
+        if error_response:
+            return error_response
+
         detector = get_detector()
         
         # Handle multi-sensor vs single-sensor input
         if "sensors" in data:
+            if not isinstance(data["sensors"], dict) or not data["sensors"]:
+                return _bad_request("'sensors' must be a non-empty object mapping sensor IDs to numeric arrays")
+
             # Multi-sensor detection
             sensor_data = {}
             for sensor_id, values in data["sensors"].items():
-                sensor_data[sensor_id] = np.array(values, dtype=np.float64)
+                parsed_values, error_response = _parse_numeric_array(values, f"sensors.{sensor_id}")
+                if error_response:
+                    return error_response
+                sensor_data[sensor_id] = parsed_values
             
             results = detector.detect(sensor_data)
         
         elif "values" in data:
             # Single sensor detection
             sensor_id = data.get("sensor_id", "unknown")
-            values = np.array(data["values"], dtype=np.float64)
+            values, error_response = _parse_numeric_array(data["values"], "values")
+            if error_response:
+                return error_response
             
             result = detector.detect(values, sensor_id=sensor_id)
             results = [result] if isinstance(result, AnomalyResult) else result
@@ -198,8 +257,10 @@ def get_anomaly_history():
     try:
         sensor_id = request.args.get("sensor_id")
         level_str = request.args.get("level")
-        limit = int(request.args.get("limit", "100"))
-        
+        limit, error_response = _parse_int_param(request.args.get("limit", "100"), "limit")
+        if error_response:
+            return error_response
+
         detector = get_detector()
         
         # Parse level filter
@@ -299,37 +360,45 @@ def train_model():
     }
     """
     try:
-        data = request.get_json()
-        
-        if not data:
-            return jsonify({
-                "error": "invalid_request",
-                "message": "Request body must be JSON",
-            }), 400
-        
+        data, error_response = _get_json_object(required=True)
+        if error_response:
+            return error_response
+
         detector = get_detector()
         
         # Extract training data
         if "data" in data:
-            training_data = {
-                sensor_id: np.array(values, dtype=np.float64)
-                for sensor_id, values in data["data"].items()
-            }
+            if not isinstance(data["data"], dict) or not data["data"]:
+                return _bad_request("'data' must be a non-empty object mapping sensor IDs to numeric arrays")
+
+            training_data = {}
+            for sensor_id, values in data["data"].items():
+                parsed_values, error_response = _parse_numeric_array(values, f"data.{sensor_id}")
+                if error_response:
+                    return error_response
+                training_data[sensor_id] = parsed_values
         elif "values" in data:
-            training_data = np.array(data["values"], dtype=np.float64)
+            training_data, error_response = _parse_numeric_array(data["values"], "values")
+            if error_response:
+                return error_response
         else:
-            return jsonify({
-                "error": "invalid_request",
-                "message": "Request must include 'data' or 'values' field",
-            }), 400
+            return _bad_request("Request must include 'data' or 'values' field")
         
         # Apply config overrides
         if "config" in data:
             config = data["config"]
+            if not isinstance(config, dict):
+                return _bad_request("'config' must be an object")
             if "n_estimators" in config:
-                detector.config.n_estimators = config["n_estimators"]
+                n_estimators, error_response = _parse_int_param(config["n_estimators"], "config.n_estimators")
+                if error_response:
+                    return error_response
+                detector.config.n_estimators = n_estimators
             if "contamination" in config:
-                detector.config.contamination = config["contamination"]
+                contamination, error_response = _parse_float_param(config["contamination"], "config.contamination")
+                if error_response:
+                    return error_response
+                detector.config.contamination = contamination
         
         # Train model
         start_time = datetime.now(timezone.utc)
@@ -458,8 +527,10 @@ def save_model():
     }
     """
     try:
-        data = request.get_json() or {}
-        
+        data, error_response = _get_json_object(required=False)
+        if error_response:
+            return error_response
+
         detector = get_detector()
         
         if not detector._is_fitted:
@@ -474,6 +545,12 @@ def save_model():
         
         # Also save to model store with versioning
         version = data.get("version", "1.0.0")
+
+        metadata = data.get("metadata", {})
+        if metadata is None:
+            metadata = {}
+        if not isinstance(metadata, dict):
+            return _bad_request("'metadata' must be an object")
         
         try:
             store = get_model_store()
@@ -507,8 +584,8 @@ def save_model():
                     "n_estimators": detector.config.n_estimators,
                     "contamination": detector.config.contamination,
                 },
-                description=data.get("metadata", {}).get("description"),
-                tags=data.get("metadata", {}).get("tags", []),
+                description=metadata.get("description"),
+                tags=metadata.get("tags", []),
             )
             
             store.save_model(
@@ -555,8 +632,10 @@ def load_model():
     }
     """
     try:
-        data = request.get_json() or {}
-        
+        data, error_response = _get_json_object(required=False)
+        if error_response:
+            return error_response
+
         detector = get_detector()
         
         # Load using detector's built-in method
@@ -673,14 +752,19 @@ def compare_models():
     }
     """
     try:
-        data = request.get_json()
-        
-        if not data or "versions" not in data:
-            return jsonify({
-                "error": "invalid_request",
-                "message": "Request must include 'versions' array",
-            }), 400
-        
+        data, error_response = _get_json_object(required=True)
+        if error_response:
+            return error_response
+
+        if "versions" not in data:
+            return _bad_request("Request must include 'versions' array")
+
+        if not isinstance(data["versions"], list) or not data["versions"]:
+            return _bad_request("'versions' must be a non-empty array")
+
+        if any(not isinstance(version, str) or not version.strip() for version in data["versions"]):
+            return _bad_request("Each entry in 'versions' must be a non-empty string")
+
         store = get_model_store()
         comparison = store.compare_models("anomaly_detector", data["versions"])
         
