@@ -301,6 +301,17 @@ def _wire_habitus_auto_mining(services: dict) -> None:
         _LOGGER.exception("Failed to wire habitus auto-mining")
 
 
+
+def _brain_graph_option(config: dict, nested_key: str, top_level_key: str, default: int) -> int:
+    """Resolve a brain_graph config value — nested block takes precedence over top-level."""
+    bg = config.get("brain_graph", {})
+    if nested_key in bg:
+        return _safe_int(bg[nested_key], default)
+    if top_level_key in config:
+        return _safe_int(config[top_level_key], default)
+    return default
+
+
 def _safe_int(value, default: int, minimum: int = 1, maximum: int = 100000) -> int:
     """Parse an int config value with bounds checking."""
     try:
