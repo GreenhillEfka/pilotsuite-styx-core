@@ -669,6 +669,98 @@ def _get_dialog_machine():
     return get_dialog_machine()
 
 
+# ── HA Assist Bridge ──────────────────────────────────────────────────────────
+
+
+@bp.route("/ha/assist", methods=["POST"])
+def ha_assist_intent():
+    """Bridge endpoint for Home Assistant Assist pipeline.
+
+    Accepts HA Assist's transcribed sentence JSON and routes it through
+    the canonical process_intent() flow so HA voice commands use the same
+    intent resolution, context building, and response generation as all other
+    voice callers.
+
+    HA payload (from Assist intent pipeline):
+    {
+        "text": "Mach das Licht an",        # transcribed sentence (required)
+        "language": "de",                  # optional, auto-detected if not provided
+        "zone": "wohnzimmer",              # optional, auto-detected if not provided
+        "context": {...},                  # optional, existing voice context
+        "ha_entity_id": "light.wohnzimmer" # optional, HA entity that triggered
+    }
+
+    Response: same as POST /api/v1/voice/intent
+    {
+        "status": "ok",
+        "intent": {...},
+        "response": {...},
+        "context": {...}
+    }
+    """
+    try:
+        data = request.get_json(silent=True) or {}
+
+        text = data.get("text") or data.get("sentence")
+        if not text:
+            return jsonify({
+                "status": "error",
+                "message": "Missing 'text' or 'sentence' in request body"
+            }), 400
+
+        language = data.get("language")
+        zone = data.get("zone")
+
+        handler = _get_intent_handler()
+        intent = handler.parse_intent(text, language)
+
+        req_context = data.get("context", {}) if isinstance(data.get("context"), dict) else {}
+        user_prefs = req_context.get("user_preferences")
+        active_devs = req_context.get("active_devices")
+
+        if not zone and isinstance(req_context, dict):
+            zone = req_context.get("zone_name")
+        zone = zone.lower() if zone else zone
+
+        context_builder = _get_context_builder()
+
+        if "context" in data and isinstance(data["context"], dict):
+            context = context_builder.build_context(
+                mood_engine=handler.mood_engine,
+                habitus_service=handler.habitus_service,
+                zone_name=zone,
+                force_refresh=True,
+                user_preferences=user_prefs,
+                active_devices=active_devs,
+            )
+        else:
+            context = context_builder.build_context(
+                mood_engine=handler.mood_engine,
+                habitus_service=handler.habitus_service,
+                zone_name=zone,
+                force_refresh=data.get("force_context", False),
+                user_preferences=user_prefs,
+                active_devices=active_devs,
+            )
+
+        response = handler.handle_intent(intent, context)
+
+        return jsonify({
+            "status": "ok",
+            "intent": intent.to_dict(),
+            "response": response.to_dict(),
+            "context": context.to_dict(),
+            "source": "ha_assist",
+        })
+
+    except Exception as e:
+        _LOGGER.exception("HA Assist intent processing failed")
+        return jsonify({
+            "status": "error",
+            "message": str(e)
+        }), 500
+
+
 @bp.route("/dialog/state", methods=["GET"])
 def get_dialog_state():
     """Get current dialog state."""
