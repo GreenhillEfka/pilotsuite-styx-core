@@ -176,9 +176,16 @@ def process_intent():
         # Build or use existing context
         context_builder = _get_context_builder()
         
-        # Extract user_preferences from request body context
+        # Build or use existing context
+        context_builder = _get_context_builder()
+
+        # Extract accepted context replay fields from request body
         req_context = data.get("context", {})
-        user_prefs = req_context.get("user_preferences") if isinstance(req_context, dict) else None
+        if not isinstance(req_context, dict):
+            req_context = {}
+        user_prefs = req_context.get("user_preferences")
+        # NOTE: active_devices replay requires a separate fix — build_context does not accept it
+        # and the existing active_devices to_dict() assumes DeviceContext objects, not raw strings
 
         if "context" in data and isinstance(data["context"], dict):
             # Use provided context (simplified reconstruction)
