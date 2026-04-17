@@ -1,4 +1,4 @@
-"""Energy Forecast API Contract Tests — Slice 370"""
+"""Energy Forecast API Contract Tests — Slice 370+"""
 from __future__ import annotations
 import sys
 from pathlib import Path
@@ -72,3 +72,29 @@ class TestEnergyForecastQueryValidation:
         for bad in ("abc", "yes"):
             r = client.get(f"/api/v1/energy/forecast/combined?hours={bad}")
             assert r.status_code == 400, f"hours={bad!r} -> {r.status_code}"
+
+
+class TestEnergyRootVisibleFeature:
+    """Slice 374: energy_root() returns HA-compatible energy snapshot."""
+
+    def test_energy_root_returns_ha_fields(self):
+        app = _make_energy_app()
+        client = app.test_client()
+        r = client.get("/api/v1/energy/")
+        assert r.status_code == 200, f"Expected 200, got {r.status_code}"
+        d = r.get_json()
+        for field in ("total_consumption_today_kwh", "total_production_today_kwh",
+                      "current_power_watts", "peak_power_today_watts",
+                      "anomalies_detected", "shifting_opportunities",
+                      "baselines", "timestamp"):
+            assert field in d, f"Missing field: {field}"
+
+    def test_energy_root_shifting_opportunities_is_integer(self):
+        app = _make_energy_app()
+        client = app.test_client()
+        r = client.get("/api/v1/energy/")
+        assert r.status_code == 200
+        d = r.get_json()
+        assert isinstance(d["shifting_opportunities"], int)
+        assert isinstance(d["anomalies_detected"], int)
+        assert isinstance(d["baselines"]["daily_average"], (int, float))
