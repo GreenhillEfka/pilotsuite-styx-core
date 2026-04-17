@@ -147,6 +147,23 @@ def _coerce_bool(value: object, *, default: bool = False) -> bool:
     return bool(value)
 
 
+def _load_json_object(*, required_fields: list[str] | None = None):
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return None, (jsonify({"error": "request body must be a JSON object"}), 400)
+
+    missing_fields = [field for field in (required_fields or []) if field not in data]
+    if missing_fields:
+        if len(missing_fields) == 1:
+            return None, (jsonify({"error": f"{missing_fields[0]} is required"}), 400)
+        return None, (
+            jsonify({"error": f"missing required fields: {', '.join(missing_fields)}"}),
+            400,
+        )
+
+    return data, None
+
+
 @bp.route("/tags", methods=["GET"])
 @require_token
 def list_tags():
@@ -249,20 +266,25 @@ def sync_tags_from_ha():
 
     Payload: {"source": "ha", "tags": [{"tag_id": ..., "name": ..., "entity_ids": [...], ...}]}
     """
-    data = request.get_json(silent=True) or {}
+    data, error_response = _load_json_object(required_fields=["tags"])
+    if error_response is not None:
+        return error_response
+
     source = data.get("source", "ha")
-    tags = data.get("tags", [])
+    tags = data["tags"]
 
     if not isinstance(tags, list):
         return jsonify({"ok": False, "error": "tags must be a list"}), 400
 
     synced = 0
-    for tag_entry in tags:
+    for idx, tag_entry in enumerate(tags):
         if not isinstance(tag_entry, dict):
-            continue
-        tag_id = tag_entry.get("tag_id", "")
+            return jsonify({"error": f"tags[{idx}] must be an object"}), 400
+
+        tag_id = (tag_entry.get("tag_id") or "").strip()
         if not tag_id:
-            continue
+            return jsonify({"error": f"tags[{idx}].tag_id is required"}), 400
+
         synced += 1
 
     return jsonify({
@@ -314,8 +336,11 @@ def bulk_assign():
 
     Payload: {"assignments": [{"subject_id": "...", "tag_id": "...", "subject_kind": "entity"}, ...]}
     """
-    data = request.get_json(silent=True) or {}
-    items = data.get("assignments")
+    data, error_response = _load_json_object(required_fields=["assignments"])
+    if error_response is not None:
+        return error_response
+
+    items = data["assignments"]
 
     if not isinstance(items, list):
         return jsonify({"ok": False, "error": "assignments must be a list"}), 400
@@ -392,7 +417,13 @@ def auto_tag():
 
     Payload: {"entity_ids": ["light.kitchen", ...]} or {"all": true}
     """
-    data = request.get_json(silent=True) or {}
+    data, error_response = _load_json_object()
+    if error_response is not None:
+        return error_response
+
+    if "all" not in data and "entity_ids" not in data:
+        return jsonify({"error": "entity_ids list or all=true is required"}), 400
+
     entity_ids = data.get("entity_ids")
     tag_all = _coerce_bool(data.get("all", False))
 
@@ -498,7 +529,10 @@ def delete_assignments():
 
     Payload: {"subject_id": "...", "tag_id": "..."} or {"ids": ["uuid1", ...]}
     """
-    data = request.get_json(silent=True) or {}
+    data, error_response = _load_json_object()
+    if error_response is not None:
+        return error_response
+
     ids_list = data.get("ids")
     subject_id = data.get("subject_id")
     tag_id = data.get("tag_id")
