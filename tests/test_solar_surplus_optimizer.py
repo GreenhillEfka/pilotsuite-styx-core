@@ -227,6 +227,114 @@ class TestSolarSurplusOptimizer:
         assert candidate.priority == 1
         assert candidate.interruptible is False
 
+    def test_reporting_surface_returns_normalized_recommendation_batch_shape(self):
+        optimizer = SolarSurplusOptimizer(schedule_now_window_minutes=10)
+        reference_time = datetime(2026, 4, 17, 9, 5, tzinfo=timezone.utc)
+        start = datetime(2026, 4, 17, 10, 0, tzinfo=timezone.utc)
+
+        pv_forecast = [
+            PVHourlyForecast(
+                timestamp=(start + timedelta(hours=hour)).isoformat(),
+                hour=(10 + hour) % 24,
+                solar_elevation=45.0,
+                solar_azimuth=180.0,
+                clearsky_irradiance_wm2=650.0,
+                actual_irradiance_wm2=610.0,
+                pv_power_kw=2.4 + hour * 0.2,
+                pv_energy_wh=2400.0 + hour * 200.0,
+                cloud_cover_pct=10,
+                weather_condition="clear",
+                efficiency_factor=0.92,
+            )
+            for hour in range(3)
+        ]
+        load_forecast = [
+            ForecastDataPoint(
+                timestamp=(start + timedelta(hours=hour)).isoformat(),
+                hour=(10 + hour) % 24,
+                predicted_consumption_kw=0.5,
+                predicted_consumption_kwh=0.5,
+                confidence=0.88,
+                base_load_kw=0.3,
+                variable_load_kw=0.2,
+                weather_adjustment=0.0,
+                day_type="weekday",
+            )
+            for hour in range(3)
+        ]
+        price_forecast = [
+            {
+                "timestamp": (start + timedelta(hours=hour)).isoformat(),
+                "price_ct_kwh": 26.0 + hour * 3,
+                "export_price_ct_kwh": 8.0,
+            }
+            for hour in range(3)
+        ]
+        shiftable_devices = [
+            ShiftableDevice(
+                device_id="dishwasher-1",
+                device_type="dishwasher",
+                name="Dishwasher",
+                power_kw=1.2,
+                energy_kwh=1.2,
+                duration_hours=1.0,
+                flexibility_hours=6,
+                priority=2,
+                min_start_hour=10,
+                max_start_hour=14,
+                must_complete_by="2026-04-17T15:00:00Z",
+                current_state="idle",
+                cost_per_kwh=29.0,
+            )
+        ]
+
+        batch = optimizer.get_recommendations_as_dict(
+            pv_forecast=pv_forecast,
+            load_forecast=load_forecast,
+            price_forecast=price_forecast,
+            shiftable_devices=shiftable_devices,
+            reference_time=reference_time,
+            now=reference_time,
+        )
+
+        assert set(batch) == {"generated_at", "summary", "recommendations", "slots", "candidates"}
+        assert batch["generated_at"] == "2026-04-17T09:05:00Z"
+
+        assert batch["summary"]["generated_at"] == batch["generated_at"]
+        assert batch["summary"]["horizon_hours"] == 3
+        assert batch["summary"]["total_slots"] == 3
+        assert batch["summary"]["total_candidates"] == 1
+        assert batch["summary"]["recommendations_count"] == 1
+
+        assert len(batch["slots"]) == 3
+        assert batch["slots"][0]["timestamp"] == "2026-04-17T10:00:00Z"
+        assert batch["slots"][0]["available_surplus_kwh"] == 1.9
+
+        assert len(batch["candidates"]) == 1
+        assert batch["candidates"][0]["device_id"] == "dishwasher-1"
+        assert batch["candidates"][0]["earliest_start"] == "2026-04-17T10:00:00Z"
+
+        assert len(batch["recommendations"]) == 1
+        recommendation = batch["recommendations"][0]
+        assert set(recommendation) == {
+            "device_id",
+            "device_name",
+            "action",
+            "recommended_start",
+            "reason",
+            "confidence",
+            "expected_self_consumption_gain_pct",
+            "expected_savings_eur",
+            "expected_grid_relief_kwh",
+            "slot_timestamp",
+            "score",
+        }
+        assert recommendation["device_id"] == "dishwasher-1"
+        assert recommendation["action"] == "schedule_at"
+        assert recommendation["recommended_start"] == "2026-04-17T12:00:00Z"
+        assert recommendation["slot_timestamp"] == recommendation["recommended_start"]
+        assert recommendation["expected_grid_relief_kwh"] == 1.2
+
     def test_optimizer_module_stays_runtime_pure(self):
         import copilot_core.energy.solar_surplus_optimizer as module
 

@@ -478,6 +478,49 @@ class SolarSurplusOptimizer:
         )
         return actions, summary
 
+    def get_recommendations_as_dict(
+        self,
+        *,
+        pv_forecast: Sequence[Any] | Iterable[Any],
+        shiftable_devices: Sequence[Any] | Iterable[Any],
+        load_forecast: Sequence[Any] | Iterable[Any] | None = None,
+        price_forecast: Sequence[Any] | Iterable[Any] | None = None,
+        reference_time: datetime | None = None,
+        now: datetime | None = None,
+        default_import_price_ct_kwh: float = 30.0,
+        default_export_price_ct_kwh: float = 8.0,
+    ) -> dict[str, Any]:
+        """Build one normalized recommendation batch for service/API callers.
+
+        This is the thin reporting surface for VFM-012: callers can hand over
+        existing forecast payloads and shiftable-device profiles, while this
+        method keeps normalization, recommendation generation, and response
+        shaping in one deterministic Core-local seam.
+        """
+
+        report_reference = (reference_time or now or datetime.now(timezone.utc)).astimezone(timezone.utc)
+        slots = SolarSurplusSlot.from_forecasts(
+            pv_forecast,
+            load_forecast=load_forecast,
+            price_forecast=price_forecast,
+            reference_time=report_reference,
+            default_import_price_ct_kwh=default_import_price_ct_kwh,
+            default_export_price_ct_kwh=default_export_price_ct_kwh,
+        )
+        candidates = SolarSurplusCandidate.from_shiftable_devices(
+            shiftable_devices,
+            reference_time=report_reference,
+        )
+        actions, summary = self.recommend(slots, candidates, now=now or report_reference)
+
+        return {
+            "generated_at": summary.generated_at,
+            "summary": summary.to_dict(),
+            "recommendations": [action.to_dict() for action in actions],
+            "slots": [asdict(slot) for slot in slots],
+            "candidates": [asdict(candidate) for candidate in candidates],
+        }
+
     def _recommend_for_candidate(
         self,
         candidate: SolarSurplusCandidate,
