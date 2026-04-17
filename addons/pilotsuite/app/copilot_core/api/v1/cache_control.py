@@ -91,7 +91,7 @@ def cache_invalidate():
     """
     try:
         cache = get_api_cache()
-        data = request.get_json() or {}
+        data = request.get_json(silent=True) or {}
 
         if data.get("all"):
             _run_async(cache.invalidate_all())
