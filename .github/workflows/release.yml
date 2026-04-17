@@ -115,4 +115,8 @@ jobs:
             echo "ERROR: ZIP contents do not match $VERSION"
             exit 1
           fi
+          if unzip -Z1 "v$VERSION.zip" | grep -Eq '^pilotsuite-styx-core/copilot_core/(config_flow\.py|manifest\.json|hacs\.json|README\.md|ui/)'; then
+            echo "ERROR: ZIP still contains stale top-level HA-owned copilot_core surfaces"
+            exit 1
+          fi
           echo "ZIP VERSION SURFACES CONSISTENT ✓"

@@ -1,0 +1,7 @@
+# Do not ship stale HA-owned top-level surfaces in Core release archives.
+copilot_core/config_flow.py export-ignore
+copilot_core/manifest.json export-ignore
+copilot_core/hacs.json export-ignore
+copilot_core/README.md export-ignore
+copilot_core/ui export-ignore
+copilot_core/ui/** export-ignore

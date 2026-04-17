@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+- Removed the stale top-level HA integration README from `copilot_core/`; canonical HA/HACS install docs remain in `pilotsuite-styx-ha`
+- Realigned the root `VERSION` file to `20.0.8`, so release/install surfaces now match `addons/pilotsuite/app/VERSION` and `addons/pilotsuite/config.yaml`
+
 ## [20.0.2] - 2026-04-08
 
 ### Fixed
@@ -41,4 +47,3 @@
 - Complete API v1
 - Brain Graph implementation
 - Neural sensor suite
-
