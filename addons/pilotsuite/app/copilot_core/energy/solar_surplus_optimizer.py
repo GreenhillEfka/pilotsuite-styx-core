@@ -7,9 +7,15 @@ without importing Home Assistant runtime surfaces.
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
-from typing import Iterable, Sequence
+from dataclasses import asdict, dataclass, is_dataclass
+from datetime import datetime, timedelta, timezone
+from typing import Any, Iterable, Mapping, Sequence
+
+
+@dataclass(frozen=True)
+class _AlignedForecastPoint:
+    timestamp: str | None
+    payload: dict[str, Any]
 
 
 def _parse_iso_timestamp(value: str) -> datetime:
@@ -22,6 +28,138 @@ def _parse_iso_timestamp(value: str) -> datetime:
 
 def _iso_utc(dt: datetime) -> str:
     return dt.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _coerce_record(value: Any) -> dict[str, Any]:
+    if value is None:
+        return {}
+    if isinstance(value, Mapping):
+        return dict(value)
+    if is_dataclass(value):
+        return asdict(value)
+    if hasattr(value, "__dict__"):
+        return {
+            key: attr
+            for key, attr in vars(value).items()
+            if not key.startswith("_")
+        }
+    return {}
+
+
+def _coerce_float(value: Any, default: float = 0.0) -> float:
+    try:
+        if value in ("", None):
+            raise ValueError
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _coerce_int(value: Any, default: int = 0) -> int:
+    try:
+        if value in ("", None):
+            raise ValueError
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _coerce_bool(value: Any, default: bool = False) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value in (None, ""):
+        return default
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+        if lowered in {"true", "1", "yes", "on"}:
+            return True
+        if lowered in {"false", "0", "no", "off"}:
+            return False
+    return bool(value)
+
+
+def _ceil_to_hour(dt: datetime) -> datetime:
+    normalized = dt.astimezone(timezone.utc)
+    floored = normalized.replace(minute=0, second=0, microsecond=0)
+    if floored == normalized:
+        return floored
+    return floored + timedelta(hours=1)
+
+
+def _floor_to_hour(dt: datetime) -> datetime:
+    return dt.astimezone(timezone.utc).replace(minute=0, second=0, microsecond=0)
+
+
+def _hour_in_window(hour: int, min_hour: int, max_hour: int) -> bool:
+    if min_hour <= max_hour:
+        return min_hour <= hour <= max_hour
+    return hour >= min_hour or hour <= max_hour
+
+
+def _next_allowed_hour(anchor: datetime, min_hour: int, max_hour: int) -> datetime:
+    candidate = _ceil_to_hour(anchor)
+    if _hour_in_window(candidate.hour, min_hour, max_hour):
+        return candidate
+
+    for offset in range(0, 49):
+        probe = candidate + timedelta(hours=offset)
+        if _hour_in_window(probe.hour, min_hour, max_hour):
+            return probe
+    return candidate
+
+
+def _previous_allowed_hour(anchor: datetime, min_hour: int, max_hour: int) -> datetime:
+    candidate = _floor_to_hour(anchor)
+    if _hour_in_window(candidate.hour, min_hour, max_hour):
+        return candidate
+
+    for offset in range(0, 49):
+        probe = candidate - timedelta(hours=offset)
+        if _hour_in_window(probe.hour, min_hour, max_hour):
+            return probe
+    return candidate
+
+
+def _normalized_timestamp(record: Mapping[str, Any], index: int, reference_time: datetime | None) -> str | None:
+    raw_timestamp = record.get("timestamp")
+    if isinstance(raw_timestamp, str) and raw_timestamp:
+        return _iso_utc(_parse_iso_timestamp(raw_timestamp))
+    if reference_time is None:
+        return None
+    return _iso_utc(_floor_to_hour(reference_time) + timedelta(hours=index))
+
+
+def _normalize_forecast_points(
+    forecast: Sequence[Any] | Iterable[Any] | None,
+    *,
+    reference_time: datetime | None = None,
+) -> list[_AlignedForecastPoint]:
+    normalized: list[_AlignedForecastPoint] = []
+    for index, point in enumerate(list(forecast or [])):
+        payload = _coerce_record(point)
+        normalized.append(
+            _AlignedForecastPoint(
+                timestamp=_normalized_timestamp(payload, index, reference_time),
+                payload=payload,
+            )
+        )
+    return normalized
+
+
+def _aligned_point(
+    points: Sequence[_AlignedForecastPoint],
+    by_timestamp: Mapping[str, dict[str, Any]],
+    *,
+    index: int,
+    timestamp: str | None,
+) -> dict[str, Any] | None:
+    if timestamp and timestamp in by_timestamp:
+        return by_timestamp[timestamp]
+    if index >= len(points):
+        return None
+    if points[index].timestamp is None:
+        return points[index].payload
+    return None
 
 
 @dataclass(frozen=True)
@@ -38,6 +176,117 @@ class SolarSurplusSlot:
     @property
     def starts_at(self) -> datetime:
         return _parse_iso_timestamp(self.timestamp)
+
+    @classmethod
+    def from_forecast_point(
+        cls,
+        pv_point: Any,
+        *,
+        load_point: Any = None,
+        price_point: Any = None,
+        timestamp: str | None = None,
+        default_import_price_ct_kwh: float = 30.0,
+        default_export_price_ct_kwh: float = 8.0,
+    ) -> SolarSurplusSlot:
+        pv_data = _coerce_record(pv_point)
+        load_data = _coerce_record(load_point)
+        price_data = _coerce_record(price_point)
+
+        resolved_timestamp = (
+            timestamp
+            or pv_data.get("timestamp")
+            or load_data.get("timestamp")
+            or price_data.get("timestamp")
+            or "1970-01-01T00:00:00Z"
+        )
+        window_hours = max(
+            0.25,
+            _coerce_float(
+                pv_data.get("window_hours", pv_data.get("duration_hours")),
+                1.0,
+            ),
+        )
+        pv_energy_kwh = _coerce_float(pv_data.get("pv_energy_wh"), 0.0) / 1000.0
+        if pv_energy_kwh <= 0:
+            pv_energy_kwh = _coerce_float(pv_data.get("pv_energy_kwh"), 0.0)
+        if pv_energy_kwh <= 0:
+            pv_energy_kwh = _coerce_float(pv_data.get("pv_power_kw"), 0.0) * window_hours
+
+        load_energy_kwh = _coerce_float(load_data.get("predicted_consumption_kwh"), 0.0)
+        if load_energy_kwh <= 0:
+            load_energy_kwh = _coerce_float(load_data.get("predicted_consumption_kw"), 0.0) * window_hours
+
+        confidence = _coerce_float(load_data.get("confidence"), _coerce_float(pv_data.get("confidence"), 1.0))
+        import_price = _coerce_float(
+            price_data.get("price_ct_kwh", price_data.get("import_price_ct_kwh")),
+            default_import_price_ct_kwh,
+        )
+        export_price = _coerce_float(
+            price_data.get("export_price_ct_kwh", price_data.get("feed_in_tariff_ct_kwh")),
+            default_export_price_ct_kwh,
+        )
+        available_surplus_kwh = max(0.0, pv_energy_kwh - load_energy_kwh)
+
+        return cls(
+            timestamp=_iso_utc(_parse_iso_timestamp(str(resolved_timestamp))),
+            window_hours=round(window_hours, 3),
+            available_surplus_kwh=round(available_surplus_kwh, 3),
+            expected_import_price_ct_kwh=round(import_price, 3),
+            expected_export_price_ct_kwh=round(export_price, 3),
+            confidence=round(min(1.0, max(0.0, confidence)), 2),
+        )
+
+    @classmethod
+    def from_forecasts(
+        cls,
+        pv_forecast: Sequence[Any] | Iterable[Any],
+        *,
+        load_forecast: Sequence[Any] | Iterable[Any] | None = None,
+        price_forecast: Sequence[Any] | Iterable[Any] | None = None,
+        reference_time: datetime | None = None,
+        default_import_price_ct_kwh: float = 30.0,
+        default_export_price_ct_kwh: float = 8.0,
+    ) -> list[SolarSurplusSlot]:
+        pv_points = _normalize_forecast_points(pv_forecast, reference_time=reference_time)
+        if not pv_points:
+            return []
+
+        load_points = _normalize_forecast_points(load_forecast, reference_time=reference_time)
+        price_points = _normalize_forecast_points(price_forecast, reference_time=reference_time)
+        load_by_timestamp = {
+            point.timestamp: point.payload
+            for point in load_points
+            if point.timestamp
+        }
+        price_by_timestamp = {
+            point.timestamp: point.payload
+            for point in price_points
+            if point.timestamp
+        }
+
+        slots: list[SolarSurplusSlot] = []
+        for index, pv_point in enumerate(pv_points):
+            if pv_point.timestamp is None:
+                continue
+            load_point = _aligned_point(load_points, load_by_timestamp, index=index, timestamp=pv_point.timestamp)
+            price_point = _aligned_point(price_points, price_by_timestamp, index=index, timestamp=pv_point.timestamp)
+
+            if load_points and load_point is None:
+                continue
+            if price_points and price_point is None:
+                continue
+
+            slots.append(
+                cls.from_forecast_point(
+                    pv_point.payload,
+                    load_point=load_point,
+                    price_point=price_point,
+                    timestamp=pv_point.timestamp,
+                    default_import_price_ct_kwh=default_import_price_ct_kwh,
+                    default_export_price_ct_kwh=default_export_price_ct_kwh,
+                )
+            )
+        return slots
 
 
 @dataclass(frozen=True)
@@ -60,6 +309,84 @@ class SolarSurplusCandidate:
     @property
     def latest_start_at(self) -> datetime:
         return _parse_iso_timestamp(self.latest_start)
+
+    @classmethod
+    def from_shiftable_device(
+        cls,
+        device: Any,
+        *,
+        reference_time: datetime,
+    ) -> SolarSurplusCandidate | None:
+        payload = _coerce_record(device)
+        device_id = str(payload.get("device_id", "")).strip()
+        if not device_id:
+            return None
+
+        current_state = str(payload.get("current_state", "idle") or "idle").strip().lower()
+        if current_state not in {"idle", "ready", "pending"}:
+            return None
+
+        anchor = _ceil_to_hour(reference_time)
+        duration_hours = _coerce_float(payload.get("duration_hours"), 0.0)
+        energy_kwh = _coerce_float(payload.get("energy_kwh"), 0.0)
+        power_kw = _coerce_float(payload.get("power_kw"), 0.0)
+
+        if duration_hours <= 0 and energy_kwh > 0 and power_kw > 0:
+            duration_hours = energy_kwh / power_kw
+        if duration_hours <= 0:
+            duration_hours = 1.0
+        if energy_kwh <= 0 and power_kw > 0:
+            energy_kwh = power_kw * duration_hours
+        if energy_kwh <= 0:
+            energy_kwh = duration_hours
+
+        min_start_hour = max(0, min(23, _coerce_int(payload.get("min_start_hour"), anchor.hour)))
+        max_start_hour = max(0, min(23, _coerce_int(payload.get("max_start_hour"), 23)))
+        flexibility_hours = max(0.0, _coerce_float(payload.get("flexibility_hours"), 4.0))
+
+        earliest_start_at = _next_allowed_hour(anchor, min_start_hour, max_start_hour)
+        latest_deadline = anchor + timedelta(hours=flexibility_hours)
+        latest_start_at = _previous_allowed_hour(latest_deadline, min_start_hour, max_start_hour)
+        if earliest_start_at > latest_deadline:
+            return None
+
+        must_complete_by = payload.get("must_complete_by")
+        if isinstance(must_complete_by, str) and must_complete_by:
+            latest_finish = _parse_iso_timestamp(must_complete_by)
+            latest_start_at = min(
+                latest_start_at,
+                _floor_to_hour(latest_finish - timedelta(hours=duration_hours)),
+            )
+            if latest_start_at + timedelta(hours=duration_hours) > latest_finish:
+                return None
+
+        if latest_start_at < earliest_start_at:
+            latest_start_at = earliest_start_at
+
+        return cls(
+            device_id=device_id,
+            device_name=str(payload.get("name") or payload.get("device_name") or device_id),
+            energy_kwh=round(max(0.0, energy_kwh), 3),
+            duration_hours=round(max(0.25, duration_hours), 3),
+            earliest_start=_iso_utc(earliest_start_at),
+            latest_start=_iso_utc(latest_start_at),
+            priority=max(1, min(5, _coerce_int(payload.get("priority"), 3))),
+            interruptible=_coerce_bool(payload.get("interruptible"), False),
+        )
+
+    @classmethod
+    def from_shiftable_devices(
+        cls,
+        devices: Sequence[Any] | Iterable[Any],
+        *,
+        reference_time: datetime,
+    ) -> list[SolarSurplusCandidate]:
+        candidates: list[SolarSurplusCandidate] = []
+        for device in list(devices):
+            candidate = cls.from_shiftable_device(device, reference_time=reference_time)
+            if candidate is not None:
+                candidates.append(candidate)
+        return candidates
 
 
 @dataclass(frozen=True)

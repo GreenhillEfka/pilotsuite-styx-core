@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import inspect
 import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -10,6 +11,9 @@ ADDON_APP = ROOT / "addons" / "pilotsuite" / "app"
 if str(ADDON_APP) not in sys.path:
     sys.path.insert(0, str(ADDON_APP))
 
+from copilot_core.energy.forecast import ForecastDataPoint  # noqa: E402
+from copilot_core.energy.load_shifting import ShiftableDevice  # noqa: E402
+from copilot_core.energy.pv_prediction import PVHourlyForecast  # noqa: E402
 from copilot_core.energy.solar_surplus_optimizer import (  # noqa: E402
     SolarSurplusCandidate,
     SolarSurplusOptimizer,
@@ -85,8 +89,6 @@ class TestSolarSurplusOptimizer:
         assert summary.expected_self_consumption_gain_pct == 40.54
 
     def test_schedule_now_when_best_slot_is_immediate(self):
-        from datetime import datetime, timezone
-
         optimizer = SolarSurplusOptimizer(schedule_now_window_minutes=45)
         slots = [
             SolarSurplusSlot(
@@ -117,6 +119,113 @@ class TestSolarSurplusOptimizer:
 
         assert actions[0].action == "schedule_now"
         assert actions[0].recommended_start == "2026-04-17T10:15:00Z"
+
+    def test_slot_adapter_trims_mismatched_forecasts_to_shared_horizon(self):
+        start = datetime(2026, 4, 17, 0, 0, tzinfo=timezone.utc)
+        pv_forecast = [
+            PVHourlyForecast(
+                timestamp=(start + timedelta(hours=hour)).isoformat(),
+                hour=hour % 24,
+                solar_elevation=35.0,
+                solar_azimuth=180.0,
+                clearsky_irradiance_wm2=550.0,
+                actual_irradiance_wm2=500.0,
+                pv_power_kw=2.0,
+                pv_energy_wh=2000.0,
+                cloud_cover_pct=15,
+                weather_condition="clear",
+                efficiency_factor=0.9,
+            )
+            for hour in range(48)
+        ]
+        load_forecast = [
+            ForecastDataPoint(
+                timestamp=(start + timedelta(hours=hour)).isoformat(),
+                hour=hour % 24,
+                predicted_consumption_kw=0.6,
+                predicted_consumption_kwh=0.6,
+                confidence=0.82,
+                base_load_kw=0.3,
+                variable_load_kw=0.3,
+                weather_adjustment=0.0,
+                day_type="weekday",
+            )
+            for hour in range(24)
+        ]
+        price_forecast = [
+            {
+                "timestamp": (start + timedelta(hours=hour)).isoformat(),
+                "price_ct_kwh": 24.0 + hour,
+            }
+            for hour in range(36)
+        ]
+
+        slots = SolarSurplusSlot.from_forecasts(
+            pv_forecast,
+            load_forecast=load_forecast,
+            price_forecast=price_forecast,
+        )
+
+        assert len(slots) == 24
+        assert slots[0].timestamp == "2026-04-17T00:00:00Z"
+        assert slots[-1].timestamp == "2026-04-17T23:00:00Z"
+        assert slots[0].available_surplus_kwh == 1.4
+        assert slots[-1].expected_import_price_ct_kwh == 47.0
+        assert slots[0].confidence == 0.82
+
+    def test_slot_adapter_handles_missing_fields_with_safe_defaults(self):
+        slots = SolarSurplusSlot.from_forecasts(
+            [{"timestamp": "2026-04-17T12:00:00Z", "pv_power_kw": 1.8}],
+            load_forecast=[{"timestamp": "2026-04-17T12:00:00Z", "predicted_consumption_kw": 0.5}],
+            price_forecast=[{"timestamp": "2026-04-17T12:00:00Z"}],
+        )
+
+        assert len(slots) == 1
+        assert slots[0].window_hours == 1.0
+        assert slots[0].available_surplus_kwh == 1.3
+        assert slots[0].expected_import_price_ct_kwh == 30.0
+        assert slots[0].expected_export_price_ct_kwh == 8.0
+        assert slots[0].confidence == 1.0
+
+    def test_candidate_adapter_normalizes_shiftable_profiles_and_filters_non_idle(self):
+        reference_time = datetime(2026, 4, 17, 10, 15, tzinfo=timezone.utc)
+        idle_device = ShiftableDevice(
+            device_id="ev-1",
+            device_type="ev_charger",
+            name="",
+            power_kw=3.5,
+            energy_kwh=0.0,
+            duration_hours=0.0,
+            flexibility_hours=6,
+            priority=0,
+            min_start_hour=11,
+            max_start_hour=18,
+            must_complete_by="2026-04-17T15:00:00Z",
+            current_state="idle",
+            cost_per_kwh=30.0,
+        )
+        running_device = {
+            "device_id": "washer-2",
+            "device_type": "washer",
+            "name": "Washer 2",
+            "current_state": "running",
+        }
+
+        candidates = SolarSurplusCandidate.from_shiftable_devices(
+            [idle_device, running_device],
+            reference_time=reference_time,
+        )
+
+        assert len(candidates) == 1
+        candidate = candidates[0]
+        assert candidate.device_id == "ev-1"
+        assert candidate.device_name == "ev-1"
+        assert candidate.energy_kwh == 3.5
+        assert candidate.duration_hours == 1.0
+        assert candidate.earliest_start == "2026-04-17T11:00:00Z"
+        assert candidate.latest_start == "2026-04-17T14:00:00Z"
+        assert candidate.priority == 1
+        assert candidate.interruptible is False
 
     def test_optimizer_module_stays_runtime_pure(self):
         import copilot_core.energy.solar_surplus_optimizer as module
