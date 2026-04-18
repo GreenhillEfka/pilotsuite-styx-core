@@ -81,7 +81,7 @@ def list_calendars():
     return jsonify({"calendars": calendars, "count": len(calendars)})
 
 
-@calendar_bp.route("/events/today", methods=["GET"])
+@calendar_bp.route("/today", methods=["GET"])
 @require_token
 def events_today():
     """Get all calendar events for today."""
@@ -104,7 +104,7 @@ def events_today():
     return jsonify({"events": events, "count": len(events), "cached": False})
 
 
-@calendar_bp.route("/events/upcoming", methods=["GET"])
+@calendar_bp.route("/upcoming", methods=["GET"])
 @require_token
 def events_upcoming():
     """Get upcoming events for the next N days (default 7)."""

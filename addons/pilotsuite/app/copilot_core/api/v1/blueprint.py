@@ -13,7 +13,9 @@ from copilot_core.api.v1.vector import bp as vector_bp
 from copilot_core.api.v1.neurons import bp as neurons_bp
 from copilot_core.api.v1.neurons_visualization import bp as neurons_viz_bp
 from copilot_core.api.v1.weather import bp as weather_bp
-from copilot_core.api.v1.energy_forecast import bp as energy_forecast_bp
+from copilot_core.api.v1.calendar import calendar_bp
+from copilot_core.api.v1.analytics import analytics_bp
+from copilot_core.api.v1.energy_forecast import energy_forecast_bp
 from copilot_core.api.v1.voice_context_bp import bp as voice_context_bp
 from copilot_core.api.v1.swagger_ui import bp as swagger_ui_bp, openapi_bp
 from copilot_core.api.v1.user_preferences import bp as user_preferences_bp
@@ -55,6 +57,8 @@ api_v1.register_blueprint(vector_bp)
 api_v1.register_blueprint(neurons_bp)
 api_v1.register_blueprint(neurons_viz_bp)
 api_v1.register_blueprint(weather_bp)
+api_v1.register_blueprint(calendar_bp)
+api_v1.register_blueprint(analytics_bp)
 api_v1.register_blueprint(energy_forecast_bp)
 api_v1.register_blueprint(voice_context_bp)
 api_v1.register_blueprint(swagger_ui_bp)
