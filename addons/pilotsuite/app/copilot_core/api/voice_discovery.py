@@ -28,6 +28,11 @@ VOICE_DISCOVERY_FEATURES: tuple[str, ...] = (
 
 
 def voice_capabilities_module() -> dict[str, Any]:
+    try:
+        from copilot_core.voice.voice_health import get_voice_health_block
+        runtime = get_voice_health_block()
+    except Exception:
+        runtime = {"can_transcribe": False, "can_synthesize": False, "available_backends": []}
     return {
         "enabled": True,
         "version": "1.0.0",
@@ -35,4 +40,5 @@ def voice_capabilities_module() -> dict[str, Any]:
         "status_surface": "/api/v1/voice/status",
         "endpoints": list(VOICE_DISCOVERY_ENDPOINTS),
         "features": list(VOICE_DISCOVERY_FEATURES),
+        "runtime": runtime,
     }
