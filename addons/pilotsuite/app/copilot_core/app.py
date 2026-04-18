@@ -294,12 +294,14 @@ def create_app() -> Flask:
 
     @app.get("/api/v1/status")
     def api_status():
+        from copilot_core.voice.voice_health import get_voice_health_block
         return jsonify(
             {
                 "ok": True,
                 "time": _now_iso(),
                 "version": cfg.version,
                 "port": int(os.environ.get("PORT", "8909")),
+                "voice": get_voice_health_block(),
             }
         )
 
