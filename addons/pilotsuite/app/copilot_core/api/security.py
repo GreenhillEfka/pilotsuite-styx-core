@@ -172,16 +172,35 @@ def _validate_ha_user_token(candidate: str) -> bool:
     return False
 
 
+
+def _record_auth_success(request) -> None:
+    """Reset brute-force counters on successful auth (best-effort)."""
+    try:
+        from copilot_core.security.brute_force_protection import record_auth_success as _ras
+        _ras()
+    except Exception:
+        pass
+
+def _record_auth_failure(request) -> None:
+    """Record failed auth attempt for brute-force tracking (best-effort)."""
+    try:
+        from copilot_core.security.brute_force_protection import record_auth_failure as _raf
+        _raf()
+    except Exception:
+        pass
+
 def validate_token(request) -> bool:
     """Validate the shared token against the incoming request.
 
     Returns True when authentication is disabled or a valid token is provided.
     Returns False when authentication is required and token validation fails.
 
+
     Accepts:
     1. Core's own auth token (X-Auth-Token header or Bearer)
     2. HA Ingress requests (X-Ingress-Path header present)
     3. Valid HA user tokens (validated against HA API, cached)
+    4. Brute-force tracking on failure / reset on success
     """
 
     # Check if auth is required
@@ -194,12 +213,14 @@ def validate_token(request) -> bool:
 
     header_token = (request.headers.get("X-Auth-Token") or "").strip()
     if header_token and hmac.compare_digest(header_token, token):
+        _record_auth_success(request)
         return True
 
     auth_header = (request.headers.get("Authorization") or "").strip()
     if auth_header.startswith("Bearer "):
         candidate = auth_header.split(" ", 1)[1].strip()
         if candidate and hmac.compare_digest(candidate, token):
+            _record_auth_success(request)
             return True
 
     # Trust requests coming through HA Ingress proxy (user already
@@ -210,12 +231,15 @@ def validate_token(request) -> bool:
     # Fallback: check if the token is a valid HA user token
     # (covers styx-chat-card sending HA frontend access_token)
     if header_token and _validate_ha_user_token(header_token):
+        _record_auth_success(request)
         return True
     if auth_header.startswith("Bearer "):
         candidate = auth_header.split(" ", 1)[1].strip()
         if candidate and _validate_ha_user_token(candidate):
+            _record_auth_success(request)
             return True
 
+    _record_auth_failure(request)
     # Log failed authentication attempt
     _LOGGER.warning(
         "Failed authentication attempt from %s (path=%s, method=%s)",
