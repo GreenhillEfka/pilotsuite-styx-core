@@ -261,6 +261,10 @@ class EnergyReportGenerator:
             "patterns": patterns,
             "impact": self._build_usage_pattern_impact(pattern_summaries),
             "drift": self._build_usage_pattern_drift(pattern_summaries, comparison_summaries),
+            "recommendations": self._build_usage_pattern_recommendations(
+                pattern_summaries,
+                comparison_summaries,
+            ),
         }
 
     # ── Internal builders ───────────────────────────────────────────────
@@ -420,6 +424,285 @@ class EnergyReportGenerator:
             "estimated_cost_impact_eur": round(estimated_cost, 2),
             "estimated_energy_impact_kwh": round(estimated_energy, 3),
         }
+
+    def _build_usage_pattern_recommendations(
+        self,
+        current_summaries: list[dict[str, Any]],
+        previous_summaries: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        """Build one bounded D3 recommendation layer with conservative explainability."""
+        current_by_id = {summary["pattern_id"]: summary for summary in current_summaries}
+        previous_by_id = {summary["pattern_id"]: summary for summary in previous_summaries}
+
+        recommendations: list[dict[str, Any]] = []
+        emitted_keys: set[tuple[str, str, str]] = set()
+
+        ranked_current = sorted(
+            current_summaries,
+            key=lambda summary: (
+                -self._usage_pattern_priority_seed(summary),
+                -self._usage_pattern_benefit_cost(summary),
+                -self._usage_pattern_benefit_energy(summary),
+                -float(summary.get("confidence", 0.0)),
+                str(summary.get("pattern_id", "")),
+            ),
+        )
+
+        for summary in ranked_current:
+            recommendation = self._build_usage_pattern_current_recommendation(
+                summary,
+                previous_by_id.get(summary["pattern_id"]),
+                emitted_keys=emitted_keys,
+            )
+            if recommendation:
+                recommendations.append(recommendation)
+
+        ranked_previous = sorted(
+            previous_summaries,
+            key=lambda summary: (
+                -int(summary.get("occurrence_count", 0)),
+                -float(summary.get("confidence", 0.0)),
+                str(summary.get("pattern_id", "")),
+            ),
+        )
+
+        for summary in ranked_previous:
+            if summary["pattern_id"] in current_by_id:
+                continue
+            recommendation = self._build_usage_pattern_fading_recommendation(
+                summary,
+                emitted_keys=emitted_keys,
+            )
+            if recommendation:
+                recommendations.append(recommendation)
+
+        recommendations.sort(
+            key=lambda item: (
+                int(item["priority"]),
+                -float(item["expected_benefit"]["estimated_cost_impact_eur"]),
+                -float(item["expected_benefit"]["estimated_energy_impact_kwh"]),
+                -float(item["confidence"]),
+                str(item["recommendation_id"]),
+            )
+        )
+        return recommendations[:3]
+
+    def _build_usage_pattern_current_recommendation(
+        self,
+        current_summary: dict[str, Any],
+        previous_summary: dict[str, Any] | None,
+        *,
+        emitted_keys: set[tuple[str, str, str]],
+    ) -> dict[str, Any] | None:
+        """Build a recommendation for a current-window pattern when evidence is strong enough."""
+        if current_summary.get("window_metrics_source") != "observations":
+            return None
+
+        confidence = round(float(current_summary.get("confidence", 0.0)), 3)
+        current_frequency = int(current_summary.get("occurrence_count", 0))
+        if confidence < 0.65 or current_frequency < 2:
+            return None
+
+        previous_frequency = int(previous_summary.get("occurrence_count", 0)) if previous_summary else 0
+        trend = self._classify_usage_pattern_trend(current_summary, previous_summary)
+        category = str(current_summary.get("category", "automation"))
+        zone = str(current_summary.get("zone") or "unknown")
+        benefit = self._build_usage_pattern_expected_benefit(current_summary)
+        pattern_id = str(current_summary["pattern_id"])
+
+        if trend == "rising" and (
+            benefit["estimated_cost_impact_eur"] > 0.0
+            or benefit["estimated_energy_impact_kwh"] > 0.0
+            or category == "energy"
+        ):
+            family = "optimize_rising_usage"
+            dedupe_key = (family, category, zone)
+            if dedupe_key in emitted_keys:
+                return None
+            emitted_keys.add(dedupe_key)
+
+            return {
+                "recommendation_id": f"{pattern_id}:optimize_rising_usage",
+                "title": self._format_usage_pattern_title("Tune rising", category, zone),
+                "reason": (
+                    f"{category.capitalize()} usage changed from {previous_frequency} to "
+                    f"{current_frequency} events in the current window."
+                ),
+                "why_now": (
+                    f"This pattern is rising now and was last seen at "
+                    f"{current_summary.get('last_occurrence')} with {confidence:.2f} confidence."
+                ),
+                "expected_benefit": benefit,
+                "confidence": confidence,
+                "priority": self._classify_usage_pattern_priority(benefit),
+                "action_type": self._classify_usage_pattern_action_type(category),
+                "explainability": {
+                    "kind": family,
+                    "pattern_ids": [pattern_id],
+                    "evidence": {
+                        "category": category,
+                        "zone": current_summary.get("zone"),
+                        "current_frequency": current_frequency,
+                        "previous_frequency": previous_frequency,
+                        "frequency_delta": current_frequency - previous_frequency,
+                        "trend": trend,
+                        "last_seen": current_summary.get("last_occurrence"),
+                        "window_metrics_source": current_summary.get("window_metrics_source"),
+                    },
+                },
+            }
+
+        if previous_summary is None and confidence >= 0.75:
+            family = "review_new_pattern"
+            dedupe_key = (family, category, zone)
+            if dedupe_key in emitted_keys:
+                return None
+            emitted_keys.add(dedupe_key)
+
+            return {
+                "recommendation_id": f"{pattern_id}:review_new_pattern",
+                "title": self._format_usage_pattern_title("Review new", category, zone),
+                "reason": (
+                    f"{category.capitalize()} usage appeared {current_frequency} times in the current "
+                    "window and was absent in the previous window."
+                ),
+                "why_now": (
+                    f"This is a new observed pattern with {confidence:.2f} confidence, so it is a good "
+                    "moment to confirm whether it should become an automation or reporting rule."
+                ),
+                "expected_benefit": benefit,
+                "confidence": confidence,
+                "priority": 2,
+                "action_type": "manual",
+                "explainability": {
+                    "kind": family,
+                    "pattern_ids": [pattern_id],
+                    "evidence": {
+                        "category": category,
+                        "zone": current_summary.get("zone"),
+                        "current_frequency": current_frequency,
+                        "previous_frequency": 0,
+                        "frequency_delta": current_frequency,
+                        "trend": trend,
+                        "last_seen": current_summary.get("last_occurrence"),
+                        "window_metrics_source": current_summary.get("window_metrics_source"),
+                    },
+                },
+            }
+
+        return None
+
+    def _build_usage_pattern_fading_recommendation(
+        self,
+        previous_summary: dict[str, Any],
+        *,
+        emitted_keys: set[tuple[str, str, str]],
+    ) -> dict[str, Any] | None:
+        """Build one bounded fading-pattern review recommendation."""
+        if previous_summary.get("window_metrics_source") != "observations":
+            return None
+
+        confidence = round(float(previous_summary.get("confidence", 0.0)), 3)
+        previous_frequency = int(previous_summary.get("occurrence_count", 0))
+        if confidence < 0.65 or previous_frequency < 2:
+            return None
+
+        category = str(previous_summary.get("category", "automation"))
+        zone = str(previous_summary.get("zone") or "unknown")
+        family = "review_fading_pattern"
+        dedupe_key = (family, category, zone)
+        if dedupe_key in emitted_keys:
+            return None
+        emitted_keys.add(dedupe_key)
+
+        pattern_id = str(previous_summary["pattern_id"])
+        return {
+            "recommendation_id": f"{pattern_id}:review_fading_pattern",
+            "title": self._format_usage_pattern_title("Review fading", category, zone),
+            "reason": (
+                f"{category.capitalize()} usage was seen {previous_frequency} times in the previous "
+                "window and did not reappear in the current one."
+            ),
+            "why_now": (
+                "A disappearing pattern can mean an obsolete routine, seasonal drift, or a broken "
+                "automation, so it is worth validating before it silently rots."
+            ),
+            "expected_benefit": {
+                "estimated_cost_impact_eur": 0.0,
+                "estimated_energy_impact_kwh": 0.0,
+            },
+            "confidence": confidence,
+            "priority": 3,
+            "action_type": "manual",
+            "explainability": {
+                "kind": family,
+                "pattern_ids": [pattern_id],
+                "evidence": {
+                    "category": category,
+                    "zone": previous_summary.get("zone"),
+                    "current_frequency": 0,
+                    "previous_frequency": previous_frequency,
+                    "frequency_delta": -previous_frequency,
+                    "trend": "falling",
+                    "last_seen": previous_summary.get("last_occurrence"),
+                    "window_metrics_source": previous_summary.get("window_metrics_source"),
+                },
+            },
+        }
+
+    def _build_usage_pattern_expected_benefit(self, summary: dict[str, Any]) -> dict[str, float]:
+        """Normalize the benefit estimate for a single recommendation candidate."""
+        energy = self._coerce_non_negative_float(summary.get("estimated_energy_impact_kwh"))
+        cost = self._coerce_non_negative_float(summary.get("estimated_cost_impact_eur"))
+        if cost == 0.0 and energy > 0.0:
+            cost = round(energy * self._grid_price, 2)
+        return {
+            "estimated_cost_impact_eur": round(cost, 2),
+            "estimated_energy_impact_kwh": round(energy, 3),
+        }
+
+    @staticmethod
+    def _format_usage_pattern_title(prefix: str, category: str, zone: str) -> str:
+        """Create a short human-readable title for one pattern recommendation."""
+        base = f"{prefix} {category} routine"
+        if zone == "unknown":
+            return base
+        return f"{base} in {zone}"
+
+    @staticmethod
+    def _classify_usage_pattern_action_type(category: str) -> str:
+        """Pick the bounded action type for a recommendation family."""
+        if category in {"energy", "media", "automation"}:
+            return "schedule"
+        return "manual"
+
+    @staticmethod
+    def _classify_usage_pattern_priority(benefit: dict[str, float]) -> int:
+        """Turn estimated benefit into a stable bounded priority."""
+        if (
+            float(benefit["estimated_cost_impact_eur"]) >= 1.0
+            or float(benefit["estimated_energy_impact_kwh"]) >= 2.0
+        ):
+            return 1
+        return 2
+
+    def _usage_pattern_priority_seed(self, summary: dict[str, Any]) -> float:
+        """Return a ranking seed so higher-signal patterns win the bounded cooldown slots."""
+        benefit = self._build_usage_pattern_expected_benefit(summary)
+        return (
+            self._usage_pattern_benefit_cost(summary) * 10
+            + self._usage_pattern_benefit_energy(summary)
+            + float(summary.get("confidence", 0.0))
+            + int(summary.get("occurrence_count", 0))
+        )
+
+    def _usage_pattern_benefit_cost(self, summary: dict[str, Any]) -> float:
+        """Return the estimated cost benefit for ranking purposes."""
+        return self._build_usage_pattern_expected_benefit(summary)["estimated_cost_impact_eur"]
+
+    def _usage_pattern_benefit_energy(self, summary: dict[str, Any]) -> float:
+        """Return the estimated energy benefit for ranking purposes."""
+        return self._build_usage_pattern_expected_benefit(summary)["estimated_energy_impact_kwh"]
 
     @staticmethod
     def _coerce_non_negative_float(value: Any) -> float:
