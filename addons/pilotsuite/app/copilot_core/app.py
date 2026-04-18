@@ -279,35 +279,8 @@ def create_app() -> Flask:
     @app.get("/health")
     def health():
         # Include the port env for easier ops/debugging.
-        # Voice capability truth embedded in root /health for ops visibility
-        voice_block = {
-            "can_transcribe": False,
-            "can_synthesize": False,
-            "can_speak": False,
-            "available_backends": [],
-        }
-        try:
-            from copilot_core.voice.stt_whisper import WhisperSTT
-            from copilot_core.voice.tts_piper import PiperTTS
-            try:
-                stt = WhisperSTT()
-                voice_block["can_transcribe"] = stt.can_transcribe()
-            except Exception:
-                pass
-            try:
-                tts = PiperTTS()
-                voice_block["can_speak"] = tts.can_synthesize()
-                voice_block["can_synthesize"] = tts.can_synthesize()
-            except Exception:
-                pass
-            available = []
-            if voice_block["can_transcribe"]:
-                available.append({"type": "stt", "backend": "whisper"})
-            if voice_block["can_speak"]:
-                available.append({"type": "tts", "backend": "piper"})
-            voice_block["available_backends"] = available
-        except Exception:
-            pass
+        from copilot_core.voice.voice_health import get_voice_health_block
+        voice_block = get_voice_health_block()
         return jsonify({
             "ok": True,
             "time": _now_iso(),
