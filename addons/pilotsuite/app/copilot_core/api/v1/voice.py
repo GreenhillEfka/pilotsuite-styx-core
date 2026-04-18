@@ -21,10 +21,11 @@ Features:
 import asyncio
 from datetime import datetime, timezone
 import logging
+from pathlib import Path
 import time
 from typing import Any, Dict, Optional
 
-from flask import Blueprint, current_app, jsonify, request
+from flask import Blueprint, current_app, jsonify, request, send_file
 
 from copilot_core.voice.command_router import VoiceCommandRouter
 from copilot_core.voice.voice_handler import VoiceIntentHandler, VoiceIntent, IntentType, VoiceResponse
@@ -115,6 +116,21 @@ def _get_tts_engine() -> PiperTTS:
     if not hasattr(current_app, "_voice_tts_engine"):
         current_app._voice_tts_engine = PiperTTS(TTSConfig())
     return current_app._voice_tts_engine
+
+
+def _get_generated_audio_cache() -> Dict[str, str]:
+    """Get or create the bounded generated-audio cache for `/voice/speak`."""
+    if not hasattr(current_app, "_voice_generated_audio"):
+        current_app._voice_generated_audio = {}
+    return current_app._voice_generated_audio
+
+
+def _cache_generated_audio(audio_path: str) -> str:
+    """Cache a generated audio file path and return its stable route id."""
+    path = Path(audio_path)
+    audio_id = path.stem or f"tts_{int(time.time() * 1000)}"
+    _get_generated_audio_cache()[audio_id] = str(path)
+    return audio_id
 
 
 def _build_voice_runtime_status() -> Dict[str, Any]:
@@ -794,31 +810,79 @@ def generate_speech():
     """
     try:
         data = request.get_json(silent=True) or {}
-        
+
         text = data.get("text")
         if not text:
             return jsonify({
                 "status": "error",
                 "message": "Missing 'text' in request body"
             }), 400
-        
+
         language = data.get("language", "de")
-        audio_format = data.get("format", "mp3")
-        
-        # Use Styx TTS endpoint if available, otherwise generate a reference ID
-        audio_id = f"tts_{hash(text) % 100000}"
-        
+        voice = data.get("voice")
+
+        result = _get_tts_engine().synthesize(text, voice=voice)
+        if not result:
+            return jsonify({
+                "status": "error",
+                "message": "Voice synthesis unavailable"
+            }), 503
+
+        audio_path = Path(result.audio_path)
+        audio_id = _cache_generated_audio(result.audio_path)
+        audio_format = audio_path.suffix.lstrip(".").lower() or "wav"
+
         return jsonify({
             "status": "ok",
             "audio_url": f"/api/v1/voice/audio/{audio_id}",
-            "text": text,
+            "text": result.text,
             "language": language,
             "format": audio_format,
-            "duration_seconds": len(text) / 15.0,  # Rough estimate
+            "duration_seconds": result.duration_seconds,
         })
-    
+
     except Exception as e:
         _LOGGER.exception("Failed to generate speech")
+        return jsonify({
+            "status": "error",
+            "message": str(e)
+        }), 500
+
+
+@bp.route("/audio/<audio_id>", methods=["GET"])
+def get_generated_audio(audio_id: str):
+    """Serve a generated audio artifact previously created via `/voice/speak`."""
+    try:
+        audio_path = _get_generated_audio_cache().get(audio_id)
+        if not audio_path:
+            return jsonify({
+                "status": "error",
+                "message": "Audio not found"
+            }), 404
+
+        path = Path(audio_path)
+        if not path.exists():
+            _get_generated_audio_cache().pop(audio_id, None)
+            return jsonify({
+                "status": "error",
+                "message": "Audio not found"
+            }), 404
+
+        mimetype = {
+            ".wav": "audio/wav",
+            ".mp3": "audio/mpeg",
+            ".ogg": "audio/ogg",
+        }.get(path.suffix.lower(), "application/octet-stream")
+
+        return send_file(
+            path,
+            mimetype=mimetype,
+            as_attachment=False,
+            download_name=path.name,
+        )
+
+    except Exception as e:
+        _LOGGER.exception("Failed to fetch generated speech audio")
         return jsonify({
             "status": "error",
             "message": str(e)

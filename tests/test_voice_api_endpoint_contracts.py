@@ -9,6 +9,7 @@ Verifies the Request/Response contract for each voice endpoint:
 from __future__ import annotations
 
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -141,3 +142,74 @@ class TestVoiceAPIRouteLogic:
         )
         # 200 (OK), 401 (auth), 503 (TTS unavailable) — not 500
         assert response.status_code in (200, 401, 503), f"Unexpected {response.status_code}"
+
+    def test_speak_returns_real_audio_url_that_can_be_fetched(self, monkeypatch):
+        """`/speak` must return an audio URL backed by a real fetchable artifact."""
+        from flask import Flask
+        from copilot_core.api.v1 import voice as voice_api
+        from copilot_core.voice.tts_piper import TTSResult, VoiceEmotion
+
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as handle:
+            handle.write(b"RIFFdemoWAVE")
+            audio_path = handle.name
+
+        class _FakeTTSEngine:
+            def synthesize(self, text, voice=None):
+                return TTSResult(
+                    audio_path=audio_path,
+                    text=text,
+                    voice=voice or "de_DE-thorsten",
+                    duration_seconds=1.2,
+                    generation_time_ms=12.0,
+                    emotion=VoiceEmotion.NEUTRAL,
+                )
+
+        monkeypatch.setattr(voice_api, "_validate_token", lambda request: True)
+        monkeypatch.setattr(voice_api, "_get_tts_engine", lambda: _FakeTTSEngine())
+
+        app = Flask(__name__)
+        app.register_blueprint(voice_api.bp)
+        client = app.test_client()
+
+        speak_response = client.post(
+            "/api/v1/voice/speak",
+            json={"text": "Licht einschalten", "language": "de"},
+        )
+
+        assert speak_response.status_code == 200, speak_response.get_data(as_text=True)
+        payload = speak_response.get_json()
+        assert payload["status"] == "ok"
+        assert payload["audio_url"].startswith("/api/v1/voice/audio/")
+        assert payload["format"] == "wav"
+        assert payload["duration_seconds"] == 1.2
+
+        audio_response = client.get(payload["audio_url"])
+        assert audio_response.status_code == 200, audio_response.get_data(as_text=True)
+        assert audio_response.mimetype == "audio/wav"
+        assert audio_response.data == b"RIFFdemoWAVE"
+
+    def test_speak_returns_503_when_tts_backend_unavailable(self, monkeypatch):
+        """`/speak` must degrade cleanly when Piper is unavailable."""
+        from flask import Flask
+        from copilot_core.api.v1 import voice as voice_api
+
+        class _FakeUnavailableTTSEngine:
+            def synthesize(self, text, voice=None):
+                return None
+
+        monkeypatch.setattr(voice_api, "_validate_token", lambda request: True)
+        monkeypatch.setattr(voice_api, "_get_tts_engine", lambda: _FakeUnavailableTTSEngine())
+
+        app = Flask(__name__)
+        app.register_blueprint(voice_api.bp)
+        client = app.test_client()
+
+        response = client.post(
+            "/api/v1/voice/speak",
+            json={"text": "Licht einschalten"},
+        )
+
+        assert response.status_code == 503, response.get_data(as_text=True)
+        payload = response.get_json()
+        assert payload["status"] == "error"
+        assert "unavailable" in payload["message"].lower()

@@ -149,6 +149,15 @@ def create_app() -> Flask:
     # Register API modules
     app.register_blueprint(api_v1)
 
+    # Full voice API surface (/api/v1/voice/*) is absolute-prefix and must be
+    # registered directly on the app, not nested under api_v1.
+    try:
+        from copilot_core.api.v1.voice import bp as voice_bp
+        app.register_blueprint(voice_bp)
+        logging.getLogger(__name__).info("Voice API registered")
+    except Exception:
+        logging.getLogger(__name__).exception("Failed to register Voice API blueprint")
+
     # Standalone Onyx bridge endpoints (/api/v1/onyx/*)
     try:
         from copilot_core.api.v1.onyx_bridge import onyx_bridge_bp
