@@ -78,12 +78,13 @@ def _get_runtime_persistence_checks() -> dict[str, dict[str, object]]:
     }
 
 
-def _get_shopping_persistence_status() -> dict[str, object]:
-    shopping_status = _get_runtime_persistence_checks()["shopping_db"]
-    return {
-        "shopping_db_path": str(shopping_status["path"]),
-        "shopping_db_accessible": bool(shopping_status["accessible"]),
-    }
+def _get_status_persistence_summary() -> dict[str, object]:
+    runtime_persistence = _get_runtime_persistence_checks()
+    summary: dict[str, object] = {}
+    for label, db_status in runtime_persistence.items():
+        summary[f"{label}_path"] = str(db_status["path"])
+        summary[f"{label}_accessible"] = bool(db_status["accessible"])
+    return summary
 
 
 def _append_dev_log(entry: dict) -> None:
@@ -396,7 +397,7 @@ def _register_routes(flask_app: Flask, startup_time: float) -> None:
             "time": _now_iso(),
             "version": APP_VERSION,
             "port": int(os.environ.get("PORT", "8909")),
-            "persistence": _get_shopping_persistence_status(),
+            "persistence": _get_status_persistence_summary(),
         })
 
     # `/api/v1/capabilities` is registered once through `copilot_core.api.v1.dev`

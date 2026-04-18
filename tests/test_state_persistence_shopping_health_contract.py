@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-"""Contract tests for shopping/reminders persistence surface wiring.
+"""Contract tests for status/deep-health persistence surface wiring.
 
 `/api/v1/health/deep` and `/api/v1/status` should report the real
-shopping/reminders database path used by the shipped runtime, including
-`SHOPPING_DB_PATH` overrides.
+runtime persistence paths used by the shipped storage layers, including
+`SHOPPING_DB_PATH`, `CONVERSATION_MEMORY_DB`, and `COPILOT_VECTOR_DB_PATH`
+overrides.
 """
 
 import importlib
@@ -73,18 +74,24 @@ def test_main_deep_health_uses_runtime_shopping_db_path(monkeypatch, tmp_path):
     assert payload["checks"]["vector_store_db"] is False
 
 
-def test_main_status_exposes_runtime_shopping_persistence_truth(monkeypatch, tmp_path):
+def test_main_status_exposes_runtime_persistence_truth(monkeypatch, tmp_path):
     _stub_main_dependencies(monkeypatch)
 
-    custom_db_path = tmp_path / "shopping" / "status-shopping.db"
-    monkeypatch.setenv("SHOPPING_DB_PATH", str(custom_db_path))
+    shopping_db_path = tmp_path / "shopping" / "status-shopping.db"
+    conversation_db_path = tmp_path / "memory" / "status-conversation.db"
+    vector_db_path = tmp_path / "vector" / "status-store.db"
+    monkeypatch.setenv("SHOPPING_DB_PATH", str(shopping_db_path))
+    monkeypatch.setenv("CONVERSATION_MEMORY_DB", str(conversation_db_path))
+    monkeypatch.setenv("COPILOT_VECTOR_DB_PATH", str(vector_db_path))
     sys.modules.pop("main", None)
 
     main = importlib.import_module("main")
     app = main.create_app(options={})
 
+    accessible_paths = {str(shopping_db_path), str(vector_db_path)}
+
     def _fake_exists(path: str) -> bool:
-        return path == str(custom_db_path)
+        return path in accessible_paths
 
     monkeypatch.setattr(main.os.path, "exists", _fake_exists)
 
@@ -94,7 +101,11 @@ def test_main_status_exposes_runtime_shopping_persistence_truth(monkeypatch, tmp
     payload = response.get_json()
     assert payload["ok"] is True
     assert payload["persistence"] == {
-        "shopping_db_path": str(custom_db_path),
+        "conversation_memory_db_path": str(conversation_db_path),
+        "conversation_memory_db_accessible": False,
+        "vector_store_db_path": str(vector_db_path),
+        "vector_store_db_accessible": True,
+        "shopping_db_path": str(shopping_db_path),
         "shopping_db_accessible": True,
     }
 
