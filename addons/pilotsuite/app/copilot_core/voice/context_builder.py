@@ -266,9 +266,13 @@ class VoiceContextBuilder:
         Returns:
             VoiceContext with all context data
         """
-        # Check cache
+        # Request-replayed data must not bleed across zone-cached contexts.
+        has_replayed_inputs = (
+            sensor_data is not None or user_preferences is not None or active_devices is not None
+        )
         cache_key = f"voice_context:{zone_name or 'global'}"
-        if not force_refresh and cache_key in self._cache:
+        use_cache = not force_refresh and not has_replayed_inputs
+        if use_cache and cache_key in self._cache:
             cached = self._cache[cache_key]
             # Check if cache is still valid
             cache_age = (
@@ -337,8 +341,9 @@ class VoiceContextBuilder:
             context_version="1.0",
         )
         
-        # Cache context
-        self._cache[cache_key] = context
+        # Cache only runtime-built contexts. Replayed request context stays per-request.
+        if not has_replayed_inputs:
+            self._cache[cache_key] = context
         
         return context
     
