@@ -97,3 +97,31 @@ def test_main_status_exposes_runtime_shopping_persistence_truth(monkeypatch, tmp
         "shopping_db_path": str(custom_db_path),
         "shopping_db_accessible": True,
     }
+
+
+def test_main_deep_health_uses_runtime_conversation_and_vector_db_paths(monkeypatch, tmp_path):
+    _stub_main_dependencies(monkeypatch)
+
+    conversation_db_path = tmp_path / "memory" / "conversation.db"
+    vector_db_path = tmp_path / "vector" / "store.db"
+    monkeypatch.setenv("CONVERSATION_MEMORY_DB", str(conversation_db_path))
+    monkeypatch.setenv("COPILOT_VECTOR_DB_PATH", str(vector_db_path))
+    sys.modules.pop("main", None)
+
+    main = importlib.import_module("main")
+    app = main.create_app(options={})
+
+    monkeypatch.setattr(requests, "get", lambda *args, **kwargs: _FakeResponse())
+
+    def _fake_exists(path: str) -> bool:
+        return path in {str(conversation_db_path), str(vector_db_path)}
+
+    monkeypatch.setattr(main.os.path, "exists", _fake_exists)
+
+    response = app.test_client().get("/api/v1/health/deep")
+
+    assert response.status_code == 503
+    payload = response.get_json()
+    assert payload["checks"]["conversation_memory_db"] is True
+    assert payload["checks"]["vector_store_db"] is True
+    assert payload["checks"]["shopping_db"] is False

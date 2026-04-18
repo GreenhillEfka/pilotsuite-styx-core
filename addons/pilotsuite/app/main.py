@@ -63,11 +63,26 @@ def _now_iso():
     return datetime.now(timezone.utc).isoformat()
 
 
-def _get_shopping_persistence_status() -> dict[str, object]:
-    shopping_db_path = os.environ.get("SHOPPING_DB_PATH", "/data/shopping_reminders.db")
+def _get_runtime_persistence_checks() -> dict[str, dict[str, object]]:
+    persistence_paths = {
+        "conversation_memory_db": os.environ.get("CONVERSATION_MEMORY_DB", "/data/conversation_memory.db"),
+        "vector_store_db": os.environ.get("COPILOT_VECTOR_DB_PATH", "/data/vector_store.db"),
+        "shopping_db": os.environ.get("SHOPPING_DB_PATH", "/data/shopping_reminders.db"),
+    }
     return {
-        "shopping_db_path": shopping_db_path,
-        "shopping_db_accessible": os.path.exists(shopping_db_path),
+        label: {
+            "path": db_path,
+            "accessible": os.path.exists(db_path),
+        }
+        for label, db_path in persistence_paths.items()
+    }
+
+
+def _get_shopping_persistence_status() -> dict[str, object]:
+    shopping_status = _get_runtime_persistence_checks()["shopping_db"]
+    return {
+        "shopping_db_path": str(shopping_status["path"]),
+        "shopping_db_accessible": bool(shopping_status["accessible"]),
     }
 
 
@@ -318,14 +333,10 @@ def _register_routes(flask_app: Flask, startup_time: float) -> None:
         except Exception:
             checks["ollama"] = False
 
-        shopping_persistence = _get_shopping_persistence_status()
+        runtime_persistence = _get_runtime_persistence_checks()
 
-        for db_label, db_path in [
-            ("conversation_memory_db", "/data/conversation_memory.db"),
-            ("vector_store_db", "/data/vector_store.db"),
-            ("shopping_db", str(shopping_persistence["shopping_db_path"])),
-        ]:
-            checks[db_label] = os.path.exists(db_path)
+        for db_label, db_status in runtime_persistence.items():
+            checks[db_label] = bool(db_status["accessible"])
 
         try:
             import shutil
