@@ -20,6 +20,7 @@ from copilot_core.voice.command_flow import (
     CommandConfirmResult,
     CommandRejectResult,
 )
+from copilot_core.voice.dialog_flow import DialogStateResult
 
 
 def _make_app():
@@ -514,6 +515,102 @@ def test_voice_command_state_route_delegates_to_command_flow_service(monkeypatch
     payload = response.get_json()
     assert payload["session_id"] == "sess-state-delegated"
     assert payload["state"]["last_status"] == "idle"
+
+
+def test_voice_dialog_state_route_delegates_to_dialog_flow_service(monkeypatch):
+    monkeypatch.setattr(voice_api, "_validate_token", lambda request: True)
+
+    called = {"count": 0}
+
+    class _DelegatingFlow:
+        def get_state(self):
+            called["count"] += 1
+            return DialogStateResult(
+                status="ok",
+                state="CONFIRMING",
+                last_status="confirmation_required",
+                active_intent="lock.unlock",
+                slot_values={"_confirmation_token": "token-123"},
+                context_stack_size=1,
+                last_activity_ts=123.0,
+                session_id="sess-dialog-delegated",
+                user_id="user-1",
+                timed_out=False,
+                confirmation_question="Soll ich das ausführen?",
+                clarification_question=None,
+                pending_confirmation=True,
+                pending_action_label="lock.unlock",
+                pending_action_payload={"domain": "lock", "service": "unlock"},
+                confirmation_token="token-123",
+                confirmation_expires_at=456.0,
+            )
+
+    def _should_not_be_called(*args, **kwargs):
+        raise AssertionError("dialog state route should delegate to dialog-flow service")
+
+    monkeypatch.setattr(voice_api, "_get_dialog_flow", lambda: _DelegatingFlow())
+    monkeypatch.setattr(voice_api, "_get_dialog_machine", _should_not_be_called)
+
+    app = _make_app()
+    response = app.test_client().get("/api/v1/voice/dialog/state")
+
+    assert response.status_code == 200, response.get_json()
+    assert called == {"count": 1}
+    payload = response.get_json()
+    assert payload["status"] == "ok"
+    assert payload["state"] == "CONFIRMING"
+    assert payload["last_status"] == "confirmation_required"
+    assert payload["pending_confirmation"] is True
+    assert payload["confirmation_token"] == "token-123"
+
+
+def test_voice_dialog_state_route_prefers_injected_runtime_seam(monkeypatch):
+    monkeypatch.setattr(voice_api, "_validate_token", lambda request: True)
+
+    class _InjectedDialogFlow:
+        def get_state(self):
+            return DialogStateResult(
+                status="ok",
+                state="IDLE",
+                last_status="idle",
+                active_intent=None,
+                slot_values={},
+                context_stack_size=0,
+                last_activity_ts=None,
+                session_id=None,
+                user_id=None,
+                timed_out=False,
+                confirmation_question=None,
+                clarification_question=None,
+                pending_confirmation=False,
+                pending_action_label=None,
+                pending_action_payload=None,
+                confirmation_token=None,
+                confirmation_expires_at=None,
+            )
+
+    class _InjectedRuntime:
+        def get_dialog_flow(self):
+            return _InjectedDialogFlow()
+
+    def _should_not_be_called(*args, **kwargs):
+        raise AssertionError("fallback dialog runtime construction should not run")
+
+    monkeypatch.setattr(voice_runtime_access.VoiceRuntimeAccess, "get_dialog_flow", _should_not_be_called)
+    monkeypatch.setattr(voice_runtime_access.VoiceRuntimeAccess, "get_dialog_machine", _should_not_be_called)
+
+    app = Flask(__name__)
+    voice_runtime_access.init_voice_runtime(app, runtime=_InjectedRuntime())
+    app.register_blueprint(voice_api.bp)
+
+    response = app.test_client().get("/api/v1/voice/dialog/state")
+
+    assert response.status_code == 200, response.get_json()
+    payload = response.get_json()
+    assert payload["status"] == "ok"
+    assert payload["state"] == "IDLE"
+    assert payload["last_status"] == "idle"
+    assert payload["pending_confirmation"] is False
 
 
 def test_voice_command_confirm_route_delegates_to_command_flow_service(monkeypatch):

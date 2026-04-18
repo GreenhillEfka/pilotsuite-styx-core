@@ -14,6 +14,7 @@ from typing import Any, MutableMapping, Optional
 from flask import Flask, current_app
 
 from copilot_core.voice.command_flow import VoiceCommandFlow
+from copilot_core.voice.dialog_flow import VoiceDialogFlow
 from copilot_core.voice.command_router import VoiceCommandRouter
 from copilot_core.voice.context_builder import VoiceContextBuilder
 from copilot_core.voice.nlu_engine import NLUEngine
@@ -40,6 +41,7 @@ class VoiceRuntimeAccess:
         self._proactive_hints: Optional[ProactiveVoiceHints] = None
         self._command_router: Optional[VoiceCommandRouter] = None
         self._command_flow: Optional[VoiceCommandFlow] = None
+        self._dialog_flow: Optional[VoiceDialogFlow] = None
         self._dialog_machine: Any = None
         self._generated_audio_cache: Optional[MutableMapping[str, str]] = None
 
@@ -170,6 +172,15 @@ class VoiceRuntimeAccess:
                     dialog_machine=self.get_dialog_machine(),
                 )
         return self._command_flow
+
+    def get_dialog_flow(self) -> VoiceDialogFlow:
+        if self._dialog_flow is None:
+            override = self._get_override("voice_dialog_flow", legacy_attr="_voice_dialog_flow")
+            if override is not None:
+                self._dialog_flow = override
+            else:
+                self._dialog_flow = VoiceDialogFlow(dialog_machine=self.get_dialog_machine())
+        return self._dialog_flow
 
     def get_dialog_machine(self):
         if self._dialog_machine is None:

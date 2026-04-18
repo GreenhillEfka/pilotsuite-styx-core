@@ -87,6 +87,11 @@ def _get_command_flow():
     return get_voice_runtime().get_command_flow()
 
 
+def _get_dialog_flow():
+    """Resolve the shared voice dialog-flow service from the runtime seam."""
+    return get_voice_runtime().get_dialog_flow()
+
+
 def _cache_generated_audio(audio_path: str) -> str:
     """Cache a generated audio file path and return its stable route id."""
     return get_voice_runtime().cache_generated_audio(audio_path)
@@ -200,41 +205,6 @@ def _voice_backend_unavailable_response(*, message: str, detail: str, backend: s
 def _get_proactive_hints():
     """Resolve proactive voice hints from the runtime seam."""
     return get_voice_runtime().get_proactive_hints()
-
-
-def _serialize_dialog_state(state) -> Dict[str, Any]:
-    """Serialize dialog state with router-facing metadata."""
-    slot_values = dict(state.slot_values)
-    return {
-        "dialog_state": state.state,
-        "active_intent": state.active_intent,
-        "slot_values": slot_values,
-        "session_id": state.session_id,
-        "user_id": state.user_id,
-        "last_status": slot_values.get("_last_status"),
-        "pending_confirmation": state.state == "CONFIRMING" and bool(slot_values.get("_confirmation_token")),
-        "pending_action_label": slot_values.get("_pending_action_label"),
-        "pending_action_payload": slot_values.get("_pending_action_payload"),
-        "clarification_question": slot_values.get("_clarification"),
-        "confirmation_token": slot_values.get("_confirmation_token"),
-        "confirmation_expires_at": slot_values.get("_confirmation_expires_at"),
-    }
-
-
-def _normalize_last_status(state) -> str:
-    """Project dialog state into the public voice-command status vocabulary."""
-    slot_values = dict(state.slot_values)
-    explicit = slot_values.get("_last_status")
-    if isinstance(explicit, str) and explicit.strip():
-        return explicit.strip()
-
-    fallback = {
-        "ACTIVE": "executed",
-        "CONFIRMING": "confirmation_required",
-        "CLARIFYING": "clarification_required",
-        "IDLE": "idle",
-    }
-    return fallback.get(state.state, "idle")
 
 
 def _resolve_requested_zone(
@@ -1131,31 +1101,7 @@ def ha_assist_intent():
 def get_dialog_state():
     """Get current dialog state."""
     try:
-        machine = _get_dialog_machine()
-        state = machine.get_state()
-        timed_out = machine.check_timeout()
-        if timed_out:
-            machine.decay()
-            state = machine.get_state()
-        return jsonify({
-            "status": "ok",
-            "state": state.state,
-            "last_status": _normalize_last_status(state),
-            "active_intent": state.active_intent,
-            "slot_values": state.slot_values,
-            "context_stack_size": len(state.context_stack),
-            "last_activity_ts": state.last_activity_ts,
-            "session_id": state.session_id,
-            "user_id": state.user_id,
-            "timed_out": timed_out,
-            "confirmation_question": machine.generate_confirmation_question(),
-            "clarification_question": machine.generate_clarification_question(),
-            "pending_confirmation": state.state == "CONFIRMING" and bool(state.slot_values.get("_confirmation_token")),
-            "pending_action_label": state.slot_values.get("_pending_action_label"),
-            "pending_action_payload": state.slot_values.get("_pending_action_payload"),
-            "confirmation_token": state.slot_values.get("_confirmation_token"),
-            "confirmation_expires_at": state.slot_values.get("_confirmation_expires_at"),
-        })
+        return jsonify(_get_dialog_flow().get_state().to_dict())
     except Exception as e:
         _LOGGER.exception("Failed to get dialog state")
         return jsonify({"status": "error", "message": str(e)}), 500
