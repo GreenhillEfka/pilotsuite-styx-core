@@ -407,9 +407,112 @@ class PatternLearner:
             stats.avg_confidence = round(
                 sum(confidences) / len(confidences), 3
             )
-        
+
         return stats
-    
+
+    @staticmethod
+    def _normalize_summary_text(value: Any) -> Optional[str]:
+        """Return a summary-safe string or ``None`` when no truthful text exists."""
+        if not isinstance(value, str):
+            return None
+        normalized = value.strip()
+        return normalized or None
+
+    def _extract_summary_zone(self, pattern: Pattern) -> Optional[str]:
+        """Read a truthful zone label from summary-safe metadata only."""
+        metadata = pattern.metadata if isinstance(pattern.metadata, dict) else {}
+        for key in ("zone", "zone_name", "area", "area_name"):
+            normalized = self._normalize_summary_text(metadata.get(key))
+            if normalized:
+                return normalized
+
+        context = metadata.get("context")
+        if isinstance(context, dict):
+            for key in ("zone", "zone_name"):
+                normalized = self._normalize_summary_text(context.get(key))
+                if normalized:
+                    return normalized
+
+        return None
+
+    @staticmethod
+    def _categorize_pattern(pattern: Pattern) -> str:
+        """Map a learned pattern to the bounded report categories."""
+        domain = pattern.entity_id.split(".", 1)[0].lower() if "." in pattern.entity_id else ""
+        entity_id = pattern.entity_id.lower()
+
+        if pattern.pattern_type == "weather_based" or domain in {"climate", "water_heater", "humidifier"}:
+            return "climate"
+        if domain in {"media_player", "remote"}:
+            return "media"
+        if domain in {"person", "device_tracker"} or "presence" in entity_id or "occupancy" in entity_id:
+            return "presence"
+        if domain == "sensor" and any(token in entity_id for token in ("energy", "power", "verbrauch", "solar")):
+            return "energy"
+        return "automation"
+
+    @staticmethod
+    def _metadata_float(metadata: Dict[str, Any], *keys: str) -> float:
+        """Read a non-negative float from metadata, otherwise return ``0.0``."""
+        for key in keys:
+            value = metadata.get(key)
+            if isinstance(value, bool):
+                continue
+            if isinstance(value, (int, float)):
+                return round(max(0.0, float(value)), 3)
+        return 0.0
+
+    def get_pattern_summaries(
+        self,
+        *,
+        min_confidence: float = 0.0,
+        window_start: Optional[datetime] = None,
+        window_end: Optional[datetime] = None,
+    ) -> List[Dict[str, Any]]:
+        """Return a bounded summary-friendly view over learned patterns."""
+        summaries: List[Dict[str, Any]] = []
+
+        for pattern in self.get_patterns(min_confidence=min_confidence):
+            last_occurrence = pattern.last_occurrence
+            if window_start and (last_occurrence is None or last_occurrence < window_start):
+                continue
+            if window_end and (last_occurrence is None or last_occurrence > window_end):
+                continue
+
+            metadata = pattern.metadata if isinstance(pattern.metadata, dict) else {}
+            summaries.append({
+                "pattern_id": pattern.pattern_id,
+                "pattern_type": pattern.pattern_type,
+                "category": self._categorize_pattern(pattern),
+                "entity_id": pattern.entity_id,
+                "action": pattern.action,
+                "zone": self._extract_summary_zone(pattern),
+                "confidence": round(pattern.confidence, 3),
+                "occurrence_count": int(pattern.occurrence_count),
+                "last_occurrence": last_occurrence.isoformat() if last_occurrence else None,
+                "hour_of_day": pattern.hour_of_day,
+                "day_of_week": pattern.day_of_week,
+                "estimated_energy_impact_kwh": self._metadata_float(
+                    metadata,
+                    "estimated_energy_impact_kwh",
+                    "energy_impact_kwh",
+                ),
+                "estimated_cost_impact_eur": self._metadata_float(
+                    metadata,
+                    "estimated_cost_impact_eur",
+                    "cost_impact_eur",
+                ),
+            })
+
+        summaries.sort(
+            key=lambda item: (
+                -float(item["confidence"]),
+                -int(item["occurrence_count"]),
+                str(item["pattern_id"]),
+            )
+        )
+        return summaries
+
     def clear_patterns(self):
         """Lösche alle gelernten Muster."""
         self.patterns.clear()

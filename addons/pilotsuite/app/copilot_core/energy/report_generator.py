@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, asdict
 from datetime import date, datetime, timedelta
-from typing import Optional
+from typing import Any, Optional
 
 
 @dataclass
@@ -203,7 +203,79 @@ class EnergyReportGenerator:
             "last_date": dates[-1],
         }
 
+    def generate_usage_pattern_summary(
+        self,
+        pattern_learner: Any,
+        *,
+        window_start: datetime | None = None,
+        window_end: datetime | None = None,
+        min_confidence: float = 0.0,
+    ) -> dict:
+        """Build the bounded D1 usage-pattern summary report shape."""
+        end = window_end or datetime.now()
+        start = window_start or (end - timedelta(days=7))
+        if start > end:
+            raise ValueError("window_start must be before or equal to window_end")
+
+        if not hasattr(pattern_learner, "get_pattern_summaries"):
+            raise TypeError("pattern_learner must expose get_pattern_summaries(...)")
+
+        pattern_summaries = pattern_learner.get_pattern_summaries(
+            min_confidence=min_confidence,
+            window_start=start,
+            window_end=end,
+        )
+
+        return {
+            "status": "ok",
+            "window": {
+                "from": start.isoformat(),
+                "to": end.isoformat(),
+            },
+            "patterns": [
+                {
+                    "pattern_id": summary["pattern_id"],
+                    "category": summary.get("category", "automation"),
+                    "zone": summary.get("zone"),
+                    "frequency": int(summary.get("occurrence_count", 0)),
+                    "confidence": round(float(summary.get("confidence", 0.0)), 3),
+                    "last_seen": summary.get("last_occurrence"),
+                    "trend": "stable",
+                }
+                for summary in pattern_summaries
+            ],
+            "impact": self._build_usage_pattern_impact(pattern_summaries),
+        }
+
     # ── Internal builders ───────────────────────────────────────────────
+
+    def _build_usage_pattern_impact(self, pattern_summaries: list[dict[str, Any]]) -> dict[str, float]:
+        """Aggregate bounded impact estimates from pattern summaries."""
+        estimated_energy = 0.0
+        estimated_cost = 0.0
+
+        for summary in pattern_summaries:
+            energy = self._coerce_non_negative_float(summary.get("estimated_energy_impact_kwh"))
+            cost = self._coerce_non_negative_float(summary.get("estimated_cost_impact_eur"))
+            if cost == 0.0 and energy > 0.0:
+                cost = round(energy * self._grid_price, 2)
+
+            estimated_energy += energy
+            estimated_cost += cost
+
+        return {
+            "estimated_cost_impact_eur": round(estimated_cost, 2),
+            "estimated_energy_impact_kwh": round(estimated_energy, 3),
+        }
+
+    @staticmethod
+    def _coerce_non_negative_float(value: Any) -> float:
+        """Return a non-negative float, otherwise ``0.0``."""
+        if isinstance(value, bool):
+            return 0.0
+        if not isinstance(value, (int, float)):
+            return 0.0
+        return round(max(0.0, float(value)), 3)
 
     def _get_days(self, start: date, end: date) -> list[dict]:
         """Get daily data for a date range."""
