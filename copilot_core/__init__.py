@@ -36,6 +36,26 @@ try:
 except ImportError:
     __version__ = '0.0.0'
 
+
+# =============================================================================
+# PUBLIC API — explicit exports for repo-root compatibility surface
+# =============================================================================
+__all__ = [
+    "__version__",
+    "DOMAIN",
+    "PLATFORMS",
+    "CONFIG_SCHEMA",
+    "async_setup",
+    "async_setup_entry",
+    "async_unload_entry",
+    "async_remove_entry",
+    "HAS_HOMEASSISTANT",
+    "_require_homeassistant_runtime",
+    "SERVICES",
+    "_build_notification_config",
+    "_build_calendar_config",
+]
+
 if HAS_HOMEASSISTANT:
     from .database.models import init_database, get_database_manager
     from .database.migrations import MigrationManager, register_default_migrations
