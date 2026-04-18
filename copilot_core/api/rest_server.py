@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from contextlib import asynccontextmanager
 from typing import Any, Dict, List, Optional
 from enum import Enum
@@ -23,6 +24,19 @@ from copilot_core.api.v1.legacy_gaps import router as legacy_gaps_router
 from copilot_core.api.voice_discovery import voice_capabilities_module
 
 logger = logging.getLogger(__name__)
+
+
+def _get_runtime_persistence_summary() -> Dict[str, object]:
+    persistence_paths = {
+        "conversation_memory_db": os.environ.get("CONVERSATION_MEMORY_DB", "/data/conversation_memory.db"),
+        "vector_store_db": os.environ.get("COPILOT_VECTOR_DB_PATH", "/data/vector_store.db"),
+        "shopping_db": os.environ.get("SHOPPING_DB_PATH", "/data/shopping_reminders.db"),
+    }
+    summary: Dict[str, object] = {}
+    for label, db_path in persistence_paths.items():
+        summary[f"{label}_path"] = db_path
+        summary[f"{label}_accessible"] = os.path.exists(db_path)
+    return summary
 
 
 # =============================================================================
@@ -66,6 +80,7 @@ class HealthResponse(BaseModel):
     version: str
     uptime_seconds: float
     timestamp: float
+    persistence: Dict[str, object] | None = None
 
 
 class StatusResponse(BaseModel):
@@ -75,6 +90,7 @@ class StatusResponse(BaseModel):
     modules: Dict[str, bool]
     capabilities: List[str]
     timestamp: float
+    persistence: Dict[str, object] | None = None
 
 
 class ErrorResponse(BaseModel):
@@ -393,6 +409,7 @@ def register_routes(app: FastAPI, config: APIConfig):
             version="1.0.0-rc2",
             uptime_seconds=time.time() - _start_time,
             timestamp=time.time(),
+            persistence=_get_runtime_persistence_summary(),
         )
 
     @app.get("/version", tags=["System"])
@@ -428,6 +445,7 @@ def register_routes(app: FastAPI, config: APIConfig):
                 "voice_pipeline",
             ],
             timestamp=time.time(),
+            persistence=_get_runtime_persistence_summary(),
         )
 
     @app.get("/api/v1/capabilities", tags=["System"])

@@ -56,6 +56,62 @@ class TestRESTAPIServer:
         assert "modules" in data
         assert "capabilities" in data
 
+    def test_health_exposes_runtime_persistence_truth(self, api_client, monkeypatch, tmp_path):
+        """Repo-root health surface should expose runtime persistence truth."""
+        from copilot_core.api import rest_server
+
+        conversation_db_path = tmp_path / "memory" / "rest-health-conversation.db"
+        vector_db_path = tmp_path / "vector" / "rest-health-store.db"
+        shopping_db_path = tmp_path / "shopping" / "rest-health-shopping.db"
+        monkeypatch.setenv("CONVERSATION_MEMORY_DB", str(conversation_db_path))
+        monkeypatch.setenv("COPILOT_VECTOR_DB_PATH", str(vector_db_path))
+        monkeypatch.setenv("SHOPPING_DB_PATH", str(shopping_db_path))
+        monkeypatch.setattr(
+            rest_server.os.path,
+            "exists",
+            lambda path: path in {str(conversation_db_path), str(shopping_db_path)},
+        )
+
+        response = api_client.get("/health")
+
+        assert response.status_code == 200
+        assert response.json()["persistence"] == {
+            "conversation_memory_db_path": str(conversation_db_path),
+            "conversation_memory_db_accessible": True,
+            "vector_store_db_path": str(vector_db_path),
+            "vector_store_db_accessible": False,
+            "shopping_db_path": str(shopping_db_path),
+            "shopping_db_accessible": True,
+        }
+
+    def test_status_exposes_runtime_persistence_truth(self, api_client, monkeypatch, tmp_path):
+        """Repo-root status surface should expose runtime persistence truth."""
+        from copilot_core.api import rest_server
+
+        conversation_db_path = tmp_path / "memory" / "rest-status-conversation.db"
+        vector_db_path = tmp_path / "vector" / "rest-status-store.db"
+        shopping_db_path = tmp_path / "shopping" / "rest-status-shopping.db"
+        monkeypatch.setenv("CONVERSATION_MEMORY_DB", str(conversation_db_path))
+        monkeypatch.setenv("COPILOT_VECTOR_DB_PATH", str(vector_db_path))
+        monkeypatch.setenv("SHOPPING_DB_PATH", str(shopping_db_path))
+        monkeypatch.setattr(
+            rest_server.os.path,
+            "exists",
+            lambda path: path in {str(vector_db_path), str(shopping_db_path)},
+        )
+
+        response = api_client.get("/api/v1/status")
+
+        assert response.status_code == 200
+        assert response.json()["persistence"] == {
+            "conversation_memory_db_path": str(conversation_db_path),
+            "conversation_memory_db_accessible": False,
+            "vector_store_db_path": str(vector_db_path),
+            "vector_store_db_accessible": True,
+            "shopping_db_path": str(shopping_db_path),
+            "shopping_db_accessible": True,
+        }
+
     def test_capabilities_requires_auth(self, api_client):
         """Capabilities endpoint stays auth-gated like the Flask runtime surface."""
         response = api_client.get("/api/v1/capabilities")
