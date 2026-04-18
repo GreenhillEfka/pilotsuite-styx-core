@@ -67,6 +67,8 @@ class HealthChecker:
             {"name": "psutil", "type": "library", "required": True},
             {"name": "flask", "type": "library", "required": True},
             {"name": "waitress", "type": "library", "required": True},
+            {"name": "whisper", "type": "library", "required": False},
+            {"name": "piper_tts", "type": "library", "required": False},
         ]
         
         # Define external services to check
