@@ -1137,6 +1137,7 @@ def confirm_command_action():
                 "message": "Fields 'session_id' and 'confirmation_token' are required",
             }), 400
         try:
+            # Delegate through command_flow seam (which now delegates to dialog_flow for transition mechanics)
             return jsonify(
                 _get_command_flow().confirm(
                     session_id=str(session_id),
@@ -1163,6 +1164,7 @@ def reject_command_action():
                 "message": "Fields 'session_id' and 'confirmation_token' are required",
             }), 400
         try:
+            # Delegate through command_flow seam (which now delegates to dialog_flow for transition mechanics)
             return jsonify(
                 _get_command_flow().reject(
                     session_id=str(session_id),

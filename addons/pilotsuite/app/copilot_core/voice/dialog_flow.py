@@ -145,6 +145,60 @@ class DialogResetResult:
         }
 
 
+@dataclass(frozen=True)
+class DialogConfirmTransitionResult:
+    """Bounded result of VoiceDialogFlow.confirm_transition()."""
+
+    status: str
+    action: Optional[str]
+    action_label: Optional[str]
+    action_payload: Optional[dict[str, Any]]
+    message: str
+    new_state: str
+    session_id: Optional[str]
+    user_id: Optional[str]
+    confirmation_token: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "status": self.status,
+            "action": self.action,
+            "action_label": self.action_label,
+            "action_payload": self.action_payload,
+            "message": self.message,
+            "new_state": self.new_state,
+            "session_id": self.session_id,
+            "user_id": self.user_id,
+            "confirmation_token": self.confirmation_token,
+        }
+
+
+@dataclass(frozen=True)
+class DialogRejectTransitionResult:
+    """Bounded result of VoiceDialogFlow.reject_transition()."""
+
+    status: str
+    action: Optional[str]
+    action_label: Optional[str]
+    message: str
+    new_state: str
+    session_id: Optional[str]
+    user_id: Optional[str]
+    confirmation_token: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "status": self.status,
+            "action": self.action,
+            "action_label": self.action_label,
+            "message": self.message,
+            "new_state": self.new_state,
+            "session_id": self.session_id,
+            "user_id": self.user_id,
+            "confirmation_token": self.confirmation_token,
+        }
+
+
 class VoiceDialogFlow:
     """Own the dialog-state read and mutation procedures behind the HTTP adapter."""
 
@@ -203,3 +257,104 @@ class VoiceDialogFlow:
     ) -> DialogResetResult:
         state = self._dialog_machine.reset(session_id=session_id, user_id=user_id)
         return DialogResetResult(status="ok", state=state.state)
+
+    def confirm_transition(
+        self,
+        *,
+        session_id: Optional[str],
+        confirmation_token: str,
+    ) -> DialogConfirmTransitionResult:
+        """Handle confirm transition with token validation, expiry check, and state mutation."""
+        pending = self._validate_pending_confirmation(
+            session_id=session_id,
+            confirmation_token=confirmation_token,
+        )
+        if pending is None:
+            raise ValueError("No matching pending confirmation found")
+
+        action_payload = pending["action_payload"]
+        action_label = pending["action_label"]
+        state = self._dialog_machine.confirm_action()
+        state = self._dialog_machine.merge_metadata({"_last_status": "executed"})
+        snapshot = DialogSnapshot.from_state(state)
+
+        return DialogConfirmTransitionResult(
+            status="executed",
+            action=pending.get("action"),
+            action_label=action_label,
+            action_payload=action_payload,
+            message="Bestätigt. Ich führe die Aktion jetzt aus.",
+            new_state=state.state,
+            session_id=state.session_id,
+            user_id=state.user_id,
+            confirmation_token=confirmation_token,
+        )
+
+    def reject_transition(
+        self,
+        *,
+        session_id: Optional[str],
+        confirmation_token: str,
+    ) -> DialogRejectTransitionResult:
+        """Handle reject transition with token validation, expiry check, and state mutation."""
+        pending = self._validate_pending_confirmation(
+            session_id=session_id,
+            confirmation_token=confirmation_token,
+        )
+        if pending is None:
+            raise ValueError("No matching pending confirmation found")
+
+        action_label = pending["action_label"]
+        state = self._dialog_machine.cancel_action()
+        state = self._dialog_machine.merge_metadata({"_last_status": "rejected"})
+        snapshot = DialogSnapshot.from_state(state)
+
+        return DialogRejectTransitionResult(
+            status="rejected",
+            action=pending.get("action"),
+            action_label=action_label,
+            message="Okay, ich verwerfe die angefragte Aktion.",
+            new_state=state.state,
+            session_id=state.session_id,
+            user_id=state.user_id,
+            confirmation_token=confirmation_token,
+        )
+
+    def _validate_pending_confirmation(
+        self,
+        *,
+        session_id: Optional[str],
+        confirmation_token: Optional[str],
+    ) -> Optional[dict[str, Any]]:
+        """Validate pending confirmation with timeout, token, and session checks."""
+        import time
+
+        if self._dialog_machine.check_timeout():
+            self._dialog_machine.decay()
+            return None
+
+        state = self._dialog_machine.get_state()
+        if state.state != "CONFIRMING":
+            return None
+
+        slot_values = dict(state.slot_values)
+        pending_token = slot_values.get("_confirmation_token")
+        pending_session_id = state.session_id
+        expires_at = slot_values.get("_confirmation_expires_at")
+
+        # Check expiry
+        if expires_at is not None and time.time() > expires_at:
+            return None
+
+        if not confirmation_token or confirmation_token != pending_token:
+            return None
+        if pending_session_id and session_id and session_id != pending_session_id:
+            return None
+
+        return {
+            "state": state,
+            "slot_values": slot_values,
+            "action": slot_values.get("_pending_action"),
+            "action_payload": slot_values.get("_pending_action_payload"),
+            "action_label": slot_values.get("_pending_action_label") or slot_values.get("_pending_action"),
+        }

@@ -165,11 +165,14 @@ class VoiceRuntimeAccess:
             if override is not None:
                 self._command_flow = override
             else:
+                # Build command_flow with dialog_flow injected for transition delegation
+                dialog_flow = self.get_dialog_flow()
                 self._command_flow = VoiceCommandFlow(
                     intent_handler=self.get_intent_handler(),
                     context_builder=self.get_context_builder(),
                     command_router=self.get_command_router(),
                     dialog_machine=self.get_dialog_machine(),
+                    dialog_flow=dialog_flow,
                 )
         return self._command_flow
 

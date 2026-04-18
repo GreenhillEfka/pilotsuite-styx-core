@@ -3,10 +3,13 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
-from typing import Any, Optional, TypeVar
+from typing import Any, Optional, TypeVar, TYPE_CHECKING
 
 from copilot_core.voice.dialog_snapshot import DialogSnapshot
 from copilot_core.voice.voice_handler import VoiceResponse
+
+if TYPE_CHECKING:
+    from copilot_core.voice.dialog_flow import VoiceDialogFlow
 
 
 T = TypeVar("T")
@@ -104,11 +107,13 @@ class VoiceCommandFlow:
         context_builder: Any,
         command_router: Any,
         dialog_machine: Any,
+        dialog_flow: Optional[Any] = None,
     ):
         self._intent_handler = intent_handler
         self._context_builder = context_builder
         self._command_router = command_router
         self._dialog_machine = dialog_machine
+        self._dialog_flow = dialog_flow
 
     def process(
         self,
@@ -189,6 +194,28 @@ class VoiceCommandFlow:
         )
 
     def confirm(self, *, session_id: str, confirmation_token: str) -> CommandConfirmResult:
+        # Delegate transition mechanics to VoiceDialogFlow
+        if self._dialog_flow is not None:
+            transition_result = self._dialog_flow.confirm_transition(
+                session_id=session_id,
+                confirmation_token=confirmation_token,
+            )
+            response = self._build_follow_through_response(transition_result.action_payload)
+            return CommandConfirmResult(
+                status=transition_result.status,
+                action=transition_result.action_label,
+                message=transition_result.message,
+                confirmation_token=confirmation_token,
+                session_state={
+                    "dialog_state": transition_result.new_state,
+                    "session_id": transition_result.session_id,
+                    "user_id": transition_result.user_id,
+                    "confirmation_token": None,  # cleared after confirm
+                },
+                response=response.to_dict(),
+            )
+
+        # Fallback: inline transition (backward compatibility)
         pending = self._validate_pending_confirmation(
             session_id=session_id,
             confirmation_token=confirmation_token,
@@ -213,6 +240,26 @@ class VoiceCommandFlow:
         )
 
     def reject(self, *, session_id: str, confirmation_token: str) -> CommandRejectResult:
+        # Delegate transition mechanics to VoiceDialogFlow
+        if self._dialog_flow is not None:
+            transition_result = self._dialog_flow.reject_transition(
+                session_id=session_id,
+                confirmation_token=confirmation_token,
+            )
+            return CommandRejectResult(
+                status=transition_result.status,
+                action=transition_result.action_label,
+                message=transition_result.message,
+                confirmation_token=confirmation_token,
+                session_state={
+                    "dialog_state": transition_result.new_state,
+                    "session_id": transition_result.session_id,
+                    "user_id": transition_result.user_id,
+                    "confirmation_token": None,  # cleared after reject
+                },
+            )
+
+        # Fallback: inline transition (backward compatibility)
         pending = self._validate_pending_confirmation(
             session_id=session_id,
             confirmation_token=confirmation_token,
