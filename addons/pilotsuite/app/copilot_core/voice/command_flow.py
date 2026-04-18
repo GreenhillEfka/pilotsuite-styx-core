@@ -2,10 +2,96 @@
 from __future__ import annotations
 
 import time
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Generic, TypeVar, Optional
 
 from copilot_core.voice.voice_handler import VoiceResponse
+
+
+T = TypeVar("T")
+
+
+@dataclass(frozen=True)
+class CommandProcessResult:
+    """Bounded result of VoiceCommandFlow.process()."""
+    status: str
+    action: Optional[str]
+    message: Optional[str]
+    confirmation_token: Optional[str]
+    session_state: dict[str, Any]
+    intent: dict[str, Any]
+    context: dict[str, Any]
+    effective_confidence: float
+    response: Optional[dict[str, Any]] = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "status": self.status,
+            "action": self.action,
+            "message": self.message,
+            "confirmation_token": self.confirmation_token,
+            "session_state": self.session_state,
+            "intent": self.intent,
+            "context": self.context,
+            "effective_confidence": self.effective_confidence,
+            **({"response": self.response} if self.response is not None else {}),
+        }
+
+
+@dataclass(frozen=True)
+class CommandStateResult:
+    """Bounded result of VoiceCommandFlow.get_state()."""
+    status: str
+    session_id: str
+    state: dict[str, Any]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "status": self.status,
+            "session_id": self.session_id,
+            "state": self.state,
+        }
+
+
+@dataclass(frozen=True)
+class CommandConfirmResult:
+    """Bounded result of VoiceCommandFlow.confirm()."""
+    status: str
+    action: Optional[str]
+    message: Optional[str]
+    confirmation_token: str
+    session_state: dict[str, Any]
+    response: Optional[dict[str, Any]] = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "status": self.status,
+            "action": self.action,
+            "message": self.message,
+            "confirmation_token": self.confirmation_token,
+            "session_state": self.session_state,
+            **({"response": self.response} if self.response is not None else {}),
+        }
+
+
+@dataclass(frozen=True)
+class CommandRejectResult:
+    """Bounded result of VoiceCommandFlow.reject()."""
+    status: str
+    action: Optional[str]
+    message: str
+    confirmation_token: str
+    session_state: dict[str, Any]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "status": self.status,
+            "action": self.action,
+            "message": self.message,
+            "confirmation_token": self.confirmation_token,
+            "session_state": self.session_state,
+        }
 
 
 class VoiceCommandFlow:
@@ -36,7 +122,7 @@ class VoiceCommandFlow:
         user_id: Optional[str],
         zone_id: Optional[str],
         request_context: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
+    ) -> CommandProcessResult:
         request_context = request_context or {}
         user_preferences = request_context.get("user_preferences")
         active_devices = request_context.get("active_devices")
@@ -76,32 +162,33 @@ class VoiceCommandFlow:
         session_state = dict(getattr(decision, "session_state", {}) or {})
         session_state.update(self._dialog_state_serializer(state))
 
-        response_payload = {
-            "status": decision.status,
-            "action": decision.action,
-            "message": decision.message,
-            "confirmation_token": decision.confirmation_token,
-            "session_state": session_state,
-            "intent": routed["intent"].to_dict(),
-            "context": context.to_dict(),
-            "effective_confidence": routed["effective_confidence"],
-        }
+        response_dict = None
         if routed.get("response") is not None:
-            response_payload["response"] = routed["response"].to_dict()
+            response_dict = routed["response"].to_dict()
 
-        return response_payload
+        return CommandProcessResult(
+            status=decision.status,
+            action=decision.action,
+            message=decision.message,
+            confirmation_token=decision.confirmation_token,
+            session_state=session_state,
+            intent=routed["intent"].to_dict(),
+            context=context.to_dict(),
+            effective_confidence=routed["effective_confidence"],
+            response=response_dict,
+        )
 
-    def get_state(self, *, session_id: str) -> Dict[str, Any]:
+    def get_state(self, *, session_id: str) -> CommandStateResult:
         if self._dialog_machine.check_timeout():
             self._dialog_machine.decay()
         state = self._dialog_machine.get_state()
-        return {
-            "status": "ok",
-            "session_id": session_id,
-            "state": self._serialize_command_state(state, session_id=session_id),
-        }
+        return CommandStateResult(
+            status="ok",
+            session_id=session_id,
+            state=self._serialize_command_state(state, session_id=session_id),
+        )
 
-    def confirm(self, *, session_id: str, confirmation_token: str) -> Dict[str, Any]:
+    def confirm(self, *, session_id: str, confirmation_token: str) -> CommandConfirmResult:
         pending = self._validate_pending_confirmation(
             session_id=session_id,
             confirmation_token=confirmation_token,
@@ -115,16 +202,16 @@ class VoiceCommandFlow:
         state = self._dialog_machine.merge_metadata({"_last_status": "executed"})
         response = self._build_follow_through_response(action_payload)
 
-        return {
-            "status": "executed",
-            "action": action_label,
-            "message": response.tts_text,
-            "confirmation_token": confirmation_token,
-            "session_state": self._dialog_state_serializer(state),
-            "response": response.to_dict(),
-        }
+        return CommandConfirmResult(
+            status="executed",
+            action=action_label,
+            message=response.tts_text,
+            confirmation_token=confirmation_token,
+            session_state=self._dialog_state_serializer(state),
+            response=response.to_dict(),
+        )
 
-    def reject(self, *, session_id: str, confirmation_token: str) -> Dict[str, Any]:
+    def reject(self, *, session_id: str, confirmation_token: str) -> CommandRejectResult:
         pending = self._validate_pending_confirmation(
             session_id=session_id,
             confirmation_token=confirmation_token,
@@ -136,13 +223,13 @@ class VoiceCommandFlow:
         state = self._dialog_machine.cancel_action()
         state = self._dialog_machine.merge_metadata({"_last_status": "rejected"})
 
-        return {
-            "status": "rejected",
-            "action": action_label,
-            "message": "Okay, ich verwerfe die angefragte Aktion.",
-            "confirmation_token": confirmation_token,
-            "session_state": self._dialog_state_serializer(state),
-        }
+        return CommandRejectResult(
+            status="rejected",
+            action=action_label,
+            message="Okay, ich verwerfe die angefragte Aktion.",
+            confirmation_token=confirmation_token,
+            session_state=self._dialog_state_serializer(state),
+        )
 
     def _apply_decision(
         self,

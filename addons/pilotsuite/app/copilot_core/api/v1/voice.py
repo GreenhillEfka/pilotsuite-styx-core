@@ -400,7 +400,7 @@ def process_command():
             zone_id=zone,
             request_context=req_context,
         )
-        return jsonify(response_payload)
+        return jsonify(response_payload.to_dict())
 
     except Exception as e:
         _LOGGER.exception("Voice command routing failed")
@@ -1172,7 +1172,7 @@ def get_command_state():
                 "message": "Query parameter 'session_id' is required",
             }), 400
 
-        return jsonify(_get_command_flow().get_state(session_id=str(session_id)))
+        return jsonify(_get_command_flow().get_state(session_id=str(session_id)).to_dict())
     except Exception as e:
         _LOGGER.exception("Failed to get command state")
         return jsonify({"status": "error", "message": str(e)}), 500
@@ -1195,7 +1195,7 @@ def confirm_command_action():
                 _get_command_flow().confirm(
                     session_id=str(session_id),
                     confirmation_token=str(confirmation_token),
-                )
+                ).to_dict()
             )
         except ValueError as exc:
             return jsonify({"status": "error", "message": str(exc)}), 400
@@ -1221,7 +1221,7 @@ def reject_command_action():
                 _get_command_flow().reject(
                     session_id=str(session_id),
                     confirmation_token=str(confirmation_token),
-                )
+                ).to_dict()
             )
         except ValueError as exc:
             return jsonify({"status": "error", "message": str(exc)}), 400

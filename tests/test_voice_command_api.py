@@ -14,6 +14,12 @@ if str(ADDON_APP) not in sys.path:
 from copilot_core.api.v1 import voice as voice_api  # noqa: E402
 from copilot_core.voice import runtime_access as voice_runtime_access  # noqa: E402
 from copilot_core.voice.dialog_state import DialogStateMachine  # noqa: E402
+from copilot_core.voice.command_flow import (
+    CommandProcessResult,
+    CommandStateResult,
+    CommandConfirmResult,
+    CommandRejectResult,
+)
 
 
 def _make_app():
@@ -372,17 +378,17 @@ def test_voice_command_route_delegates_to_command_flow_service(monkeypatch):
     class _DelegatingFlow:
         def process(self, **kwargs):
             called.update(kwargs)
-            return {
-                "status": "executed",
-                "action": "light.turn_on",
-                "message": "delegated",
-                "confirmation_token": None,
-                "session_state": {"session_id": kwargs["session_id"]},
-                "intent": {"intent_type": "light_on"},
-                "context": {"zone_name": kwargs["zone_id"]},
-                "effective_confidence": kwargs["confidence"],
-                "response": {"actions": [{"domain": "light", "service": "turn_on", "data": {}}]},
-            }
+            return CommandProcessResult(
+                status="executed",
+                action="light.turn_on",
+                message="delegated",
+                confirmation_token=None,
+                session_state={"session_id": kwargs["session_id"]},
+                intent={"intent_type": "light_on"},
+                context={"zone_name": kwargs["zone_id"]},
+                effective_confidence=kwargs["confidence"],
+                response={"actions": [{"domain": "light", "service": "turn_on", "data": {}}]},
+            )
 
     def _should_not_be_called(*args, **kwargs):
         raise AssertionError("voice route should delegate orchestration to command-flow service")
@@ -425,17 +431,17 @@ def test_voice_command_prefers_injected_runtime_seam(monkeypatch):
 
     class _InjectedCommandFlow:
         def process(self, **kwargs):
-            return {
-                "status": "executed",
-                "action": "light.turn_on",
-                "message": "Licht ist an",
-                "confirmation_token": None,
-                "session_state": {"session_id": kwargs.get("session_id")},
-                "intent": {"intent_type": "light_on", "raw_text": kwargs.get("utterance")},
-                "context": {"zone_name": kwargs.get("zone_id")},
-                "effective_confidence": kwargs.get("confidence"),
-                "response": {"actions": [{"domain": "light", "service": "turn_on", "data": {}}]},
-            }
+            return CommandProcessResult(
+                status="executed",
+                action="light.turn_on",
+                message="Licht ist an",
+                confirmation_token=None,
+                session_state={"session_id": kwargs.get("session_id")},
+                intent={"intent_type": "light_on", "raw_text": kwargs.get("utterance")},
+                context={"zone_name": kwargs.get("zone_id")},
+                effective_confidence=kwargs.get("confidence") or 0.95,
+                response={"actions": [{"domain": "light", "service": "turn_on", "data": {}}]},
+            )
 
     class _InjectedRuntime:
         def get_command_flow(self):
@@ -480,16 +486,16 @@ def test_voice_command_state_route_delegates_to_command_flow_service(monkeypatch
     class _DelegatingFlow:
         def get_state(self, **kwargs):
             called.update(kwargs)
-            return {
-                "status": "ok",
-                "session_id": kwargs["session_id"],
-                "state": {
+            return CommandStateResult(
+                status="ok",
+                session_id=kwargs["session_id"],
+                state={
                     "last_status": "idle",
                     "pending_confirmation": False,
                     "pending_action_label": None,
                     "confirmation_expires_at": None,
                 },
-            }
+            )
 
     def _should_not_be_called(*args, **kwargs):
         raise AssertionError("command state route should delegate to command-flow service")
@@ -518,14 +524,14 @@ def test_voice_command_confirm_route_delegates_to_command_flow_service(monkeypat
     class _DelegatingFlow:
         def confirm(self, **kwargs):
             called.update(kwargs)
-            return {
-                "status": "executed",
-                "action": "lock.unlock",
-                "message": "Bestätigt. Ich führe die Aktion jetzt aus.",
-                "confirmation_token": kwargs["confirmation_token"],
-                "session_state": {"dialog_state": "IDLE", "session_id": kwargs["session_id"]},
-                "response": {"actions": [{"domain": "lock", "service": "unlock", "data": {}}]},
-            }
+            return CommandConfirmResult(
+                status="executed",
+                action="lock.unlock",
+                message="Bestätigt. Ich führe die Aktion jetzt aus.",
+                confirmation_token=kwargs["confirmation_token"],
+                session_state={"dialog_state": "IDLE", "session_id": kwargs["session_id"]},
+                response={"actions": [{"domain": "lock", "service": "unlock", "data": {}}]},
+            )
 
     def _should_not_be_called(*args, **kwargs):
         raise AssertionError("command confirm route should delegate to command-flow service")
@@ -558,13 +564,13 @@ def test_voice_command_reject_route_delegates_to_command_flow_service(monkeypatc
     class _DelegatingFlow:
         def reject(self, **kwargs):
             called.update(kwargs)
-            return {
-                "status": "rejected",
-                "action": "lock.unlock",
-                "message": "Okay, ich verwerfe die angefragte Aktion.",
-                "confirmation_token": kwargs["confirmation_token"],
-                "session_state": {"dialog_state": "IDLE", "session_id": kwargs["session_id"]},
-            }
+            return CommandRejectResult(
+                status="rejected",
+                action="lock.unlock",
+                message="Okay, ich verwerfe die angefragte Aktion.",
+                confirmation_token=kwargs["confirmation_token"],
+                session_state={"dialog_state": "IDLE", "session_id": kwargs["session_id"]},
+            )
 
     def _should_not_be_called(*args, **kwargs):
         raise AssertionError("command reject route should delegate to command-flow service")
