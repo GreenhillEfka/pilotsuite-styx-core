@@ -17,6 +17,19 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _get_runtime_persistence_summary() -> dict[str, object]:
+    persistence_paths = {
+        "conversation_memory_db": os.environ.get("CONVERSATION_MEMORY_DB", "/data/conversation_memory.db"),
+        "vector_store_db": os.environ.get("COPILOT_VECTOR_DB_PATH", "/data/vector_store.db"),
+        "shopping_db": os.environ.get("SHOPPING_DB_PATH", "/data/shopping_reminders.db"),
+    }
+    summary: dict[str, object] = {}
+    for label, db_path in persistence_paths.items():
+        summary[f"{label}_path"] = db_path
+        summary[f"{label}_accessible"] = os.path.exists(db_path)
+    return summary
+
+
 @dataclass(frozen=True)
 class CopilotConfig:
     version: str = "0.0.0"
@@ -301,6 +314,7 @@ def create_app() -> Flask:
                 "version": cfg.version,
                 "port": int(os.environ.get("PORT", "8909")),
                 "voice": get_voice_health_block(),
+                "persistence": _get_runtime_persistence_summary(),
             }
         )
 
