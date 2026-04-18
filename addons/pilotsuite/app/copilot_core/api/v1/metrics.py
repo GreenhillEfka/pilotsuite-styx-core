@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import logging
 import asyncio
+import os
 import time
 from typing import Any, Dict
 
@@ -41,6 +42,19 @@ from copilot_core.monitoring.health import get_health_checker
 from copilot_core.voice.voice_health import get_voice_health_block
 
 logger = logging.getLogger(__name__)
+
+
+def _get_runtime_persistence_summary() -> dict[str, object]:
+    persistence_paths = {
+        "conversation_memory_db": os.environ.get("CONVERSATION_MEMORY_DB", "/data/conversation_memory.db"),
+        "vector_store_db": os.environ.get("COPILOT_VECTOR_DB_PATH", "/data/vector_store.db"),
+        "shopping_db": os.environ.get("SHOPPING_DB_PATH", "/data/shopping_reminders.db"),
+    }
+    summary: dict[str, object] = {}
+    for label, db_path in persistence_paths.items():
+        summary[f"{label}_path"] = db_path
+        summary[f"{label}_accessible"] = os.path.exists(db_path)
+    return summary
 
 
 # Create blueprint with relative prefix (will be nested under /api/v1)
@@ -145,11 +159,13 @@ def readiness_probe():
         health = _run_async(checker.get_dependency_health(), timeout=5)
         
         voice_block = get_voice_health_block()
+        persistence = _get_runtime_persistence_summary()
         if health.get("status") == "healthy":
             return jsonify({
                 "ready": True,
                 "status": "healthy",
                 "voice": voice_block,
+                "persistence": persistence,
             }), 200
         else:
             return jsonify({
@@ -157,6 +173,7 @@ def readiness_probe():
                 "status": health.get("status", "unknown"),
                 "missing_required": health.get("missing_required", []),
                 "voice": voice_block,
+                "persistence": persistence,
             }), 503
             
     except Exception as e:
@@ -166,6 +183,7 @@ def readiness_probe():
             "status": "error",
             "error": str(e),
             "voice": get_voice_health_block(),
+            "persistence": _get_runtime_persistence_summary(),
         }), 503
 
 

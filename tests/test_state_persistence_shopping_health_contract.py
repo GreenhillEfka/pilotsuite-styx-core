@@ -196,3 +196,41 @@ def test_lightweight_app_status_exposes_runtime_persistence_truth(monkeypatch, t
         "shopping_db_path": str(shopping_db_path),
         "shopping_db_accessible": True,
     }
+
+
+def test_lightweight_app_ready_exposes_runtime_persistence_truth(monkeypatch, tmp_path):
+    _stub_lightweight_app_dependencies(monkeypatch)
+
+    shopping_db_path = tmp_path / "shopping" / "ready-shopping.db"
+    conversation_db_path = tmp_path / "memory" / "ready-conversation.db"
+    vector_db_path = tmp_path / "vector" / "ready-store.db"
+    monkeypatch.setenv("SHOPPING_DB_PATH", str(shopping_db_path))
+    monkeypatch.setenv("CONVERSATION_MEMORY_DB", str(conversation_db_path))
+    monkeypatch.setenv("COPILOT_VECTOR_DB_PATH", str(vector_db_path))
+    sys.modules.pop("copilot_core.app", None)
+
+    app_module = importlib.import_module("copilot_core.app")
+    from copilot_core.api.v1 import metrics as metrics_api
+
+    monkeypatch.setattr(
+        metrics_api.os.path,
+        "exists",
+        lambda path: path in {str(vector_db_path), str(shopping_db_path)},
+    )
+
+    response = app_module.create_app().test_client().get(
+        "/api/v1/ready",
+        headers={"X-Auth-Token": "pilotclaw-test-token"},
+    )
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["ready"] is True
+    assert payload["persistence"] == {
+        "conversation_memory_db_path": str(conversation_db_path),
+        "conversation_memory_db_accessible": False,
+        "vector_store_db_path": str(vector_db_path),
+        "vector_store_db_accessible": True,
+        "shopping_db_path": str(shopping_db_path),
+        "shopping_db_accessible": True,
+    }
