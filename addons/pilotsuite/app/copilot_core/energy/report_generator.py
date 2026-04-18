@@ -220,11 +220,33 @@ class EnergyReportGenerator:
         if not hasattr(pattern_learner, "get_pattern_summaries"):
             raise TypeError("pattern_learner must expose get_pattern_summaries(...)")
 
-        pattern_summaries = pattern_learner.get_pattern_summaries(
+        pattern_summaries = self._get_usage_pattern_window_summaries(
             min_confidence=min_confidence,
             window_start=start,
             window_end=end,
+            pattern_learner=pattern_learner,
         )
+
+        comparison_end = start
+        comparison_start = comparison_end - (end - start)
+        comparison_summaries = self._get_usage_pattern_window_summaries(
+            min_confidence=min_confidence,
+            window_start=comparison_start,
+            window_end=comparison_end,
+            pattern_learner=pattern_learner,
+        )
+
+        comparison_by_id = {
+            summary["pattern_id"]: summary for summary in comparison_summaries
+        }
+
+        patterns = [
+            self._build_usage_pattern_summary_item(
+                summary,
+                comparison_by_id.get(summary["pattern_id"]),
+            )
+            for summary in pattern_summaries
+        ]
 
         return {
             "status": "ok",
@@ -232,22 +254,153 @@ class EnergyReportGenerator:
                 "from": start.isoformat(),
                 "to": end.isoformat(),
             },
-            "patterns": [
-                {
-                    "pattern_id": summary["pattern_id"],
-                    "category": summary.get("category", "automation"),
-                    "zone": summary.get("zone"),
-                    "frequency": int(summary.get("occurrence_count", 0)),
-                    "confidence": round(float(summary.get("confidence", 0.0)), 3),
-                    "last_seen": summary.get("last_occurrence"),
-                    "trend": "stable",
-                }
-                for summary in pattern_summaries
-            ],
+            "comparison_window": {
+                "from": comparison_start.isoformat(),
+                "to": comparison_end.isoformat(),
+            },
+            "patterns": patterns,
             "impact": self._build_usage_pattern_impact(pattern_summaries),
+            "drift": self._build_usage_pattern_drift(pattern_summaries, comparison_summaries),
         }
 
     # ── Internal builders ───────────────────────────────────────────────
+
+    @staticmethod
+    def _get_usage_pattern_window_summaries(
+        pattern_learner: Any,
+        *,
+        window_start: datetime,
+        window_end: datetime,
+        min_confidence: float,
+    ) -> list[dict[str, Any]]:
+        """Read windowed pattern summaries when the learner exposes them."""
+        if hasattr(pattern_learner, "get_pattern_window_summaries"):
+            return pattern_learner.get_pattern_window_summaries(
+                min_confidence=min_confidence,
+                window_start=window_start,
+                window_end=window_end,
+            )
+
+        return pattern_learner.get_pattern_summaries(
+            min_confidence=min_confidence,
+            window_start=window_start,
+            window_end=window_end,
+        )
+
+    @staticmethod
+    def _build_usage_pattern_summary_item(
+        current_summary: dict[str, Any],
+        previous_summary: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        """Build one D2 pattern item with bounded comparison fields."""
+        current_frequency = int(current_summary.get("occurrence_count", 0))
+        previous_frequency = int(previous_summary.get("occurrence_count", 0)) if previous_summary else 0
+
+        return {
+            "pattern_id": current_summary["pattern_id"],
+            "category": current_summary.get("category", "automation"),
+            "zone": current_summary.get("zone"),
+            "frequency": current_frequency,
+            "previous_frequency": previous_frequency,
+            "frequency_delta": current_frequency - previous_frequency,
+            "confidence": round(float(current_summary.get("confidence", 0.0)), 3),
+            "last_seen": current_summary.get("last_occurrence"),
+            "trend": EnergyReportGenerator._classify_usage_pattern_trend(
+                current_summary,
+                previous_summary,
+            ),
+        }
+
+    @staticmethod
+    def _classify_usage_pattern_trend(
+        current_summary: dict[str, Any],
+        previous_summary: dict[str, Any] | None,
+    ) -> str:
+        """Classify one bounded trend signal without overclaiming sparse data."""
+        current_source = current_summary.get("window_metrics_source")
+        previous_source = previous_summary.get("window_metrics_source") if previous_summary else None
+
+        if current_source != "observations":
+            return "stable"
+        if previous_summary and previous_source not in {None, "observations"}:
+            return "stable"
+
+        current_frequency = int(current_summary.get("occurrence_count", 0))
+        previous_frequency = int(previous_summary.get("occurrence_count", 0)) if previous_summary else 0
+
+        if previous_frequency == 0:
+            return "rising"
+
+        change_ratio = (current_frequency - previous_frequency) / max(previous_frequency, 1)
+        if change_ratio >= 0.25:
+            return "rising"
+        if change_ratio <= -0.25:
+            return "falling"
+        return "stable"
+
+    @staticmethod
+    def _build_usage_pattern_drift(
+        current_summaries: list[dict[str, Any]],
+        previous_summaries: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        """Build the bounded D2 drift summary over two adjacent windows."""
+        current_by_id = {summary["pattern_id"]: summary for summary in current_summaries}
+        previous_by_id = {summary["pattern_id"]: summary for summary in previous_summaries}
+
+        shared_ids = sorted(set(current_by_id) & set(previous_by_id))
+        rising = 0
+        stable = 0
+        falling = 0
+
+        for pattern_id in shared_ids:
+            trend = EnergyReportGenerator._classify_usage_pattern_trend(
+                current_by_id[pattern_id],
+                previous_by_id[pattern_id],
+            )
+            if trend == "rising":
+                rising += 1
+            elif trend == "falling":
+                falling += 1
+            else:
+                stable += 1
+
+        new_patterns = [
+            {
+                "pattern_id": summary["pattern_id"],
+                "category": summary.get("category", "automation"),
+                "zone": summary.get("zone"),
+                "frequency": int(summary.get("occurrence_count", 0)),
+                "last_seen": summary.get("last_occurrence"),
+            }
+            for summary in current_summaries
+            if summary.get("window_metrics_source") == "observations"
+            and summary["pattern_id"] not in previous_by_id
+        ]
+
+        fading_patterns = [
+            {
+                "pattern_id": summary["pattern_id"],
+                "category": summary.get("category", "automation"),
+                "zone": summary.get("zone"),
+                "previous_frequency": int(summary.get("occurrence_count", 0)),
+                "last_seen": summary.get("last_occurrence"),
+            }
+            for summary in previous_summaries
+            if summary.get("window_metrics_source") == "observations"
+            and summary["pattern_id"] not in current_by_id
+        ]
+
+        return {
+            "summary": {
+                "new_patterns": len(new_patterns),
+                "fading_patterns": len(fading_patterns),
+                "rising_patterns": rising,
+                "stable_patterns": stable,
+                "falling_patterns": falling,
+            },
+            "new_patterns": new_patterns,
+            "fading_patterns": fading_patterns,
+        }
 
     def _build_usage_pattern_impact(self, pattern_summaries: list[dict[str, Any]]) -> dict[str, float]:
         """Aggregate bounded impact estimates from pattern summaries."""

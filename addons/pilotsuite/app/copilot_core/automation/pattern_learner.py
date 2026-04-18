@@ -123,6 +123,7 @@ class PatternLearner:
         
         # Lade existierende Muster
         self._load_patterns()
+        self._load_observations()
     
     def _generate_pattern_id(self) -> str:
         """Generiere eindeutige Pattern-ID."""
@@ -159,6 +160,35 @@ class PatternLearner:
             _LOGGER.debug(f"Gespeichert: {len(self.patterns)} Muster")
         except Exception as e:
             _LOGGER.error(f"Fehler beim Speichern der Muster: {e}")
+
+    def _load_observations(self):
+        """Lade gespeicherte Beobachtungen von Disk."""
+        if not self.observations_file.exists():
+            return
+
+        loaded: List[Dict[str, Any]] = []
+        try:
+            with open(self.observations_file, "r") as f:
+                for raw_line in f:
+                    line = raw_line.strip()
+                    if not line:
+                        continue
+                    try:
+                        observation = json.loads(line)
+                    except json.JSONDecodeError:
+                        _LOGGER.warning("Ignoriere ungueltige Beobachtungszeile in %s", self.observations_file)
+                        continue
+
+                    if not isinstance(observation, dict):
+                        continue
+                    if not isinstance(observation.get("timestamp"), str):
+                        continue
+                    loaded.append(observation)
+
+            self.observations = loaded[-self.max_observations:]
+        except Exception as e:
+            _LOGGER.warning(f"Konnte Beobachtungen nicht laden: {e}")
+            self.observations = []
     
     def _log_observation(self, observation: Dict[str, Any]):
         """Logge Beobachtung für inkrementelles Lernen."""
@@ -462,6 +492,78 @@ class PatternLearner:
                 return round(max(0.0, float(value)), 3)
         return 0.0
 
+    @staticmethod
+    def _parse_observation_timestamp(observation: Dict[str, Any]) -> Optional[datetime]:
+        """Parse an observation timestamp safely."""
+        timestamp = observation.get("timestamp")
+        if not isinstance(timestamp, str):
+            return None
+        try:
+            return datetime.fromisoformat(timestamp)
+        except ValueError:
+            return None
+
+    @staticmethod
+    def _observation_within_window(
+        observed_at: datetime,
+        *,
+        window_start: Optional[datetime],
+        window_end: Optional[datetime],
+    ) -> bool:
+        """Return whether an observation is inside the bounded window."""
+        if window_start and observed_at < window_start:
+            return False
+        if window_end and observed_at >= window_end:
+            return False
+        return True
+
+    @staticmethod
+    def _pattern_matches_observation(pattern: Pattern, observation: Dict[str, Any]) -> bool:
+        """Return whether an observation belongs to a learned pattern."""
+        if observation.get("entity_id") != pattern.entity_id:
+            return False
+        if observation.get("action") != pattern.action:
+            return False
+
+        if pattern.pattern_type == "weather_based" and pattern.weather_condition:
+            context = observation.get("context")
+            if not isinstance(context, dict):
+                return False
+            return context.get("weather_condition") == pattern.weather_condition
+
+        return True
+
+    def _count_pattern_window_observations(
+        self,
+        pattern: Pattern,
+        *,
+        window_start: Optional[datetime],
+        window_end: Optional[datetime],
+    ) -> Tuple[int, Optional[datetime]]:
+        """Count matching observations for a pattern inside a bounded window."""
+        count = 0
+        last_occurrence = None
+
+        for observation in self.observations:
+            if not self._pattern_matches_observation(pattern, observation):
+                continue
+
+            observed_at = self._parse_observation_timestamp(observation)
+            if observed_at is None:
+                continue
+            if not self._observation_within_window(
+                observed_at,
+                window_start=window_start,
+                window_end=window_end,
+            ):
+                continue
+
+            count += 1
+            if last_occurrence is None or observed_at > last_occurrence:
+                last_occurrence = observed_at
+
+        return count, last_occurrence
+
     def get_pattern_summaries(
         self,
         *,
@@ -502,6 +604,72 @@ class PatternLearner:
                     "estimated_cost_impact_eur",
                     "cost_impact_eur",
                 ),
+            })
+
+        summaries.sort(
+            key=lambda item: (
+                -float(item["confidence"]),
+                -int(item["occurrence_count"]),
+                str(item["pattern_id"]),
+            )
+        )
+        return summaries
+
+    def get_pattern_window_summaries(
+        self,
+        *,
+        min_confidence: float = 0.0,
+        window_start: Optional[datetime] = None,
+        window_end: Optional[datetime] = None,
+    ) -> List[Dict[str, Any]]:
+        """Return pattern summaries with window-specific frequency metrics when available."""
+        summaries: List[Dict[str, Any]] = []
+
+        for pattern in self.get_patterns(min_confidence=min_confidence):
+            occurrence_count, last_occurrence = self._count_pattern_window_observations(
+                pattern,
+                window_start=window_start,
+                window_end=window_end,
+            )
+
+            metrics_source = "observations"
+            if occurrence_count == 0:
+                fallback_last_occurrence = pattern.last_occurrence
+                if fallback_last_occurrence is None:
+                    continue
+                if window_start and fallback_last_occurrence < window_start:
+                    continue
+                if window_end and fallback_last_occurrence >= window_end:
+                    continue
+
+                occurrence_count = int(pattern.occurrence_count)
+                last_occurrence = fallback_last_occurrence
+                metrics_source = "pattern"
+
+            metadata = pattern.metadata if isinstance(pattern.metadata, dict) else {}
+            summaries.append({
+                "pattern_id": pattern.pattern_id,
+                "pattern_type": pattern.pattern_type,
+                "category": self._categorize_pattern(pattern),
+                "entity_id": pattern.entity_id,
+                "action": pattern.action,
+                "zone": self._extract_summary_zone(pattern),
+                "confidence": round(pattern.confidence, 3),
+                "occurrence_count": int(occurrence_count),
+                "last_occurrence": last_occurrence.isoformat() if last_occurrence else None,
+                "hour_of_day": pattern.hour_of_day,
+                "day_of_week": pattern.day_of_week,
+                "estimated_energy_impact_kwh": self._metadata_float(
+                    metadata,
+                    "estimated_energy_impact_kwh",
+                    "energy_impact_kwh",
+                ),
+                "estimated_cost_impact_eur": self._metadata_float(
+                    metadata,
+                    "estimated_cost_impact_eur",
+                    "cost_impact_eur",
+                ),
+                "window_metrics_source": metrics_source,
             })
 
         summaries.sort(
