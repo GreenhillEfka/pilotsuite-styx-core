@@ -93,6 +93,14 @@ def get_auth_token(options_path: str = OPTIONS_PATH) -> str:
     """
     global _token_cache
 
+    # Environment overrides must win immediately, even within the TTL window.
+    env_token = os.environ.get("COPILOT_AUTH_TOKEN", "").strip()
+    if env_token:
+        now = time.monotonic()
+        if _token_cache != (env_token, _token_cache[1]):
+            _token_cache = (env_token, now)
+        return env_token
+
     # Fast path (no lock): check if cache is still valid
     now = time.monotonic()
     cached_token, cached_at = _token_cache
@@ -101,19 +109,23 @@ def get_auth_token(options_path: str = OPTIONS_PATH) -> str:
 
     # Slow path: acquire lock, re-check, then refresh
     with _token_lock:
+        env_token = os.environ.get("COPILOT_AUTH_TOKEN", "").strip()
         now = time.monotonic()
+        if env_token:
+            _token_cache = (env_token, now)
+            return env_token
+
         cached_token, cached_at = _token_cache
         if cached_token and (now - cached_at) < _TOKEN_CACHE_TTL:
             return cached_token
 
-        token = os.environ.get("COPILOT_AUTH_TOKEN", "").strip()
-        if not token:
-            try:
-                with open(options_path, "r", encoding="utf-8") as fh:
-                    opts: Any = json.load(fh) or {}
-                token = str(opts.get("auth_token", "")).strip()
-            except Exception:
-                token = ""
+        token = ""
+        try:
+            with open(options_path, "r", encoding="utf-8") as fh:
+                opts: Any = json.load(fh) or {}
+            token = str(opts.get("auth_token", "")).strip()
+        except Exception:
+            token = ""
 
         # 1-Key-Flow: auto-generate token if nothing is configured
         if not token:
@@ -134,6 +146,17 @@ def is_auth_required(options_path: str = OPTIONS_PATH) -> bool:
     """
     global _auth_required_cache
 
+    # Environment overrides must win immediately, even within the TTL window.
+    env_value = os.environ.get("COPILOT_AUTH_REQUIRED", "").lower().strip()
+    if env_value == "false":
+        now = time.monotonic()
+        _auth_required_cache = (False, now)
+        return False
+    if env_value == "true":
+        now = time.monotonic()
+        _auth_required_cache = (True, now)
+        return True
+
     # Fast path (no lock): check if cache is still valid
     now = time.monotonic()
     cached_result, cached_at = _auth_required_cache
@@ -142,25 +165,27 @@ def is_auth_required(options_path: str = OPTIONS_PATH) -> bool:
 
     # Slow path: acquire lock, re-check, then recompute
     with _auth_lock:
+        env_value = os.environ.get("COPILOT_AUTH_REQUIRED", "").lower().strip()
         now = time.monotonic()
+        if env_value == "false":
+            _auth_required_cache = (False, now)
+            return False
+        if env_value == "true":
+            _auth_required_cache = (True, now)
+            return True
+
         cached_result, cached_at = _auth_required_cache
         if now - cached_at < _AUTH_CACHE_TTL:
             return cached_result
 
         result = True
-        env_value = os.environ.get("COPILOT_AUTH_REQUIRED", "").lower().strip()
-        if env_value == "false":
-            result = False
-        elif env_value == "true":
-            result = True
-        else:
-            try:
-                with open(options_path, "r", encoding="utf-8") as fh:
-                    opts: Any = json.load(fh) or {}
-                if opts.get("auth_required") is False:
-                    result = False
-            except Exception:
-                pass
+        try:
+            with open(options_path, "r", encoding="utf-8") as fh:
+                opts: Any = json.load(fh) or {}
+            if opts.get("auth_required") is False:
+                result = False
+        except Exception:
+            pass
 
         _auth_required_cache = (result, now)
         return result

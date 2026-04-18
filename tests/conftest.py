@@ -8,6 +8,20 @@ from unittest.mock import Mock, MagicMock
 import pytest
 
 
+_STUB_MODULE_KEYS = (
+    "copilot_core.api.v1.mcp",
+    "copilot_core.tags",
+    "copilot_core.tags.api",
+)
+
+try:
+    from copilot_core.voice import runtime_access as _runtime_access_module
+
+    _ORIGINAL_GET_DIALOG_MACHINE = _runtime_access_module.VoiceRuntimeAccess.get_dialog_machine
+except Exception:
+    _ORIGINAL_GET_DIALOG_MACHINE = None
+
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 repo_root_str = str(REPO_ROOT)
 if repo_root_str not in sys.path:
@@ -18,6 +32,71 @@ COPILOT_CORE_PATH = REPO_ROOT / "copilot_core" / "rootfs" / "usr" / "src" / "app
 copilot_core_path_str = str(COPILOT_CORE_PATH)
 if copilot_core_path_str not in sys.path:
     sys.path.insert(0, copilot_core_path_str)
+
+
+@pytest.fixture(autouse=True)
+def _reset_shared_test_state():
+    """Reset cross-test globals/caches that otherwise leak through the suite."""
+    original_modules = {key: sys.modules.get(key) for key in _STUB_MODULE_KEYS}
+
+    try:
+        try:
+            from copilot_core.api import security as security_module
+
+            security_module._token_cache = ("", 0.0)
+            security_module._auth_required_cache = (True, 0.0)
+            security_module._ha_token_cache.clear()
+        except Exception:
+            pass
+
+        try:
+            from copilot_core.voice import dialog_state as dialog_state_module
+
+            dialog_state_module._dialog_machine = None
+        except Exception:
+            pass
+
+        if _ORIGINAL_GET_DIALOG_MACHINE is not None:
+            try:
+                from copilot_core.voice import runtime_access as runtime_access_module
+
+                runtime_access_module.VoiceRuntimeAccess.get_dialog_machine = _ORIGINAL_GET_DIALOG_MACHINE
+            except Exception:
+                pass
+
+        yield
+    finally:
+        try:
+            from copilot_core.api import security as security_module
+
+            security_module._token_cache = ("", 0.0)
+            security_module._auth_required_cache = (True, 0.0)
+            security_module._ha_token_cache.clear()
+        except Exception:
+            pass
+
+        try:
+            from copilot_core.voice import dialog_state as dialog_state_module
+
+            dialog_state_module._dialog_machine = None
+        except Exception:
+            pass
+
+        if _ORIGINAL_GET_DIALOG_MACHINE is not None:
+            try:
+                from copilot_core.voice import runtime_access as runtime_access_module
+
+                runtime_access_module.VoiceRuntimeAccess.get_dialog_machine = _ORIGINAL_GET_DIALOG_MACHINE
+            except Exception:
+                pass
+
+        for key, original in original_modules.items():
+            current = sys.modules.get(key)
+            if original is None:
+                if current is not None:
+                    sys.modules.pop(key, None)
+            else:
+                sys.modules[key] = original
 
 
 @pytest.fixture

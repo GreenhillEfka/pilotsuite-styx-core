@@ -17,6 +17,7 @@ from copilot_core.voice.command_flow import VoiceCommandFlow
 from copilot_core.voice.dialog_flow import VoiceDialogFlow
 from copilot_core.voice.command_router import VoiceCommandRouter
 from copilot_core.voice.context_builder import VoiceContextBuilder, VoiceContextRuntime
+from copilot_core.voice import dialog_state as dialog_state_module
 from copilot_core.voice.nlu_engine import NLUEngine
 from copilot_core.voice.proactive import HintConfig, HintPriority, ProactiveVoiceHints
 from copilot_core.voice.stt_whisper import STTConfig, WhisperSTT
@@ -50,8 +51,10 @@ class VoiceRuntimeAccess:
         override = self._services.get(service_key)
         if override is not None:
             return override
-        if legacy_attr and hasattr(self._app, legacy_attr):
-            return getattr(self._app, legacy_attr)
+        if legacy_attr:
+            app_dict = getattr(self._app, "__dict__", {})
+            if legacy_attr in app_dict:
+                return app_dict[legacy_attr]
         return None
 
     def _build_default_mood_engine(self) -> Any:
@@ -220,9 +223,9 @@ class VoiceRuntimeAccess:
             if override is not None:
                 self._dialog_machine = override
             else:
-                from copilot_core.voice.dialog_state import get_dialog_machine
-
-                self._dialog_machine = get_dialog_machine(data_dir=self._get_runtime_data_dir())
+                self._dialog_machine = dialog_state_module.get_dialog_machine(
+                    data_dir=self._get_runtime_data_dir()
+                )
         return self._dialog_machine
 
 

@@ -60,6 +60,16 @@ def _stub_lightweight_app_dependencies(monkeypatch):
     _stub_shared_app_dependencies(monkeypatch)
     monkeypatch.setenv("COPILOT_AUTH_TOKEN", "pilotclaw-test-token")
 
+    # Guard: unregister app Prometheus collectors before re-importing metrics.
+    # Prevents "Duplicated timeseries" from re-registered Histogram/Counter metrics.
+    for collector in list(__import__('prometheus_client', fromlist=['REGISTRY']).REGISTRY._collector_to_names.keys()):
+        name = type(collector).__name__
+        if name not in ('GCCollector', 'PlatformCollector', 'ProcessCollector'):
+            try:
+                __import__('prometheus_client', fromlist=['REGISTRY']).REGISTRY.unregister(collector)
+            except Exception:
+                pass
+
     from copilot_core.api.v1 import metrics as metrics_api
     from copilot_core.voice import voice_health
 

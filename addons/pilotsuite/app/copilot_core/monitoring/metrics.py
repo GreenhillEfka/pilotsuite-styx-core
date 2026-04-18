@@ -43,19 +43,30 @@ from prometheus_client import (
     REGISTRY,
 )
 
+
+def _idempotent_metric(metric_cls, name, *args, **kwargs):
+    """Create a Prometheus metric, returning an existing one if name is already registered."""
+    try:
+        return metric_cls(name, *args, **kwargs)
+    except ValueError:
+        for collector in REGISTRY._collector_to_names.keys():
+            if hasattr(collector, '_name') and collector._name == name:
+                return collector
+        raise
+
 logger = logging.getLogger(__name__)
 
 # --- Metric Definitions ---
 
 # Request Metrics
-REQUEST_LATENCY = Histogram(
+REQUEST_LATENCY = _idempotent_metric(Histogram,
     "http_request_duration_seconds",
     "HTTP request latency in seconds",
     ["method", "endpoint", "status"],
     buckets=(0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0),
 )
 
-REQUEST_COUNT = Counter(
+REQUEST_COUNT = _idempotent_metric(Counter,
     "http_requests_total",
     "Total number of HTTP requests",
     ["method", "endpoint", "status"],
@@ -121,7 +132,7 @@ CACHE_HIT_RATIO = Gauge(
 )
 
 # Connection Pool Metrics
-CONNECTION_POOL_SIZE = Gauge(
+CONNECTION_POOL_SIZE = _idempotent_metric(Gauge,
     "connection_pool_size",
     "Current size of the connection pool",
     ["pool_name"],
@@ -147,7 +158,7 @@ CONNECTION_POOL_WAIT_TIME = Histogram(
 )
 
 # LLM/Model Metrics
-LLM_REQUEST_COUNT = Counter(
+LLM_REQUEST_COUNT = _idempotent_metric(Counter,
     "llm_requests_total",
     "Total number of LLM API requests",
     ["provider", "model", "status"],
@@ -167,7 +178,7 @@ LLM_LATENCY = Histogram(
 )
 
 # Home Assistant Integration Metrics
-HA_REQUEST_COUNT = Counter(
+HA_REQUEST_COUNT = _idempotent_metric(Counter,
     "homeassistant_requests_total",
     "Total number of Home Assistant API requests",
     ["endpoint", "status"],
