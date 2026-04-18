@@ -29,12 +29,16 @@ except ModuleNotFoundError:
     vol = None  # type: ignore
     HAS_HOMEASSISTANT = False
 
-# Version — forward to addon path if available
+# Version — resolve via the addon package path that was appended to ``__path__``.
+# Importing ``__version__`` from ``copilot_core`` here would recurse into this
+# partially initialized repo-root package and collapse to the fallback value.
 try:
-    from copilot_core import __version__ as _addon_version
-    __version__ = _addon_version
-except ImportError:
-    __version__ = '0.0.0'
+    from .versioning import get_runtime_version as _get_runtime_version
+except Exception:  # pragma: no cover - defensive fallback for partial checkouts
+    def _get_runtime_version(default: str = "0.0.0") -> str:
+        return default
+
+__version__ = _get_runtime_version()
 
 
 # =============================================================================
