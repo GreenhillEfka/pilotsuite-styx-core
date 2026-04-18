@@ -1,6 +1,7 @@
 """Contract tests for POST /api/v1/voice/command (VFM-002 / CORE-VFM-002-A)."""
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -12,6 +13,7 @@ if str(ADDON_APP) not in sys.path:
     sys.path.append(str(ADDON_APP))
 
 from copilot_core.api.v1 import voice as voice_api  # noqa: E402
+from copilot_core.voice import dialog_state as dialog_state_module  # noqa: E402
 from copilot_core.voice import runtime_access as voice_runtime_access  # noqa: E402
 from copilot_core.voice.dialog_state import DialogStateMachine  # noqa: E402
 from copilot_core.voice.command_flow import (
@@ -94,6 +96,44 @@ def test_dialog_snapshot_returns_idle_command_projection_for_other_session(tmp_p
         "pending_action_label": None,
         "confirmation_expires_at": None,
     }
+
+
+def test_voice_dialog_state_persists_via_runtime_data_dir_on_restart(monkeypatch, tmp_path):
+    monkeypatch.setattr(voice_api, "_validate_token", lambda request: True)
+    data_dir = tmp_path / "runtime-data"
+    persistence_path = data_dir / "dialog_state.json"
+    monkeypatch.setenv("DATA_DIR", str(data_dir))
+    monkeypatch.setattr(dialog_state_module, "_dialog_machine", None)
+
+    app = _make_app()
+    activate_response = app.test_client().post(
+        "/api/v1/voice/dialog/activate",
+        json={
+            "intent": "light.turn_on",
+            "slots": {"room": "Wohnzimmer"},
+            "session_id": "sess-runtime-persist",
+            "user_id": "user-runtime-persist",
+        },
+    )
+
+    assert activate_response.status_code == 200, activate_response.get_json()
+    assert persistence_path.exists()
+    persisted = json.loads(persistence_path.read_text(encoding="utf-8"))
+    assert persisted["session_id"] == "sess-runtime-persist"
+    assert persisted["active_intent"] == "light.turn_on"
+    assert persisted["slot_values"]["room"] == "Wohnzimmer"
+
+    monkeypatch.setattr(dialog_state_module, "_dialog_machine", None)
+
+    restarted_app = _make_app()
+    state_response = restarted_app.test_client().get("/api/v1/voice/dialog/state")
+
+    assert state_response.status_code == 200, state_response.get_json()
+    payload = state_response.get_json()
+    assert payload["state"] == "ACTIVE"
+    assert payload["active_intent"] == "light.turn_on"
+    assert payload["session_id"] == "sess-runtime-persist"
+    assert payload["user_id"] == "user-runtime-persist"
 
 
 def test_voice_command_executes_safe_high_confidence_light_command(monkeypatch, tmp_path):

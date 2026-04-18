@@ -5,7 +5,7 @@ Implements FSM + Context Stack for multi-turn voice dialogs with:
 - Finite State Machine for well-defined flows (climate, lights, scenes)
 - Context Stack for nested interruptions
 - 30-second timeout with graceful decay
-- Persistence in /data/dialog_state.json (survives restarts)
+- Persistence in $DATA_DIR/dialog_state.json (survives restarts)
 
 Owner: homeclaw
 Priority: P1 (blocks multi-turn UX)
@@ -50,7 +50,7 @@ class DialogStateMachine:
     - INTERRUPTED: Nested context active
     
     Confirmed UX: spoken + dashboard (Beides)
-    Persistence: survives restarts via /data/dialog_state.json
+    Persistence: survives restarts via $DATA_DIR/dialog_state.json
     Language: German only (DE), English later
     """
     
@@ -64,9 +64,9 @@ class DialogStateMachine:
     
     TIMEOUT_SECONDS = 30  # Context expires after 30s of silence
     
-    def __init__(self, data_dir: str = '/data'):
-        self.data_dir = data_dir
-        self.persistence_path = os.path.join(data_dir, 'dialog_state.json')
+    def __init__(self, data_dir: Optional[str] = None):
+        self.data_dir = _resolve_dialog_data_dir(data_dir)
+        self.persistence_path = os.path.join(self.data_dir, 'dialog_state.json')
         self.state = DialogState(
             state='IDLE',
             active_intent=None,
@@ -284,7 +284,7 @@ class DialogStateMachine:
     # ─────────────────────────────────────────────────────────────────────────
     
     def _persist(self):
-        """Save state to /data/dialog_state.json."""
+        """Save state to the runtime dialog-state persistence file."""
         try:
             os.makedirs(self.data_dir, exist_ok=True)
             
@@ -361,7 +361,19 @@ class DialogStateMachine:
 _dialog_machine: Optional[DialogStateMachine] = None
 
 
-def get_dialog_machine(data_dir: str = '/data') -> DialogStateMachine:
+def _resolve_dialog_data_dir(data_dir: Optional[str] = None) -> str:
+    """Resolve the runtime dialog-state data directory.
+
+    The shipped add-on runtime can relocate persistent storage through DATA_DIR,
+    so the dialog-state machine must follow that seam instead of hardcoding /data.
+    """
+    if isinstance(data_dir, str) and data_dir.strip():
+        return data_dir
+    return os.environ.get('DATA_DIR', '/data')
+
+
+
+def get_dialog_machine(data_dir: Optional[str] = None) -> DialogStateMachine:
     """Get or create global dialog machine instance."""
     global _dialog_machine
     if _dialog_machine is None:
