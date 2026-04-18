@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 
-from .context_builder import VoiceContextBuilder, VoiceContext
+from .context_builder import VoiceContextBuilder, VoiceContext, VoiceContextRuntime
 from ..mood.engine import MoodEngine, MoodState, MoodConfig
 from ..habitus.service import HabitusService
 
@@ -386,6 +386,13 @@ class VoiceIntentHandler:
         self.habitus_service = habitus_service
         self.default_language = default_language
         self._context_builder = VoiceContextBuilder()
+
+    def _get_context_runtime(self) -> VoiceContextRuntime:
+        """Bundle context collaborators behind one narrow runtime seam."""
+        return VoiceContextRuntime(
+            mood_engine=self.mood_engine,
+            habitus_service=self.habitus_service,
+        )
     
     def parse_intent(self, text: str, language: Optional[str] = None) -> VoiceIntent:
         """Parse voice text into structured intent.
@@ -525,8 +532,7 @@ class VoiceIntentHandler:
         # Build context if not provided
         if context is None:
             context = self._context_builder.build_context(
-                mood_engine=self.mood_engine,
-                habitus_service=self.habitus_service,
+                context_runtime=self._get_context_runtime(),
             )
         
         # Get mood-based response templates

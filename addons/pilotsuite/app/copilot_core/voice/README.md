@@ -94,16 +94,17 @@ curl -X GET "http://localhost:8123/api/v1/voice/hints?priority=medium&force=fals
 ## Python API
 
 ```python
-from copilot_core.voice import VoiceIntentHandler, VoiceContextBuilder, ProactiveVoiceHints
+from copilot_core.voice import VoiceIntentHandler, VoiceContextBuilder, ProactiveVoiceHints, VoiceContextRuntime
 
 # Initialize components
 handler = VoiceIntentHandler(mood_engine, habitus_service)
 context_builder = VoiceContextBuilder()
 hints = ProactiveVoiceHints(mood_engine, habitus_service)
+context_runtime = VoiceContextRuntime(mood_engine=mood_engine, habitus_service=habitus_service)
 
 # Process voice intent
 intent = handler.parse_intent("Mach das Licht an")
-context = context_builder.build_context(mood_engine, habitus_service, zone_name="wohnzimmer")
+context = context_builder.build_context(context_runtime=context_runtime, zone_name="wohnzimmer")
 response = handler.handle_intent(intent, context)
 
 # Generate proactive hints

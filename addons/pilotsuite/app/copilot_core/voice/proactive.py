@@ -21,7 +21,13 @@ from datetime import datetime, timezone, timedelta
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from .context_builder import VoiceContextBuilder, VoiceContext, TimeOfDay, MoodState
+from .context_builder import (
+    VoiceContextBuilder,
+    VoiceContext,
+    VoiceContextRuntime,
+    TimeOfDay,
+    MoodState,
+)
 from ..mood.engine import MoodEngine, MoodState as EngineMoodState, MoodResult
 from ..habitus.service import HabitusService
 
@@ -149,7 +155,8 @@ class ProactiveVoiceHints:
     Usage:
     ```python
     hints = ProactiveVoiceHints(mood_engine, habitus_service)
-    context = hints.context_builder.build_context(...)
+    context_runtime = VoiceContextRuntime(mood_engine=mood_engine, habitus_service=habitus_service)
+    context = hints.context_builder.build_context(context_runtime=context_runtime)
     hints_list = hints.generate_hints(context)
     
     for hint in hints_list:
@@ -328,6 +335,13 @@ class ProactiveVoiceHints:
         # Track mood state for change detection
         self._last_mood: Optional[EngineMoodState] = None
         self._last_mood_time: Optional[datetime] = None
+
+    def _get_context_runtime(self) -> VoiceContextRuntime:
+        """Bundle context collaborators behind one narrow runtime seam."""
+        return VoiceContextRuntime(
+            mood_engine=self.mood_engine,
+            habitus_service=self.habitus_service,
+        )
     
     def generate_hints(
         self,
@@ -346,8 +360,7 @@ class ProactiveVoiceHints:
         # Build context if not provided
         if context is None:
             context = self.context_builder.build_context(
-                mood_engine=self.mood_engine,
-                habitus_service=self.habitus_service,
+                context_runtime=self._get_context_runtime(),
             )
         
         # Check if we should generate hints
