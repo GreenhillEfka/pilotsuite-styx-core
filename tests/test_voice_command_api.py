@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 from flask import Flask
 
@@ -134,6 +135,41 @@ def test_voice_dialog_state_persists_via_runtime_data_dir_on_restart(monkeypatch
     assert payload["active_intent"] == "light.turn_on"
     assert payload["session_id"] == "sess-runtime-persist"
     assert payload["user_id"] == "user-runtime-persist"
+
+
+def test_voice_runtime_dialog_machine_prefers_app_runtime_data_dir(monkeypatch, tmp_path):
+    captured = {}
+    app = _make_app()
+    app.config["COPILOT_CFG"] = SimpleNamespace(data_dir=str(tmp_path / "cfg-data"))
+    runtime = voice_runtime_access.VoiceRuntimeAccess(app)
+
+    def _fake_get_dialog_machine(*, data_dir=None):
+        captured["data_dir"] = data_dir
+        return object()
+
+    monkeypatch.setattr(dialog_state_module, "get_dialog_machine", _fake_get_dialog_machine)
+
+    runtime.get_dialog_machine()
+
+    assert captured == {"data_dir": str(tmp_path / "cfg-data")}
+
+
+def test_voice_runtime_dialog_machine_prefers_services_config_data_dir(monkeypatch, tmp_path):
+    captured = {}
+    services = {"config": {"data_dir": str(tmp_path / "services-data")}}
+    app = _make_app()
+    app.config["COPILOT_CFG"] = SimpleNamespace(data_dir=str(tmp_path / "cfg-data"))
+    runtime = voice_runtime_access.VoiceRuntimeAccess(app, services=services)
+
+    def _fake_get_dialog_machine(*, data_dir=None):
+        captured["data_dir"] = data_dir
+        return object()
+
+    monkeypatch.setattr(dialog_state_module, "get_dialog_machine", _fake_get_dialog_machine)
+
+    runtime.get_dialog_machine()
+
+    assert captured == {"data_dir": str(tmp_path / "services-data")}
 
 
 def test_voice_command_executes_safe_high_confidence_light_command(monkeypatch, tmp_path):

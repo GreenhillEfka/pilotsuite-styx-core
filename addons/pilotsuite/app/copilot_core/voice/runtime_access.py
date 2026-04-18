@@ -200,6 +200,20 @@ class VoiceRuntimeAccess:
                 self._dialog_flow = VoiceDialogFlow(dialog_machine=self.get_dialog_machine())
         return self._dialog_flow
 
+    def _get_runtime_data_dir(self) -> Optional[str]:
+        config = self._services.get("config")
+        if isinstance(config, dict):
+            data_dir = config.get("data_dir")
+            if isinstance(data_dir, str) and data_dir.strip():
+                return data_dir
+
+        cfg = self._app.config.get("COPILOT_CFG") if hasattr(self._app, "config") else None
+        data_dir = getattr(cfg, "data_dir", None)
+        if isinstance(data_dir, str) and data_dir.strip():
+            return data_dir
+
+        return None
+
     def get_dialog_machine(self):
         if self._dialog_machine is None:
             override = self._get_override("voice_dialog_machine", legacy_attr="_voice_dialog_machine")
@@ -208,7 +222,7 @@ class VoiceRuntimeAccess:
             else:
                 from copilot_core.voice.dialog_state import get_dialog_machine
 
-                self._dialog_machine = get_dialog_machine()
+                self._dialog_machine = get_dialog_machine(data_dir=self._get_runtime_data_dir())
         return self._dialog_machine
 
 
