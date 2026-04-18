@@ -268,7 +268,10 @@ const TOKEN = new URLSearchParams(location.search).get('token') || INJECTED_TOKE
 if (TOKEN) sessionStorage.setItem('styx-auth-token', TOKEN);
 let activeTab = 'styx', refreshTimer = null, liveRefreshTimer = null, moduleSchemas = {}, chatHistory = [];
 let brainData = { nodes: 0, edges: 0, totalEvents: 0 }, neuronsData = {}, liveSocket = null, graphDeltaState = null, brainDeltaAnimationId = null;
+let graphTopologyState = { nodes: [], edges: [], positions: {}, fetchedAt: 0 }, graphTopologyRefreshPromise = null;
 const GRAPH_DELTA_TTL_MS = 4200;
+const GRAPH_TOPOLOGY_LIMITS = { nodes: 48, edges: 96 };
+const GRAPH_TOPOLOGY_REFRESH_MS = 30000;
 const GRAPH_DELTA_STYLE = {
   node_updated: { stroke: 'rgba(34,211,238,1)', glow: 'rgba(34,211,238,.28)', text: '#b8fbff' },
   edge_updated: { stroke: 'rgba(96,165,250,1)', glow: 'rgba(96,165,250,.25)', text: '#cfe0ff' },
@@ -338,12 +341,231 @@ function ellipsizeGraphLabel(value, max = 28) {
   const text = String(value || 'graph');
   return text.length > max ? text.slice(0, max - 1) + '\u2026' : text;
 }
+function normalizeGraphNode(node = {}) {
+  return {
+    id: String(node.id || '').trim(),
+    label: node.label || node.id || 'graph',
+    kind: node.kind || 'entity',
+    score: Number(node.score || 0),
+  };
+}
+function normalizeGraphEdge(edge = {}) {
+  const from = String(edge.from || '').trim();
+  const to = String(edge.to || '').trim();
+  return {
+    id: String(edge.id || `${from}:${to}`),
+    from,
+    to,
+    weight: Number(edge.weight || 0),
+  };
+}
+function graphNodeRank(node = {}, degree = 0) {
+  return (Number(node.score || 0) * 1000) + degree;
+}
+function computeGraphComponentCenters(count) {
+  if (count <= 1) return [{ x: 0.5, y: 0.5 }];
+  const centers = [];
+  const radius = count === 2 ? 0.18 : Math.min(0.28, 0.12 + count * 0.025);
+  for (let i = 0; i < count; i++) {
+    const angle = (-Math.PI / 2) + ((Math.PI * 2 * i) / count);
+    centers.push({ x: 0.5 + Math.cos(angle) * radius, y: 0.5 + Math.sin(angle) * radius * 0.82 });
+  }
+  return centers;
+}
+function computeGraphTopologyPositions(nodes = [], edges = []) {
+  const positions = {};
+  if (!nodes.length) return positions;
+  const nodeMap = {};
+  const degree = {};
+  const adjacency = {};
+  nodes.forEach(rawNode => {
+    const node = normalizeGraphNode(rawNode);
+    if (!node.id) return;
+    nodeMap[node.id] = node;
+    degree[node.id] = 0;
+    adjacency[node.id] = new Set();
+  });
+  edges.forEach(rawEdge => {
+    const edge = normalizeGraphEdge(rawEdge);
+    if (!nodeMap[edge.from] || !nodeMap[edge.to] || edge.from === edge.to) return;
+    adjacency[edge.from].add(edge.to);
+    adjacency[edge.to].add(edge.from);
+    degree[edge.from] += 1;
+    degree[edge.to] += 1;
+  });
+
+  const orderedNodeIds = Object.keys(nodeMap).sort((a, b) => {
+    const rankDelta = graphNodeRank(nodeMap[b], degree[b]) - graphNodeRank(nodeMap[a], degree[a]);
+    return rankDelta !== 0 ? rankDelta : a.localeCompare(b);
+  });
+  const seen = new Set();
+  const components = [];
+
+  orderedNodeIds.forEach(startId => {
+    if (seen.has(startId)) return;
+    const queue = [startId];
+    const component = [];
+    seen.add(startId);
+    while (queue.length) {
+      const nodeId = queue.shift();
+      component.push(nodeId);
+      const neighbors = Array.from(adjacency[nodeId] || []).sort((a, b) => {
+        const rankDelta = graphNodeRank(nodeMap[b], degree[b]) - graphNodeRank(nodeMap[a], degree[a]);
+        return rankDelta !== 0 ? rankDelta : a.localeCompare(b);
+      });
+      neighbors.forEach(nextId => {
+        if (seen.has(nextId)) return;
+        seen.add(nextId);
+        queue.push(nextId);
+      });
+    }
+    components.push(component);
+  });
+
+  components.sort((a, b) => b.length - a.length || a[0].localeCompare(b[0]));
+  const centers = computeGraphComponentCenters(components.length);
+
+  components.forEach((component, componentIndex) => {
+    const center = centers[componentIndex] || { x: 0.5, y: 0.5 };
+    const rootId = component.slice().sort((a, b) => {
+      const rankDelta = graphNodeRank(nodeMap[b], degree[b]) - graphNodeRank(nodeMap[a], degree[a]);
+      return rankDelta !== 0 ? rankDelta : a.localeCompare(b);
+    })[0];
+    const layers = { 0: [rootId] };
+    const depths = { [rootId]: 0 };
+    const queue = [rootId];
+    while (queue.length) {
+      const nodeId = queue.shift();
+      const nextDepth = depths[nodeId] + 1;
+      Array.from(adjacency[nodeId] || []).sort((a, b) => {
+        const rankDelta = graphNodeRank(nodeMap[b], degree[b]) - graphNodeRank(nodeMap[a], degree[a]);
+        return rankDelta !== 0 ? rankDelta : a.localeCompare(b);
+      }).forEach(nextId => {
+        if (depths[nextId] !== undefined) return;
+        depths[nextId] = nextDepth;
+        layers[nextDepth] = layers[nextDepth] || [];
+        layers[nextDepth].push(nextId);
+        queue.push(nextId);
+      });
+    }
+    component.forEach(nodeId => {
+      if (depths[nodeId] !== undefined) return;
+      const orphanDepth = Object.keys(layers).length;
+      depths[nodeId] = orphanDepth;
+      layers[orphanDepth] = layers[orphanDepth] || [];
+      layers[orphanDepth].push(nodeId);
+    });
+
+    const baseAngle = ((hashGraphKey(rootId) % 360) / 180) * Math.PI;
+    const maxDepth = Math.max(...Object.keys(layers).map(v => Number(v)));
+    const maxRadius = component.length === 1 ? 0 : Math.min(0.22, 0.08 + maxDepth * 0.055);
+
+    Object.entries(layers).forEach(([depthKey, layerNodeIds]) => {
+      const depth = Number(depthKey);
+      const sortedIds = layerNodeIds.slice().sort((a, b) => {
+        const rankDelta = graphNodeRank(nodeMap[b], degree[b]) - graphNodeRank(nodeMap[a], degree[a]);
+        return rankDelta !== 0 ? rankDelta : a.localeCompare(b);
+      });
+      if (depth === 0) {
+        positions[sortedIds[0]] = { x: center.x, y: center.y };
+        return;
+      }
+      const radius = maxRadius * (depth / Math.max(1, maxDepth));
+      sortedIds.forEach((nodeId, index) => {
+        const angle = baseAngle + (Math.PI * 2 * index) / Math.max(1, sortedIds.length) + depth * 0.42;
+        positions[nodeId] = {
+          x: Math.max(0.08, Math.min(0.92, center.x + Math.cos(angle) * radius)),
+          y: Math.max(0.12, Math.min(0.88, center.y + Math.sin(angle) * radius * 0.82)),
+        };
+      });
+    });
+  });
+
+  return positions;
+}
+function normalizeGraphTopologyState(payload) {
+  const nodeMap = {};
+  const nodes = Array.isArray(payload?.nodes) ? payload.nodes.map(normalizeGraphNode).filter(node => {
+    if (!node.id || nodeMap[node.id]) return false;
+    nodeMap[node.id] = node;
+    return true;
+  }) : [];
+  const edges = Array.isArray(payload?.edges) ? payload.edges.map(normalizeGraphEdge).filter(edge => edge.from && edge.to && nodeMap[edge.from] && nodeMap[edge.to]) : [];
+  return {
+    nodes,
+    edges,
+    positions: computeGraphTopologyPositions(nodes, edges),
+    fetchedAt: Date.now(),
+  };
+}
+async function refreshGraphTopology(force = false) {
+  const stale = !graphTopologyState.fetchedAt || (Date.now() - graphTopologyState.fetchedAt) >= GRAPH_TOPOLOGY_REFRESH_MS;
+  if (!force && graphTopologyState.nodes.length && !stale) return graphTopologyState;
+  if (graphTopologyRefreshPromise) return graphTopologyRefreshPromise;
+  graphTopologyRefreshPromise = (async () => {
+    const snapshot = await fetchJSON(`/api/v1/graph/state?limitNodes=${GRAPH_TOPOLOGY_LIMITS.nodes}&limitEdges=${GRAPH_TOPOLOGY_LIMITS.edges}`);
+    if (snapshot?.nodes) graphTopologyState = normalizeGraphTopologyState(snapshot);
+    return graphTopologyState;
+  })();
+  try {
+    return await graphTopologyRefreshPromise;
+  } finally {
+    graphTopologyRefreshPromise = null;
+  }
+}
+function syncGraphTopologyWithDelta(payload) {
+  const delta = payload?.delta || {};
+  const eventData = payload?.event_data || {};
+  const nextNodes = new Map((graphTopologyState.nodes || []).map(node => [node.id, normalizeGraphNode(node)]));
+  const nextEdges = new Map((graphTopologyState.edges || []).map(edge => [edge.id, normalizeGraphEdge(edge)]));
+
+  if (delta.change_type === 'node_updated') {
+    const nodeId = String(delta.node_id || eventData.id || '').trim();
+    if (nodeId) {
+      nextNodes.set(nodeId, {
+        ...(nextNodes.get(nodeId) || { id: nodeId, label: eventData.label || nodeId, kind: eventData.kind || 'entity', score: 0 }),
+        ...normalizeGraphNode({ id: nodeId, label: eventData.label || nodeId, kind: eventData.kind || 'entity', score: eventData.score }),
+      });
+    }
+  } else if (delta.change_type === 'edge_updated') {
+    const from = String(eventData.from || '').trim();
+    const to = String(eventData.to || '').trim();
+    if (from) nextNodes.set(from, nextNodes.get(from) || normalizeGraphNode({ id: from, label: from }));
+    if (to) nextNodes.set(to, nextNodes.get(to) || normalizeGraphNode({ id: to, label: to }));
+    if (from && to) {
+      const edge = normalizeGraphEdge({ id: delta.edge_id || `${from}:${to}`, from, to, weight: eventData.weight || 0 });
+      nextEdges.set(edge.id, edge);
+    }
+  }
+
+  const nodes = Array.from(nextNodes.values());
+  const edges = Array.from(nextEdges.values()).filter(edge => nextNodes.has(edge.from) && nextNodes.has(edge.to));
+  graphTopologyState = {
+    nodes,
+    edges,
+    positions: computeGraphTopologyPositions(nodes, edges),
+    fetchedAt: graphTopologyState.fetchedAt || Date.now(),
+  };
+}
 function graphPointFromKey(key, cx, cy, minRadius, maxRadius) {
   const hash = hashGraphKey(key);
   const angle = ((hash % 360) / 180) * Math.PI;
   const radiusRatio = (((hash >>> 9) % 1000) / 999);
   const radius = minRadius + (maxRadius - minRadius) * radiusRatio;
   return { x: cx + Math.cos(angle) * radius, y: cy + Math.sin(angle) * radius };
+}
+function graphCanvasPoint(point, W, H) {
+  const padX = Math.min(70, Math.max(36, W * 0.08));
+  const padY = Math.min(56, Math.max(28, H * 0.08));
+  return {
+    x: padX + (W - padX * 2) * point.x,
+    y: padY + (H - padY * 2) * point.y,
+  };
+}
+function getGraphAnchorPoint(nodeId, fallbackKey, cx, cy, minRadius, maxRadius, W, H) {
+  const topologyPoint = nodeId ? graphTopologyState.positions?.[nodeId] : null;
+  if (topologyPoint) return graphCanvasPoint(topologyPoint, W, H);
+  return graphPointFromKey(fallbackKey || nodeId || 'graph-delta', cx, cy, minRadius, maxRadius);
 }
 function deriveGraphDeltaHighlight(payload) {
   const delta = payload?.delta || {};
@@ -366,6 +588,9 @@ function deriveGraphDeltaHighlight(payload) {
     glow: style.glow,
     text: style.text,
     eventData,
+    nodeId: delta.node_id || eventData.id || null,
+    fromNodeId: eventData.from || null,
+    toNodeId: eventData.to || null,
     key: delta.node_id || delta.edge_id || eventData.id || `${eventData.from || 'graph'}:${eventData.to || 'graph'}`,
     expiresAt: receivedAt + (changeType === 'pruned' ? GRAPH_DELTA_TTL_MS + 1200 : GRAPH_DELTA_TTL_MS),
   };
@@ -387,9 +612,11 @@ function ensureBrainDeltaAnimation() {
 function applyGraphRealtime(evt) {
   const payload = evt?.data || evt || {};
   const graphPayload = payload.data || payload;
+  syncGraphTopologyWithDelta(graphPayload);
   graphDeltaState = deriveGraphDeltaHighlight(graphPayload);
   renderStyxSummary(null, graphPayload);
   if (graphDeltaState) ensureBrainDeltaAnimation();
+  if (!graphTopologyState.nodes.length || graphDeltaState?.changeType === 'pruned' || (graphDeltaState?.nodeId && !graphTopologyState.positions?.[graphDeltaState.nodeId])) refreshGraphTopology(graphDeltaState?.changeType === 'pruned');
   scheduleLiveRefresh(activeTab === 'styx', 120);
 }
 function connectLiveUpdates() {
@@ -447,13 +674,52 @@ function chip(label, value, color) { return `<div class="brain-chip"><span class
 // TAB 1: STYX
 // ══════════════════════════════════════════════════════════════════════
 async function loadStyx() {
-  const [health, graph, neurons, mood] = await Promise.all([fetchJSON('/api/v1/health/deep'), fetchJSON('/api/v1/graph/stats'), fetchJSON('/api/v1/neurons'), fetchJSON('/api/v1/mood/state')]);
+  const [health, graph, graphTopology, neurons, mood] = await Promise.all([fetchJSON('/api/v1/health/deep'), fetchJSON('/api/v1/graph/stats'), refreshGraphTopology(), fetchJSON('/api/v1/neurons'), fetchJSON('/api/v1/mood/state')]);
   if (health) {
     if (!liveSocket?.connected) setConnectionState(health.ok !== false, health.ok !== false ? 'Verbunden' : 'Fehler');
     $('ver-pill').textContent = 'v' + (health.version || health.data?.version || '--');
     if (health.uptime_s) $('uptime-text').textContent = formatUptime(health.uptime_s);
   }
+  if (graphTopology?.nodes) graphTopologyState = graphTopology;
   renderStyxSummary(mood, graph, neurons?.neurons || {});
+}
+
+function drawGraphTopologyBackdrop(ctx, W, H) {
+  if (!graphTopologyState.nodes.length || !Object.keys(graphTopologyState.positions || {}).length) return;
+  const kindColors = {
+    entity: 'rgba(96,165,250,.8)',
+    zone: 'rgba(52,211,153,.85)',
+    device: 'rgba(34,211,238,.82)',
+    person: 'rgba(244,114,182,.82)',
+    concept: 'rgba(167,139,250,.82)',
+    module: 'rgba(251,191,36,.82)',
+    event: 'rgba(251,146,60,.82)',
+  };
+  ctx.save();
+  graphTopologyState.edges.slice(0, GRAPH_TOPOLOGY_LIMITS.edges).forEach(edge => {
+    const from = graphTopologyState.positions?.[edge.from];
+    const to = graphTopologyState.positions?.[edge.to];
+    if (!from || !to) return;
+    const start = graphCanvasPoint(from, W, H);
+    const end = graphCanvasPoint(to, W, H);
+    ctx.beginPath();
+    ctx.moveTo(start.x, start.y);
+    ctx.lineTo(end.x, end.y);
+    ctx.strokeStyle = 'rgba(46,70,95,.55)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  });
+  graphTopologyState.nodes.slice(0, GRAPH_TOPOLOGY_LIMITS.nodes).forEach(node => {
+    const point = graphTopologyState.positions?.[node.id];
+    if (!point) return;
+    const canvasPoint = graphCanvasPoint(point, W, H);
+    const radius = 2.5 + Math.min(3.5, Number(node.score || 0) * 1.6);
+    ctx.beginPath();
+    ctx.arc(canvasPoint.x, canvasPoint.y, radius, 0, Math.PI * 2);
+    ctx.fillStyle = kindColors[node.kind] || 'rgba(148,163,184,.75)';
+    ctx.fill();
+  });
+  ctx.restore();
 }
 
 function drawBrain() {
@@ -467,17 +733,16 @@ function drawBrain() {
   const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.min(W, H) / 2);
   grad.addColorStop(0, 'rgba(124,106,239,.06)'); grad.addColorStop(1, 'transparent');
   ctx.fillStyle = grad; ctx.fillRect(0, 0, W, H);
+  drawGraphTopologyBackdrop(ctx, W, H);
   const layers = [
     { r: Math.min(W, H) * 0.35, color: 'rgba(34,211,238,.4)', count: 8 },
     { r: Math.min(W, H) * 0.24, color: 'rgba(167,139,250,.5)', count: 6 },
     { r: Math.min(W, H) * 0.12, color: 'rgba(244,114,182,.6)', count: 4 },
   ];
   // Graph delta flash: brief highlight ring on canvas border for node/edge changes
-  const nowMs = Date.now();
-  const flashNode = Object.values(highlightedNodes).some(t => nowMs - t < 1500);
-  const flashEdge = Object.values(highlightedEdges).some(t => nowMs - t < 1500);
-  if (flashNode || flashEdge) {
-    const flashColor = flashNode ? 'rgba(34,211,238,0.18)' : 'rgba(96,165,250,0.18)';
+  const flashActive = graphDeltaState && Date.now() < graphDeltaState.expiresAt;
+  if (flashActive) {
+    const flashColor = graphDeltaState.changeType === 'pruned' ? 'rgba(251,146,60,0.18)' : graphDeltaState.changeType === 'edge_updated' ? 'rgba(96,165,250,0.18)' : 'rgba(34,211,238,0.18)';
     ctx.strokeStyle = flashColor;
     ctx.lineWidth = 6;
     ctx.strokeRect(2, 2, W - 4, H - 4);
@@ -517,7 +782,7 @@ function drawGraphDeltaOverlay(ctx, W, H, cx, cy) {
   ctx.globalAlpha = Math.max(0.2, life);
 
   if (delta.changeType === 'node_updated') {
-    const point = graphPointFromKey(delta.key, cx, cy, minR, maxR);
+    const point = getGraphAnchorPoint(delta.nodeId, delta.key, cx, cy, minR, maxR, W, H);
     ctx.beginPath();
     ctx.moveTo(cx, cy);
     ctx.lineTo(point.x, point.y);
@@ -543,8 +808,8 @@ function drawGraphDeltaOverlay(ctx, W, H, cx, cy) {
 
     drawGraphDeltaLabel(ctx, delta.label, point.x, point.y - 24, delta.text, delta.glow);
   } else if (delta.changeType === 'edge_updated') {
-    const start = graphPointFromKey(delta.eventData.from || `${delta.key}:from`, cx, cy, minR, maxR);
-    const end = graphPointFromKey(delta.eventData.to || `${delta.key}:to`, cx, cy, minR, maxR);
+    const start = getGraphAnchorPoint(delta.fromNodeId, delta.eventData.from || `${delta.key}:from`, cx, cy, minR, maxR, W, H);
+    const end = getGraphAnchorPoint(delta.toNodeId, delta.eventData.to || `${delta.key}:to`, cx, cy, minR, maxR, W, H);
     const midX = (start.x + end.x) / 2;
     const midY = (start.y + end.y) / 2;
 
