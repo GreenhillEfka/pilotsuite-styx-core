@@ -28,6 +28,18 @@ def test_styx_dashboard_template_wires_live_updates_for_mood_and_neurons():
     assert "connectLiveUpdates();" in content
 
 
+def test_styx_dashboard_template_uses_graph_update_delta_for_canvas_highlights():
+    content = TEMPLATE.read_text(encoding="utf-8")
+
+    assert "let brainData = { nodes: 0, edges: 0, totalEvents: 0 }, neuronsData = {}, liveSocket = null, graphDeltaState = null, brainDeltaAnimationId = null;" in content
+    assert "function applyGraphRealtime(evt)" in content
+    assert "function deriveGraphDeltaHighlight(payload)" in content
+    assert "function drawGraphDeltaOverlay(ctx, W, H, cx, cy)" in content
+    assert "drawGraphDeltaOverlay(ctx, W, H, cx, cy);" in content
+    assert "liveSocket.on('graph_update', applyGraphRealtime);" in content
+    assert "if (graphDeltaState) ensureBrainDeltaAnimation();" in content
+
+
 def test_main_styx_route_injects_auth_token_into_template():
     content = MAIN_APP.read_text(encoding="utf-8")
 

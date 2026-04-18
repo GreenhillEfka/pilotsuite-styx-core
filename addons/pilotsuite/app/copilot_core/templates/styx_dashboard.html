@@ -267,7 +267,13 @@ const INJECTED_TOKEN = {{ (auth_token|default('', true))|tojson }};
 const TOKEN = new URLSearchParams(location.search).get('token') || INJECTED_TOKEN || sessionStorage.getItem('styx-auth-token') || '';
 if (TOKEN) sessionStorage.setItem('styx-auth-token', TOKEN);
 let activeTab = 'styx', refreshTimer = null, liveRefreshTimer = null, moduleSchemas = {}, chatHistory = [];
-let brainData = { nodes: 0, edges: 0, totalEvents: 0 }, neuronsData = {}, liveSocket = null;
+let brainData = { nodes: 0, edges: 0, totalEvents: 0 }, neuronsData = {}, liveSocket = null, graphDeltaState = null, brainDeltaAnimationId = null;
+const GRAPH_DELTA_TTL_MS = 4200;
+const GRAPH_DELTA_STYLE = {
+  node_updated: { stroke: 'rgba(34,211,238,1)', glow: 'rgba(34,211,238,.28)', text: '#b8fbff' },
+  edge_updated: { stroke: 'rgba(96,165,250,1)', glow: 'rgba(96,165,250,.25)', text: '#cfe0ff' },
+  pruned: { stroke: 'rgba(251,146,60,1)', glow: 'rgba(251,146,60,.28)', text: '#ffd9bb' },
+};
 
 async function fetchJSON(url) {
   const h = {}; if (TOKEN) h['X-Auth-Token'] = TOKEN;
@@ -319,6 +325,73 @@ function applyNeuronRealtime(evt, opts = {}) {
   if (opts.firing) neuronsData[neuronName] = { ...(neuronsData[neuronName] || {}), firing: true, active: true };
   renderStyxSummary();
 }
+function hashGraphKey(value = '') {
+  let hash = 2166136261;
+  const text = String(value || 'graph-delta');
+  for (let i = 0; i < text.length; i++) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+function ellipsizeGraphLabel(value, max = 28) {
+  const text = String(value || 'graph');
+  return text.length > max ? text.slice(0, max - 1) + '\u2026' : text;
+}
+function graphPointFromKey(key, cx, cy, minRadius, maxRadius) {
+  const hash = hashGraphKey(key);
+  const angle = ((hash % 360) / 180) * Math.PI;
+  const radiusRatio = (((hash >>> 9) % 1000) / 999);
+  const radius = minRadius + (maxRadius - minRadius) * radiusRatio;
+  return { x: cx + Math.cos(angle) * radius, y: cy + Math.sin(angle) * radius };
+}
+function deriveGraphDeltaHighlight(payload) {
+  const delta = payload?.delta || {};
+  const changeType = delta.change_type;
+  if (!changeType) return null;
+  const eventData = payload?.event_data || {};
+  const style = GRAPH_DELTA_STYLE[changeType] || GRAPH_DELTA_STYLE.node_updated;
+  const receivedAt = Date.now();
+  let label = 'Graph update';
+  if (changeType === 'node_updated') label = `Node ${ellipsizeGraphLabel(delta.node_id || eventData.label || eventData.id || 'update')}`;
+  if (changeType === 'edge_updated') label = `Edge ${ellipsizeGraphLabel(eventData.from || delta.edge_id || 'graph')} → ${ellipsizeGraphLabel(eventData.to || delta.edge_id || 'graph')}`;
+  if (changeType === 'pruned') {
+    const pruned = delta.pruned_stats || {};
+    label = `Pruned ${pruned.nodes_removed || 0}N / ${pruned.edges_removed || 0}E`;
+  }
+  return {
+    changeType,
+    label,
+    stroke: style.stroke,
+    glow: style.glow,
+    text: style.text,
+    eventData,
+    key: delta.node_id || delta.edge_id || eventData.id || `${eventData.from || 'graph'}:${eventData.to || 'graph'}`,
+    expiresAt: receivedAt + (changeType === 'pruned' ? GRAPH_DELTA_TTL_MS + 1200 : GRAPH_DELTA_TTL_MS),
+  };
+}
+function ensureBrainDeltaAnimation() {
+  if (brainDeltaAnimationId !== null) return;
+  const tick = () => {
+    if (!graphDeltaState || Date.now() >= graphDeltaState.expiresAt) {
+      graphDeltaState = null;
+      brainDeltaAnimationId = null;
+      drawBrain();
+      return;
+    }
+    drawBrain();
+    brainDeltaAnimationId = requestAnimationFrame(tick);
+  };
+  brainDeltaAnimationId = requestAnimationFrame(tick);
+}
+function applyGraphRealtime(evt) {
+  const payload = evt?.data || evt || {};
+  const graphPayload = payload.data || payload;
+  graphDeltaState = deriveGraphDeltaHighlight(graphPayload);
+  renderStyxSummary(null, graphPayload);
+  if (graphDeltaState) ensureBrainDeltaAnimation();
+  scheduleLiveRefresh(activeTab === 'styx', 120);
+}
 function connectLiveUpdates() {
   if (typeof io !== 'function' || !TOKEN) return;
   if (liveSocket?.connected) return;
@@ -341,11 +414,7 @@ function connectLiveUpdates() {
   liveSocket.on('mood_update', applyMoodRealtime);
   liveSocket.on('neuron_fire', evt => applyNeuronRealtime(evt, { firing: true }));
   liveSocket.on('neuron_state_change', evt => applyNeuronRealtime(evt));
-  liveSocket.on('graph_update', evt => {
-    const payload = evt?.data || evt || {};
-    renderStyxSummary(null, payload.data || payload);
-    scheduleLiveRefresh(activeTab === 'styx', 120);
-  });
+  liveSocket.on('graph_update', applyGraphRealtime);
 }
 
 // ── Navigation ──
@@ -403,6 +472,16 @@ function drawBrain() {
     { r: Math.min(W, H) * 0.24, color: 'rgba(167,139,250,.5)', count: 6 },
     { r: Math.min(W, H) * 0.12, color: 'rgba(244,114,182,.6)', count: 4 },
   ];
+  // Graph delta flash: brief highlight ring on canvas border for node/edge changes
+  const nowMs = Date.now();
+  const flashNode = Object.values(highlightedNodes).some(t => nowMs - t < 1500);
+  const flashEdge = Object.values(highlightedEdges).some(t => nowMs - t < 1500);
+  if (flashNode || flashEdge) {
+    const flashColor = flashNode ? 'rgba(34,211,238,0.18)' : 'rgba(96,165,250,0.18)';
+    ctx.strokeStyle = flashColor;
+    ctx.lineWidth = 6;
+    ctx.strokeRect(2, 2, W - 4, H - 4);
+  }
   const nList = Object.values(neuronsData); let ni = 0;
   layers.forEach(layer => {
     ctx.beginPath(); ctx.arc(cx, cy, layer.r, 0, Math.PI * 2); ctx.strokeStyle = layer.color; ctx.lineWidth = 1; ctx.stroke();
@@ -419,6 +498,114 @@ function drawBrain() {
   const cg = ctx.createRadialGradient(cx, cy, 0, cx, cy, 10);
   cg.addColorStop(0, 'rgba(124,106,239,.8)'); cg.addColorStop(1, 'rgba(124,106,239,.2)');
   ctx.fillStyle = cg; ctx.fill();
+  drawGraphDeltaOverlay(ctx, W, H, cx, cy);
+}
+function drawGraphDeltaOverlay(ctx, W, H, cx, cy) {
+  const delta = graphDeltaState;
+  if (!delta) return;
+  const ttl = Math.max(1, delta.expiresAt - Date.now());
+  if (ttl <= 0) {
+    graphDeltaState = null;
+    return;
+  }
+  const life = Math.max(0, Math.min(1, ttl / (delta.changeType === 'pruned' ? GRAPH_DELTA_TTL_MS + 1200 : GRAPH_DELTA_TTL_MS)));
+  const pulse = 0.55 + Math.sin((1 - life) * Math.PI * 6) * 0.18;
+  const minR = Math.min(W, H) * 0.17;
+  const maxR = Math.min(W, H) * 0.37;
+
+  ctx.save();
+  ctx.globalAlpha = Math.max(0.2, life);
+
+  if (delta.changeType === 'node_updated') {
+    const point = graphPointFromKey(delta.key, cx, cy, minR, maxR);
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(point.x, point.y);
+    ctx.strokeStyle = delta.glow;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(point.x, point.y, 12 + (1 - life) * 10, 0, Math.PI * 2);
+    ctx.fillStyle = delta.glow;
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.arc(point.x, point.y, 5 + pulse * 4, 0, Math.PI * 2);
+    ctx.fillStyle = delta.stroke;
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.arc(point.x, point.y, 14 + (1 - life) * 10, 0, Math.PI * 2);
+    ctx.strokeStyle = delta.stroke;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    drawGraphDeltaLabel(ctx, delta.label, point.x, point.y - 24, delta.text, delta.glow);
+  } else if (delta.changeType === 'edge_updated') {
+    const start = graphPointFromKey(delta.eventData.from || `${delta.key}:from`, cx, cy, minR, maxR);
+    const end = graphPointFromKey(delta.eventData.to || `${delta.key}:to`, cx, cy, minR, maxR);
+    const midX = (start.x + end.x) / 2;
+    const midY = (start.y + end.y) / 2;
+
+    ctx.beginPath();
+    ctx.moveTo(start.x, start.y);
+    ctx.lineTo(end.x, end.y);
+    ctx.strokeStyle = delta.glow;
+    ctx.lineWidth = 8;
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(start.x, start.y);
+    ctx.lineTo(end.x, end.y);
+    ctx.strokeStyle = delta.stroke;
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(midX, midY, 8 + pulse * 5, 0, Math.PI * 2);
+    ctx.fillStyle = delta.stroke;
+    ctx.fill();
+
+    drawGraphDeltaLabel(ctx, delta.label, midX, midY - 22, delta.text, delta.glow);
+  } else if (delta.changeType === 'pruned') {
+    const ringRadius = Math.min(W, H) * (0.22 + (1 - life) * 0.08);
+    ctx.beginPath();
+    ctx.arc(cx, cy, ringRadius, 0, Math.PI * 2);
+    ctx.strokeStyle = delta.glow;
+    ctx.lineWidth = 16;
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(cx, cy, ringRadius, 0, Math.PI * 2);
+    ctx.strokeStyle = delta.stroke;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    drawGraphDeltaLabel(ctx, delta.label, cx, cy + ringRadius + 18, delta.text, delta.glow);
+  }
+
+  ctx.restore();
+}
+function drawGraphDeltaLabel(ctx, text, x, y, textColor, bgColor) {
+  ctx.save();
+  ctx.font = '600 12px Inter, sans-serif';
+  const paddingX = 8;
+  const paddingY = 6;
+  const width = ctx.measureText(text).width + paddingX * 2;
+  const height = 26;
+  const left = x - width / 2;
+  const top = y - height / 2;
+  ctx.fillStyle = 'rgba(10,14,20,.9)';
+  ctx.fillRect(left, top, width, height);
+  ctx.strokeStyle = bgColor;
+  ctx.lineWidth = 1;
+  ctx.strokeRect(left, top, width, height);
+  ctx.fillStyle = textColor;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, x, y + 0.5);
+  ctx.restore();
 }
 
 // ── Chat ──
