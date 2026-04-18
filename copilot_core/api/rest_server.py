@@ -430,8 +430,13 @@ def register_routes(app: FastAPI, config: APIConfig):
         )
 
     @app.get("/api/v1/capabilities", tags=["System"])
-    async def get_capabilities():
-        """Module capabilities endpoint."""
+    async def get_capabilities(user: Dict = Depends(get_current_user)):
+        """Module capabilities endpoint.
+
+        Keep capability discovery auth-gated here as well, so the standalone
+        FastAPI compatibility server does not advertise a weaker unauthenticated
+        contract than the canonical Flask runtime surfaces.
+        """
         return {
             "modules": {
                 "rag": ["embedding", "similarity_search", "retrieval"],

@@ -54,10 +54,25 @@ class TestRESTAPIServer:
         assert "modules" in data
         assert "capabilities" in data
 
+    def test_capabilities_requires_auth(self, api_client):
+        """Capabilities endpoint stays auth-gated like the Flask runtime surface."""
+        response = api_client.get("/api/v1/capabilities")
+
+        assert response.status_code == 401
+
     def test_capabilities(self, api_client):
         """Test capabilities endpoint."""
-        response = api_client.get("/api/v1/capabilities")
-        
+        token_response = api_client.post(
+            "/api/v1/auth/token",
+            json={"api_key": "test_api_key_12345", "scope": "read"}
+        )
+        token = token_response.json()["access_token"]
+
+        response = api_client.get(
+            "/api/v1/capabilities",
+            headers={"Authorization": f"Bearer {token}"}
+        )
+
         assert response.status_code == 200
         data = response.json()
         assert "modules" in data
