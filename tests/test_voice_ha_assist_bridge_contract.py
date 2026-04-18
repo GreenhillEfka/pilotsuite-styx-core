@@ -12,7 +12,9 @@ if str(ADDON_APP) not in sys.path:
     sys.path.append(str(ADDON_APP))
 
 from copilot_core.api.v1 import voice as voice_api  # noqa: E402
+from copilot_core.voice.context_builder import VoiceContextBuilder, VoiceContextRuntime  # noqa: E402
 from copilot_core.voice.dialog_state import DialogStateMachine  # noqa: E402
+from copilot_core.voice.voice_handler import VoiceIntentHandler  # noqa: E402
 
 
 def _make_app():
@@ -201,6 +203,48 @@ class TestHAAssistBridge:
         assert payload["context"]["language_preference"] == "en"
         # response.language should honor context.language_preference
         assert payload["response"]["language"] == "en"
+
+    def test_ha_assist_uses_context_runtime_for_pattern_enrichment(self, monkeypatch):
+        """HA Assist context enrichment comes from the runtime seam, not handler-owned sourcing."""
+
+        class _FakeHabitusService:
+            def list_recent_patterns(self, limit=5):
+                return [
+                    {
+                        "id": "habit-1",
+                        "metadata": {"zone_filter": "wohnzimmer"},
+                        "summary": "Wohnzimmer pattern",
+                    }
+                ]
+
+        monkeypatch.setattr(voice_api, "_validate_token", lambda request: True)
+        monkeypatch.setattr(
+            voice_api,
+            "_get_intent_handler",
+            lambda: VoiceIntentHandler(mood_engine=None, habitus_service=None, default_language="de"),
+        )
+        monkeypatch.setattr(voice_api, "_get_context_builder", lambda: VoiceContextBuilder())
+        monkeypatch.setattr(
+            voice_api,
+            "_get_context_runtime",
+            lambda: VoiceContextRuntime(mood_engine=None, habitus_service=_FakeHabitusService()),
+        )
+
+        app = _make_app()
+        client = app.test_client()
+
+        response = client.post(
+            "/api/v1/voice/ha/assist",
+            json={
+                "text": "Status",
+                "zone": "wohnzimmer",
+            },
+        )
+
+        assert response.status_code == 200, f"got {response.status_code}: {response.get_json()}"
+        payload = response.get_json()
+        assert len(payload["context"]["relevant_patterns"]) == 1
+        assert payload["context"]["relevant_patterns"][0]["metadata"]["zone_filter"] == "wohnzimmer"
 
     def test_command_state_surface_exposes_ha_bridge_field_projection(self, monkeypatch, tmp_path):
         """The HA bridge can bind to a thin command-state surface without slot introspection."""

@@ -167,6 +167,14 @@ class VoiceContext:
         }
 
 
+@dataclass(frozen=True)
+class VoiceContextRuntime:
+    """Narrow runtime dependency bundle for voice-context enrichment."""
+
+    mood_engine: Optional[MoodEngine] = None
+    habitus_service: Optional[HabitusService] = None
+
+
 class VoiceContextBuilder:
     """Builds comprehensive voice context from multiple sources.
     
@@ -241,6 +249,7 @@ class VoiceContextBuilder:
         sensor_data: Optional[Dict[str, Any]] = None,
         user_preferences: Optional[Dict[str, Any]] = None,
         active_devices: Optional[List[Dict[str, Any]]] = None,
+        context_runtime: Optional[VoiceContextRuntime] = None,
         force_refresh: bool = False,
     ) -> VoiceContext:
         """Build comprehensive voice context.
@@ -251,6 +260,7 @@ class VoiceContextBuilder:
             zone_name: Current zone (auto-detected if None)
             sensor_data: Current sensor data from HA
             user_preferences: User preferences (language, etc.)
+            context_runtime: Narrow runtime dependency bundle for mood/pattern sources
             force_refresh: Force fresh context (skip cache)
             
         Returns:
@@ -266,7 +276,11 @@ class VoiceContextBuilder:
             ).total_seconds()
             if cache_age < self._cache_ttl_seconds:
                 return cached
-        
+
+        if context_runtime is not None:
+            mood_engine = context_runtime.mood_engine
+            habitus_service = context_runtime.habitus_service
+
         now = datetime.now(timezone.utc)
         
         # Build time context

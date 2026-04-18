@@ -16,7 +16,7 @@ from flask import Flask, current_app
 from copilot_core.voice.command_flow import VoiceCommandFlow
 from copilot_core.voice.dialog_flow import VoiceDialogFlow
 from copilot_core.voice.command_router import VoiceCommandRouter
-from copilot_core.voice.context_builder import VoiceContextBuilder
+from copilot_core.voice.context_builder import VoiceContextBuilder, VoiceContextRuntime
 from copilot_core.voice.nlu_engine import NLUEngine
 from copilot_core.voice.proactive import HintConfig, HintPriority, ProactiveVoiceHints
 from copilot_core.voice.stt_whisper import STTConfig, WhisperSTT
@@ -35,6 +35,7 @@ class VoiceRuntimeAccess:
         self._services = services or {}
         self._intent_handler: Optional[VoiceIntentHandler] = None
         self._context_builder: Optional[VoiceContextBuilder] = None
+        self._context_runtime: Optional[VoiceContextRuntime] = None
         self._stt_engine: Optional[WhisperSTT] = None
         self._tts_engine: Optional[PiperTTS] = None
         self._nlu_engine: Optional[NLUEngine] = None
@@ -98,6 +99,19 @@ class VoiceRuntimeAccess:
             override = self._get_override("voice_context_builder", legacy_attr="_voice_context_builder")
             self._context_builder = override or VoiceContextBuilder()
         return self._context_builder
+
+    def get_context_runtime(self) -> VoiceContextRuntime:
+        if self._context_runtime is None:
+            override = self._get_override("voice_context_runtime", legacy_attr="_voice_context_runtime")
+            if override is not None:
+                self._context_runtime = override
+            else:
+                intent_handler = self.get_intent_handler()
+                self._context_runtime = VoiceContextRuntime(
+                    mood_engine=getattr(intent_handler, "mood_engine", None),
+                    habitus_service=getattr(intent_handler, "habitus_service", None),
+                )
+        return self._context_runtime
 
     def get_stt_engine(self) -> WhisperSTT:
         if self._stt_engine is None:
@@ -170,6 +184,7 @@ class VoiceRuntimeAccess:
                 self._command_flow = VoiceCommandFlow(
                     intent_handler=self.get_intent_handler(),
                     context_builder=self.get_context_builder(),
+                    context_runtime=self.get_context_runtime(),
                     command_router=self.get_command_router(),
                     dialog_machine=self.get_dialog_machine(),
                     dialog_flow=dialog_flow,

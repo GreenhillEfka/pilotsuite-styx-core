@@ -105,12 +105,14 @@ class VoiceCommandFlow:
         *,
         intent_handler: Any,
         context_builder: Any,
+        context_runtime: Optional[Any],
         command_router: Any,
         dialog_machine: Any,
         dialog_flow: Optional[Any] = None,
     ):
         self._intent_handler = intent_handler
         self._context_builder = context_builder
+        self._context_runtime = context_runtime
         self._command_router = command_router
         self._dialog_machine = dialog_machine
         self._dialog_flow = dialog_flow
@@ -130,14 +132,22 @@ class VoiceCommandFlow:
         user_preferences = request_context.get("user_preferences")
         active_devices = request_context.get("active_devices")
 
-        context = self._context_builder.build_context(
-            mood_engine=self._intent_handler.mood_engine,
-            habitus_service=self._intent_handler.habitus_service,
-            zone_name=zone_id,
-            force_refresh=bool(request_context),
-            user_preferences=user_preferences,
-            active_devices=active_devices,
-        )
+        context_kwargs = {
+            "context_runtime": self._context_runtime,
+            "zone_name": zone_id,
+            "force_refresh": bool(request_context),
+            "user_preferences": user_preferences,
+            "active_devices": active_devices,
+        }
+        if self._context_runtime is None:
+            context_kwargs.update(
+                {
+                    "mood_engine": getattr(self._intent_handler, "mood_engine", None),
+                    "habitus_service": getattr(self._intent_handler, "habitus_service", None),
+                }
+            )
+
+        context = self._context_builder.build_context(**context_kwargs)
 
         routed = self._command_router.route(
             utterance=utterance,

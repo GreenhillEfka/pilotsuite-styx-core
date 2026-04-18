@@ -62,6 +62,11 @@ def _get_context_builder():
     return get_voice_runtime().get_context_builder()
 
 
+def _get_context_runtime():
+    """Resolve the shared voice context runtime bundle from the runtime seam."""
+    return get_voice_runtime().get_context_runtime()
+
+
 def _get_stt_engine():
     """Resolve the shared STT engine from the runtime seam."""
     return get_voice_runtime().get_stt_engine()
@@ -283,12 +288,12 @@ def process_intent():
         zone = _resolve_requested_zone(zone, req_context)
 
         context_builder = _get_context_builder()
+        context_runtime = _get_context_runtime()
 
         if "context" in data and isinstance(data["context"], dict):
             # Use provided context (simplified reconstruction)
             context = context_builder.build_context(
-                mood_engine=handler.mood_engine,
-                habitus_service=handler.habitus_service,
+                context_runtime=context_runtime,
                 zone_name=zone,
                 force_refresh=True,
                 user_preferences=user_prefs,
@@ -297,8 +302,7 @@ def process_intent():
         else:
             # Build fresh context
             context = context_builder.build_context(
-                mood_engine=handler.mood_engine,
-                habitus_service=handler.habitus_service,
+                context_runtime=context_runtime,
                 zone_name=zone,
                 force_refresh=data.get("force_context", False),
                 user_preferences=user_prefs,
@@ -418,13 +422,12 @@ def get_context():
     try:
         zone = request.args.get("zone")
         force = request.args.get("force", "false").lower() == "true"
-        
+
         context_builder = _get_context_builder()
-        handler = _get_intent_handler()
-        
+        context_runtime = _get_context_runtime()
+
         context = context_builder.build_context(
-            mood_engine=handler.mood_engine,
-            habitus_service=handler.habitus_service,
+            context_runtime=context_runtime,
             zone_name=zone,
             force_refresh=force,
         )
@@ -480,11 +483,10 @@ def get_hints():
         # Get proactive hints
         hints_service = _get_proactive_hints()
         context_builder = _get_context_builder()
-        handler = _get_intent_handler()
-        
+        context_runtime = _get_context_runtime()
+
         context = context_builder.build_context(
-            mood_engine=handler.mood_engine,
-            habitus_service=handler.habitus_service,
+            context_runtime=context_runtime,
             zone_name=zone,
         )
         
@@ -1054,11 +1056,11 @@ def ha_assist_intent():
         zone = _resolve_requested_zone(zone, req_context)
 
         context_builder = _get_context_builder()
+        context_runtime = _get_context_runtime()
 
         if "context" in data and isinstance(data["context"], dict):
             context = context_builder.build_context(
-                mood_engine=handler.mood_engine,
-                habitus_service=handler.habitus_service,
+                context_runtime=context_runtime,
                 zone_name=zone,
                 force_refresh=True,
                 user_preferences=user_prefs,
@@ -1066,8 +1068,7 @@ def ha_assist_intent():
             )
         else:
             context = context_builder.build_context(
-                mood_engine=handler.mood_engine,
-                habitus_service=handler.habitus_service,
+                context_runtime=context_runtime,
                 zone_name=zone,
                 force_refresh=data.get("force_context", False),
                 user_preferences=user_prefs,
