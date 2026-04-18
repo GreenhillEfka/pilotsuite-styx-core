@@ -11,7 +11,11 @@ import time
 from functools import wraps
 from typing import Any, Callable
 
-from flask import g, request as flask_request, jsonify
+from flask import g, request, jsonify
+
+# NOTE: Do NOT assign flask.request at module level (it causes test pollution).
+# Always use flask.request inside request handlers or test_request_context blocks.
+_request = request
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -33,31 +37,51 @@ _auth_required_cache: tuple[bool, float] = (True, 0.0)
 _auth_lock = threading.Lock()
 _AUTH_CACHE_TTL = 30.0  # seconds
 
+# Token age enforcement (GAP-5)
+_TOKEN_MAX_AGE_SECS = 90 * 86400   # 90 days default
+_TOKEN_WARN_AGE_SECS = 70 * 86400  # warn after 70 days
+
 
 def _ensure_auto_token() -> str:
     """Generate and persist an auto-token if none exists (1-Key-Flow).
 
     On first startup with no configured auth_token, a random token is
     generated and saved to AUTO_TOKEN_PATH. Subsequent starts reuse it.
+    Auto-token file format: {token}\n{created_at_unix}
     """
     try:
         with open(AUTO_TOKEN_PATH, "r", encoding="utf-8") as fh:
-            token = fh.read().strip()
-        if token:
-            return token
+            lines = fh.read().splitlines()
+        if lines:
+            token = lines[0].strip()
+            if token:
+                return token
     except FileNotFoundError:
         pass
     except Exception:
         _LOGGER.debug("Could not read auto-token file, generating new one")
 
     token = secrets.token_urlsafe(32)
+    created_at = int(time.time())
     try:
         with open(AUTO_TOKEN_PATH, "w", encoding="utf-8") as fh:
-            fh.write(token)
-        _LOGGER.info("Auto-generated API token (1-Key-Flow): %s...%s", token[:8], token[-4:])
+            fh.write(f"{token}\n{created_at}\n")
+        _LOGGER.info("Auto-generated API token (1-Key-Flow): %s...%s age=0", token[:8], token[-4:])
     except Exception:
         _LOGGER.warning("Could not persist auto-token to %s", AUTO_TOKEN_PATH)
     return token
+
+
+def _get_token_age() -> float | None:
+    """Return age of the auto-generated token in seconds, or None if not an auto-token."""
+    try:
+        with open(AUTO_TOKEN_PATH, "r", encoding="utf-8") as fh:
+            lines = fh.read().splitlines()
+        if len(lines) >= 2:
+            return time.time() - float(lines[1])
+    except Exception:
+        pass
+    return None
 
 
 def get_auth_token(options_path: str = OPTIONS_PATH) -> str:
@@ -231,6 +255,23 @@ def validate_token(request) -> bool:
     # Auth required - validate token (always has a token via 1-Key-Flow)
     token = get_auth_token()
 
+    # GAP-5: Check auto-token age
+    token_age = _get_token_age()
+    if token_age is not None:
+        max_age = float(os.environ.get("COPILOT_TOKEN_MAX_AGE_DAYS", "90")) * 86400
+        warn_age = float(os.environ.get("COPILOT_TOKEN_WARN_AGE_DAYS", "70")) * 86400
+        if token_age > max_age:
+            _LOGGER.error(
+                "Auto-token expired (age=%.0f days). Set COPILOT_TOKEN_MAX_AGE_DAYS or rotate.",
+                token_age / 86400
+            )
+            return False
+        if token_age > warn_age:
+            _LOGGER.warning(
+                "Auto-token approaching max age (%.0f/%.0f days). Consider rotating.",
+                token_age / 86400, max_age / 86400
+            )
+
     header_token = (request.headers.get("X-Auth-Token") or "").strip()
     if header_token and hmac.compare_digest(header_token, token):
         _record_auth_success(request)
@@ -281,7 +322,9 @@ def require_token(f: Callable | None = None, *, scopes: tuple[str, ...] | None =
     def decorator(ff: Callable) -> Callable:
         @wraps(ff)
         def decorated(*args: Any, **kwargs: Any) -> Any:
-            if not validate_token(flask_request):
+            # Use ``is True`` (not ``not``) to survive sys.modules mocking
+            # (MagicMock.__bool__ returns True causing false positives)
+            if validate_token(request) is not True:
                 return jsonify({
                     "ok": False,
                     "error": "Authentication required",
@@ -310,7 +353,8 @@ def require_scope(*rScopes: str) -> Callable:
     def decorator(ff: Callable) -> Callable:
         @wraps(ff)
         def decorated(*args: Any, **kwargs: Any) -> Any:
-            if not getattr(g, "token_valid", False):
+            # Use ``is not True`` to survive sys.modules mocking
+            if getattr(g, "token_valid", False) is not True:
                 return jsonify({
                     "ok": False,
                     "error": "Authentication required",
@@ -335,7 +379,7 @@ def optional_token(f: Callable) -> Callable:
     """
     @wraps(f)
     def decorated_function(*args: Any, **kwargs: Any) -> Any:
-        g.token_valid = validate_token(flask_request)
+        g.token_valid = validate_token(request)
         return f(*args, **kwargs)
     return decorated_function
 
@@ -445,7 +489,7 @@ def require_admin(f: Callable) -> Callable:
     """
     @wraps(f)
     def decorated_function(*args: Any, **kwargs: Any) -> Any:
-        if not require_admin_token(flask_request):
+        if not require_admin_token(request):
             return jsonify({
                 "ok": False,
                 "error": "Admin authentication required",

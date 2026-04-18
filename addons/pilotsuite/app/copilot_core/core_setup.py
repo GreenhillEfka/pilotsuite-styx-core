@@ -509,6 +509,14 @@ async def init_services(hass=None, config: dict = None):
         brain_graph_service.start_scheduled_pruning()
         services["brain_graph_service"] = brain_graph_service
         services["graph_renderer"] = GraphRenderer()
+
+        # Wire properly initialized BrainGraphService into the API singleton (P3-003 fix)
+        try:
+            from copilot_core.brain_graph.api import init_brain_graph_api
+            init_brain_graph_api(services["brain_graph_service"], services["graph_renderer"])
+        except Exception:
+            _LOGGER.warning("Failed to wire brain_graph_api: %s", e)
+
     except Exception:
         _LOGGER.exception("Failed to init BrainGraphService")
 

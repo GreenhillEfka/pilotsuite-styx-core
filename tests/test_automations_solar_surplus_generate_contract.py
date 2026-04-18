@@ -3,11 +3,8 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock
 
-mock_security = MagicMock()
-mock_security.require_api_key = lambda f: f
-sys.modules["copilot_core.api.security"] = mock_security
+import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 ADDON_APP = ROOT / "addons" / "pilotsuite" / "app"
@@ -19,7 +16,11 @@ from copilot_core.automations import api as automations_api
 from copilot_core.automations.suggestion_engine import AutomationSuggestionEngine
 
 
-def _make_app():
+def _make_app(monkeypatch):
+    """Make test app with auth disabled via monkeypatch."""
+    # Disable auth for this test app
+    monkeypatch.setattr("copilot_core.api.security.is_auth_required", lambda *args, **kwargs: False)
+
     app = Flask(__name__)
     automations_api.init_automations_api(AutomationSuggestionEngine())
     app.register_blueprint(automations_api.automations_bp)
@@ -27,8 +28,8 @@ def _make_app():
 
 
 class TestAutomationSolarSurplusGenerateRoute:
-    def test_generate_route_turns_solar_surplus_batch_into_energy_suggestion(self):
-        app = _make_app()
+    def test_generate_route_turns_solar_surplus_batch_into_energy_suggestion(self, monkeypatch):
+        app = _make_app(monkeypatch)
         client = app.test_client()
 
         payload = {
@@ -101,8 +102,8 @@ class TestAutomationSolarSurplusGenerateRoute:
         assert suggestion["automation_yaml"]["action"][0]["service"] == "homeassistant.turn_on"
         assert suggestion["automation_yaml"]["action"][0]["target"]["entity_id"] == "switch.dishwasher"
 
-    def test_generate_route_keeps_batch_report_when_no_shiftable_recommendation_is_actionable(self):
-        app = _make_app()
+    def test_generate_route_keeps_batch_report_when_no_shiftable_recommendation_is_actionable(self, monkeypatch):
+        app = _make_app(monkeypatch)
         client = app.test_client()
 
         payload = {

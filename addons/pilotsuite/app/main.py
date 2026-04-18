@@ -480,6 +480,18 @@ def create_app(options: dict | None = None) -> Flask:
     except Exception:
         _main_logger.exception("CRITICAL: register_blueprints failed")
 
+    # Initialize WebSocket support (P3-002 wiring)
+    try:
+        from copilot_core.websocket_handler import init_websocket
+        ws_handler = init_websocket(flask_app)
+        if ws_handler is not None:
+            flask_app.config["WS_HANDLER"] = ws_handler
+            _main_logger.info("WebSocket support enabled")
+        else:
+            _main_logger.warning("WebSocket support unavailable (flask-socketio not installed)")
+    except Exception:
+        _main_logger.exception("WebSocket initialization failed — continuing without WS")
+
     # Set COPILOT_CFG for blueprints that use current_app.config["COPILOT_CFG"]
     # (habitus.py, mood.py etc. need cfg.data_dir at minimum)
     # NOTE: Cannot import from app.py — it triggers api/v1/blueprint.py which

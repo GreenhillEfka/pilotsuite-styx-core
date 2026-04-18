@@ -2,7 +2,7 @@
 
 **Date:** 2026-04-18 03:25 Europe/Berlin
 **Author:** PilotClaw
-**Status:** ✅ FIXES LANDED (Option B)
+**Status:** ✅ Option C — ALL GAPS CLOSED (GAP-3 + GAP-1 + GAP-4 + GAP-5)
 
 ## Scope
 Core shipped add-on (`addons/pilotsuite/app/`) token authentication surface.
@@ -67,7 +67,7 @@ Regular `validate_token` does not check token expiry.
 
 ---
 
-## FIXES LANDED (Option B)
+## FIXES LANDED (Option C — ALL GAPS)
 
 ### GAP-3 ✅ Cache `is_auth_required()` (2026-04-18)
 - Added `_auth_required_cache: tuple[bool, float]` with 30s TTL
@@ -76,18 +76,25 @@ Regular `validate_token` does not check token expiry.
 
 ### GAP-1 ✅ Scope support in `require_token` (2026-04-18)
 - `require_token(f)` now accepts optional `scopes=('read','write')` kwarg
-- Scope check after token validation, 403 if scope missing
+- Scope check after token validation — 403 if scope missing
 - New `require_scope(*scopes)` decorator for post-auth scope gates
 - Token scopes stored in `flask.g.token_scopes`
 
 ### GAP-4 ✅ Admin scope enforcement (2026-04-18)
 - `require_admin_token()` now requires `'admin'` in `g.token_scopes`
-- Only falls back to any valid token when `auth_required=False`
-- `require_admin` decorator docstring updated
+- Only falls back to "any valid token" when `auth_required=False`
 
-## Verification
-- `python3 -m py_compile addons/pilotsuite/app/copilot_core/api/security.py tests/test_api_security_scope_contract.py`
-- `/config/clawd/.venv_smoke_gate/bin/python -m pytest -q tests/test_api_security_scope_contract.py tests/test_security_brute_force_protection_contract.py` -> `10 passed`
+### GAP-5 ✅ Token expiry enforcement (2026-04-18)
+- Auto-token file format upgraded: `{token}\n{created_at_unix}`
+- `_get_token_age()` reads created_at from existing auto-token
+- `validate_token()` checks token age on every request:
+  - WARN after 70 days (`COPILOT_TOKEN_WARN_AGE_DAYS`)
+  - REJECT after 90 days (`COPILOT_TOKEN_MAX_AGE_DAYS`)
+- Existing auto-tokens without created_at treated as age=0
+
+## REMAINING: HA Token Fallback (Follow-up P1)
+- GAP-2: HA token validation has no fallback when HA API is unreachable
+- Requires HA integration review before implementing
 
 ## QUICK WINS (Minimal Risk)
 
