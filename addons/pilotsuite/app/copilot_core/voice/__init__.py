@@ -46,6 +46,9 @@ API Endpoints:
 from .voice_handler import VoiceIntentHandler, VoiceIntent, IntentType, VoiceResponse
 from .context_builder import VoiceContextBuilder, VoiceContext, TimeContext, ZoneContext, DeviceContext
 from .proactive import ProactiveVoiceHints, ProactiveHint, HintConfig, HintPriority, HintType
+from .stt_whisper import WhisperSTT, STTConfig, TranscriptionResult, SpeechLanguage, init_stt, transcribe_audio
+from .tts_piper import PiperTTS, TTSConfig, TTSResult, VoiceEmotion, init_tts, synthesize_speech
+from .nlu_engine import NLUEngine, NLUResult, Entity, init_nlu, process_utterance
 
 __all__ = [
     # Voice Handler
@@ -67,6 +70,29 @@ __all__ = [
     "HintConfig",
     "HintPriority",
     "HintType",
+
+    # STT
+    "WhisperSTT",
+    "STTConfig",
+    "TranscriptionResult",
+    "SpeechLanguage",
+    "init_stt",
+    "transcribe_audio",
+
+    # TTS
+    "PiperTTS",
+    "TTSConfig",
+    "TTSResult",
+    "VoiceEmotion",
+    "init_tts",
+    "synthesize_speech",
+
+    # NLU
+    "NLUEngine",
+    "NLUResult",
+    "Entity",
+    "init_nlu",
+    "process_utterance",
 ]
 
 __version__ = "1.0.0"
