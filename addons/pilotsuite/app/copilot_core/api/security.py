@@ -28,6 +28,11 @@ _ha_token_cache: dict[str, float] = {}
 _ha_token_lock = threading.Lock()
 _HA_TOKEN_CACHE_TTL = 300.0  # 5 minutes
 
+# Auth-required cache: (result, timestamp) — protected by _auth_lock
+_auth_required_cache: tuple[bool, float] = (True, 0.0)
+_auth_lock = threading.Lock()
+_AUTH_CACHE_TTL = 30.0  # seconds
+
 
 def _ensure_auto_token() -> str:
     """Generate and persist an auto-token if none exists (1-Key-Flow).
@@ -98,28 +103,43 @@ def is_auth_required(options_path: str = OPTIONS_PATH) -> bool:
     """Check if authentication is required.
 
     Returns True by default (secure default).
+    Uses a 30-second TTL cache to avoid repeated disk reads.
     Can be disabled via:
     - Environment: COPILOT_AUTH_REQUIRED=false
     - Options: auth_required: false
     """
-    # Check environment variable first (highest priority)
-    env_value = os.environ.get("COPILOT_AUTH_REQUIRED", "").lower().strip()
-    if env_value == "false":
-        return False
-    if env_value == "true":
-        return True
+    global _auth_required_cache
 
-    # Check options.json
-    try:
-        with open(options_path, "r", encoding="utf-8") as fh:
-            opts: Any = json.load(fh) or {}
-        if opts.get("auth_required") is False:
-            return False
-    except Exception:
-        pass
+    # Fast path (no lock): check if cache is still valid
+    now = time.monotonic()
+    cached_result, cached_at = _auth_required_cache
+    if now - cached_at < _AUTH_CACHE_TTL:
+        return cached_result
 
-    # Default: require authentication (secure by default)
-    return True
+    # Slow path: acquire lock, re-check, then recompute
+    with _auth_lock:
+        now = time.monotonic()
+        cached_result, cached_at = _auth_required_cache
+        if now - cached_at < _AUTH_CACHE_TTL:
+            return cached_result
+
+        result = True
+        env_value = os.environ.get("COPILOT_AUTH_REQUIRED", "").lower().strip()
+        if env_value == "false":
+            result = False
+        elif env_value == "true":
+            result = True
+        else:
+            try:
+                with open(options_path, "r", encoding="utf-8") as fh:
+                    opts: Any = json.load(fh) or {}
+                if opts.get("auth_required") is False:
+                    result = False
+            except Exception:
+                pass
+
+        _auth_required_cache = (result, now)
+        return result
 
 
 def _validate_ha_user_token(candidate: str) -> bool:
@@ -250,18 +270,62 @@ def validate_token(request) -> bool:
     return False
 
 
-def require_token(f: Callable) -> Callable:
-    """Decorator to require valid token for an endpoint."""
-    @wraps(f)
-    def decorated_function(*args: Any, **kwargs: Any) -> Any:
-        if not validate_token(flask_request):
-            return jsonify({
-                "ok": False,
-                "error": "Authentication required",
-                "message": "Valid X-Auth-Token header or Bearer token required"
-            }), 401
-        return f(*args, **kwargs)
-    return decorated_function
+def require_token(f: Callable | None = None, *, scopes: tuple[str, ...] | None = None) -> Callable:
+    """Decorator to require valid token for an endpoint.
+
+    Usage:
+        @require_token                      # any valid token
+        @require_token(scopes=("read",))   # token must have "read" scope
+        @require_token(scopes=("admin", "write"))
+    """
+    def decorator(ff: Callable) -> Callable:
+        @wraps(ff)
+        def decorated(*args: Any, **kwargs: Any) -> Any:
+            if not validate_token(flask_request):
+                return jsonify({
+                    "ok": False,
+                    "error": "Authentication required",
+                    "message": "Valid X-Auth-Token header or Bearer token required"
+                }), 401
+
+            # Scope check (GAP-1: token scope enforcement)
+            if scopes is not None:
+                token_scopes = getattr(g, "token_scopes", None)
+                if not token_scopes or not any(s in token_scopes for s in scopes):
+                    return jsonify({
+                        "ok": False,
+                        "error": "Insufficient scope",
+                        "message": f"Token requires one of: {', '.join(scopes)}"
+                    }), 403
+
+            return ff(*args, **kwargs)
+        return decorated
+
+    if f is not None:
+        return decorator(f)
+    return decorator
+
+def require_scope(*rScopes: str) -> Callable:
+    """Decorator: require specific token scopes on an already-authenticated endpoint."""
+    def decorator(ff: Callable) -> Callable:
+        @wraps(ff)
+        def decorated(*args: Any, **kwargs: Any) -> Any:
+            if not getattr(g, "token_valid", False):
+                return jsonify({
+                    "ok": False,
+                    "error": "Authentication required",
+                    "message": "Valid token required before scope check"
+                }), 401
+            token_scopes = getattr(g, "token_scopes", None)
+            if not token_scopes or not any(s in token_scopes for s in rScopes):
+                return jsonify({
+                    "ok": False,
+                    "error": "Insufficient scope",
+                    "message": f"Token requires one of: {', '.join(rScopes)}"
+                }), 403
+            return ff(*args, **kwargs)
+        return decorated
+    return decorator
 
 
 def optional_token(f: Callable) -> Callable:
@@ -336,34 +400,46 @@ def validate_websocket_token(request) -> bool:
 
 def require_admin_token(request) -> bool:
     """Validate that a valid admin token is present.
-    
+
+    GAP-4 fix: Requires 'admin' scope on the token, OR
+    allows any valid token when auth is globally disabled.
+
     Unlike validate_token(), this ALWAYS requires a token,
     even if auth is disabled globally (for sensitive operations).
-    
-    Returns True if a valid token is provided.
-    Returns False if no token or invalid token.
+    Returns True if a valid token is provided and has admin scope
+    (or auth is disabled and a valid token is present).
     """
     token = get_auth_token()
     if not token:
-        # No token configured at all - cannot validate
         return False
 
     header_token = (request.headers.get("X-Auth-Token") or "").strip()
     if header_token and hmac.compare_digest(header_token, token):
-        return True
+        if not is_auth_required():
+            return True
+        token_scopes = getattr(g, "token_scopes", None)
+        if token_scopes and "admin" in token_scopes:
+            return True
+        return False
 
     auth_header = (request.headers.get("Authorization") or "").strip()
     if auth_header.startswith("Bearer "):
         candidate = auth_header.split(" ", 1)[1].strip()
         if candidate and hmac.compare_digest(candidate, token):
-            return True
+            if not is_auth_required():
+                return True
+            token_scopes = getattr(g, "token_scopes", None)
+            if token_scopes and "admin" in token_scopes:
+                return True
+            return False
 
     return False
 
 
 def require_admin(f: Callable) -> Callable:
     """Decorator to require valid admin token for sensitive operations.
-    
+
+    GAP-4 fix: Now checks for 'admin' scope on the validated token.
     Unlike require_token, this ALWAYS requires authentication,
     even if auth is disabled globally.
     """
