@@ -27,6 +27,7 @@ from copilot_core.voice.dialog_flow import (
     DialogResetResult,
     DialogStateResult,
 )
+from copilot_core.voice.dialog_snapshot import DialogSnapshot
 
 
 def _make_app():
@@ -45,6 +46,54 @@ def _patch_runtime_dialog_machine(monkeypatch, tmp_path):
     machine = _isolated_dialog_machine(tmp_path)
     monkeypatch.setattr(voice_runtime_access.VoiceRuntimeAccess, "get_dialog_machine", lambda self: machine)
     return machine
+
+
+def test_dialog_snapshot_projects_shared_command_and_dialog_surfaces(tmp_path):
+    machine = _isolated_dialog_machine(tmp_path)
+    machine.activate_intent(
+        "lock.unlock",
+        slots={"_last_utterance": "Garage öffnen"},
+        session_id="sess-shared-snapshot",
+        user_id="user-shared",
+    )
+    machine.set_confirming(
+        metadata={
+            "_last_status": "confirmation_required",
+            "_confirmation_token": "token-123",
+            "_confirmation_expires_at": 1713441600,
+            "_pending_action_label": "lock.unlock",
+            "_pending_action_payload": {"domain": "lock", "service": "unlock"},
+            "_clarification": "Soll ich wirklich öffnen?",
+        }
+    )
+
+    snapshot = DialogSnapshot.from_state(machine.get_state())
+
+    assert snapshot.to_dialog_state_fields()["state"] == "CONFIRMING"
+    assert snapshot.to_dialog_state_fields()["last_status"] == "confirmation_required"
+    assert snapshot.to_dialog_state_fields()["pending_action_label"] == "lock.unlock"
+    assert snapshot.to_command_session_state()["dialog_state"] == "CONFIRMING"
+    assert snapshot.to_command_session_state()["clarification_question"] == "Soll ich wirklich öffnen?"
+    assert snapshot.to_command_state(session_id="sess-shared-snapshot") == {
+        "last_status": "confirmation_required",
+        "pending_confirmation": True,
+        "pending_action_label": "lock.unlock",
+        "confirmation_expires_at": "2024-04-18T12:00:00Z",
+    }
+
+
+def test_dialog_snapshot_returns_idle_command_projection_for_other_session(tmp_path):
+    machine = _isolated_dialog_machine(tmp_path)
+    machine.activate_intent("light.turn_on", session_id="sess-owned")
+
+    snapshot = DialogSnapshot.from_state(machine.get_state())
+
+    assert snapshot.to_command_state(session_id="sess-other") == {
+        "last_status": "idle",
+        "pending_confirmation": False,
+        "pending_action_label": None,
+        "confirmation_expires_at": None,
+    }
 
 
 def test_voice_command_executes_safe_high_confidence_light_command(monkeypatch, tmp_path):

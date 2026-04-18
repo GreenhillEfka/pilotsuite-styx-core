@@ -4,6 +4,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Optional
 
+from copilot_core.voice.dialog_snapshot import DialogSnapshot
+
 
 @dataclass(frozen=True)
 class DialogStateResult:
@@ -156,25 +158,12 @@ class VoiceDialogFlow:
             self._dialog_machine.decay()
             state = self._dialog_machine.get_state()
 
-        slot_values = dict(state.slot_values)
+        snapshot = DialogSnapshot.from_state(state)
         return DialogStateResult(
             status="ok",
-            state=state.state,
-            last_status=self._normalize_last_status(state),
-            active_intent=state.active_intent,
-            slot_values=slot_values,
-            context_stack_size=len(state.context_stack),
-            last_activity_ts=state.last_activity_ts,
-            session_id=state.session_id,
-            user_id=state.user_id,
             timed_out=timed_out,
             confirmation_question=self._dialog_machine.generate_confirmation_question(),
-            clarification_question=self._dialog_machine.generate_clarification_question(),
-            pending_confirmation=state.state == "CONFIRMING" and bool(slot_values.get("_confirmation_token")),
-            pending_action_label=slot_values.get("_pending_action_label"),
-            pending_action_payload=slot_values.get("_pending_action_payload"),
-            confirmation_token=slot_values.get("_confirmation_token"),
-            confirmation_expires_at=slot_values.get("_confirmation_expires_at"),
+            **snapshot.to_dialog_state_fields(),
         )
 
     def activate_intent(
@@ -191,18 +180,19 @@ class VoiceDialogFlow:
             session_id=session_id,
             user_id=user_id,
         )
-        return DialogActivateResult(status="ok", **self._serialize_mutation_state(state))
+        return DialogActivateResult(status="ok", **DialogSnapshot.from_state(state).to_dialog_mutation_state())
 
     def confirm_action(self, *, confirmed: bool) -> DialogConfirmResult:
         state = self._dialog_machine.confirm_action() if confirmed else self._dialog_machine.cancel_action()
-        return DialogConfirmResult(status="ok", **self._serialize_mutation_state(state))
+        return DialogConfirmResult(status="ok", **DialogSnapshot.from_state(state).to_dialog_mutation_state())
 
     def clarify(self, *, clarification_text: str) -> DialogClarifyResult:
         state = self._dialog_machine.set_clarifying(clarification_text)
+        snapshot = DialogSnapshot.from_state(state)
         return DialogClarifyResult(
             status="ok",
             clarification_question=self._dialog_machine.generate_clarification_question(),
-            **self._serialize_mutation_state(state),
+            **snapshot.to_dialog_mutation_state(),
         )
 
     def reset(
@@ -213,30 +203,3 @@ class VoiceDialogFlow:
     ) -> DialogResetResult:
         state = self._dialog_machine.reset(session_id=session_id, user_id=user_id)
         return DialogResetResult(status="ok", state=state.state)
-
-    @staticmethod
-    def _serialize_mutation_state(state: Any) -> dict[str, Any]:
-        return {
-            "state": state.state,
-            "active_intent": state.active_intent,
-            "slot_values": dict(state.slot_values),
-            "context_stack_size": len(state.context_stack),
-            "last_activity_ts": state.last_activity_ts,
-            "session_id": state.session_id,
-            "user_id": state.user_id,
-        }
-
-    @staticmethod
-    def _normalize_last_status(state: Any) -> str:
-        slot_values = dict(state.slot_values)
-        explicit = slot_values.get("_last_status")
-        if isinstance(explicit, str) and explicit.strip():
-            return explicit.strip()
-
-        fallback = {
-            "ACTIVE": "executed",
-            "CONFIRMING": "confirmation_required",
-            "CLARIFYING": "clarification_required",
-            "IDLE": "idle",
-        }
-        return fallback.get(state.state, "idle")

@@ -2,10 +2,10 @@
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Callable, Generic, TypeVar, Optional
+from dataclasses import dataclass
+from typing import Any, Optional, TypeVar
 
+from copilot_core.voice.dialog_snapshot import DialogSnapshot
 from copilot_core.voice.voice_handler import VoiceResponse
 
 
@@ -104,13 +104,11 @@ class VoiceCommandFlow:
         context_builder: Any,
         command_router: Any,
         dialog_machine: Any,
-        dialog_state_serializer: Optional[Callable[[Any], Dict[str, Any]]] = None,
     ):
         self._intent_handler = intent_handler
         self._context_builder = context_builder
         self._command_router = command_router
         self._dialog_machine = dialog_machine
-        self._dialog_state_serializer = dialog_state_serializer or self._default_dialog_state_serializer
 
     def process(
         self,
@@ -158,9 +156,10 @@ class VoiceCommandFlow:
             user_id=user_id,
         )
         state = self._dialog_machine.merge_metadata({"_last_status": decision.status})
+        snapshot = DialogSnapshot.from_state(state)
 
         session_state = dict(getattr(decision, "session_state", {}) or {})
-        session_state.update(self._dialog_state_serializer(state))
+        session_state.update(snapshot.to_command_session_state())
 
         response_dict = None
         if routed.get("response") is not None:
@@ -182,10 +181,11 @@ class VoiceCommandFlow:
         if self._dialog_machine.check_timeout():
             self._dialog_machine.decay()
         state = self._dialog_machine.get_state()
+        snapshot = DialogSnapshot.from_state(state)
         return CommandStateResult(
             status="ok",
             session_id=session_id,
-            state=self._serialize_command_state(state, session_id=session_id),
+            state=snapshot.to_command_state(session_id=session_id),
         )
 
     def confirm(self, *, session_id: str, confirmation_token: str) -> CommandConfirmResult:
@@ -200,6 +200,7 @@ class VoiceCommandFlow:
         action_label = pending["action_label"]
         state = self._dialog_machine.confirm_action()
         state = self._dialog_machine.merge_metadata({"_last_status": "executed"})
+        snapshot = DialogSnapshot.from_state(state)
         response = self._build_follow_through_response(action_payload)
 
         return CommandConfirmResult(
@@ -207,7 +208,7 @@ class VoiceCommandFlow:
             action=action_label,
             message=response.tts_text,
             confirmation_token=confirmation_token,
-            session_state=self._dialog_state_serializer(state),
+            session_state=snapshot.to_command_session_state(),
             response=response.to_dict(),
         )
 
@@ -222,13 +223,14 @@ class VoiceCommandFlow:
         action_label = pending["action_label"]
         state = self._dialog_machine.cancel_action()
         state = self._dialog_machine.merge_metadata({"_last_status": "rejected"})
+        snapshot = DialogSnapshot.from_state(state)
 
         return CommandRejectResult(
             status="rejected",
             action=action_label,
             message="Okay, ich verwerfe die angefragte Aktion.",
             confirmation_token=confirmation_token,
-            session_state=self._dialog_state_serializer(state),
+            session_state=snapshot.to_command_session_state(),
         )
 
     def _apply_decision(
@@ -284,24 +286,6 @@ class VoiceCommandFlow:
 
         return self._dialog_machine.reset(session_id=session_id, user_id=user_id)
 
-    @staticmethod
-    def _default_dialog_state_serializer(state) -> Dict[str, Any]:
-        slot_values = dict(state.slot_values)
-        return {
-            "dialog_state": state.state,
-            "active_intent": state.active_intent,
-            "slot_values": slot_values,
-            "session_id": state.session_id,
-            "user_id": state.user_id,
-            "last_status": slot_values.get("_last_status"),
-            "pending_confirmation": state.state == "CONFIRMING" and bool(slot_values.get("_confirmation_token")),
-            "pending_action_label": slot_values.get("_pending_action_label"),
-            "pending_action_payload": slot_values.get("_pending_action_payload"),
-            "clarification_question": slot_values.get("_clarification"),
-            "confirmation_token": slot_values.get("_confirmation_token"),
-            "confirmation_expires_at": slot_values.get("_confirmation_expires_at"),
-        }
-
     def _validate_pending_confirmation(
         self,
         *,
@@ -331,48 +315,6 @@ class VoiceCommandFlow:
             "action_payload": slot_values.get("_pending_action_payload"),
             "action_label": slot_values.get("_pending_action_label") or slot_values.get("_pending_action"),
         }
-
-    def _serialize_command_state(self, state: Any, *, session_id: str) -> Dict[str, Any]:
-        if not state.session_id or state.session_id != session_id:
-            return {
-                "last_status": "idle",
-                "pending_confirmation": False,
-                "pending_action_label": None,
-                "confirmation_expires_at": None,
-            }
-
-        slot_values = dict(state.slot_values)
-        pending_confirmation = state.state == "CONFIRMING" and bool(slot_values.get("_confirmation_token"))
-        return {
-            "last_status": self._normalize_last_status(state),
-            "pending_confirmation": pending_confirmation,
-            "pending_action_label": slot_values.get("_pending_action_label"),
-            "confirmation_expires_at": self._format_command_state_timestamp(slot_values.get("_confirmation_expires_at")),
-        }
-
-    @staticmethod
-    def _normalize_last_status(state: Any) -> str:
-        slot_values = dict(state.slot_values)
-        explicit = slot_values.get("_last_status")
-        if isinstance(explicit, str) and explicit.strip():
-            return explicit.strip()
-
-        fallback = {
-            "ACTIVE": "executed",
-            "CONFIRMING": "confirmation_required",
-            "CLARIFYING": "clarification_required",
-            "IDLE": "idle",
-        }
-        return fallback.get(state.state, "idle")
-
-    @staticmethod
-    def _format_command_state_timestamp(value: Optional[Any]) -> Optional[str]:
-        if value is None:
-            return None
-        try:
-            return datetime.fromtimestamp(float(value), tz=timezone.utc).isoformat().replace("+00:00", "Z")
-        except (TypeError, ValueError, OSError, OverflowError):
-            return None
 
     @staticmethod
     def _build_follow_through_response(action_payload: Optional[Dict[str, Any]]) -> VoiceResponse:
