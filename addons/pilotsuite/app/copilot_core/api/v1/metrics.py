@@ -41,6 +41,46 @@ from copilot_core.monitoring.health import get_health_checker
 
 logger = logging.getLogger(__name__)
 
+
+def _build_voice_health_block() -> dict:
+    """Build the voice capability truth block for health/readiness endpoints.
+    
+    Returns the same capability truth as GET /api/v1/voice/status,
+    without introducing a circular dependency on the voice blueprint.
+    """
+    # Import locally to avoid circular imports at module load time
+    try:
+        from copilot_core.voice.stt_whisper import WhisperSTT
+        from copilot_core.voice.tts_piper import PiperTTS
+        from copilot_core.voice import init_stt, init_tts
+    except Exception:
+        return {"can_transcribe": False, "can_synthesize": False, "available_backends": []}
+    
+    try:
+        stt_engine = WhisperSTT()
+        stt_available = stt_engine.can_transcribe()
+    except Exception:
+        stt_available = False
+    
+    try:
+        tts_engine = PiperTTS()
+        tts_available = tts_engine.can_synthesize()
+    except Exception:
+        tts_available = False
+    
+    available = []
+    if stt_available:
+        available.append({"type": "stt", "backend": "whisper", "status": "available"})
+    if tts_available:
+        available.append({"type": "tts", "backend": "piper", "status": "available"})
+    
+    return {
+        "can_transcribe": stt_available,
+        "can_synthesize": tts_available,
+        "can_speak": tts_available,
+        "available_backends": available,
+    }
+
 # Create blueprint with relative prefix (will be nested under /api/v1)
 metrics_bp = Blueprint("metrics", __name__)
 
@@ -106,7 +146,9 @@ def health_check():
         elif health.get("status") == "degraded":
             status_code = 200  # Still serve, but degraded
         
-        return jsonify(health), status_code
+        response = dict(health)
+        response["voice"] = _build_voice_health_block()
+        return jsonify(response), status_code
         
     except asyncio.TimeoutError:
         logger.warning("Health check timed out")
@@ -140,16 +182,19 @@ def readiness_probe():
         checker = get_health_checker()
         health = _run_async(checker.get_dependency_health(), timeout=5)
         
+        voice_block = _build_voice_health_block()
         if health.get("status") == "healthy":
             return jsonify({
                 "ready": True,
                 "status": "healthy",
+                "voice": voice_block,
             }), 200
         else:
             return jsonify({
                 "ready": False,
                 "status": health.get("status", "unknown"),
                 "missing_required": health.get("missing_required", []),
+                "voice": voice_block,
             }), 503
             
     except Exception as e:
@@ -158,6 +203,7 @@ def readiness_probe():
             "ready": False,
             "status": "error",
             "error": str(e),
+            "voice": _build_voice_health_block(),
         }), 503
 
 
