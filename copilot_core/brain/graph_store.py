@@ -52,10 +52,19 @@ class TemporalContext:
     
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> TemporalContext:
+        def _parse(v):
+            if v is None:
+                return None
+            if isinstance(v, (int, float)):
+                return datetime.fromtimestamp(v)
+            try:
+                return datetime.fromisoformat(str(v))
+            except Exception:
+                return datetime.fromtimestamp(float(v))
         return cls(
-            valid_from=datetime.fromisoformat(data["valid_from"]) if data.get("valid_from") else None,
-            valid_to=datetime.fromisoformat(data["valid_to"]) if data.get("valid_to") else None,
-            timestamp=datetime.fromisoformat(data["timestamp"]) if data.get("timestamp") else None
+            valid_from=_parse(data.get("valid_from")),
+            valid_to=_parse(data.get("valid_to")),
+            timestamp=_parse(data.get("timestamp")),
         )
 
 
@@ -258,11 +267,24 @@ class BrainGraphStore:
     
     def add_relationship(self, from_entity: str, relation_type: str, 
                         to_entity: str, attributes: Optional[Dict[str, Any]] = None) -> bool:
-        """Add a relationship between two entities."""
+        """Add a relationship between two entities.
+        
+        Auto-creates missing entities in the graph if they are not yet present.
+        """
         with self._lock:
-            # Verify entities exist
-            if from_entity not in self.entities or to_entity not in self.entities:
-                return False
+            # Auto-create missing entities to avoid silent failures
+            for eid in (from_entity, to_entity):
+                if eid not in self.entities:
+                    self.entities[eid] = Entity(
+                        entity_id=eid,
+                        entity_type="auto_created",
+                        name=eid,
+                        attributes={},
+                        temporal=TemporalContext()
+                    )
+                    # Also add to NetworkX graph so traverse_from works
+                    if self.graph is not None:
+                        self.graph.add_node(eid)
             
             rel = Relationship(
                 from_entity=from_entity,
@@ -299,6 +321,23 @@ class BrainGraphStore:
             ]
             return rels
     
+    def query(self, sparql_query: str) -> List[Dict[str, Any]]:
+        """Execute a SPARQL-like query on the graph.
+        
+        Delegates to execute_sparql_like for full SPARQL-like support.
+        Returns entity dicts for SELECT ?e patterns.
+        """
+        return self.execute_sparql_like(sparql_query)
+
+    def get_entity_at_time(self, entity_id: str, timestamp: float) -> Optional[Dict[str, Any]]:
+        """Get entity state at a specific point in time (Unix timestamp)."""
+        entity = self.entities.get(entity_id)
+        if entity is None:
+            return None
+        if entity.temporal and entity.temporal.is_valid_at(datetime.fromtimestamp(timestamp)):
+            return entity.to_dict()
+        return None
+
     def query_by_type(self, entity_type: str) -> List[Dict[str, Any]]:
         """Query all entities of a specific type."""
         with self._lock:
@@ -308,49 +347,57 @@ class BrainGraphStore:
             ]
             return results
     
-    def traverse_from(self, entity_id: str, relation_type: str, 
+    def traverse_from(self, entity_id: str, relation_type: str,
                      max_depth: int = 1) -> List[Dict[str, Any]]:
         """Traverse graph from an entity following specific relations.
-        
+
+        Falls NetworkX verfügbar: nutzt den Graph für BFS.
+        Falls nicht: fällt zurück auf self.relationships ( списки )
         Returns all entities reachable via the specified relation type within max_depth hops.
         """
         with self._lock:
-            if self.graph is None or entity_id not in self.graph:
-                return []
-            
             connected = []
             visited = {entity_id}
             queue = [(entity_id, 0)]
-            
+
             while queue:
                 current, depth = queue.pop(0)
                 if depth >= max_depth:
                     continue
-                
-                # Get all outgoing edges from current node
-                if self.graph.has_node(current):
-                    for neighbor in self.graph.successors(current):
-                        if neighbor in visited:
-                            continue
-                        
-                        # Check if there's an edge with matching relation type
-                        if self.graph.has_edge(current, neighbor):
-                            edge_data = self.graph.get_edge_data(current, neighbor)
-                            # For MultiDiGraph, edge_data is {key: attrs}
-                            found_match = False
-                            if edge_data:
-                                for key, data in edge_data.items():
-                                    if data.get("type") == relation_type or key == relation_type:
-                                        found_match = True
-                                        break
-                            
-                            if found_match:
-                                visited.add(neighbor)
-                                neighbor_entity = self.entities.get(neighbor)
+
+                if self.graph is not None and entity_id in self.graph:
+                    # NetworkX path
+                    if self.graph.has_node(current):
+                        for neighbor in self.graph.successors(current):
+                            if neighbor in visited:
+                                continue
+                            if self.graph.has_edge(current, neighbor):
+                                edge_data = self.graph.get_edge_data(current, neighbor)
+                                found_match = False
+                                if edge_data:
+                                    for key, data in edge_data.items():
+                                        if data.get("type") == relation_type or key == relation_type:
+                                            found_match = True
+                                            break
+                                if found_match:
+                                    visited.add(neighbor)
+                                    neighbor_entity = self.entities.get(neighbor)
+                                    if neighbor_entity:
+                                        connected.append(neighbor_entity.to_dict())
+                                    queue.append((neighbor, depth + 1))
+                else:
+                    # Fallback: use self.relationships directly (no NetworkX required)
+                    current_depth_visited = []
+                    for rel in self.relationships:
+                        if rel.from_entity == current and rel.type == relation_type:
+                            if rel.to_entity not in visited:
+                                visited.add(rel.to_entity)
+                                neighbor_entity = self.entities.get(rel.to_entity)
                                 if neighbor_entity:
-                                    connected.append(neighbor_entity.to_dict())
-                                queue.append((neighbor, depth + 1))
-            
+                                    current_depth_visited.append(neighbor_entity.to_dict())
+                                    queue.append((rel.to_entity, depth + 1))
+                    connected.extend(current_depth_visited)
+
             return connected
     
     def execute_sparql_like(self, query: str) -> List[Dict[str, Any]]:
@@ -475,6 +522,8 @@ class BrainGraphStore:
             stats = {
                 "entity_count": len(self.entities),
                 "relationship_count": len(self.relationships),
+                "node_count": len(self.entities),
+                "edge_count": len(self.relationships),
                 "memory_usage_mb": 0
             }
             
@@ -498,7 +547,10 @@ class BrainGraphStore:
         """
         with self._lock:
             # Start with entity dict (entity_id -> entity_data)
-            result = {k: v.to_dict() for k, v in self.entities.items()}
+            result = {"entities": {k: v.to_dict() for k, v in self.entities.items()}}
+            # Also include top-level entity keys for backward compatibility
+            for k, v in self.entities.items():
+                result[k] = v.to_dict()
             # Add relationships array
             result["_relationships"] = [r.to_dict() for r in self.relationships]
             result["_exported_at"] = datetime.now().isoformat()
@@ -512,8 +564,21 @@ class BrainGraphStore:
         """
         with self._lock:
             if not self.graph or not NETWORKX_AVAILABLE:
-                return ""
-            
+                # Fallback: generate basic GraphML from entities/relationships
+                import xml.etree.ElementTree as ET
+                ns = "http://graphml.graphdrawing.org/xmlns"
+                root = ET.Element("graphml", xmlns=ns)
+                graph = ET.SubElement(root, "graph", id="G")
+                for eid, entity in self.entities.items():
+                    node = ET.SubElement(graph, "node", id=eid)
+                    data = ET.SubElement(node, "data", key="type")
+                    data.text = entity.type
+                for rel in self.relationships:
+                    edge = ET.SubElement(graph, "edge", source=rel.from_entity, target=rel.to_entity)
+                    data = ET.SubElement(edge, "data", key="type")
+                    data.text = rel.type
+                return ET.tostring(root, encoding="unicode")
+
             try:
                 import io
                 import json as json_module

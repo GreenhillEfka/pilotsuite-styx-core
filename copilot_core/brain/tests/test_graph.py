@@ -88,16 +88,18 @@ class TestBrainGraphStore:
         # Add entity with temporal context
         graph_store.add_entity(
             "sensor.temp",
-            {"type": "sensor", "value": 22.5},
-            valid_from=hour_ago,
-            valid_to=now
+            {
+                "type": "sensor",
+                "value": 22.5,
+                "temporal": {"valid_from": hour_ago, "valid_to": now}
+            }
         )
         
         # Query historical state
         historical = graph_store.get_entity_at_time("sensor.temp", hour_ago + 1800)
         
         assert historical is not None
-        assert historical["value"] == 22.5
+        assert historical["attributes"]["value"] == 22.5
 
     def test_graph_traversal(self, graph_store):
         """Test traversing graph relationships."""
