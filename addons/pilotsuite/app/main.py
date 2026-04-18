@@ -310,10 +310,12 @@ def _register_routes(flask_app: Flask, startup_time: float) -> None:
         except Exception:
             checks["ollama"] = False
 
+        shopping_db_path = os.environ.get("SHOPPING_DB_PATH", "/data/shopping_reminders.db")
+
         for db_label, db_path in [
             ("conversation_memory_db", "/data/conversation_memory.db"),
             ("vector_store_db", "/data/vector_store.db"),
-            ("shopping_db", "/data/shopping_reminders.db"),
+            ("shopping_db", shopping_db_path),
         ]:
             checks[db_label] = os.path.exists(db_path)
 
