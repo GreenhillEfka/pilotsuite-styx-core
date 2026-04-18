@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from flask import Blueprint, current_app, jsonify, request, send_file
 
 from diagnostics_contract import build_bundle_zip
+from copilot_core.api.voice_discovery import voice_capabilities_module
 
 bp = Blueprint("dev", __name__)
 
@@ -318,6 +319,7 @@ def get_capabilities():
             "energy",
             "vector",
             "tags",
+            "voice",
             "voice_context",
             "user_preferences",
             "knowledge_graph",
@@ -407,6 +409,7 @@ def get_capabilities():
                     "/api/v1/notifications/subscriptions"
                 ]
             },
+            "voice": voice_capabilities_module(),
             "voice_context": {
                 "enabled": True,
                 "version": "1.0.0",

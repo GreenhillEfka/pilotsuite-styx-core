@@ -10,7 +10,9 @@ from __future__ import annotations
 
 import json
 import logging
+import queue
 import re
+import threading
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Set, Callable
 from dataclasses import dataclass, field
@@ -53,6 +55,7 @@ class EventType(str, Enum):
     MOOD_UPDATE = "mood_update"
     NEURON_FIRE = "neuron_fire"
     NEURON_STATE_CHANGE = "neuron_state_change"
+    GRAPH_UPDATE = "graph_update"
     PIPELINE_UPDATE = "pipeline_update"
     SUGGESTION = "suggestion"
     SYSTEM_STATUS = "system_status"
@@ -84,6 +87,57 @@ class WebSocketEvent:
         }
 
 
+def build_graph_update_payload(graph_stats: Dict[str, Any], event: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """Project brain-graph stats into the bounded live dashboard payload.
+    
+    Enriches event_data with canvas-actionable delta fields:
+    - node_id / edge_id / pruned_stats: exact change targets
+    - change_type: "node_added" | "node_updated" | "edge_added" | "edge_updated" | "pruned"
+    This lets canvas consumers highlight exact graph element deltas, not only summary counts.
+    """
+    graph_stats = graph_stats or {}
+    event = event or {}
+    event_type = event.get("event") or None
+    raw_data = event.get("data") if isinstance(event.get("data"), dict) else {}
+    event_timestamp_ms = event.get("timestamp_ms") if event else None
+
+    # Derive canvas-actionable delta fields from event type
+    node_id = None
+    edge_id = None
+    pruned_stats = None
+    change_type = None
+
+    if event_type == "node_updated":
+        node_id = raw_data.get("id")
+        change_type = "node_updated"
+    elif event_type == "edge_updated":
+        edge_id = raw_data.get("id")
+        change_type = "edge_updated"
+    elif event_type == "graph_pruned":
+        pruned_stats = {
+            "nodes_removed": raw_data.get("nodes_removed", 0),
+            "edges_removed": raw_data.get("edges_removed", 0),
+        }
+        change_type = "pruned"
+
+    return {
+        "nodes": int(graph_stats.get("nodes") or graph_stats.get("node_count") or 0),
+        "edges": int(graph_stats.get("edges") or graph_stats.get("edge_count") or 0),
+        "max_nodes": int(graph_stats.get("max_nodes") or 0),
+        "max_edges": int(graph_stats.get("max_edges") or 0),
+        "source_event": event_type,
+        "event_timestamp_ms": event_timestamp_ms,
+        "event_data": raw_data,
+        # Canvas-actionable delta fields
+        "delta": {
+            "change_type": change_type,
+            "node_id": node_id,
+            "edge_id": edge_id,
+            "pruned_stats": pruned_stats,
+        },
+    }
+
+
 class WebSocketHandler:
     """Handler for WebSocket connections and events.
     
@@ -104,6 +158,8 @@ class WebSocketHandler:
         self._connections: Set[str] = set()
         self._rooms: Dict[str, Set[str]] = {}
         self._event_handlers: Dict[EventType, List[Callable]] = {}
+        self._graph_bridge_stop = threading.Event()
+        self._graph_bridge_thread: Optional[threading.Thread] = None
         
         if socketio:
             self._register_handlers()
@@ -306,6 +362,15 @@ class WebSocketHandler:
         )
         self.emit_event(event)
     
+    def broadcast_graph_update(self, graph_data: Dict[str, Any]) -> None:
+        """Broadcast a bounded brain-graph summary update to live dashboard clients."""
+        event = WebSocketEvent(
+            event_type=EventType.GRAPH_UPDATE,
+            data=graph_data,
+            room="neurons"
+        )
+        self.emit_event(event)
+
     def broadcast_pipeline_update(self, pipeline_data: Dict[str, Any]) -> None:
         """Broadcast pipeline update.
         
@@ -370,8 +435,53 @@ class WebSocketHandler:
         """
         return len(self._rooms.get(room, set()))
     
+    def attach_brain_graph_service(self, brain_graph_service: Any) -> None:
+        """Bridge BrainGraph SSE events onto the existing live Socket.IO channel."""
+        if not self.socketio or brain_graph_service is None:
+            return
+        if self._graph_bridge_thread is not None and self._graph_bridge_thread.is_alive():
+            return
+
+        subscriber = brain_graph_service.subscribe_sse()
+        self._graph_bridge_stop.clear()
+
+        def _bridge_loop() -> None:
+            try:
+                while not self._graph_bridge_stop.is_set():
+                    try:
+                        event = subscriber.get(timeout=0.5)
+                    except queue.Empty:
+                        continue
+
+                    latest_event = event
+                    while True:
+                        try:
+                            latest_event = subscriber.get_nowait()
+                        except queue.Empty:
+                            break
+
+                    try:
+                        payload = build_graph_update_payload(
+                            brain_graph_service.get_stats(),
+                            latest_event,
+                        )
+                        self.broadcast_graph_update(payload)
+                    except Exception:
+                        _LOGGER.exception("Brain graph live bridge emit failed")
+            finally:
+                brain_graph_service.unsubscribe_sse(subscriber)
+
+        self._graph_bridge_thread = threading.Thread(
+            target=_bridge_loop,
+            name="brain-graph-ws-bridge",
+            daemon=True,
+        )
+        self._graph_bridge_thread.start()
+        _LOGGER.info("Brain graph live bridge enabled")
+
     def cleanup(self) -> None:
         """Cleanup resources."""
+        self._graph_bridge_stop.set()
         self._connections.clear()
         self._rooms.clear()
         self._event_handlers.clear()
@@ -412,7 +522,7 @@ def init_websocket(app) -> WebSocketHandler:
         _websocket_handler = WebSocketHandler(_socketio_instance)
         
         # Setup real-time callbacks
-        _setup_realtime_callbacks()
+        _setup_realtime_callbacks(app)
         
         _LOGGER.info("WebSocket initialized successfully")
         return _websocket_handler
@@ -422,7 +532,7 @@ def init_websocket(app) -> WebSocketHandler:
         return None
 
 
-def _setup_realtime_callbacks() -> None:
+def _setup_realtime_callbacks(app=None) -> None:
     """Setup callbacks for real-time updates."""
     if not _websocket_handler:
         return
@@ -430,6 +540,15 @@ def _setup_realtime_callbacks() -> None:
     # Subscribe to mood updates
     mood_engine = get_live_mood_engine()
     mood_engine.on_update(_websocket_handler.broadcast_mood_update)
+
+    if app is not None:
+        try:
+            services = app.config.get("COPILOT_SERVICES", {}) or {}
+            brain_graph_service = services.get("brain_graph_service")
+            if brain_graph_service is not None:
+                _websocket_handler.attach_brain_graph_service(brain_graph_service)
+        except Exception as e:
+            _LOGGER.warning("Could not setup brain graph live bridge: %s", e)
     
     # Subscribe to neuron updates (would need callback support in NeuronManager)
     try:
@@ -473,6 +592,7 @@ __all__ = [
     "EventType",
     "WebSocketEvent",
     "WebSocketHandler",
+    "build_graph_update_payload",
     "init_websocket",
     "get_websocket_handler",
     "get_socketio"

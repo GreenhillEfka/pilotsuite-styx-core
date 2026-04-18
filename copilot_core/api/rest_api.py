@@ -94,9 +94,17 @@ class RESTAPI:
         self._register(APIEndpoint("/api/v1/rag/memory", "GET", "Query memory", ["rag"]))
         
         # Voice Endpoints
-        self._register(APIEndpoint("/api/v1/voice/transcribe", "POST", "Transcribe audio", ["voice"]))
-        self._register(APIEndpoint("/api/v1/voice/synthesize", "POST", "Synthesize speech", ["voice"]))
-        self._register(APIEndpoint("/api/v1/voice/process", "POST", "Process voice command", ["voice"]))
+        for path, method, description in (
+            ("/api/v1/voice/intent", "POST", "Process voice intent"),
+            ("/api/v1/voice/transcribe", "POST", "Transcribe audio"),
+            ("/api/v1/voice/synthesize", "POST", "Synthesize speech"),
+            ("/api/v1/voice/speak", "POST", "Synthesize speech and return a retrievable audio artifact"),
+            ("/api/v1/voice/status", "GET", "Get voice runtime status and safe-call capability truth"),
+            ("/api/v1/voice/audio/{audio_id}", "GET", "Retrieve a generated voice audio artifact"),
+            ("/api/v1/voice/zones", "GET", "List available voice zones"),
+            ("/api/v1/voice/intents", "GET", "List supported voice intents"),
+        ):
+            self._register(APIEndpoint(path, method, description, ["voice"]))
         
         # ML Endpoints
         self._register(APIEndpoint("/api/v1/ml/patterns", "GET", "Get detected patterns", ["ml"]))

@@ -257,14 +257,17 @@ a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
   </div>
 </div>
 
+<script src="/socket.io/socket.io.js"></script>
 <script>
 /* ═══════════════════════════════════════════════════════════════════
    PilotSuite Styx Dashboard — JS v17
    ═══════════════════════════════════════════════════════════════════ */
 const BASE = location.origin;
-const TOKEN = new URLSearchParams(location.search).get('token') || '';
-let activeTab = 'styx', refreshTimer = null, moduleSchemas = {}, chatHistory = [];
-let brainData = { nodes: 0, edges: 0 }, neuronsData = {};
+const INJECTED_TOKEN = {{ (auth_token|default('', true))|tojson }};
+const TOKEN = new URLSearchParams(location.search).get('token') || INJECTED_TOKEN || sessionStorage.getItem('styx-auth-token') || '';
+if (TOKEN) sessionStorage.setItem('styx-auth-token', TOKEN);
+let activeTab = 'styx', refreshTimer = null, liveRefreshTimer = null, moduleSchemas = {}, chatHistory = [];
+let brainData = { nodes: 0, edges: 0, totalEvents: 0 }, neuronsData = {}, liveSocket = null;
 
 async function fetchJSON(url) {
   const h = {}; if (TOKEN) h['X-Auth-Token'] = TOKEN;
@@ -276,6 +279,74 @@ async function postJSON(url, body) {
 }
 function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 function $(id) { return document.getElementById(id); }
+function setConnectionState(ok, label) {
+  const dot = $('health-dot'), text = $('health-label');
+  if (dot) dot.style.background = ok ? 'var(--green)' : 'var(--red)';
+  if (text && label) text.textContent = label;
+}
+function scheduleLiveRefresh(force = false, delay = 250) {
+  if (!force && !['styx', 'mood', 'status'].includes(activeTab)) return;
+  if (liveRefreshTimer) clearTimeout(liveRefreshTimer);
+  liveRefreshTimer = setTimeout(() => refreshActiveTab(), delay);
+}
+function renderStyxSummary(moodState = null, graphStats = null, neuronSnapshot = null) {
+  if (graphStats) {
+    brainData.nodes = graphStats.nodes || graphStats.node_count || graphStats.total_nodes || brainData.nodes || 0;
+    brainData.edges = graphStats.edges || graphStats.edge_count || graphStats.total_edges || brainData.edges || 0;
+    brainData.totalEvents = graphStats.total_events || graphStats.events || brainData.totalEvents || 0;
+  }
+  if (neuronSnapshot) neuronsData = neuronSnapshot;
+  const neuronsMap = neuronsData || {};
+  const nc = Object.keys(neuronsMap).length;
+  const fc = Object.values(neuronsMap).filter(n => n?.firing || n?.active).length;
+  const ms = moodState?.mood || moodState?.state || $('mood-pill-text')?.textContent || 'neutral';
+  const mp = $('mood-pill-text'); if (mp) mp.textContent = ms;
+  const stats = $('brain-stats');
+  if (stats) stats.innerHTML = [chip('Nodes', brainData.nodes, 'var(--cyan)'), chip('Edges', brainData.edges, 'var(--blue)'), chip('Neuronen', nc, 'var(--purple)'), chip('Aktiv', fc, 'var(--green)'), chip('Mood', ms, 'var(--pink)'), chip('Events', brainData.totalEvents || 0, 'var(--orange)')].join('');
+  drawBrain();
+}
+function applyMoodRealtime(evt) {
+  const payload = evt?.data || evt || {};
+  renderStyxSummary(payload);
+  if (activeTab === 'mood') scheduleLiveRefresh(true, 120);
+}
+function applyNeuronRealtime(evt, opts = {}) {
+  const payload = evt?.data || {};
+  const neuronName = payload.neuron_name || payload.neuron_id;
+  if (!neuronName) return;
+  const nextState = payload.new_state || payload.state || payload.data || {};
+  neuronsData[neuronName] = { ...(neuronsData[neuronName] || {}), ...nextState };
+  if (opts.firing) neuronsData[neuronName] = { ...(neuronsData[neuronName] || {}), firing: true, active: true };
+  renderStyxSummary();
+}
+function connectLiveUpdates() {
+  if (typeof io !== 'function' || !TOKEN) return;
+  if (liveSocket?.connected) return;
+  liveSocket = io(BASE, {
+    path: '/socket.io',
+    auth: { token: TOKEN },
+    query: { token: TOKEN },
+    transports: ['websocket', 'polling'],
+    timeout: 8000,
+    reconnection: true,
+  });
+  liveSocket.on('connect', () => {
+    setConnectionState(true, 'Live verbunden');
+    liveSocket.emit('join_room', { room: 'mood' });
+    liveSocket.emit('join_room', { room: 'neurons' });
+  });
+  liveSocket.on('disconnect', () => setConnectionState(false, 'Live getrennt'));
+  liveSocket.on('connect_error', () => setConnectionState(false, 'Live Fehler'));
+  liveSocket.on('system_status', () => setConnectionState(true, 'Live verbunden'));
+  liveSocket.on('mood_update', applyMoodRealtime);
+  liveSocket.on('neuron_fire', evt => applyNeuronRealtime(evt, { firing: true }));
+  liveSocket.on('neuron_state_change', evt => applyNeuronRealtime(evt));
+  liveSocket.on('graph_update', evt => {
+    const payload = evt?.data || evt || {};
+    renderStyxSummary(null, payload.data || payload);
+    scheduleLiveRefresh(activeTab === 'styx', 120);
+  });
+}
 
 // ── Navigation ──
 const TABS = ['styx','module','mood','habitus','zones','status','settings'];
@@ -309,19 +380,11 @@ function chip(label, value, color) { return `<div class="brain-chip"><span class
 async function loadStyx() {
   const [health, graph, neurons, mood] = await Promise.all([fetchJSON('/api/v1/health/deep'), fetchJSON('/api/v1/graph/stats'), fetchJSON('/api/v1/neurons'), fetchJSON('/api/v1/mood/state')]);
   if (health) {
-    $('health-dot').style.background = health.ok !== false ? 'var(--green)' : 'var(--red)';
-    $('health-label').textContent = health.ok !== false ? 'Verbunden' : 'Fehler';
+    if (!liveSocket?.connected) setConnectionState(health.ok !== false, health.ok !== false ? 'Verbunden' : 'Fehler');
     $('ver-pill').textContent = 'v' + (health.version || health.data?.version || '--');
     if (health.uptime_s) $('uptime-text').textContent = formatUptime(health.uptime_s);
   }
-  if (graph) { brainData.nodes = graph.nodes || graph.node_count || 0; brainData.edges = graph.edges || graph.edge_count || 0; }
-  const nc = neurons?.neurons ? Object.keys(neurons.neurons).length : 0;
-  const fc = neurons?.neurons ? Object.values(neurons.neurons).filter(n => n.firing || n.active).length : 0;
-  neuronsData = neurons?.neurons || {};
-  const ms = mood?.mood || mood?.state || 'neutral';
-  $('mood-pill-text').textContent = ms;
-  $('brain-stats').innerHTML = [chip('Nodes', brainData.nodes, 'var(--cyan)'), chip('Edges', brainData.edges, 'var(--blue)'), chip('Neuronen', nc, 'var(--purple)'), chip('Aktiv', fc, 'var(--green)'), chip('Mood', ms, 'var(--pink)'), chip('Events', graph?.total_events || 0, 'var(--orange)')].join('');
-  drawBrain();
+  renderStyxSummary(mood, graph, neurons?.neurons || {});
 }
 
 function drawBrain() {
@@ -477,6 +540,7 @@ async function loadSettings() {
 function renderSummaryStrip(data) { const el = $('summary-strip'); if (!el) return; el.innerHTML = `<span>${data?.nodes || 0} Nodes</span><span>${data?.edges || 0} Edges</span>`; }
 async function loadDashboard() { await refreshActiveTab(); }
 async function init() {
+  connectLiveUpdates();
   const saved = localStorage.getItem('styx-active-tab');
   if (saved && TABS.includes(saved)) switchTab(saved);
   else await loadStyx();

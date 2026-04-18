@@ -8,6 +8,7 @@ from typing import Any
 from flask import Flask, jsonify, request
 
 from copilot_core.api.v1.blueprint import api_v1
+from copilot_core.api.voice_discovery import voice_capabilities_module
 from copilot_core.api.security import validate_token, is_auth_required
 from copilot_core.api.middleware.security import init_security_middleware
 from copilot_core.versioning import get_runtime_version
@@ -358,6 +359,7 @@ def create_app() -> Flask:
                             "/api/v1/notifications/subscriptions"
                         ]
                     },
+                    "voice": voice_capabilities_module(),
                     "voice_context": {
                         "enabled": True,
                         "version": "1.0.0",
