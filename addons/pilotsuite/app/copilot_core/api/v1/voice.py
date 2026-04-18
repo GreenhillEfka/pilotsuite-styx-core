@@ -4,6 +4,8 @@ Provides REST API for voice intent handling, context building, and proactive hin
 
 Endpoints:
 - POST /api/v1/voice/intent - Process voice intent
+- POST /api/v1/voice/transcribe - Transcribe audio through Whisper compatibility
+- POST /api/v1/voice/synthesize - Synthesize audio through Piper compatibility
 - GET  /api/v1/voice/context - Get current voice context
 - GET  /api/v1/voice/hints - Get proactive voice hints
 - POST /api/v1/voice/speak - Generate TTS response
@@ -28,6 +30,8 @@ from copilot_core.voice.command_router import VoiceCommandRouter
 from copilot_core.voice.voice_handler import VoiceIntentHandler, VoiceIntent, IntentType, VoiceResponse
 from copilot_core.voice.context_builder import VoiceContextBuilder, VoiceContext
 from copilot_core.voice.proactive import ProactiveVoiceHints, HintConfig, HintPriority
+from copilot_core.voice.stt_whisper import WhisperSTT, STTConfig
+from copilot_core.voice.tts_piper import PiperTTS, TTSConfig
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -97,6 +101,54 @@ def _get_context_builder() -> VoiceContextBuilder:
     if not hasattr(current_app, '_voice_context_builder'):
         current_app._voice_context_builder = VoiceContextBuilder()
     return current_app._voice_context_builder
+
+
+def _get_stt_engine() -> WhisperSTT:
+    """Get or create the shared STT engine."""
+    if not hasattr(current_app, "_voice_stt_engine"):
+        current_app._voice_stt_engine = WhisperSTT(STTConfig(language="de"))
+    return current_app._voice_stt_engine
+
+
+def _get_tts_engine() -> PiperTTS:
+    """Get or create the shared TTS engine."""
+    if not hasattr(current_app, "_voice_tts_engine"):
+        current_app._voice_tts_engine = PiperTTS(TTSConfig())
+    return current_app._voice_tts_engine
+
+
+def _build_voice_runtime_status() -> Dict[str, Any]:
+    """Summarize the bounded STT/TTS runtime exposed by this API surface."""
+    runtime: Dict[str, Any] = {}
+
+    try:
+        stt_engine = _get_stt_engine()
+        runtime["stt"] = {
+            "available": True,
+            "engine": "whisper",
+            "model": stt_engine.config.model,
+            "default_language": stt_engine.config.language or "de",
+        }
+    except Exception:
+        runtime["stt"] = {
+            "available": False,
+            "engine": "whisper",
+        }
+
+    try:
+        tts_engine = _get_tts_engine()
+        runtime["tts"] = {
+            "available": True,
+            "engine": tts_engine.config.engine,
+            "voice": tts_engine.config.voice,
+        }
+    except Exception:
+        runtime["tts"] = {
+            "available": False,
+            "engine": "piper",
+        }
+
+    return runtime
 
 
 def _get_proactive_hints() -> ProactiveVoiceHints:
@@ -652,6 +704,73 @@ def get_hints():
         }), 500
 
 
+@bp.route("/transcribe", methods=["POST"])
+def transcribe_speech():
+    """Transcribe audio through the shipped Whisper compatibility surface."""
+    try:
+        data = request.get_json(silent=True) or {}
+        audio_path = data.get("audio_path") or "memory://voice-input"
+        language = data.get("language", "de")
+
+        result = _get_stt_engine().transcribe(audio_path, language=language)
+        if not result:
+            return jsonify({
+                "status": "error",
+                "message": "Voice transcription unavailable",
+            }), 503
+
+        return jsonify({
+            "status": "ok",
+            "text": result.text,
+            "language": result.language,
+            "confidence": result.confidence,
+            "duration_ms": result.duration_ms,
+            "metadata": result.metadata,
+        })
+    except Exception as e:
+        _LOGGER.exception("Failed to transcribe speech")
+        return jsonify({
+            "status": "error",
+            "message": str(e)
+        }), 500
+
+
+@bp.route("/synthesize", methods=["POST"])
+def synthesize_speech_route():
+    """Synthesize speech through the shipped Piper compatibility surface."""
+    try:
+        data = request.get_json(silent=True) or {}
+        text = data.get("text")
+        if not text:
+            return jsonify({
+                "status": "error",
+                "message": "Missing 'text' in request body"
+            }), 400
+
+        voice = data.get("voice")
+        result = _get_tts_engine().synthesize(text, voice=voice)
+        if not result:
+            return jsonify({
+                "status": "error",
+                "message": "Voice synthesis unavailable"
+            }), 503
+
+        return jsonify({
+            "status": "ok",
+            "audio_path": result.audio_path,
+            "text": result.text,
+            "voice": result.voice,
+            "duration_seconds": result.duration_seconds,
+            "generation_time_ms": result.generation_time_ms,
+        })
+    except Exception as e:
+        _LOGGER.exception("Failed to synthesize speech")
+        return jsonify({
+            "status": "error",
+            "message": str(e)
+        }), 500
+
+
 @bp.route("/speak", methods=["POST"])
 def generate_speech():
     """Generate TTS response for voice output.
@@ -753,6 +872,10 @@ def get_status():
         except Exception:
             components["proactive_hints"] = "unavailable"
         
+        runtime = _build_voice_runtime_status()
+        components["stt_engine"] = "available" if runtime["stt"]["available"] else "unavailable"
+        components["tts_engine"] = "available" if runtime["tts"]["available"] else "unavailable"
+
         # Get config from proactive hints
         hints_service = _get_proactive_hints()
         config = hints_service.config
@@ -761,6 +884,7 @@ def get_status():
             "status": "ok",
             "version": "1.0.0",
             "components": components,
+            "runtime": runtime,
             "config": {
                 "default_language": "de",
                 "supported_languages": ["de", "en"],
