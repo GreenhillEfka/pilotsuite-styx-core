@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import builtins
 import sys
+import types
 from pathlib import Path
 from unittest.mock import patch
 
@@ -14,6 +15,17 @@ if str(ADDON_APP) not in sys.path:
 
 from copilot_core.api.voice_discovery import voice_capabilities_module
 from copilot_core.voice import voice_health
+
+
+class _BackendProbe:
+    def __init__(self, available: bool):
+        self.available = available
+
+    def can_transcribe(self):
+        return self.available
+
+    def can_synthesize(self):
+        return self.available
 
 
 def test_empty_voice_health_block_keeps_capability_shape_stable():
@@ -41,4 +53,44 @@ def test_voice_capabilities_module_fallback_keeps_can_speak_field():
         "can_synthesize": False,
         "can_speak": False,
         "available_backends": [],
+    }
+
+
+def test_voice_health_block_keeps_tts_truth_when_stt_import_fails(monkeypatch):
+    def _fake_import_module(module_path: str):
+        if module_path == "copilot_core.voice.stt_whisper":
+            raise ImportError("missing whisper")
+        if module_path == "copilot_core.voice.tts_piper":
+            return types.SimpleNamespace(PiperTTS=lambda: _BackendProbe(True))
+        raise AssertionError(f"unexpected module lookup: {module_path}")
+
+    monkeypatch.setattr(voice_health.importlib, "import_module", _fake_import_module)
+
+    assert voice_health.get_voice_health_block() == {
+        "can_transcribe": False,
+        "can_synthesize": True,
+        "can_speak": True,
+        "available_backends": [
+            {"type": "tts", "backend": "piper", "status": "available"},
+        ],
+    }
+
+
+def test_voice_health_block_keeps_stt_truth_when_tts_import_fails(monkeypatch):
+    def _fake_import_module(module_path: str):
+        if module_path == "copilot_core.voice.stt_whisper":
+            return types.SimpleNamespace(WhisperSTT=lambda: _BackendProbe(True))
+        if module_path == "copilot_core.voice.tts_piper":
+            raise ImportError("missing piper")
+        raise AssertionError(f"unexpected module lookup: {module_path}")
+
+    monkeypatch.setattr(voice_health.importlib, "import_module", _fake_import_module)
+
+    assert voice_health.get_voice_health_block() == {
+        "can_transcribe": True,
+        "can_synthesize": False,
+        "can_speak": False,
+        "available_backends": [
+            {"type": "stt", "backend": "whisper", "status": "available"},
+        ],
     }
