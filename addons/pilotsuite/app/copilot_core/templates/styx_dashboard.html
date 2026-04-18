@@ -84,6 +84,14 @@ a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
 .brain-chip{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:6px 12px;font-size:11px;display:flex;align-items:center;gap:6px;flex:1;min-width:120px}
 .brain-chip .chip-v{font-weight:700;color:var(--accent2)}
 .brain-chip .chip-l{color:var(--dim);font-size:10px}
+.brain-focus-panel{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 14px;min-height:84px}
+.brain-focus-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}
+.brain-focus-kicker{font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.6px}
+.brain-focus-title{font-size:11px;font-weight:700;color:var(--text)}
+.brain-focus-label{font-size:13px;font-weight:700;color:var(--accent2)}
+.brain-focus-meta{font-size:11px;color:var(--dim);line-height:1.5;margin-top:4px}
+.brain-focus-badges{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+.brain-focus-empty{font-size:11px;color:var(--dim);line-height:1.5}
 
 /* ── Chat ── */
 .chat-panel{display:flex;flex-direction:column;flex:1;min-height:0;background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
@@ -186,6 +194,7 @@ a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
       <div class="styx-left">
         <div class="brain-wrap"><canvas id="brain-canvas"></canvas></div>
         <div class="brain-stats" id="brain-stats"></div>
+        <div class="brain-focus-panel" id="brain-focus-panel"></div>
       </div>
       <div class="styx-right">
         <div class="chat-panel">
@@ -269,6 +278,7 @@ if (TOKEN) sessionStorage.setItem('styx-auth-token', TOKEN);
 let activeTab = 'styx', refreshTimer = null, liveRefreshTimer = null, moduleSchemas = {}, chatHistory = [];
 let brainData = { nodes: 0, edges: 0, totalEvents: 0 }, neuronsData = {}, liveSocket = null, graphDeltaState = null, brainDeltaAnimationId = null;
 let graphTopologyState = { nodes: [], edges: [], positions: {}, fetchedAt: 0 }, graphTopologyRefreshPromise = null;
+let graphHoverState = null, graphSelectionState = null, graphCanvasInteractionBound = false;
 const GRAPH_DELTA_TTL_MS = 4200;
 const GRAPH_TOPOLOGY_LIMITS = { nodes: 48, edges: 96 };
 const GRAPH_TOPOLOGY_REFRESH_MS = 30000;
@@ -567,6 +577,117 @@ function getGraphAnchorPoint(nodeId, fallbackKey, cx, cy, minRadius, maxRadius, 
   if (topologyPoint) return graphCanvasPoint(topologyPoint, W, H);
   return graphPointFromKey(fallbackKey || nodeId || 'graph-delta', cx, cy, minRadius, maxRadius);
 }
+function getGraphNodeById(nodeId) {
+  if (!nodeId) return null;
+  return (graphTopologyState.nodes || []).find(node => node.id === nodeId) || null;
+}
+function getGraphNeighborIds(nodeId) {
+  if (!nodeId) return [];
+  return Array.from(new Set((graphTopologyState.edges || []).flatMap(edge => {
+    if (edge.from === nodeId) return [edge.to];
+    if (edge.to === nodeId) return [edge.from];
+    return [];
+  }).filter(Boolean)));
+}
+function renderGraphFocusPanel() {
+  const panel = $('brain-focus-panel');
+  if (!panel) return;
+  const selectedNode = getGraphNodeById(graphSelectionState?.nodeId);
+  const hoverNode = selectedNode ? null : getGraphNodeById(graphHoverState?.nodeId);
+  const focusNode = selectedNode || hoverNode;
+  if (focusNode) {
+    const neighborIds = getGraphNeighborIds(focusNode.id);
+    const neighborLabels = neighborIds.slice(0, 4).map(nodeId => getGraphNodeById(nodeId)?.label || nodeId).filter(Boolean);
+    panel.innerHTML = `
+      <div class="brain-focus-head">
+        <div>
+          <div class="brain-focus-kicker">${selectedNode ? 'Pinned graph focus' : 'Hover graph focus'}</div>
+          <div class="brain-focus-title">Topology-aware node inspection</div>
+        </div>
+        <span class="badge ${selectedNode ? 'bp' : 'bc'}">${selectedNode ? 'Fixiert' : 'Hover'}</span>
+      </div>
+      <div class="brain-focus-label">${esc(focusNode.label || focusNode.id)}</div>
+      <div class="brain-focus-meta">Kind: ${esc(focusNode.kind || 'entity')} · Score: ${Number(focusNode.score || 0).toFixed(2)} · Degree: ${neighborIds.length}${neighborLabels.length ? ` · Neighbors: ${esc(neighborLabels.join(', '))}${neighborIds.length > neighborLabels.length ? '…' : ''}` : ''}</div>
+      <div class="brain-focus-badges">
+        <span class="badge bb">Node ${esc(focusNode.id)}</span>
+        <span class="badge bc">${neighborIds.length} linked</span>
+        ${selectedNode ? '<span class="badge bp">Click empty canvas to clear</span>' : '<span class="badge bg">Click to pin</span>'}
+      </div>
+    `;
+    return;
+  }
+  if (graphDeltaState) {
+    panel.innerHTML = `
+      <div class="brain-focus-head">
+        <div>
+          <div class="brain-focus-kicker">Live graph delta</div>
+          <div class="brain-focus-title">Realtime topology overlay active</div>
+        </div>
+        <span class="badge bo">Live</span>
+      </div>
+      <div class="brain-focus-label">${esc(graphDeltaState.label || 'Graph update')}</div>
+      <div class="brain-focus-meta">Die Canvas-Overlay nutzt jetzt echte Snapshot-Koordinaten. Hover oder klicke Nodes, um die aktuelle Graph-Topologie ohne zweiten Graph-Surface zu inspizieren.</div>
+    `;
+    return;
+  }
+  panel.innerHTML = '<div class="brain-focus-empty">Hover oder klicke einen Node im Brain-Canvas, um Kind, Score und Nachbarn aus dem aktuellen bounded Graph-Snapshot zu sehen.</div>';
+}
+function findGraphNodeAtCanvasPoint(clientX, clientY) {
+  const canvas = $('brain-canvas');
+  if (!canvas || !graphTopologyState.nodes.length) return null;
+  const rect = canvas.getBoundingClientRect();
+  const x = clientX - rect.left;
+  const y = clientY - rect.top;
+  const W = rect.width;
+  const H = rect.height;
+  let best = null;
+  let bestDistance = Infinity;
+  graphTopologyState.nodes.forEach(node => {
+    const point = graphTopologyState.positions?.[node.id];
+    if (!point) return;
+    const canvasPoint = graphCanvasPoint(point, W, H);
+    const hitRadius = 10 + Math.min(6, Number(node.score || 0) * 2.2);
+    const distance = Math.hypot(canvasPoint.x - x, canvasPoint.y - y);
+    if (distance <= hitRadius && distance < bestDistance) {
+      best = node;
+      bestDistance = distance;
+    }
+  });
+  return best;
+}
+function handleBrainCanvasPointerMove(evt) {
+  const node = findGraphNodeAtCanvasPoint(evt.clientX, evt.clientY);
+  const nextNodeId = node?.id || null;
+  if (graphHoverState?.nodeId === nextNodeId) return;
+  graphHoverState = nextNodeId ? { nodeId: nextNodeId } : null;
+  const canvas = $('brain-canvas');
+  if (canvas) canvas.style.cursor = nextNodeId ? 'pointer' : 'default';
+  renderGraphFocusPanel();
+  drawBrain();
+}
+function handleBrainCanvasPointerLeave() {
+  graphHoverState = null;
+  const canvas = $('brain-canvas');
+  if (canvas) canvas.style.cursor = 'default';
+  renderGraphFocusPanel();
+  drawBrain();
+}
+function handleBrainCanvasClick(evt) {
+  const node = findGraphNodeAtCanvasPoint(evt.clientX, evt.clientY);
+  const nextNodeId = node?.id || null;
+  graphSelectionState = nextNodeId && graphSelectionState?.nodeId !== nextNodeId ? { nodeId: nextNodeId } : null;
+  renderGraphFocusPanel();
+  drawBrain();
+}
+function bindBrainCanvasInteractions() {
+  if (graphCanvasInteractionBound) return;
+  const canvas = $('brain-canvas');
+  if (!canvas) return;
+  canvas.addEventListener('mousemove', handleBrainCanvasPointerMove);
+  canvas.addEventListener('mouseleave', handleBrainCanvasPointerLeave);
+  canvas.addEventListener('click', handleBrainCanvasClick);
+  graphCanvasInteractionBound = true;
+}
 function deriveGraphDeltaHighlight(payload) {
   const delta = payload?.delta || {};
   const changeType = delta.change_type;
@@ -613,8 +734,11 @@ function applyGraphRealtime(evt) {
   const payload = evt?.data || evt || {};
   const graphPayload = payload.data || payload;
   syncGraphTopologyWithDelta(graphPayload);
+  if (graphSelectionState?.nodeId && !getGraphNodeById(graphSelectionState.nodeId)) graphSelectionState = null;
+  if (graphHoverState?.nodeId && !getGraphNodeById(graphHoverState.nodeId)) graphHoverState = null;
   graphDeltaState = deriveGraphDeltaHighlight(graphPayload);
   renderStyxSummary(null, graphPayload);
+  renderGraphFocusPanel();
   if (graphDeltaState) ensureBrainDeltaAnimation();
   if (!graphTopologyState.nodes.length || graphDeltaState?.changeType === 'pruned' || (graphDeltaState?.nodeId && !graphTopologyState.positions?.[graphDeltaState.nodeId])) refreshGraphTopology(graphDeltaState?.changeType === 'pruned');
   scheduleLiveRefresh(activeTab === 'styx', 120);
@@ -682,6 +806,7 @@ async function loadStyx() {
   }
   if (graphTopology?.nodes) graphTopologyState = graphTopology;
   renderStyxSummary(mood, graph, neurons?.neurons || {});
+  renderGraphFocusPanel();
 }
 
 function drawGraphTopologyBackdrop(ctx, W, H) {
@@ -695,6 +820,8 @@ function drawGraphTopologyBackdrop(ctx, W, H) {
     module: 'rgba(251,191,36,.82)',
     event: 'rgba(251,146,60,.82)',
   };
+  const focusNodeIds = new Set([graphSelectionState?.nodeId, graphHoverState?.nodeId].filter(Boolean));
+  const focusEdgeIds = new Set((graphTopologyState.edges || []).filter(edge => focusNodeIds.has(edge.from) || focusNodeIds.has(edge.to)).map(edge => edge.id));
   ctx.save();
   graphTopologyState.edges.slice(0, GRAPH_TOPOLOGY_LIMITS.edges).forEach(edge => {
     const from = graphTopologyState.positions?.[edge.from];
@@ -705,8 +832,9 @@ function drawGraphTopologyBackdrop(ctx, W, H) {
     ctx.beginPath();
     ctx.moveTo(start.x, start.y);
     ctx.lineTo(end.x, end.y);
-    ctx.strokeStyle = 'rgba(46,70,95,.55)';
-    ctx.lineWidth = 1;
+    const focused = focusEdgeIds.has(edge.id);
+    ctx.strokeStyle = focused ? 'rgba(124,106,239,.78)' : 'rgba(46,70,95,.55)';
+    ctx.lineWidth = focused ? 2.4 : 1;
     ctx.stroke();
   });
   graphTopologyState.nodes.slice(0, GRAPH_TOPOLOGY_LIMITS.nodes).forEach(node => {
@@ -714,10 +842,25 @@ function drawGraphTopologyBackdrop(ctx, W, H) {
     if (!point) return;
     const canvasPoint = graphCanvasPoint(point, W, H);
     const radius = 2.5 + Math.min(3.5, Number(node.score || 0) * 1.6);
+    const focused = focusNodeIds.has(node.id);
+    if (focused) {
+      ctx.beginPath();
+      ctx.arc(canvasPoint.x, canvasPoint.y, radius + 7, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(124,106,239,.18)';
+      ctx.fill();
+    }
     ctx.beginPath();
     ctx.arc(canvasPoint.x, canvasPoint.y, radius, 0, Math.PI * 2);
     ctx.fillStyle = kindColors[node.kind] || 'rgba(148,163,184,.75)';
     ctx.fill();
+    if (focused) {
+      ctx.beginPath();
+      ctx.arc(canvasPoint.x, canvasPoint.y, radius + 3, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(167,139,250,.92)';
+      ctx.lineWidth = 1.6;
+      ctx.stroke();
+      drawGraphDeltaLabel(ctx, ellipsizeGraphLabel(node.label || node.id, 18), canvasPoint.x, canvasPoint.y - 18, '#d8d1ff', 'rgba(124,106,239,.35)');
+    }
   });
   ctx.restore();
 }
@@ -993,6 +1136,7 @@ function renderSummaryStrip(data) { const el = $('summary-strip'); if (!el) retu
 async function loadDashboard() { await refreshActiveTab(); }
 async function init() {
   connectLiveUpdates();
+  bindBrainCanvasInteractions();
   const saved = localStorage.getItem('styx-active-tab');
   if (saved && TABS.includes(saved)) switchTab(saved);
   else await loadStyx();
