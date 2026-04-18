@@ -40,7 +40,7 @@ PilotSuite generates a random 256-bit token on first startup if none is configur
 | `GET /health` | No | — |
 | `GET /ready` | No | — |
 | `GET /api/v1/status` | Yes | read |
-| `GET /api/v1/capabilities` | No | — |
+| `GET /api/v1/capabilities` | Yes | read |
 | `GET /version` | No | — |
 | `POST /api/v1/...` | Yes | read+write |
 | `POST /api/v1/automations/...` | Yes | read+write |

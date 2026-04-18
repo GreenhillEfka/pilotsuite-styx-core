@@ -8,7 +8,6 @@ from typing import Any
 from flask import Flask, jsonify, request
 
 from copilot_core.api.v1.blueprint import api_v1
-from copilot_core.api.voice_discovery import voice_capabilities_module
 from copilot_core.api.security import validate_token, is_auth_required
 from copilot_core.api.middleware.security import init_security_middleware
 from copilot_core.versioning import get_runtime_version
@@ -305,149 +304,9 @@ def create_app() -> Flask:
             }
         )
 
-    @app.get("/api/v1/capabilities")
-    def capabilities():
-        return jsonify(
-            {
-                "ok": True,
-                "time": _now_iso(),
-                "version": cfg.version,
-                "modules": {
-                    "events": {
-                        "enabled": True,
-                        "persist": cfg.events_persist,
-                        "cache_max": cfg.events_cache_max,
-                        "idempotency": {
-                            "supported": True,
-                            "ttl_seconds": cfg.events_idempotency_ttl_seconds,
-                            "lru_max": cfg.events_idempotency_lru_max,
-                            "key_sources": [
-                                "Idempotency-Key header",
-                                "idempotency_key payload field",
-                                "event_id payload field",
-                                "id payload field",
-                            ],
-                        },
-                    },
-                    "candidates": {
-                        "enabled": True,
-                        "persist": cfg.candidates_persist,
-                        "max": cfg.candidates_max,
-                    },
-                    "mood": {"enabled": True, "window_seconds": cfg.mood_window_seconds},
-                    "brain_graph": {
-                        "enabled": True,
-                        "persist": cfg.brain_graph_persist,
-                        "json_path": cfg.brain_graph_json_path,
-                        "nodes_max": cfg.brain_graph_nodes_max,
-                        "edges_max": cfg.brain_graph_edges_max,
-                        "feeding_enabled": True,
-                    },
-                    "vector_store": {
-                        "enabled": True,
-                        "version": "0.1.0",
-                        "description": "Vector operations for semantic search and embeddings",
-                        "endpoints": [
-                            "/api/v1/vector/store",
-                            "/api/v1/vector/search",
-                            "/api/v1/vector/get/:id",
-                            "/api/v1/vector/delete/:id",
-                            "/api/v1/vector/stats"
-                        ]
-                    },
-                    "dashboard": {
-                        "enabled": True,
-                        "version": "0.1.0",
-                        "description": "Dashboard data endpoints",
-                        "endpoints": [
-                            "/api/v1/dashboard/brain-summary"
-                        ]
-                    },
-                    "search": {
-                        "enabled": True,
-                        "version": "1.0.0",
-                        "description": "Quick search for entities, automations, scripts, scenes, and services",
-                        "endpoints": [
-                            "/api/v1/search",
-                            "/api/v1/search/entities",
-                            "/api/v1/search/stats",
-                            "/api/v1/search/index"
-                        ]
-                    },
-                    "notifications": {
-                        "enabled": True,
-                        "version": "1.0.0",
-                        "description": "Push notification system for alerts, mood changes, and suggestions",
-                        "endpoints": [
-                            "/api/v1/notifications/send",
-                            "/api/v1/notifications",
-                            "/api/v1/notifications/subscribe",
-                            "/api/v1/notifications/subscriptions"
-                        ]
-                    },
-                    "voice": voice_capabilities_module(),
-                    "voice_context": {
-                        "enabled": True,
-                        "version": "1.0.0",
-                        "description": "Voice assistant integration for mood-based context",
-                        "endpoints": [
-                            "/api/v1/voice_context"
-                        ]
-                    },
-                    "anomaly_detection": {
-                        "enabled": True,
-                        "version": "1.0.0",
-                        "description": "ML-based anomaly detection for sensor patterns using Isolation Forest",
-                        "endpoints": [
-                            "/api/v1/anomaly/detect",
-                            "/api/v1/anomaly/history",
-                            "/api/v1/anomaly/sensor/:sensor_id/health",
-                            "/api/v1/anomaly/train",
-                            "/api/v1/anomaly/model/status",
-                            "/api/v1/anomaly/model/save",
-                            "/api/v1/anomaly/model/load",
-                            "/api/v1/anomaly/model/versions",
-                            "/api/v1/anomaly/compare",
-                            "/api/v1/anomaly/store/stats"
-                        ],
-                        "features": [
-                            "Isolation Forest anomaly detection",
-                            "Incremental learning (partial_fit)",
-                            "Per-sensor anomaly scoring",
-                            "Critical alert integration",
-                            "Model persistence and versioning"
-                        ]
-                    },
-                    "multihome": {
-                        "enabled": True,
-                        "version": "1.0.0",
-                        "description": "Multi-home synchronization for multiple locations (Hauptwohnung, Ferienhaus, Büro)",
-                        "endpoints": [
-                            "/api/v1/multihome/homes",
-                            "/api/v1/multihome/homes/<home_id>",
-                            "/api/v1/multihome/config/diff/<source>/<target>",
-                            "/api/v1/multihome/config/sync",
-                            "/api/v1/multihome/state/diff/<home1>/<home2>",
-                            "/api/v1/multihome/state/sync",
-                            "/api/v1/multihome/location/sync",
-                            "/api/v1/multihome/climate/preheat",
-                            "/api/v1/multihome/conflicts",
-                            "/api/v1/multihome/conflicts/<id>/resolve",
-                            "/api/v1/multihome/status",
-                            "/api/v1/multihome/operations"
-                        ],
-                        "features": [
-                            "Secure synchronization between multiple homes",
-                            "Location-aware automations (e.g., Ferienhaus vorheizen)",
-                            "Encrypted communication between instances",
-                            "Conflict resolution (last_write_wins, primary_wins, merge, manual)",
-                            "Configuration and state synchronization",
-                            "Climate and lighting scene sync"
-                        ]
-                    },
-                },
-            }
-        )
+    # `/api/v1/capabilities` is registered once via the nested api_v1/dev blueprint.
+    # Keep the lightweight app factory on the same canonical capability surface
+    # instead of shadow-registering a second handler here.
 
     @app.before_request
     def _auth_middleware():

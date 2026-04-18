@@ -377,25 +377,10 @@ def _register_routes(flask_app: Flask, startup_time: float) -> None:
             "port": int(os.environ.get("PORT", "8909")),
         })
 
-    @flask_app.get("/api/v1/capabilities")
-    def api_v1_capabilities():
-        """Capabilities endpoint for HA pipeline health."""
-        return jsonify({
-            "ok": True,
-            "time": _now_iso(),
-            "version": APP_VERSION,
-            "modules": {
-                "events": {"enabled": True},
-                "candidates": {"enabled": True},
-                "brain_graph": {"enabled": True},
-                "neurons": {"enabled": True},
-                "mood": {"enabled": True},
-                "habitus": {"enabled": True},
-                "chat": {"enabled": True},
-                "weather": {"enabled": True},
-                "energy": {"enabled": True},
-            },
-        })
+    # `/api/v1/capabilities` is registered once through `copilot_core.api.v1.dev`
+    # during `register_blueprints(...)`. Keep the production app on that same
+    # canonical capability/discovery surface instead of shadow-registering a
+    # second reduced handler here.
 
     @flask_app.get("/version")
     def version():
