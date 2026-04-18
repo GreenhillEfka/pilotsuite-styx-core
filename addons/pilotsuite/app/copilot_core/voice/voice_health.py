@@ -46,4 +46,9 @@ def get_voice_health_block() -> dict:
 
 
 def _empty_block() -> dict:
-    return {"can_transcribe": False, "can_synthesize": False, "available_backends": []}
+    return {
+        "can_transcribe": False,
+        "can_synthesize": False,
+        "can_speak": False,
+        "available_backends": [],
+    }

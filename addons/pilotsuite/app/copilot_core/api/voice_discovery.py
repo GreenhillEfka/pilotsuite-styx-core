@@ -32,7 +32,12 @@ def voice_capabilities_module() -> dict[str, Any]:
         from copilot_core.voice.voice_health import get_voice_health_block
         runtime = get_voice_health_block()
     except Exception:
-        runtime = {"can_transcribe": False, "can_synthesize": False, "available_backends": []}
+        runtime = {
+            "can_transcribe": False,
+            "can_synthesize": False,
+            "can_speak": False,
+            "available_backends": [],
+        }
     return {
         "enabled": True,
         "version": "1.0.0",
