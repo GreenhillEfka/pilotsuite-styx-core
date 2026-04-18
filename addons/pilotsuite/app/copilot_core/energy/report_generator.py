@@ -267,6 +267,22 @@ class EnergyReportGenerator:
             ),
         }
 
+    def export_usage_pattern_summary(
+        self,
+        pattern_learner: Any,
+        *,
+        window_start: datetime | None = None,
+        window_end: datetime | None = None,
+        min_confidence: float = 0.0,
+    ) -> dict[str, Any]:
+        """Return the canonical D1/D2/D3 usage-pattern payload unchanged for API export."""
+        return self.generate_usage_pattern_summary(
+            pattern_learner,
+            window_start=window_start,
+            window_end=window_end,
+            min_confidence=min_confidence,
+        )
+
     # ── Internal builders ───────────────────────────────────────────────
 
     @staticmethod

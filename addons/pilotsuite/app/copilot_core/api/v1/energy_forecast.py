@@ -24,8 +24,10 @@ from typing import Optional
 from flask import Blueprint, jsonify, request, current_app
 
 from copilot_core.api.security import require_token
+from copilot_core.automation.pattern_learner import PatternLearner
 from copilot_core.energy.forecast import EnergyForecastEngine
 from copilot_core.energy.pv_prediction import PVPredictionEngine
+from copilot_core.energy.report_generator import EnergyReportGenerator
 from copilot_core.energy.load_shifting import LoadShiftingEngine, ShiftableDevice
 from copilot_core.energy.solar_surplus_optimizer import SolarSurplusOptimizer
 
@@ -58,6 +60,37 @@ def _get_energy_service():
         return services.get("energy_service")
     except Exception:
         return None
+
+
+def _get_pattern_learner() -> PatternLearner:
+    """Hole PatternLearner aus App Config oder erstelle eine fallback-Instanz."""
+    try:
+        services = current_app.config.get("COPILOT_SERVICES", {})
+        pattern_learner = services.get("pattern_learner")
+        if pattern_learner:
+            return pattern_learner
+
+        cfg = current_app.config.get("COPILOT_CFG")
+        data_dir = getattr(cfg, "data_dir", None)
+        if data_dir:
+            return PatternLearner(data_dir=data_dir)
+    except Exception as e:
+        _LOGGER.warning("Error getting pattern learner: %s", e)
+
+    return PatternLearner()
+
+
+def _get_energy_report_generator() -> EnergyReportGenerator:
+    """Hole EnergyReportGenerator aus App Config oder erstelle eine fallback-Instanz."""
+    try:
+        services = current_app.config.get("COPILOT_SERVICES", {})
+        generator = services.get("energy_report_generator")
+        if generator:
+            return generator
+    except Exception as e:
+        _LOGGER.warning("Error getting energy report generator: %s", e)
+
+    return EnergyReportGenerator()
 
 
 def _resolve_weather_forecast_result(result):
@@ -954,6 +987,45 @@ def energy_sankey_svg():
 def energy_reports_generate():
     """Energy report — stub."""
     return jsonify({"ok": True, "status": "not_configured", "report": None})
+
+
+@energy_forecast_bp.route("/reports/usage-patterns/export", methods=["GET"])
+@require_token
+def export_usage_pattern_report():
+    """Export the canonical D1/D2/D3 usage-pattern report payload."""
+    try:
+        window_start = _parse_request_datetime(
+            request.args.get("window_start"),
+            "window_start",
+        )
+        window_end = _parse_request_datetime(
+            request.args.get("window_end"),
+            "window_end",
+        )
+
+        min_confidence_raw = request.args.get("min_confidence", "0.0")
+        try:
+            min_confidence = float(min_confidence_raw)
+        except (TypeError, ValueError):
+            return jsonify({"error": "Query parameter 'min_confidence' must be a float between 0.0 and 1.0"}), 400
+
+        if min_confidence < 0.0 or min_confidence > 1.0:
+            return jsonify({"error": "Query parameter 'min_confidence' must be a float between 0.0 and 1.0"}), 400
+
+        report = _get_energy_report_generator().export_usage_pattern_summary(
+            _get_pattern_learner(),
+            window_start=window_start,
+            window_end=window_end,
+            min_confidence=min_confidence,
+        )
+        return jsonify(report)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except TypeError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except Exception as exc:
+        _LOGGER.error("Usage pattern report export error: %s", exc)
+        return jsonify({"error": str(exc)}), 500
 
 
 @energy_forecast_bp.route("/demand-response/status", methods=["GET"])
