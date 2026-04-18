@@ -5,6 +5,8 @@ import pytest
 import time
 from typing import Dict, Any
 
+from copilot_core.api.voice_discovery import voice_capabilities_module
+
 
 class TestRESTAPIServer:
     """Test REST API server endpoints."""
@@ -77,6 +79,9 @@ class TestRESTAPIServer:
         data = response.json()
         assert "modules" in data
         assert isinstance(data["modules"], dict)
+        assert data["modules"]["voice"] == voice_capabilities_module()
+        assert "voice_context" not in data["modules"]
+        assert data["modules"]["rag"] == ["embedding", "similarity_search", "retrieval"]
 
     def test_create_token(self, api_client):
         """Test token creation."""

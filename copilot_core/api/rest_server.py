@@ -20,6 +20,7 @@ import uvicorn
 
 # Legacy gap endpoints
 from copilot_core.api.v1.legacy_gaps import router as legacy_gaps_router
+from copilot_core.api.voice_discovery import voice_capabilities_module
 
 logger = logging.getLogger(__name__)
 
@@ -435,7 +436,9 @@ def register_routes(app: FastAPI, config: APIConfig):
 
         Keep capability discovery auth-gated here as well, so the standalone
         FastAPI compatibility server does not advertise a weaker unauthenticated
-        contract than the canonical Flask runtime surfaces.
+        contract than the canonical Flask runtime surfaces. Reuse the shared
+        voice discovery payload so the compatibility server does not drift back
+        to the older reduced voice-module shape.
         """
         return {
             "modules": {
@@ -444,7 +447,7 @@ def register_routes(app: FastAPI, config: APIConfig):
                 "presence": ["multi_sensor_fusion", "wilson_score", "bayesian"],
                 "energy": ["forecasting", "or_tools_scheduler", "optimization"],
                 "brain": ["graph_store", "neo4j", "networkx", "temporal"],
-                "voice": ["stt", "nlu", "tts", "emotion"],
+                "voice": voice_capabilities_module(),
             },
         }
 
