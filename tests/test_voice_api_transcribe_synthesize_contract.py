@@ -205,6 +205,49 @@ def test_voice_status_capabilities_turn_false_when_backends_missing(monkeypatch)
     }
 
 
+def test_voice_status_stays_truthful_when_proactive_hints_are_unavailable(monkeypatch):
+    monkeypatch.setattr(voice_api, "_validate_token", lambda request: True)
+
+    class _DummyHandler:
+        mood_engine = object()
+        habitus_service = None
+
+    class _UnavailableEngine:
+        def availability_payload(self):
+            return {
+                "available": False,
+                "engine": "stub",
+                "available_backends": [],
+            }
+
+    monkeypatch.setattr(voice_api, "_get_intent_handler", lambda: _DummyHandler())
+    monkeypatch.setattr(voice_api, "_get_context_builder", lambda: object())
+    monkeypatch.setattr(voice_api, "_get_proactive_hints", lambda: (_ for _ in ()).throw(RuntimeError("hints offline")))
+    monkeypatch.setattr(voice_api, "_get_stt_engine", lambda: _UnavailableEngine())
+    monkeypatch.setattr(voice_api, "_get_tts_engine", lambda: _UnavailableEngine())
+    monkeypatch.setattr(voice_api, "_get_nlu_engine", lambda: object())
+
+    client = _make_app().test_client()
+    response = client.get("/api/v1/voice/status")
+
+    assert response.status_code == 200, response.get_json()
+    payload = response.get_json()
+    assert payload["components"]["proactive_hints"] == "unavailable"
+    assert payload["config"] == {
+        "default_language": "de",
+        "supported_languages": ["de", "en"],
+        "hint_cooldown_seconds": 300,
+        "max_hints_per_hour": 6,
+        "min_priority": "low",
+    }
+    assert payload["capabilities"] == {
+        "can_transcribe": False,
+        "can_synthesize": False,
+        "can_speak": False,
+        "can_dialog": False,
+    }
+
+
 def test_voice_status_prefers_injected_runtime_seam(monkeypatch):
     monkeypatch.setattr(voice_api, "_validate_token", lambda request: True)
 

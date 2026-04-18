@@ -51,6 +51,44 @@ def test_voice_capabilities_module_advertises_restored_public_routes():
     assert "/api/v1/voice/context" not in payload["endpoints"]
     assert "capability-gated consumer branching" in payload["features"]
 
+
+def test_voice_capabilities_module_preserves_nested_runtime_truth(monkeypatch):
+    from copilot_core.voice import voice_health
+
+    helper_payload = {
+        "can_transcribe": True,
+        "can_synthesize": True,
+        "can_speak": True,
+        "can_dialog": True,
+        "available_backends": [
+            {"type": "stt", "backend": "whisper", "status": "available"},
+            {"type": "tts", "backend": "piper", "status": "available"},
+        ],
+        "runtime": {
+            "stt": {
+                "available": True,
+                "engine": "whisper",
+                "available_backends": ["whisper"],
+            },
+            "tts": {
+                "available": True,
+                "engine": "piper",
+                "available_backends": ["piper"],
+            },
+            "nlu": {
+                "available": True,
+                "engine": "rule_based",
+                "supported_languages": ["de", "en"],
+            },
+        },
+    }
+
+    monkeypatch.setattr(voice_health, "get_voice_health_block", lambda: dict(helper_payload))
+
+    payload = voice_capabilities_module()
+
+    assert payload["runtime"] == helper_payload
+
 def test_create_app_capabilities_surface_keeps_one_canonical_voice_module_route(monkeypatch):
     _stub_create_app_dependencies(monkeypatch)
     monkeypatch.setenv("COPILOT_AUTH_TOKEN", "pilotclaw-test-token")
@@ -71,7 +109,8 @@ def test_create_app_capabilities_surface_keeps_one_canonical_voice_module_route(
     payload = response.get_json()
 
     assert "voice" in payload["capabilities"]
-    assert payload["modules"]["voice"] == voice_capabilities_module()
+    with app.app_context():
+        assert payload["modules"]["voice"] == voice_capabilities_module()
     assert payload["modules"]["voice_context"]["endpoints"] == ["/api/v1/voice_context"]
 
 def test_main_create_app_capabilities_surface_keeps_one_canonical_voice_module_route(monkeypatch):
@@ -94,7 +133,8 @@ def test_main_create_app_capabilities_surface_keeps_one_canonical_voice_module_r
     assert response.status_code == 200
     payload = response.get_json()
 
-    assert payload["modules"]["voice"] == voice_capabilities_module()
+    with app.app_context():
+        assert payload["modules"]["voice"] == voice_capabilities_module()
     assert payload["modules"]["voice_context"]["endpoints"] == ["/api/v1/voice_context"]
 
 

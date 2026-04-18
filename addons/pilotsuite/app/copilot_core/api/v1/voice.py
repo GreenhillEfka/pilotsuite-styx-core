@@ -27,7 +27,7 @@ from flask import Blueprint, jsonify, request, send_file
 
 from copilot_core.voice.voice_handler import VoiceIntent, IntentType
 from copilot_core.voice.context_builder import VoiceContext, VoiceContextBuilder
-from copilot_core.voice.proactive import HintPriority
+from copilot_core.voice.proactive import HintConfig, HintPriority
 from copilot_core.voice.runtime_access import get_voice_runtime
 
 _LOGGER = logging.getLogger(__name__)
@@ -169,6 +169,22 @@ def _build_voice_capabilities(runtime: Dict[str, Any], *, intent_handler_availab
         "can_synthesize": tts_available,
         "can_speak": tts_available,
         "can_dialog": bool(intent_handler_available and stt_available and tts_available and nlu_available),
+    }
+
+
+def _build_voice_status_config() -> Dict[str, Any]:
+    """Return stable voice config metadata even when proactive hints are unavailable."""
+    try:
+        config = _get_proactive_hints().config
+    except Exception:
+        config = HintConfig()
+
+    return {
+        "default_language": "de",
+        "supported_languages": ["de", "en"],
+        "hint_cooldown_seconds": config.hint_cooldown_seconds,
+        "max_hints_per_hour": config.max_hints_per_hour,
+        "min_priority": config.min_priority.value,
     }
 
 
@@ -818,23 +834,13 @@ def get_status():
         components["nlu_engine"] = "available" if runtime["nlu"]["available"] else "unavailable"
         capabilities = _build_voice_capabilities(runtime, intent_handler_available=intent_handler_available)
 
-        # Get config from proactive hints
-        hints_service = _get_proactive_hints()
-        config = hints_service.config
-        
         return jsonify({
             "status": "ok",
             "version": "1.0.0",
             "components": components,
             "runtime": runtime,
             "capabilities": capabilities,
-            "config": {
-                "default_language": "de",
-                "supported_languages": ["de", "en"],
-                "hint_cooldown_seconds": config.hint_cooldown_seconds,
-                "max_hints_per_hour": config.max_hints_per_hour,
-                "min_priority": config.min_priority.value,
-            },
+            "config": _build_voice_status_config(),
         })
     
     except Exception as e:

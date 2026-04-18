@@ -36,7 +36,30 @@ def voice_capabilities_module() -> dict[str, Any]:
             "can_transcribe": False,
             "can_synthesize": False,
             "can_speak": False,
+            "can_dialog": False,
             "available_backends": [],
+            "runtime": {
+                "stt": {
+                    "available": False,
+                    "engine": "whisper",
+                    "available_backends": [],
+                },
+                "tts": {
+                    "available": False,
+                    "engine": "piper",
+                    "available_backends": [],
+                },
+                "nlu": {
+                    "available": False,
+                    "engine": "rule_based",
+                    "supported_languages": ["de", "en"],
+                },
+                "intent_handler": {
+                    "available": False,
+                    "engine": "voice_handler",
+                    "default_language": "de",
+                },
+            },
         }
     return {
         "enabled": True,

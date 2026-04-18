@@ -67,17 +67,53 @@ def _make_client(monkeypatch, voice_block):
             "can_transcribe": False,
             "can_synthesize": True,
             "can_speak": True,
+            "can_dialog": False,
             "available_backends": [
                 {"type": "tts", "backend": "piper", "status": "available"},
             ],
+            "runtime": {
+                "stt": {
+                    "available": False,
+                    "engine": "whisper",
+                    "available_backends": [],
+                },
+                "tts": {
+                    "available": True,
+                    "engine": "piper",
+                    "available_backends": ["piper"],
+                },
+                "nlu": {
+                    "available": False,
+                    "engine": "rule_based",
+                    "supported_languages": ["de", "en"],
+                },
+            },
         },
         {
             "can_transcribe": True,
             "can_synthesize": False,
             "can_speak": False,
+            "can_dialog": False,
             "available_backends": [
                 {"type": "stt", "backend": "whisper", "status": "available"},
             ],
+            "runtime": {
+                "stt": {
+                    "available": True,
+                    "engine": "whisper",
+                    "available_backends": ["whisper"],
+                },
+                "tts": {
+                    "available": False,
+                    "engine": "piper",
+                    "available_backends": [],
+                },
+                "nlu": {
+                    "available": False,
+                    "engine": "rule_based",
+                    "supported_languages": ["de", "en"],
+                },
+            },
         },
     ],
 )
