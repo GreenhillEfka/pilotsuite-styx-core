@@ -20,7 +20,13 @@ from copilot_core.voice.command_flow import (
     CommandConfirmResult,
     CommandRejectResult,
 )
-from copilot_core.voice.dialog_flow import DialogStateResult
+from copilot_core.voice.dialog_flow import (
+    DialogActivateResult,
+    DialogClarifyResult,
+    DialogConfirmResult,
+    DialogResetResult,
+    DialogStateResult,
+)
 
 
 def _make_app():
@@ -611,6 +617,208 @@ def test_voice_dialog_state_route_prefers_injected_runtime_seam(monkeypatch):
     assert payload["state"] == "IDLE"
     assert payload["last_status"] == "idle"
     assert payload["pending_confirmation"] is False
+
+
+def test_voice_dialog_activate_route_delegates_to_dialog_flow_service(monkeypatch):
+    monkeypatch.setattr(voice_api, "_validate_token", lambda request: True)
+
+    called = {}
+
+    class _DelegatingFlow:
+        def activate_intent(self, **kwargs):
+            called.update(kwargs)
+            return DialogActivateResult(
+                status="ok",
+                state="ACTIVE",
+                active_intent=kwargs["intent"],
+                slot_values=kwargs["slots"],
+                context_stack_size=0,
+                last_activity_ts=123.0,
+                session_id=kwargs["session_id"],
+                user_id=kwargs["user_id"],
+            )
+
+    def _should_not_be_called(*args, **kwargs):
+        raise AssertionError("dialog activate route should delegate to dialog-flow service")
+
+    monkeypatch.setattr(voice_api, "_get_dialog_flow", lambda: _DelegatingFlow())
+    monkeypatch.setattr(voice_api, "_get_dialog_machine", _should_not_be_called)
+
+    app = _make_app()
+    response = app.test_client().post(
+        "/api/v1/voice/dialog/activate",
+        json={
+            "intent": "light.turn_on",
+            "slots": {"room": "wohnzimmer"},
+            "session_id": "sess-dialog-activate",
+            "user_id": "user-activate",
+        },
+    )
+
+    assert response.status_code == 200, response.get_json()
+    assert called == {
+        "intent": "light.turn_on",
+        "slots": {"room": "wohnzimmer"},
+        "session_id": "sess-dialog-activate",
+        "user_id": "user-activate",
+    }
+    payload = response.get_json()
+    assert payload["status"] == "ok"
+    assert payload["state"] == "ACTIVE"
+    assert payload["active_intent"] == "light.turn_on"
+    assert payload["session_id"] == "sess-dialog-activate"
+
+
+def test_voice_dialog_activate_route_prefers_injected_runtime_seam(monkeypatch):
+    monkeypatch.setattr(voice_api, "_validate_token", lambda request: True)
+
+    class _InjectedDialogFlow:
+        def activate_intent(self, **kwargs):
+            return DialogActivateResult(
+                status="ok",
+                state="ACTIVE",
+                active_intent=kwargs["intent"],
+                slot_values=kwargs["slots"],
+                context_stack_size=0,
+                last_activity_ts=123.0,
+                session_id=kwargs["session_id"],
+                user_id=kwargs["user_id"],
+            )
+
+    class _InjectedRuntime:
+        def get_dialog_flow(self):
+            return _InjectedDialogFlow()
+
+    def _should_not_be_called(*args, **kwargs):
+        raise AssertionError("fallback dialog runtime construction should not run")
+
+    monkeypatch.setattr(voice_runtime_access.VoiceRuntimeAccess, "get_dialog_flow", _should_not_be_called)
+    monkeypatch.setattr(voice_runtime_access.VoiceRuntimeAccess, "get_dialog_machine", _should_not_be_called)
+
+    app = Flask(__name__)
+    voice_runtime_access.init_voice_runtime(app, runtime=_InjectedRuntime())
+    app.register_blueprint(voice_api.bp)
+
+    response = app.test_client().post(
+        "/api/v1/voice/dialog/activate",
+        json={
+            "intent": "scene.activate",
+            "slots": {"scene": "abend"},
+            "session_id": "sess-injected-activate",
+            "user_id": "user-injected",
+        },
+    )
+
+    assert response.status_code == 200, response.get_json()
+    payload = response.get_json()
+    assert payload["status"] == "ok"
+    assert payload["state"] == "ACTIVE"
+    assert payload["active_intent"] == "scene.activate"
+    assert payload["slot_values"] == {"scene": "abend"}
+
+
+def test_voice_dialog_confirm_route_delegates_to_dialog_flow_service(monkeypatch):
+    monkeypatch.setattr(voice_api, "_validate_token", lambda request: True)
+
+    called = {}
+
+    class _DelegatingFlow:
+        def confirm_action(self, **kwargs):
+            called.update(kwargs)
+            return DialogConfirmResult(
+                status="ok",
+                state="IDLE",
+                active_intent=None,
+                slot_values={},
+                context_stack_size=0,
+                last_activity_ts=456.0,
+                session_id="sess-dialog-confirm",
+                user_id="user-confirm",
+            )
+
+    def _should_not_be_called(*args, **kwargs):
+        raise AssertionError("dialog confirm route should delegate to dialog-flow service")
+
+    monkeypatch.setattr(voice_api, "_get_dialog_flow", lambda: _DelegatingFlow())
+    monkeypatch.setattr(voice_api, "_get_dialog_machine", _should_not_be_called)
+
+    app = _make_app()
+    response = app.test_client().post(
+        "/api/v1/voice/dialog/confirm",
+        json={"confirmed": True},
+    )
+
+    assert response.status_code == 200, response.get_json()
+    assert called == {"confirmed": True}
+    payload = response.get_json()
+    assert payload["status"] == "ok"
+    assert payload["state"] == "IDLE"
+    assert payload["session_id"] == "sess-dialog-confirm"
+
+
+def test_voice_dialog_clarify_route_delegates_to_dialog_flow_service(monkeypatch):
+    monkeypatch.setattr(voice_api, "_validate_token", lambda request: True)
+
+    called = {}
+
+    class _DelegatingFlow:
+        def clarify(self, **kwargs):
+            called.update(kwargs)
+            return DialogClarifyResult(
+                status="ok",
+                state="CLARIFYING",
+                active_intent="light.turn_on",
+                slot_values={"_clarification": kwargs["clarification_text"]},
+                context_stack_size=0,
+                last_activity_ts=789.0,
+                session_id="sess-dialog-clarify",
+                user_id="user-clarify",
+                clarification_question=kwargs["clarification_text"],
+            )
+
+    def _should_not_be_called(*args, **kwargs):
+        raise AssertionError("dialog clarify route should delegate to dialog-flow service")
+
+    monkeypatch.setattr(voice_api, "_get_dialog_flow", lambda: _DelegatingFlow())
+    monkeypatch.setattr(voice_api, "_get_dialog_machine", _should_not_be_called)
+
+    app = _make_app()
+    response = app.test_client().post(
+        "/api/v1/voice/dialog/clarify",
+        json={"clarification_text": "Was genau meinst du?"},
+    )
+
+    assert response.status_code == 200, response.get_json()
+    assert called == {"clarification_text": "Was genau meinst du?"}
+    payload = response.get_json()
+    assert payload["status"] == "ok"
+    assert payload["state"] == "CLARIFYING"
+    assert payload["clarification_question"] == "Was genau meinst du?"
+
+
+def test_voice_dialog_reset_route_delegates_to_dialog_flow_service(monkeypatch):
+    monkeypatch.setattr(voice_api, "_validate_token", lambda request: True)
+
+    called = {"count": 0}
+
+    class _DelegatingFlow:
+        def reset(self):
+            called["count"] += 1
+            return DialogResetResult(status="ok", state="IDLE")
+
+    def _should_not_be_called(*args, **kwargs):
+        raise AssertionError("dialog reset route should delegate to dialog-flow service")
+
+    monkeypatch.setattr(voice_api, "_get_dialog_flow", lambda: _DelegatingFlow())
+    monkeypatch.setattr(voice_api, "_get_dialog_machine", _should_not_be_called)
+
+    app = _make_app()
+    response = app.test_client().post("/api/v1/voice/dialog/reset")
+
+    assert response.status_code == 200, response.get_json()
+    assert called == {"count": 1}
+    payload = response.get_json()
+    assert payload == {"status": "ok", "state": "IDLE"}
 
 
 def test_voice_command_confirm_route_delegates_to_command_flow_service(monkeypatch):

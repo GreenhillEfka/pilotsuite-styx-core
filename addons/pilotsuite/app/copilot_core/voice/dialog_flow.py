@@ -1,4 +1,4 @@
-"""Application-facing dialog-state service for voice dialog routes."""
+"""Application-facing dialog-flow service for voice dialog routes."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -49,8 +49,102 @@ class DialogStateResult:
         }
 
 
+@dataclass(frozen=True)
+class DialogActivateResult:
+    """Bounded result of VoiceDialogFlow.activate_intent()."""
+
+    status: str
+    state: str
+    active_intent: Optional[str]
+    slot_values: dict[str, Any]
+    context_stack_size: int
+    last_activity_ts: Optional[float]
+    session_id: Optional[str]
+    user_id: Optional[str]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "status": self.status,
+            "state": self.state,
+            "active_intent": self.active_intent,
+            "slot_values": self.slot_values,
+            "context_stack_size": self.context_stack_size,
+            "last_activity_ts": self.last_activity_ts,
+            "session_id": self.session_id,
+            "user_id": self.user_id,
+        }
+
+
+@dataclass(frozen=True)
+class DialogConfirmResult:
+    """Bounded result of VoiceDialogFlow.confirm_action()."""
+
+    status: str
+    state: str
+    active_intent: Optional[str]
+    slot_values: dict[str, Any]
+    context_stack_size: int
+    last_activity_ts: Optional[float]
+    session_id: Optional[str]
+    user_id: Optional[str]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "status": self.status,
+            "state": self.state,
+            "active_intent": self.active_intent,
+            "slot_values": self.slot_values,
+            "context_stack_size": self.context_stack_size,
+            "last_activity_ts": self.last_activity_ts,
+            "session_id": self.session_id,
+            "user_id": self.user_id,
+        }
+
+
+@dataclass(frozen=True)
+class DialogClarifyResult:
+    """Bounded result of VoiceDialogFlow.clarify()."""
+
+    status: str
+    state: str
+    active_intent: Optional[str]
+    slot_values: dict[str, Any]
+    context_stack_size: int
+    last_activity_ts: Optional[float]
+    session_id: Optional[str]
+    user_id: Optional[str]
+    clarification_question: Optional[str]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "status": self.status,
+            "state": self.state,
+            "active_intent": self.active_intent,
+            "slot_values": self.slot_values,
+            "context_stack_size": self.context_stack_size,
+            "last_activity_ts": self.last_activity_ts,
+            "session_id": self.session_id,
+            "user_id": self.user_id,
+            "clarification_question": self.clarification_question,
+        }
+
+
+@dataclass(frozen=True)
+class DialogResetResult:
+    """Bounded result of VoiceDialogFlow.reset()."""
+
+    status: str
+    state: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "status": self.status,
+            "state": self.state,
+        }
+
+
 class VoiceDialogFlow:
-    """Own the dialog-state read procedure behind the HTTP adapter."""
+    """Own the dialog-state read and mutation procedures behind the HTTP adapter."""
 
     def __init__(self, *, dialog_machine: Any):
         self._dialog_machine = dialog_machine
@@ -82,6 +176,55 @@ class VoiceDialogFlow:
             confirmation_token=slot_values.get("_confirmation_token"),
             confirmation_expires_at=slot_values.get("_confirmation_expires_at"),
         )
+
+    def activate_intent(
+        self,
+        *,
+        intent: str,
+        slots: Optional[dict[str, Any]] = None,
+        session_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+    ) -> DialogActivateResult:
+        state = self._dialog_machine.activate_intent(
+            intent=intent,
+            slots=slots or {},
+            session_id=session_id,
+            user_id=user_id,
+        )
+        return DialogActivateResult(status="ok", **self._serialize_mutation_state(state))
+
+    def confirm_action(self, *, confirmed: bool) -> DialogConfirmResult:
+        state = self._dialog_machine.confirm_action() if confirmed else self._dialog_machine.cancel_action()
+        return DialogConfirmResult(status="ok", **self._serialize_mutation_state(state))
+
+    def clarify(self, *, clarification_text: str) -> DialogClarifyResult:
+        state = self._dialog_machine.set_clarifying(clarification_text)
+        return DialogClarifyResult(
+            status="ok",
+            clarification_question=self._dialog_machine.generate_clarification_question(),
+            **self._serialize_mutation_state(state),
+        )
+
+    def reset(
+        self,
+        *,
+        session_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+    ) -> DialogResetResult:
+        state = self._dialog_machine.reset(session_id=session_id, user_id=user_id)
+        return DialogResetResult(status="ok", state=state.state)
+
+    @staticmethod
+    def _serialize_mutation_state(state: Any) -> dict[str, Any]:
+        return {
+            "state": state.state,
+            "active_intent": state.active_intent,
+            "slot_values": dict(state.slot_values),
+            "context_stack_size": len(state.context_stack),
+            "last_activity_ts": state.last_activity_ts,
+            "session_id": state.session_id,
+            "user_id": state.user_id,
+        }
 
     @staticmethod
     def _normalize_last_status(state: Any) -> str:

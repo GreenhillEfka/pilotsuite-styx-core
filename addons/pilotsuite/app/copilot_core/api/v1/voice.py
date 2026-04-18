@@ -1184,23 +1184,14 @@ def activate_dialog_intent():
         intent = data.get("intent")
         if not intent:
             return jsonify({"status": "error", "message": "Missing 'intent'"}), 400
-        machine = _get_dialog_machine()
-        state = machine.activate_intent(
-            intent=str(intent),
-            slots=data.get("slots") if isinstance(data.get("slots"), dict) else {},
-            session_id=data.get("session_id"),
-            user_id=data.get("user_id"),
+        return jsonify(
+            _get_dialog_flow().activate_intent(
+                intent=str(intent),
+                slots=data.get("slots") if isinstance(data.get("slots"), dict) else {},
+                session_id=data.get("session_id"),
+                user_id=data.get("user_id"),
+            ).to_dict()
         )
-        return jsonify({
-            "status": "ok",
-            "state": state.state,
-            "active_intent": state.active_intent,
-            "slot_values": state.slot_values,
-            "context_stack_size": len(state.context_stack),
-            "last_activity_ts": state.last_activity_ts,
-            "session_id": state.session_id,
-            "user_id": state.user_id,
-        })
     except Exception as e:
         _LOGGER.exception("Failed to activate dialog intent")
         return jsonify({"status": "error", "message": str(e)}), 500
@@ -1211,19 +1202,11 @@ def confirm_dialog_action():
     """Confirm or cancel the pending dialog action."""
     try:
         data = request.get_json(silent=True) or {}
-        confirmed = bool(data.get("confirmed", False))
-        machine = _get_dialog_machine()
-        state = machine.confirm_action() if confirmed else machine.cancel_action()
-        return jsonify({
-            "status": "ok",
-            "state": state.state,
-            "active_intent": state.active_intent,
-            "slot_values": state.slot_values,
-            "context_stack_size": len(state.context_stack),
-            "last_activity_ts": state.last_activity_ts,
-            "session_id": state.session_id,
-            "user_id": state.user_id,
-        })
+        return jsonify(
+            _get_dialog_flow().confirm_action(
+                confirmed=bool(data.get("confirmed", False)),
+            ).to_dict()
+        )
     except Exception as e:
         _LOGGER.exception("Failed to confirm dialog action")
         return jsonify({"status": "error", "message": str(e)}), 500
@@ -1235,19 +1218,7 @@ def clarify_dialog():
     try:
         data = request.get_json(silent=True) or {}
         clarification_text = str(data.get("clarification_text", "Kannst du das bitte genauer beschreiben?"))
-        machine = _get_dialog_machine()
-        state = machine.set_clarifying(clarification_text)
-        return jsonify({
-            "status": "ok",
-            "state": state.state,
-            "active_intent": state.active_intent,
-            "slot_values": state.slot_values,
-            "context_stack_size": len(state.context_stack),
-            "last_activity_ts": state.last_activity_ts,
-            "session_id": state.session_id,
-            "user_id": state.user_id,
-            "clarification_question": machine.generate_clarification_question(),
-        })
+        return jsonify(_get_dialog_flow().clarify(clarification_text=clarification_text).to_dict())
     except Exception as e:
         _LOGGER.exception("Failed to clarify dialog")
         return jsonify({"status": "error", "message": str(e)}), 500
@@ -1257,9 +1228,7 @@ def clarify_dialog():
 def reset_dialog():
     """Reset dialog state to IDLE."""
     try:
-        machine = _get_dialog_machine()
-        state = machine.reset()
-        return jsonify({"status": "ok", "state": state.state})
+        return jsonify(_get_dialog_flow().reset().to_dict())
     except Exception as e:
         _LOGGER.exception("Failed to reset dialog state")
         return jsonify({"status": "error", "message": str(e)}), 500
