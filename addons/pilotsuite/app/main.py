@@ -63,6 +63,14 @@ def _now_iso():
     return datetime.now(timezone.utc).isoformat()
 
 
+def _get_shopping_persistence_status() -> dict[str, object]:
+    shopping_db_path = os.environ.get("SHOPPING_DB_PATH", "/data/shopping_reminders.db")
+    return {
+        "shopping_db_path": shopping_db_path,
+        "shopping_db_accessible": os.path.exists(shopping_db_path),
+    }
+
+
 def _append_dev_log(entry: dict) -> None:
     os.makedirs(os.path.dirname(DEV_LOG_PATH), exist_ok=True)
     with open(DEV_LOG_PATH, "a", encoding="utf-8") as fh:
@@ -310,12 +318,12 @@ def _register_routes(flask_app: Flask, startup_time: float) -> None:
         except Exception:
             checks["ollama"] = False
 
-        shopping_db_path = os.environ.get("SHOPPING_DB_PATH", "/data/shopping_reminders.db")
+        shopping_persistence = _get_shopping_persistence_status()
 
         for db_label, db_path in [
             ("conversation_memory_db", "/data/conversation_memory.db"),
             ("vector_store_db", "/data/vector_store.db"),
-            ("shopping_db", shopping_db_path),
+            ("shopping_db", str(shopping_persistence["shopping_db_path"])),
         ]:
             checks[db_label] = os.path.exists(db_path)
 
@@ -377,6 +385,7 @@ def _register_routes(flask_app: Flask, startup_time: float) -> None:
             "time": _now_iso(),
             "version": APP_VERSION,
             "port": int(os.environ.get("PORT", "8909")),
+            "persistence": _get_shopping_persistence_status(),
         })
 
     # `/api/v1/capabilities` is registered once through `copilot_core.api.v1.dev`

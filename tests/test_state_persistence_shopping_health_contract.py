@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-"""Contract tests for shopping/reminders persistence health wiring.
+"""Contract tests for shopping/reminders persistence surface wiring.
 
-`/api/v1/health/deep` should report the real shopping/reminders database path
-used by the shipped runtime, including `SHOPPING_DB_PATH` overrides.
+`/api/v1/health/deep` and `/api/v1/status` should report the real
+shopping/reminders database path used by the shipped runtime, including
+`SHOPPING_DB_PATH` overrides.
 """
 
 import importlib
@@ -70,3 +71,29 @@ def test_main_deep_health_uses_runtime_shopping_db_path(monkeypatch, tmp_path):
     assert payload["checks"]["shopping_db"] is True
     assert payload["checks"]["conversation_memory_db"] is False
     assert payload["checks"]["vector_store_db"] is False
+
+
+def test_main_status_exposes_runtime_shopping_persistence_truth(monkeypatch, tmp_path):
+    _stub_main_dependencies(monkeypatch)
+
+    custom_db_path = tmp_path / "shopping" / "status-shopping.db"
+    monkeypatch.setenv("SHOPPING_DB_PATH", str(custom_db_path))
+    sys.modules.pop("main", None)
+
+    main = importlib.import_module("main")
+    app = main.create_app(options={})
+
+    def _fake_exists(path: str) -> bool:
+        return path == str(custom_db_path)
+
+    monkeypatch.setattr(main.os.path, "exists", _fake_exists)
+
+    response = app.test_client().get("/api/v1/status")
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["ok"] is True
+    assert payload["persistence"] == {
+        "shopping_db_path": str(custom_db_path),
+        "shopping_db_accessible": True,
+    }
