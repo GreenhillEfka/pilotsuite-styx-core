@@ -150,6 +150,15 @@ def create_app() -> Flask:
     # Register API modules
     app.register_blueprint(api_v1)
 
+    # Auth setup blueprint: /api/v1/auth/*
+    # /setup-token is intentionally unauthenticated (1-Key-Flow seam for HA)
+    try:
+        from copilot_core.api.v1.auth import auth_bp
+        app.register_blueprint(auth_bp)
+        logging.getLogger(__name__).info("Auth blueprint registered")
+    except Exception:
+        logging.getLogger(__name__).exception("Failed to register Auth blueprint")
+
     # Full voice API surface (/api/v1/voice/*) is absolute-prefix and must be
     # registered directly on the app, not nested under api_v1.
     try:
@@ -461,7 +470,7 @@ def create_app() -> Flask:
     def _auth_middleware():
         # Use centralized auth logic from security.py
         # Allowlisted paths (no auth required)
-        allowlist = {"/", "/health", "/version", "/api/v1/status", "/api/v1/docs", "/api/v1/docs/openapi.yaml"}
+        allowlist = {"/", "/health", "/version", "/api/v1/status", "/api/v1/docs", "/api/v1/docs/openapi.yaml", "/api/v1/auth/setup-token"}
 
         if request.path in allowlist:
             return None
