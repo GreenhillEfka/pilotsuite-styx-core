@@ -55,10 +55,24 @@ class PiperTTS:
         self._output_dir = Path(self.config.output_dir)
         self._output_dir.mkdir(parents=True, exist_ok=True)
         self._loaded = False
+        self._unavailable = False
+
+    def _check_backend(self) -> bool:
+        """Check if piper-tts package is installed."""
+        try:
+            import piper_tts as _piper_pkg  # noqa: F401
+            return True
+        except ImportError:
+            return False
 
     def load_voice(self, voice_id: str) -> bool:
-        """Load a voice model."""
+        """Load a voice model (real backend or unavailable stub)."""
         try:
+            if not self._check_backend():
+                logger.warning("Piper package not installed — TTS degraded to stub")
+                self._unavailable = True
+                self._loaded = False
+                return False
             self._loaded = True
             self.config.voice = voice_id
             logger.info("Loaded voice: %s", voice_id)
@@ -75,6 +89,10 @@ class PiperTTS:
         speed: Optional[float] = None,
     ) -> Optional[TTSResult]:
         """Synthesize speech from text."""
+        if getattr(self, '_unavailable', False):
+            logger.warning("Piper backend unavailable — synthesize() returns None")
+            return None
+
         start = time.time()
         voice = voice or self.config.voice
         emotion = emotion or self.config.emotion

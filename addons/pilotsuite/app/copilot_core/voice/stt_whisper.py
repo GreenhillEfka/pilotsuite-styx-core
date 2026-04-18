@@ -49,15 +49,31 @@ class WhisperSTT:
         self.config = config or STTConfig()
         self._model = None
         self._loaded = False
+        self._unavailable = False
+
+    def _check_backend(self) -> bool:
+        """Check if whisper package is installed."""
+        try:
+            import whisper as _whisper_pkg  # noqa: F401
+            return True
+        except ImportError:
+            return False
 
     def load_model(self) -> bool:
-        """Load Whisper model."""
+        """Load Whisper model (real backend or unavailable stub)."""
         try:
+            if not self._check_backend():
+                logger.warning("Whisper package not installed — STT degraded to stub")
+                self._loaded = False
+                self._unavailable = True
+                return False
             self._loaded = True
             logger.info("Loaded Whisper model: %s", self.config.model)
             return True
         except Exception as exc:
             logger.error("Failed to load Whisper: %s", exc)
+            self._loaded = False
+            self._unavailable = True
             return False
 
     def transcribe(self, audio_path: str, language: Optional[str] = None) -> Optional[TranscriptionResult]:

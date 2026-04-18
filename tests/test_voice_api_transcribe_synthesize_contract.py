@@ -20,8 +20,23 @@ def _make_app() -> Flask:
     return app
 
 
-def test_voice_transcribe_route_returns_placeholder_transcript(monkeypatch):
+def test_voice_transcribe_degraded_when_whisper_unavailable(monkeypatch):
+    """
+    When Whisper is not installed, transcribe endpoint returns 503.
+    This is the correct degraded path — not a 200 with fake data.
+    """
     monkeypatch.setattr(voice_api, "_validate_token", lambda request: True)
+
+    def _fake_stt_engine():
+        from copilot_core.voice.stt_whisper import WhisperSTT, STTConfig
+        engine = WhisperSTT(STTConfig(model="base", language="de"))
+        # Simulate unavailable backend
+        engine._check_backend = lambda: False
+        engine._unavailable = True
+        engine._loaded = False
+        return engine
+
+    monkeypatch.setattr(voice_api, "_get_stt_engine", _fake_stt_engine)
 
     client = _make_app().test_client()
     response = client.post(
@@ -29,12 +44,11 @@ def test_voice_transcribe_route_returns_placeholder_transcript(monkeypatch):
         json={"audio_path": "dummy.wav", "language": "de"},
     )
 
-    assert response.status_code == 200, response.get_json()
+    # Correct degraded path: 503 when backend unavailable
+    assert response.status_code == 503, response.get_json()
     payload = response.get_json()
-    assert payload["status"] == "ok"
-    assert payload["language"] == "de"
-    assert payload["text"]
-    assert payload["metadata"]["audio_path"] == "dummy.wav"
+    assert payload["status"] == "error"
+    assert "unavailable" in payload["message"].lower()
 
 
 def test_voice_synthesize_route_returns_audio_path(monkeypatch, tmp_path):
