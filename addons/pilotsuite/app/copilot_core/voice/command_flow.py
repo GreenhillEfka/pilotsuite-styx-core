@@ -2,7 +2,10 @@
 from __future__ import annotations
 
 import time
+from datetime import datetime, timezone
 from typing import Any, Callable, Dict, Optional
+
+from copilot_core.voice.voice_handler import VoiceResponse
 
 
 class VoiceCommandFlow:
@@ -88,6 +91,59 @@ class VoiceCommandFlow:
 
         return response_payload
 
+    def get_state(self, *, session_id: str) -> Dict[str, Any]:
+        if self._dialog_machine.check_timeout():
+            self._dialog_machine.decay()
+        state = self._dialog_machine.get_state()
+        return {
+            "status": "ok",
+            "session_id": session_id,
+            "state": self._serialize_command_state(state, session_id=session_id),
+        }
+
+    def confirm(self, *, session_id: str, confirmation_token: str) -> Dict[str, Any]:
+        pending = self._validate_pending_confirmation(
+            session_id=session_id,
+            confirmation_token=confirmation_token,
+        )
+        if pending is None:
+            raise ValueError("No matching pending confirmation found")
+
+        action_payload = pending["action_payload"]
+        action_label = pending["action_label"]
+        state = self._dialog_machine.confirm_action()
+        state = self._dialog_machine.merge_metadata({"_last_status": "executed"})
+        response = self._build_follow_through_response(action_payload)
+
+        return {
+            "status": "executed",
+            "action": action_label,
+            "message": response.tts_text,
+            "confirmation_token": confirmation_token,
+            "session_state": self._dialog_state_serializer(state),
+            "response": response.to_dict(),
+        }
+
+    def reject(self, *, session_id: str, confirmation_token: str) -> Dict[str, Any]:
+        pending = self._validate_pending_confirmation(
+            session_id=session_id,
+            confirmation_token=confirmation_token,
+        )
+        if pending is None:
+            raise ValueError("No matching pending confirmation found")
+
+        action_label = pending["action_label"]
+        state = self._dialog_machine.cancel_action()
+        state = self._dialog_machine.merge_metadata({"_last_status": "rejected"})
+
+        return {
+            "status": "rejected",
+            "action": action_label,
+            "message": "Okay, ich verwerfe die angefragte Aktion.",
+            "confirmation_token": confirmation_token,
+            "session_state": self._dialog_state_serializer(state),
+        }
+
     def _apply_decision(
         self,
         *,
@@ -158,3 +214,85 @@ class VoiceCommandFlow:
             "confirmation_token": slot_values.get("_confirmation_token"),
             "confirmation_expires_at": slot_values.get("_confirmation_expires_at"),
         }
+
+    def _validate_pending_confirmation(
+        self,
+        *,
+        session_id: Optional[str],
+        confirmation_token: Optional[str],
+    ) -> Optional[Dict[str, Any]]:
+        if self._dialog_machine.check_timeout():
+            self._dialog_machine.decay()
+            return None
+
+        state = self._dialog_machine.get_state()
+        if state.state != "CONFIRMING":
+            return None
+
+        slot_values = dict(state.slot_values)
+        pending_token = slot_values.get("_confirmation_token")
+        pending_session_id = state.session_id
+
+        if not confirmation_token or confirmation_token != pending_token:
+            return None
+        if pending_session_id and session_id and session_id != pending_session_id:
+            return None
+
+        return {
+            "state": state,
+            "slot_values": slot_values,
+            "action_payload": slot_values.get("_pending_action_payload"),
+            "action_label": slot_values.get("_pending_action_label") or slot_values.get("_pending_action"),
+        }
+
+    def _serialize_command_state(self, state: Any, *, session_id: str) -> Dict[str, Any]:
+        if not state.session_id or state.session_id != session_id:
+            return {
+                "last_status": "idle",
+                "pending_confirmation": False,
+                "pending_action_label": None,
+                "confirmation_expires_at": None,
+            }
+
+        slot_values = dict(state.slot_values)
+        pending_confirmation = state.state == "CONFIRMING" and bool(slot_values.get("_confirmation_token"))
+        return {
+            "last_status": self._normalize_last_status(state),
+            "pending_confirmation": pending_confirmation,
+            "pending_action_label": slot_values.get("_pending_action_label"),
+            "confirmation_expires_at": self._format_command_state_timestamp(slot_values.get("_confirmation_expires_at")),
+        }
+
+    @staticmethod
+    def _normalize_last_status(state: Any) -> str:
+        slot_values = dict(state.slot_values)
+        explicit = slot_values.get("_last_status")
+        if isinstance(explicit, str) and explicit.strip():
+            return explicit.strip()
+
+        fallback = {
+            "ACTIVE": "executed",
+            "CONFIRMING": "confirmation_required",
+            "CLARIFYING": "clarification_required",
+            "IDLE": "idle",
+        }
+        return fallback.get(state.state, "idle")
+
+    @staticmethod
+    def _format_command_state_timestamp(value: Optional[Any]) -> Optional[str]:
+        if value is None:
+            return None
+        try:
+            return datetime.fromtimestamp(float(value), tz=timezone.utc).isoformat().replace("+00:00", "Z")
+        except (TypeError, ValueError, OSError, OverflowError):
+            return None
+
+    @staticmethod
+    def _build_follow_through_response(action_payload: Optional[Dict[str, Any]]) -> VoiceResponse:
+        actions = [dict(action_payload)] if action_payload else []
+        return VoiceResponse(
+            tts_text="Bestätigt. Ich führe die Aktion jetzt aus.",
+            actions=actions,
+            confidence=1.0,
+            language="de",
+        )

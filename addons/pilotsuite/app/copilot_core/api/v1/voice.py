@@ -19,14 +19,13 @@ Features:
 - Integration mit Mood Engine und Habitus
 """
 import asyncio
-from datetime import datetime, timezone
 import logging
 from pathlib import Path
 from typing import Any, Dict, Optional
 
 from flask import Blueprint, jsonify, request, send_file
 
-from copilot_core.voice.voice_handler import VoiceIntent, IntentType, VoiceResponse
+from copilot_core.voice.voice_handler import VoiceIntent, IntentType
 from copilot_core.voice.context_builder import VoiceContext, VoiceContextBuilder
 from copilot_core.voice.proactive import HintPriority
 from copilot_core.voice.runtime_access import get_voice_runtime
@@ -236,84 +235,6 @@ def _normalize_last_status(state) -> str:
         "IDLE": "idle",
     }
     return fallback.get(state.state, "idle")
-
-
-def _format_command_state_timestamp(value: Optional[Any]) -> Optional[str]:
-    """Normalize optional epoch timestamps to ISO 8601 UTC for API consumers."""
-    if value is None:
-        return None
-    try:
-        return datetime.fromtimestamp(float(value), tz=timezone.utc).isoformat().replace("+00:00", "Z")
-    except (TypeError, ValueError, OSError, OverflowError):
-        return None
-
-
-def _build_idle_command_state() -> Dict[str, Any]:
-    """Return the truthful empty command-state shape."""
-    return {
-        "last_status": "idle",
-        "pending_confirmation": False,
-        "pending_action_label": None,
-        "confirmation_expires_at": None,
-    }
-
-
-def _serialize_command_state(state, *, session_id: str) -> Dict[str, Any]:
-    """Serialize the session-scoped command-state surface for HA consumers."""
-    if not state.session_id or state.session_id != session_id:
-        return _build_idle_command_state()
-
-    slot_values = dict(state.slot_values)
-    pending_confirmation = state.state == "CONFIRMING" and bool(slot_values.get("_confirmation_token"))
-    return {
-        "last_status": _normalize_last_status(state),
-        "pending_confirmation": pending_confirmation,
-        "pending_action_label": slot_values.get("_pending_action_label"),
-        "confirmation_expires_at": _format_command_state_timestamp(slot_values.get("_confirmation_expires_at")),
-    }
-
-
-def _build_command_follow_through_response(action_payload: Optional[Dict[str, Any]]) -> VoiceResponse:
-    """Build the first bounded execution payload for a confirmed action."""
-    actions = [dict(action_payload)] if action_payload else []
-    return VoiceResponse(
-        tts_text="Bestätigt. Ich führe die Aktion jetzt aus.",
-        actions=actions,
-        confidence=1.0,
-        language="de",
-    )
-
-
-def _validate_pending_confirmation(
-    machine,
-    *,
-    session_id: Optional[str],
-    confirmation_token: Optional[str],
-) -> Optional[Dict[str, Any]]:
-    """Validate the currently persisted pending confirmation state."""
-    if machine.check_timeout():
-        machine.decay()
-        return None
-
-    state = machine.get_state()
-    if state.state != "CONFIRMING":
-        return None
-
-    slot_values = dict(state.slot_values)
-    pending_token = slot_values.get("_confirmation_token")
-    pending_session_id = state.session_id
-
-    if not confirmation_token or confirmation_token != pending_token:
-        return None
-    if pending_session_id and session_id and session_id != pending_session_id:
-        return None
-
-    return {
-        "state": state,
-        "slot_values": slot_values,
-        "action_payload": slot_values.get("_pending_action_payload"),
-        "action_label": slot_values.get("_pending_action_label") or slot_values.get("_pending_action"),
-    }
 
 
 def _resolve_requested_zone(
@@ -1251,16 +1172,7 @@ def get_command_state():
                 "message": "Query parameter 'session_id' is required",
             }), 400
 
-        machine = _get_dialog_machine()
-        if machine.check_timeout():
-            machine.decay()
-        state = machine.get_state()
-
-        return jsonify({
-            "status": "ok",
-            "session_id": session_id,
-            "state": _serialize_command_state(state, session_id=str(session_id)),
-        })
+        return jsonify(_get_command_flow().get_state(session_id=str(session_id)))
     except Exception as e:
         _LOGGER.exception("Failed to get command state")
         return jsonify({"status": "error", "message": str(e)}), 500
@@ -1278,33 +1190,15 @@ def confirm_command_action():
                 "status": "error",
                 "message": "Fields 'session_id' and 'confirmation_token' are required",
             }), 400
-
-        machine = _get_dialog_machine()
-        pending = _validate_pending_confirmation(
-            machine,
-            session_id=str(session_id),
-            confirmation_token=str(confirmation_token),
-        )
-        if pending is None:
-            return jsonify({
-                "status": "error",
-                "message": "No matching pending confirmation found",
-            }), 400
-
-        action_payload = pending["action_payload"]
-        action_label = pending["action_label"]
-        state = machine.confirm_action()
-        state = machine.merge_metadata({"_last_status": "executed"})
-        response = _build_command_follow_through_response(action_payload)
-
-        return jsonify({
-            "status": "executed",
-            "action": action_label,
-            "message": response.tts_text,
-            "confirmation_token": confirmation_token,
-            "session_state": _serialize_dialog_state(state),
-            "response": response.to_dict(),
-        })
+        try:
+            return jsonify(
+                _get_command_flow().confirm(
+                    session_id=str(session_id),
+                    confirmation_token=str(confirmation_token),
+                )
+            )
+        except ValueError as exc:
+            return jsonify({"status": "error", "message": str(exc)}), 400
     except Exception as e:
         _LOGGER.exception("Failed to confirm command action")
         return jsonify({"status": "error", "message": str(e)}), 500
@@ -1322,29 +1216,15 @@ def reject_command_action():
                 "status": "error",
                 "message": "Fields 'session_id' and 'confirmation_token' are required",
             }), 400
-
-        machine = _get_dialog_machine()
-        pending = _validate_pending_confirmation(
-            machine,
-            session_id=str(session_id),
-            confirmation_token=str(confirmation_token),
-        )
-        if pending is None:
-            return jsonify({
-                "status": "error",
-                "message": "No matching pending confirmation found",
-            }), 400
-
-        action_label = pending["action_label"]
-        state = machine.cancel_action()
-        state = machine.merge_metadata({"_last_status": "rejected"})
-        return jsonify({
-            "status": "rejected",
-            "action": action_label,
-            "message": "Okay, ich verwerfe die angefragte Aktion.",
-            "confirmation_token": confirmation_token,
-            "session_state": _serialize_dialog_state(state),
-        })
+        try:
+            return jsonify(
+                _get_command_flow().reject(
+                    session_id=str(session_id),
+                    confirmation_token=str(confirmation_token),
+                )
+            )
+        except ValueError as exc:
+            return jsonify({"status": "error", "message": str(exc)}), 400
     except Exception as e:
         _LOGGER.exception("Failed to reject command action")
         return jsonify({"status": "error", "message": str(e)}), 500

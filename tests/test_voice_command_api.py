@@ -470,3 +470,120 @@ def test_voice_command_prefers_injected_runtime_seam(monkeypatch):
     assert payload["action"] == "light.turn_on"
     assert payload["session_state"]["session_id"] == "sess-runtime-seam"
     assert payload["response"]["actions"][0]["domain"] == "light"
+
+
+def test_voice_command_state_route_delegates_to_command_flow_service(monkeypatch):
+    monkeypatch.setattr(voice_api, "_validate_token", lambda request: True)
+
+    called = {}
+
+    class _DelegatingFlow:
+        def get_state(self, **kwargs):
+            called.update(kwargs)
+            return {
+                "status": "ok",
+                "session_id": kwargs["session_id"],
+                "state": {
+                    "last_status": "idle",
+                    "pending_confirmation": False,
+                    "pending_action_label": None,
+                    "confirmation_expires_at": None,
+                },
+            }
+
+    def _should_not_be_called(*args, **kwargs):
+        raise AssertionError("command state route should delegate to command-flow service")
+
+    monkeypatch.setattr(voice_api, "_get_command_flow", lambda: _DelegatingFlow())
+    monkeypatch.setattr(voice_api, "_get_dialog_machine", _should_not_be_called)
+
+    app = _make_app()
+    response = app.test_client().get(
+        "/api/v1/voice/command/state",
+        query_string={"session_id": "sess-state-delegated"},
+    )
+
+    assert response.status_code == 200, response.get_json()
+    assert called == {"session_id": "sess-state-delegated"}
+    payload = response.get_json()
+    assert payload["session_id"] == "sess-state-delegated"
+    assert payload["state"]["last_status"] == "idle"
+
+
+def test_voice_command_confirm_route_delegates_to_command_flow_service(monkeypatch):
+    monkeypatch.setattr(voice_api, "_validate_token", lambda request: True)
+
+    called = {}
+
+    class _DelegatingFlow:
+        def confirm(self, **kwargs):
+            called.update(kwargs)
+            return {
+                "status": "executed",
+                "action": "lock.unlock",
+                "message": "Bestätigt. Ich führe die Aktion jetzt aus.",
+                "confirmation_token": kwargs["confirmation_token"],
+                "session_state": {"dialog_state": "IDLE", "session_id": kwargs["session_id"]},
+                "response": {"actions": [{"domain": "lock", "service": "unlock", "data": {}}]},
+            }
+
+    def _should_not_be_called(*args, **kwargs):
+        raise AssertionError("command confirm route should delegate to command-flow service")
+
+    monkeypatch.setattr(voice_api, "_get_command_flow", lambda: _DelegatingFlow())
+    monkeypatch.setattr(voice_api, "_get_dialog_machine", _should_not_be_called)
+
+    app = _make_app()
+    response = app.test_client().post(
+        "/api/v1/voice/command/confirm",
+        json={
+            "session_id": "sess-confirm-delegated",
+            "confirmation_token": "token-123",
+        },
+    )
+
+    assert response.status_code == 200, response.get_json()
+    assert called == {"session_id": "sess-confirm-delegated", "confirmation_token": "token-123"}
+    payload = response.get_json()
+    assert payload["status"] == "executed"
+    assert payload["action"] == "lock.unlock"
+    assert payload["session_state"]["session_id"] == "sess-confirm-delegated"
+
+
+def test_voice_command_reject_route_delegates_to_command_flow_service(monkeypatch):
+    monkeypatch.setattr(voice_api, "_validate_token", lambda request: True)
+
+    called = {}
+
+    class _DelegatingFlow:
+        def reject(self, **kwargs):
+            called.update(kwargs)
+            return {
+                "status": "rejected",
+                "action": "lock.unlock",
+                "message": "Okay, ich verwerfe die angefragte Aktion.",
+                "confirmation_token": kwargs["confirmation_token"],
+                "session_state": {"dialog_state": "IDLE", "session_id": kwargs["session_id"]},
+            }
+
+    def _should_not_be_called(*args, **kwargs):
+        raise AssertionError("command reject route should delegate to command-flow service")
+
+    monkeypatch.setattr(voice_api, "_get_command_flow", lambda: _DelegatingFlow())
+    monkeypatch.setattr(voice_api, "_get_dialog_machine", _should_not_be_called)
+
+    app = _make_app()
+    response = app.test_client().post(
+        "/api/v1/voice/command/reject",
+        json={
+            "session_id": "sess-reject-delegated",
+            "confirmation_token": "token-456",
+        },
+    )
+
+    assert response.status_code == 200, response.get_json()
+    assert called == {"session_id": "sess-reject-delegated", "confirmation_token": "token-456"}
+    payload = response.get_json()
+    assert payload["status"] == "rejected"
+    assert payload["action"] == "lock.unlock"
+    assert payload["session_state"]["session_id"] == "sess-reject-delegated"
