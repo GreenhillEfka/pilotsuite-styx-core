@@ -31,6 +31,7 @@ from copilot_core.voice.command_router import VoiceCommandRouter
 from copilot_core.voice.voice_handler import VoiceIntentHandler, VoiceIntent, IntentType, VoiceResponse
 from copilot_core.voice.context_builder import VoiceContextBuilder, VoiceContext
 from copilot_core.voice.proactive import ProactiveVoiceHints, HintConfig, HintPriority
+from copilot_core.voice.nlu_engine import NLUEngine
 from copilot_core.voice.stt_whisper import WhisperSTT, STTConfig
 from copilot_core.voice.tts_piper import PiperTTS, TTSConfig
 
@@ -118,6 +119,13 @@ def _get_tts_engine() -> PiperTTS:
     return current_app._voice_tts_engine
 
 
+def _get_nlu_engine() -> NLUEngine:
+    """Get or create the shared NLU engine."""
+    if not hasattr(current_app, "_voice_nlu_engine"):
+        current_app._voice_nlu_engine = NLUEngine()
+    return current_app._voice_nlu_engine
+
+
 def _get_generated_audio_cache() -> Dict[str, str]:
     """Get or create the bounded generated-audio cache for `/voice/speak`."""
     if not hasattr(current_app, "_voice_generated_audio"):
@@ -139,32 +147,103 @@ def _build_voice_runtime_status() -> Dict[str, Any]:
 
     try:
         stt_engine = _get_stt_engine()
-        runtime["stt"] = {
-            "available": True,
-            "engine": "whisper",
-            "model": stt_engine.config.model,
-            "default_language": stt_engine.config.language or "de",
-        }
+        if hasattr(stt_engine, "availability_payload"):
+            runtime["stt"] = stt_engine.availability_payload()
+        else:
+            runtime["stt"] = {
+                "available": True,
+                "engine": "whisper",
+                "model": stt_engine.config.model,
+                "default_language": stt_engine.config.language or "de",
+            }
     except Exception:
         runtime["stt"] = {
             "available": False,
             "engine": "whisper",
+            "available_backends": [],
         }
 
     try:
         tts_engine = _get_tts_engine()
-        runtime["tts"] = {
-            "available": True,
-            "engine": tts_engine.config.engine,
-            "voice": tts_engine.config.voice,
-        }
+        if hasattr(tts_engine, "availability_payload"):
+            runtime["tts"] = tts_engine.availability_payload()
+        else:
+            runtime["tts"] = {
+                "available": True,
+                "engine": tts_engine.config.engine,
+                "voice": tts_engine.config.voice,
+            }
     except Exception:
         runtime["tts"] = {
             "available": False,
             "engine": "piper",
+            "available_backends": [],
+        }
+
+    try:
+        _get_nlu_engine()
+        runtime["nlu"] = {
+            "available": True,
+            "engine": "rule_based",
+            "supported_languages": ["de", "en"],
+        }
+    except Exception:
+        runtime["nlu"] = {
+            "available": False,
+            "engine": "rule_based",
+            "supported_languages": [],
         }
 
     return runtime
+
+
+def _build_voice_capabilities(runtime: Dict[str, Any], *, intent_handler_available: bool) -> Dict[str, bool]:
+    """Project backend/runtime truth into one bounded HA-consumable capability gate."""
+    stt_available = bool(runtime.get("stt", {}).get("available"))
+    tts_available = bool(runtime.get("tts", {}).get("available"))
+    nlu_available = bool(runtime.get("nlu", {}).get("available"))
+
+    return {
+        "can_transcribe": stt_available,
+        "can_synthesize": tts_available,
+        "can_speak": tts_available,
+        "can_dialog": bool(intent_handler_available and stt_available and tts_available and nlu_available),
+    }
+
+
+def _collect_available_voice_backends(*, skip: Optional[str] = None) -> list[str]:
+    """Collect other currently available voice backends for degraded responses."""
+    factories = [
+        ("stt", "whisper", _get_stt_engine),
+        ("tts", "piper", _get_tts_engine),
+    ]
+    available: list[str] = []
+    for kind, fallback_label, factory in factories:
+        if kind == skip:
+            continue
+        try:
+            engine = factory()
+            if hasattr(engine, "available_backends"):
+                available.extend(engine.available_backends())
+            elif hasattr(engine, "is_available") and engine.is_available():
+                available.append(fallback_label)
+        except Exception:
+            continue
+    return sorted(set(available))
+
+
+def _voice_backend_unavailable_response(*, message: str, detail: str, backend: str, available_backends: Optional[list[str]] = None):
+    """Build the stable degraded-path contract for missing voice backends."""
+    return jsonify({
+        "status": "error",
+        "message": message,
+        "error": "service_unavailable",
+        "code": "backend_missing",
+        "detail": detail,
+        "backend": backend,
+        "available_backends": sorted(set(available_backends or [])),
+        "retry_after_seconds": None,
+    }), 503
 
 
 def _get_proactive_hints() -> ProactiveVoiceHints:
@@ -728,12 +807,25 @@ def transcribe_speech():
         audio_path = data.get("audio_path") or "memory://voice-input"
         language = data.get("language", "de")
 
-        result = _get_stt_engine().transcribe(audio_path, language=language)
+        try:
+            stt_engine = _get_stt_engine()
+        except Exception as exc:
+            _LOGGER.warning("Whisper STT bootstrap unavailable: %s", exc)
+            return _voice_backend_unavailable_response(
+                message="Voice transcription unavailable",
+                detail="Whisper STT backend not available",
+                backend="whisper",
+                available_backends=_collect_available_voice_backends(skip="stt"),
+            )
+
+        result = stt_engine.transcribe(audio_path, language=language)
         if not result:
-            return jsonify({
-                "status": "error",
-                "message": "Voice transcription unavailable",
-            }), 503
+            return _voice_backend_unavailable_response(
+                message="Voice transcription unavailable",
+                detail="Whisper STT backend not available",
+                backend="whisper",
+                available_backends=_collect_available_voice_backends(skip="stt"),
+            )
 
         return jsonify({
             "status": "ok",
@@ -764,12 +856,25 @@ def synthesize_speech_route():
             }), 400
 
         voice = data.get("voice")
-        result = _get_tts_engine().synthesize(text, voice=voice)
+        try:
+            tts_engine = _get_tts_engine()
+        except Exception as exc:
+            _LOGGER.warning("Piper TTS bootstrap unavailable: %s", exc)
+            return _voice_backend_unavailable_response(
+                message="Voice synthesis unavailable",
+                detail="Piper TTS backend not available",
+                backend="piper",
+                available_backends=_collect_available_voice_backends(skip="tts"),
+            )
+
+        result = tts_engine.synthesize(text, voice=voice)
         if not result:
-            return jsonify({
-                "status": "error",
-                "message": "Voice synthesis unavailable"
-            }), 503
+            return _voice_backend_unavailable_response(
+                message="Voice synthesis unavailable",
+                detail="Piper TTS backend not available",
+                backend="piper",
+                available_backends=_collect_available_voice_backends(skip="tts"),
+            )
 
         return jsonify({
             "status": "ok",
@@ -821,12 +926,25 @@ def generate_speech():
         language = data.get("language", "de")
         voice = data.get("voice")
 
-        result = _get_tts_engine().synthesize(text, voice=voice)
+        try:
+            tts_engine = _get_tts_engine()
+        except Exception as exc:
+            _LOGGER.warning("Piper TTS bootstrap unavailable for /speak: %s", exc)
+            return _voice_backend_unavailable_response(
+                message="Voice synthesis unavailable",
+                detail="Piper TTS backend not available",
+                backend="piper",
+                available_backends=_collect_available_voice_backends(skip="tts"),
+            )
+
+        result = tts_engine.synthesize(text, voice=voice)
         if not result:
-            return jsonify({
-                "status": "error",
-                "message": "Voice synthesis unavailable"
-            }), 503
+            return _voice_backend_unavailable_response(
+                message="Voice synthesis unavailable",
+                detail="Piper TTS backend not available",
+                backend="piper",
+                available_backends=_collect_available_voice_backends(skip="tts"),
+            )
 
         audio_path = Path(result.audio_path)
         audio_id = _cache_generated_audio(result.audio_path)
@@ -902,7 +1020,21 @@ def get_status():
             "context_builder": "available",
             "proactive_hints": "available",
             "mood_engine": "available",
-            "habitus_service": "unavailable"
+            "habitus_service": "unavailable",
+            "stt_engine": "available",
+            "tts_engine": "available",
+            "nlu_engine": "available"
+        },
+        "runtime": {
+            "stt": {"available": true, "engine": "whisper"},
+            "tts": {"available": true, "engine": "piper"},
+            "nlu": {"available": true, "engine": "rule_based"}
+        },
+        "capabilities": {
+            "can_transcribe": true,
+            "can_synthesize": true,
+            "can_speak": true,
+            "can_dialog": true
         },
         "config": {
             "default_language": "de",
@@ -915,12 +1047,14 @@ def get_status():
     try:
         # Check component availability
         components = {}
+        intent_handler_available = False
         
         try:
             handler = _get_intent_handler()
             components["intent_handler"] = "available"
             components["mood_engine"] = "available" if handler.mood_engine else "unavailable"
             components["habitus_service"] = "available" if handler.habitus_service else "unavailable"
+            intent_handler_available = True
         except Exception:
             components["intent_handler"] = "unavailable"
         
@@ -939,6 +1073,8 @@ def get_status():
         runtime = _build_voice_runtime_status()
         components["stt_engine"] = "available" if runtime["stt"]["available"] else "unavailable"
         components["tts_engine"] = "available" if runtime["tts"]["available"] else "unavailable"
+        components["nlu_engine"] = "available" if runtime["nlu"]["available"] else "unavailable"
+        capabilities = _build_voice_capabilities(runtime, intent_handler_available=intent_handler_available)
 
         # Get config from proactive hints
         hints_service = _get_proactive_hints()
@@ -949,6 +1085,7 @@ def get_status():
             "version": "1.0.0",
             "components": components,
             "runtime": runtime,
+            "capabilities": capabilities,
             "config": {
                 "default_language": "de",
                 "supported_languages": ["de", "en"],

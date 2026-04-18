@@ -29,6 +29,13 @@ except ModuleNotFoundError:
     vol = None  # type: ignore
     HAS_HOMEASSISTANT = False
 
+# Version — forward to addon path if available
+try:
+    from copilot_core import __version__ as _addon_version
+    __version__ = _addon_version
+except ImportError:
+    __version__ = '0.0.0'
+
 if HAS_HOMEASSISTANT:
     from .database.models import init_database, get_database_manager
     from .database.migrations import MigrationManager, register_default_migrations

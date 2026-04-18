@@ -65,20 +65,44 @@ class PiperTTS:
         except ImportError:
             return False
 
+    def _check_backend_available(self) -> bool:
+        """Compatibility alias for bounded backend availability checks."""
+        return self._loaded or self._check_backend()
+
+    def available_backends(self) -> List[str]:
+        """Return the currently usable backend identifiers."""
+        return [self.config.engine] if self._check_backend_available() else []
+
+    def is_available(self) -> bool:
+        """Expose whether this compatibility engine can serve requests."""
+        return self._check_backend_available()
+
+    def availability_payload(self) -> Dict[str, object]:
+        """Return a small runtime status surface for API consumers."""
+        return {
+            "available": self.is_available(),
+            "engine": self.config.engine,
+            "voice": self.config.voice,
+            "available_backends": self.available_backends(),
+        }
+
     def load_voice(self, voice_id: str) -> bool:
         """Load a voice model (real backend or unavailable stub)."""
         try:
-            if not self._check_backend():
+            if not self._check_backend_available():
                 logger.warning("Piper package not installed — TTS degraded to stub")
                 self._unavailable = True
                 self._loaded = False
                 return False
             self._loaded = True
+            self._unavailable = False
             self.config.voice = voice_id
             logger.info("Loaded voice: %s", voice_id)
             return True
         except Exception as exc:
             logger.error("Failed to load voice: %s", exc)
+            self._loaded = False
+            self._unavailable = True
             return False
 
     def synthesize(
@@ -89,14 +113,19 @@ class PiperTTS:
         speed: Optional[float] = None,
     ) -> Optional[TTSResult]:
         """Synthesize speech from text."""
-        if getattr(self, '_unavailable', False):
+        voice = voice or self.config.voice
+        emotion = emotion or self.config.emotion
+        speed = speed or self.config.speed
+
+        if not self._loaded and not self.load_voice(voice):
+            logger.warning("Piper backend unavailable — synthesize() returns None")
+            return None
+
+        if getattr(self, '_unavailable', False) and not self._check_backend_available():
             logger.warning("Piper backend unavailable — synthesize() returns None")
             return None
 
         start = time.time()
-        voice = voice or self.config.voice
-        emotion = emotion or self.config.emotion
-        speed = speed or self.config.speed
 
         audio_hash = hashlib.sha256(f"{text}{time.time()}".encode()).hexdigest()[:16]
         audio_path = self._output_dir / f"{audio_hash}.wav"

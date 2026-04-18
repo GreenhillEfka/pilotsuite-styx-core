@@ -59,15 +59,38 @@ class WhisperSTT:
         except ImportError:
             return False
 
+    def _check_backend_available(self) -> bool:
+        """Compatibility alias for bounded backend availability checks."""
+        return self._loaded or self._check_backend()
+
+    def available_backends(self) -> List[str]:
+        """Return the currently usable backend identifiers."""
+        return ["whisper"] if self._check_backend_available() else []
+
+    def is_available(self) -> bool:
+        """Expose whether this compatibility engine can serve requests."""
+        return self._check_backend_available()
+
+    def availability_payload(self) -> Dict[str, Any]:
+        """Return a small runtime status surface for API consumers."""
+        return {
+            "available": self.is_available(),
+            "engine": "whisper",
+            "model": self.config.model,
+            "default_language": self.config.language or "de",
+            "available_backends": self.available_backends(),
+        }
+
     def load_model(self) -> bool:
         """Load Whisper model (real backend or unavailable stub)."""
         try:
-            if not self._check_backend():
+            if not self._check_backend_available():
                 logger.warning("Whisper package not installed — STT degraded to stub")
                 self._loaded = False
                 self._unavailable = True
                 return False
             self._loaded = True
+            self._unavailable = False
             logger.info("Loaded Whisper model: %s", self.config.model)
             return True
         except Exception as exc:
@@ -79,6 +102,7 @@ class WhisperSTT:
     def transcribe(self, audio_path: str, language: Optional[str] = None) -> Optional[TranscriptionResult]:
         """Transcribe an audio file."""
         if not self._loaded and not self.load_model():
+            logger.warning("Whisper backend unavailable — transcribe() returns None")
             return None
 
         start = time.time()

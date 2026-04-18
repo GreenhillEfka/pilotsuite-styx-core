@@ -36,6 +36,16 @@ def _patch_auth():
     voice_api._validate_token = lambda request: True
 
 
+def _assert_backend_missing_contract(data, *, message_fragment: str, backend: str):
+    assert data["status"] == "error"
+    assert data["error"] == "service_unavailable"
+    assert data["code"] == "backend_missing"
+    assert data["backend"] == backend
+    assert data["available_backends"] == []
+    assert data["retry_after_seconds"] is None
+    assert message_fragment in data["message"].lower()
+
+
 class TestSTTDegradedPath:
     """STT degraded path: Whisper backend unavailable."""
 
@@ -64,8 +74,20 @@ class TestSTTDegradedPath:
             f"Body: {response.get_data(as_text=True)}"
         )
         data = response.get_json()
-        assert data["status"] == "error"
-        assert "unavailable" in data["message"].lower()
+        _assert_backend_missing_contract(data, message_fragment="unavailable", backend="whisper")
+
+    def test_transcribe_returns_503_when_engine_factory_raises(self, monkeypatch):
+        monkeypatch.setattr(voice_api, "_validate_token", lambda request: True)
+        monkeypatch.setattr(voice_api, "_get_stt_engine", lambda: (_ for _ in ()).throw(RuntimeError("missing whisper")))
+
+        client = _make_app().test_client()
+        response = client.post(
+            "/api/v1/voice/transcribe",
+            json={"audio_path": "/tmp/test.wav", "language": "de"},
+        )
+
+        assert response.status_code == 503, response.get_data(as_text=True)
+        _assert_backend_missing_contract(response.get_json(), message_fragment="unavailable", backend="whisper")
 
     def test_transcribe_returns_500_when_engine_raises(self, monkeypatch):
         """
@@ -120,8 +142,20 @@ class TestTTSDegradedPath:
             f"Body: {response.get_data(as_text=True)}"
         )
         data = response.get_json()
-        assert data["status"] == "error"
-        assert "unavailable" in data["message"].lower()
+        _assert_backend_missing_contract(data, message_fragment="unavailable", backend="piper")
+
+    def test_synthesize_returns_503_when_engine_factory_raises(self, monkeypatch):
+        monkeypatch.setattr(voice_api, "_validate_token", lambda request: True)
+        monkeypatch.setattr(voice_api, "_get_tts_engine", lambda: (_ for _ in ()).throw(RuntimeError("missing piper")))
+
+        client = _make_app().test_client()
+        response = client.post(
+            "/api/v1/voice/synthesize",
+            json={"text": "Hello world"},
+        )
+
+        assert response.status_code == 503, response.get_data(as_text=True)
+        _assert_backend_missing_contract(response.get_json(), message_fragment="unavailable", backend="piper")
 
     def test_synthesize_returns_500_when_engine_raises(self, monkeypatch):
         """
