@@ -12,6 +12,7 @@ if str(ADDON_APP) not in sys.path:
     sys.path.append(str(ADDON_APP))
 
 from copilot_core.api.v1 import voice as voice_api  # noqa: E402
+from copilot_core.voice import runtime_access as voice_runtime_access  # noqa: E402
 
 
 def _make_app() -> Flask:
@@ -201,4 +202,91 @@ def test_voice_status_capabilities_turn_false_when_backends_missing(monkeypatch)
         "can_synthesize": False,
         "can_speak": False,
         "can_dialog": False,
+    }
+
+
+def test_voice_status_prefers_injected_runtime_seam(monkeypatch):
+    monkeypatch.setattr(voice_api, "_validate_token", lambda request: True)
+
+    class _DummyHintsConfig:
+        hint_cooldown_seconds = 300
+        max_hints_per_hour = 6
+
+        class _Priority:
+            value = "low"
+
+        min_priority = _Priority()
+
+    class _DummyHints:
+        config = _DummyHintsConfig()
+
+    class _DummyHandler:
+        mood_engine = object()
+        habitus_service = object()
+
+    class _InjectedEngine:
+        def __init__(self, payload):
+            self._payload = payload
+
+        def availability_payload(self):
+            return self._payload
+
+    class _InjectedRuntime:
+        def get_intent_handler(self):
+            return _DummyHandler()
+
+        def get_context_builder(self):
+            return object()
+
+        def get_stt_engine(self):
+            return _InjectedEngine({
+                "available": True,
+                "engine": "injected-whisper",
+                "available_backends": ["injected-whisper"],
+            })
+
+        def get_tts_engine(self):
+            return _InjectedEngine({
+                "available": True,
+                "engine": "injected-piper",
+                "available_backends": ["injected-piper"],
+            })
+
+        def get_nlu_engine(self):
+            return object()
+
+        def get_proactive_hints(self):
+            return _DummyHints()
+
+        def get_generated_audio_cache(self):
+            return {}
+
+        def cache_generated_audio(self, audio_path):
+            return "ignored"
+
+    def _should_not_be_called(*args, **kwargs):
+        raise AssertionError("fallback voice runtime construction should not run")
+
+    monkeypatch.setattr(voice_runtime_access.VoiceRuntimeAccess, "get_intent_handler", _should_not_be_called)
+    monkeypatch.setattr(voice_runtime_access.VoiceRuntimeAccess, "get_context_builder", _should_not_be_called)
+    monkeypatch.setattr(voice_runtime_access.VoiceRuntimeAccess, "get_stt_engine", _should_not_be_called)
+    monkeypatch.setattr(voice_runtime_access.VoiceRuntimeAccess, "get_tts_engine", _should_not_be_called)
+    monkeypatch.setattr(voice_runtime_access.VoiceRuntimeAccess, "get_nlu_engine", _should_not_be_called)
+    monkeypatch.setattr(voice_runtime_access.VoiceRuntimeAccess, "get_proactive_hints", _should_not_be_called)
+
+    app = Flask(__name__)
+    voice_runtime_access.init_voice_runtime(app, runtime=_InjectedRuntime())
+    app.register_blueprint(voice_api.bp)
+
+    response = app.test_client().get("/api/v1/voice/status")
+
+    assert response.status_code == 200, response.get_json()
+    payload = response.get_json()
+    assert payload["runtime"]["stt"]["engine"] == "injected-whisper"
+    assert payload["runtime"]["tts"]["engine"] == "injected-piper"
+    assert payload["capabilities"] == {
+        "can_transcribe": True,
+        "can_synthesize": True,
+        "can_speak": True,
+        "can_dialog": True,
     }

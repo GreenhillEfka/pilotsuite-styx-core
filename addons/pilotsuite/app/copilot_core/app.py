@@ -144,6 +144,14 @@ def create_app() -> Flask:
     # Attach config to app (simple, explicit)
     app.config["COPILOT_CFG"] = cfg
 
+    # Install the single voice runtime seam early so the voice blueprint can
+    # resolve injected services instead of constructing them in the route layer.
+    try:
+        from copilot_core.voice.runtime_access import init_voice_runtime
+        init_voice_runtime(app, app.config.get("COPILOT_SERVICES"))
+    except Exception:
+        logging.getLogger(__name__).exception("Failed to initialize voice runtime seam")
+
     # Initialize security middleware (rate limiting, security headers, logging)
     init_security_middleware(app)
 

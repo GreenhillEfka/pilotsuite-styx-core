@@ -22,18 +22,15 @@ import asyncio
 from datetime import datetime, timezone
 import logging
 from pathlib import Path
-import time
 from typing import Any, Dict, Optional
 
-from flask import Blueprint, current_app, jsonify, request, send_file
+from flask import Blueprint, jsonify, request, send_file
 
 from copilot_core.voice.command_router import VoiceCommandRouter
-from copilot_core.voice.voice_handler import VoiceIntentHandler, VoiceIntent, IntentType, VoiceResponse
-from copilot_core.voice.context_builder import VoiceContextBuilder, VoiceContext
-from copilot_core.voice.proactive import ProactiveVoiceHints, HintConfig, HintPriority
-from copilot_core.voice.nlu_engine import NLUEngine
-from copilot_core.voice.stt_whisper import WhisperSTT, STTConfig
-from copilot_core.voice.tts_piper import PiperTTS, TTSConfig
+from copilot_core.voice.voice_handler import VoiceIntent, IntentType, VoiceResponse
+from copilot_core.voice.context_builder import VoiceContext, VoiceContextBuilder
+from copilot_core.voice.proactive import HintPriority
+from copilot_core.voice.runtime_access import get_voice_runtime
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -52,93 +49,39 @@ def _require_auth():
         }), 401
 
 
-def _get_intent_handler() -> VoiceIntentHandler:
-    """Get or create voice intent handler instance."""
-    if not hasattr(current_app, '_voice_intent_handler'):
-        # Initialize mood engine if available
-        mood_engine = None
-        try:
-            from copilot_core.mood.engine import MoodEngine, MoodConfig, ZoneConfig
-            
-            # Create default mood config
-            zone_config = ZoneConfig(
-                name="wohnzimmer",
-                motion_entities=["binary_sensor.wohnzimmer_motion"],
-                light_entities=["light.wohnzimmer"],
-                media_entities=["media_player.wohnzimmer"],
-                illuminance_entity="sensor.wohnzimmer_illuminance",
-            )
-            
-            mood_config = MoodConfig(zones={"wohnzimmer": zone_config})
-            mood_engine = MoodEngine(mood_config)
-            
-        except Exception as e:
-            _LOGGER.warning("Failed to initialize mood engine for voice: %s", e)
-        
-        # Initialize habitus service if available
-        habitus_service = None
-        try:
-            from copilot_core.habitus.service import HabitusService
-            from copilot_core.brain_graph.service import BrainGraphService
-            from copilot_core.candidates.store import CandidateStore
-            
-            # Try to get existing instances
-            if hasattr(current_app, '_habitus_service'):
-                habitus_service = current_app._habitus_service
-            
-        except Exception as e:
-            _LOGGER.warning("Failed to initialize habitus service for voice: %s", e)
-        
-        current_app._voice_intent_handler = VoiceIntentHandler(
-            mood_engine=mood_engine,
-            habitus_service=habitus_service,
-            default_language="de",
-        )
-    
-    return current_app._voice_intent_handler
-
-
-def _get_context_builder() -> VoiceContextBuilder:
-    """Get or create voice context builder instance."""
-    if not hasattr(current_app, '_voice_context_builder'):
-        current_app._voice_context_builder = VoiceContextBuilder()
-    return current_app._voice_context_builder
-
-
-def _get_stt_engine() -> WhisperSTT:
-    """Get or create the shared STT engine."""
-    if not hasattr(current_app, "_voice_stt_engine"):
-        current_app._voice_stt_engine = WhisperSTT(STTConfig(language="de"))
-    return current_app._voice_stt_engine
-
-
-def _get_tts_engine() -> PiperTTS:
-    """Get or create the shared TTS engine."""
-    if not hasattr(current_app, "_voice_tts_engine"):
-        current_app._voice_tts_engine = PiperTTS(TTSConfig())
-    return current_app._voice_tts_engine
-
-
-def _get_nlu_engine() -> NLUEngine:
-    """Get or create the shared NLU engine."""
-    if not hasattr(current_app, "_voice_nlu_engine"):
-        current_app._voice_nlu_engine = NLUEngine()
-    return current_app._voice_nlu_engine
-
-
 def _get_generated_audio_cache() -> Dict[str, str]:
-    """Get or create the bounded generated-audio cache for `/voice/speak`."""
-    if not hasattr(current_app, "_voice_generated_audio"):
-        current_app._voice_generated_audio = {}
-    return current_app._voice_generated_audio
+    """Get the bounded generated-audio cache for `/voice/speak`."""
+    return get_voice_runtime().get_generated_audio_cache()
+
+
+def _get_intent_handler():
+    """Resolve the shared voice intent handler from the runtime seam."""
+    return get_voice_runtime().get_intent_handler()
+
+
+def _get_context_builder():
+    """Resolve the shared voice context builder from the runtime seam."""
+    return get_voice_runtime().get_context_builder()
+
+
+def _get_stt_engine():
+    """Resolve the shared STT engine from the runtime seam."""
+    return get_voice_runtime().get_stt_engine()
+
+
+def _get_tts_engine():
+    """Resolve the shared TTS engine from the runtime seam."""
+    return get_voice_runtime().get_tts_engine()
+
+
+def _get_nlu_engine():
+    """Resolve the shared NLU engine from the runtime seam."""
+    return get_voice_runtime().get_nlu_engine()
 
 
 def _cache_generated_audio(audio_path: str) -> str:
     """Cache a generated audio file path and return its stable route id."""
-    path = Path(audio_path)
-    audio_id = path.stem or f"tts_{int(time.time() * 1000)}"
-    _get_generated_audio_cache()[audio_id] = str(path)
-    return audio_id
+    return get_voice_runtime().cache_generated_audio(audio_path)
 
 
 def _build_voice_runtime_status() -> Dict[str, Any]:
@@ -246,28 +189,9 @@ def _voice_backend_unavailable_response(*, message: str, detail: str, backend: s
     }), 503
 
 
-def _get_proactive_hints() -> ProactiveVoiceHints:
-    """Get or create proactive voice hints instance."""
-    if not hasattr(current_app, '_voice_proactive_hints'):
-        # Get mood engine and habitus service
-        intent_handler = _get_intent_handler()
-        
-        config = HintConfig(
-            enabled_types=[
-                hint_type for hint_type in __import__('copilot_core.voice.proactive', fromlist=['HintType']).HintType
-            ],
-            min_priority=HintPriority.LOW,
-            hint_cooldown_seconds=300,
-            max_hints_per_hour=6,
-        )
-        
-        current_app._voice_proactive_hints = ProactiveVoiceHints(
-            mood_engine=intent_handler.mood_engine,
-            habitus_service=intent_handler.habitus_service,
-            config=config,
-        )
-    
-    return current_app._voice_proactive_hints
+def _get_proactive_hints():
+    """Resolve proactive voice hints from the runtime seam."""
+    return get_voice_runtime().get_proactive_hints()
 
 
 def _serialize_dialog_state(state) -> Dict[str, Any]:

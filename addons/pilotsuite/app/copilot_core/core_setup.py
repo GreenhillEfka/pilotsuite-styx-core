@@ -1363,6 +1363,13 @@ def register_blueprints(app: Flask, services: dict) -> None:
     # Make services available via app.config for blueprints using current_app.config
     app.config["COPILOT_SERVICES"] = services
 
+    # Install the single voice runtime access seam before any voice routes run.
+    try:
+        from copilot_core.voice.runtime_access import init_voice_runtime
+        init_voice_runtime(app, services)
+    except Exception:
+        _LOGGER.exception("Failed to initialize voice runtime access seam")
+
     # ── Data-driven blueprint registration ────────────────────────────────
     # Each entry: (module_path, blueprint_attr, url_prefix_or_None)
     # url_prefix=None means the blueprint defines its own prefix internally.
