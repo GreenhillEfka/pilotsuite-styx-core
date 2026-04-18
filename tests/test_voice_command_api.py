@@ -12,6 +12,7 @@ if str(ADDON_APP) not in sys.path:
     sys.path.append(str(ADDON_APP))
 
 from copilot_core.api.v1 import voice as voice_api  # noqa: E402
+from copilot_core.voice import runtime_access as voice_runtime_access  # noqa: E402
 from copilot_core.voice.dialog_state import DialogStateMachine  # noqa: E402
 
 
@@ -361,3 +362,123 @@ def test_voice_command_state_requires_session_id(monkeypatch, tmp_path):
     payload = response.get_json()
     assert payload["status"] == "error"
     assert "session_id" in payload["message"]
+
+
+def test_voice_command_prefers_injected_runtime_seam(monkeypatch, tmp_path):
+    monkeypatch.setattr(voice_api, "_validate_token", lambda request: True)
+
+    class _DummyHandler:
+        mood_engine = None
+        habitus_service = None
+
+    class _DummyContext:
+        def to_dict(self):
+            return {"zone_name": "wohnzimmer"}
+
+    class _DummyContextBuilder:
+        def build_context(self, **kwargs):
+            return _DummyContext()
+
+    class _DummyIntent:
+        intent_type = type("IntentTypeValue", (), {"value": "light_on"})()
+        confidence = 0.95
+        slots = {}
+        language = "de"
+
+        def __init__(self, raw_text):
+            self.raw_text = raw_text
+
+        def to_dict(self):
+            return {
+                "intent_type": "light_on",
+                "confidence": self.confidence,
+                "slots": self.slots,
+                "language": self.language,
+                "raw_text": self.raw_text,
+            }
+
+    class _DummyResponse:
+        text = "Licht ist an"
+        tts_text = "Licht ist an"
+        requires_confirmation = False
+        actions = [{"domain": "light", "service": "turn_on", "data": {}}]
+        metadata = {}
+
+        def to_dict(self):
+            return {
+                "text": self.text,
+                "tts_text": self.tts_text,
+                "requires_confirmation": self.requires_confirmation,
+                "actions": self.actions,
+                "metadata": self.metadata,
+            }
+
+    class _InjectedRouter:
+        def route(self, **kwargs):
+            return {
+                "decision": type(
+                    "Decision",
+                    (),
+                    {
+                        "status": "executed",
+                        "action": "light.turn_on",
+                        "message": "Licht ist an",
+                        "confirmation_token": None,
+                        "action_payload": None,
+                        "session_state": {
+                            "state": "ACTIVE",
+                            "session_id": kwargs.get("session_id"),
+                            "user_id": kwargs.get("user_id"),
+                            "zone_id": kwargs.get("zone_id"),
+                        },
+                    },
+                )(),
+                "intent": _DummyIntent(kwargs.get("utterance")),
+                "normalized_intent": type("NormalizedIntent", (), {"value": "light_on"})(),
+                "effective_confidence": 0.95,
+                "response": _DummyResponse(),
+            }
+
+    machine = _isolated_dialog_machine(tmp_path)
+
+    class _InjectedRuntime:
+        def get_intent_handler(self):
+            return _DummyHandler()
+
+        def get_context_builder(self):
+            return _DummyContextBuilder()
+
+        def get_command_router(self):
+            return _InjectedRouter()
+
+        def get_dialog_machine(self):
+            return machine
+
+    def _should_not_be_called(*args, **kwargs):
+        raise AssertionError("fallback voice runtime construction should not run")
+
+    monkeypatch.setattr(voice_runtime_access.VoiceRuntimeAccess, "get_intent_handler", _should_not_be_called)
+    monkeypatch.setattr(voice_runtime_access.VoiceRuntimeAccess, "get_context_builder", _should_not_be_called)
+    monkeypatch.setattr(voice_runtime_access.VoiceRuntimeAccess, "get_command_router", _should_not_be_called)
+    monkeypatch.setattr(voice_runtime_access.VoiceRuntimeAccess, "get_dialog_machine", _should_not_be_called)
+
+    app = Flask(__name__)
+    voice_runtime_access.init_voice_runtime(app, runtime=_InjectedRuntime())
+    app.register_blueprint(voice_api.bp)
+
+    response = app.test_client().post(
+        "/api/v1/voice/command",
+        json={
+            "session_id": "sess-runtime-seam",
+            "utterance": "Mach das Licht an",
+            "confidence": 0.95,
+            "zone_id": "Wohnzimmer",
+        },
+    )
+
+    assert response.status_code == 200, response.get_json()
+    payload = response.get_json()
+    assert payload["status"] == "executed"
+    assert payload["action"] == "light.turn_on"
+    assert payload["session_state"]["session_id"] == "sess-runtime-seam"
+    assert payload["response"]["actions"][0]["domain"] == "light"

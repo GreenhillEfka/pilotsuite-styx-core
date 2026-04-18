@@ -13,6 +13,7 @@ from typing import Any, MutableMapping, Optional
 
 from flask import Flask, current_app
 
+from copilot_core.voice.command_router import VoiceCommandRouter
 from copilot_core.voice.context_builder import VoiceContextBuilder
 from copilot_core.voice.nlu_engine import NLUEngine
 from copilot_core.voice.proactive import HintConfig, HintPriority, ProactiveVoiceHints
@@ -36,6 +37,8 @@ class VoiceRuntimeAccess:
         self._tts_engine: Optional[PiperTTS] = None
         self._nlu_engine: Optional[NLUEngine] = None
         self._proactive_hints: Optional[ProactiveVoiceHints] = None
+        self._command_router: Optional[VoiceCommandRouter] = None
+        self._dialog_machine: Any = None
         self._generated_audio_cache: Optional[MutableMapping[str, str]] = None
 
     def _get_override(self, service_key: str, *, legacy_attr: Optional[str] = None) -> Any:
@@ -145,6 +148,23 @@ class VoiceRuntimeAccess:
                     config=config,
                 )
         return self._proactive_hints
+
+    def get_command_router(self) -> VoiceCommandRouter:
+        if self._command_router is None:
+            override = self._get_override("voice_command_router", legacy_attr="_voice_command_router")
+            self._command_router = override or VoiceCommandRouter(self.get_intent_handler())
+        return self._command_router
+
+    def get_dialog_machine(self):
+        if self._dialog_machine is None:
+            override = self._get_override("voice_dialog_machine", legacy_attr="_voice_dialog_machine")
+            if override is not None:
+                self._dialog_machine = override
+            else:
+                from copilot_core.voice.dialog_state import get_dialog_machine
+
+                self._dialog_machine = get_dialog_machine()
+        return self._dialog_machine
 
 
 def init_voice_runtime(

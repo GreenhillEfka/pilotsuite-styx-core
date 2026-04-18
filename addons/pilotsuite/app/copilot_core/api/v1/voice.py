@@ -22,11 +22,11 @@ import asyncio
 from datetime import datetime, timezone
 import logging
 from pathlib import Path
+import time
 from typing import Any, Dict, Optional
 
 from flask import Blueprint, jsonify, request, send_file
 
-from copilot_core.voice.command_router import VoiceCommandRouter
 from copilot_core.voice.voice_handler import VoiceIntent, IntentType, VoiceResponse
 from copilot_core.voice.context_builder import VoiceContext, VoiceContextBuilder
 from copilot_core.voice.proactive import HintPriority
@@ -77,6 +77,11 @@ def _get_tts_engine():
 def _get_nlu_engine():
     """Resolve the shared NLU engine from the runtime seam."""
     return get_voice_runtime().get_nlu_engine()
+
+
+def _get_command_router():
+    """Resolve the shared voice command router from the runtime seam."""
+    return get_voice_runtime().get_command_router()
 
 
 def _cache_generated_audio(audio_path: str) -> str:
@@ -477,7 +482,7 @@ def process_command():
             active_devices=active_devs,
         )
 
-        router = VoiceCommandRouter(handler)
+        router = _get_command_router()
         routed = router.route(
             utterance=utterance,
             stt_confidence=confidence,
@@ -1182,9 +1187,8 @@ def get_supported_intents():
 
 
 def _get_dialog_machine():
-    """Get or create dialog state machine."""
-    from copilot_core.voice.dialog_state import get_dialog_machine
-    return get_dialog_machine()
+    """Resolve the shared dialog state machine from the runtime seam."""
+    return get_voice_runtime().get_dialog_machine()
 
 
 # ── HA Assist Bridge ──────────────────────────────────────────────────────────
