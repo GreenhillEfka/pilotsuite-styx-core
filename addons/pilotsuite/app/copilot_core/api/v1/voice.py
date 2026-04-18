@@ -22,7 +22,6 @@ import asyncio
 from datetime import datetime, timezone
 import logging
 from pathlib import Path
-import time
 from typing import Any, Dict, Optional
 
 from flask import Blueprint, jsonify, request, send_file
@@ -82,6 +81,11 @@ def _get_nlu_engine():
 def _get_command_router():
     """Resolve the shared voice command router from the runtime seam."""
     return get_voice_runtime().get_command_router()
+
+
+def _get_command_flow():
+    """Resolve the shared voice command-flow service from the runtime seam."""
+    return get_voice_runtime().get_command_flow()
 
 
 def _cache_generated_audio(audio_path: str) -> str:
@@ -463,102 +467,18 @@ def process_command():
                 "message": "Field 'intent_candidates' must be a list"
             }), 400
 
-        session_id = data.get("session_id")
-        user_id = data.get("user_id")
-        zone = data.get("zone_id") or data.get("zone")
         req_context = data.get("context", {}) if isinstance(data.get("context"), dict) else {}
-        user_prefs = req_context.get("user_preferences")
-        active_devs = req_context.get("active_devices")
-        zone = _resolve_requested_zone(zone, req_context)
+        zone = _resolve_requested_zone(data.get("zone_id") or data.get("zone"), req_context)
 
-        handler = _get_intent_handler()
-        context_builder = _get_context_builder()
-        context = context_builder.build_context(
-            mood_engine=handler.mood_engine,
-            habitus_service=handler.habitus_service,
-            zone_name=zone,
-            force_refresh=bool(req_context),
-            user_preferences=user_prefs,
-            active_devices=active_devs,
-        )
-
-        router = _get_command_router()
-        routed = router.route(
+        response_payload = _get_command_flow().process(
             utterance=utterance,
-            stt_confidence=confidence,
-            context=context,
+            confidence=confidence,
             intent_candidates=intent_candidates,
-            session_id=session_id,
-            user_id=user_id,
+            session_id=data.get("session_id"),
+            user_id=data.get("user_id"),
             zone_id=zone,
+            request_context=req_context,
         )
-
-        decision = routed["decision"]
-        normalized_intent = routed["normalized_intent"]
-        intent_name = normalized_intent.value if hasattr(normalized_intent, "value") else str(normalized_intent)
-
-        machine = _get_dialog_machine()
-        if decision.status == "executed":
-            state = machine.activate_intent(
-                intent=decision.action or intent_name,
-                slots={"_last_utterance": utterance},
-                session_id=session_id,
-                user_id=user_id,
-            )
-        elif decision.status == "confirmation_required":
-            machine.activate_intent(
-                intent=decision.action or intent_name,
-                slots={"_last_utterance": utterance},
-                session_id=session_id,
-                user_id=user_id,
-            )
-            confirmation_metadata = {
-                "_last_utterance": utterance,
-                "_pending_action": decision.action,
-                "_pending_action_label": decision.action,
-                "_pending_action_payload": decision.action_payload,
-                "_confirmation_prompt": decision.message,
-                "_confirmation_expires_at": time.time() + machine.TIMEOUT_SECONDS,
-                "_confirmation_token": decision.confirmation_token,
-            }
-            state = machine.set_confirming(metadata={
-                **confirmation_metadata,
-            })
-        elif decision.status == "clarification_required":
-            machine.activate_intent(
-                intent=intent_name,
-                slots={"_last_utterance": utterance},
-                session_id=session_id,
-                user_id=user_id,
-            )
-            state = machine.set_clarifying(
-                decision.message,
-                metadata={
-                    "_last_utterance": utterance,
-                    "_intent": intent_name,
-                },
-            )
-        else:
-            state = machine.reset(session_id=session_id, user_id=user_id)
-
-        state = machine.merge_metadata({"_last_status": decision.status})
-
-        session_state = dict(decision.session_state)
-        session_state.update(_serialize_dialog_state(state))
-
-        response_payload = {
-            "status": decision.status,
-            "action": decision.action,
-            "message": decision.message,
-            "confirmation_token": decision.confirmation_token,
-            "session_state": session_state,
-            "intent": routed["intent"].to_dict(),
-            "context": context.to_dict(),
-            "effective_confidence": routed["effective_confidence"],
-        }
-        if routed.get("response") is not None:
-            response_payload["response"] = routed["response"].to_dict()
-
         return jsonify(response_payload)
 
     except Exception as e:

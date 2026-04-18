@@ -28,9 +28,15 @@ def _isolated_dialog_machine(tmp_path):
     return machine
 
 
+def _patch_runtime_dialog_machine(monkeypatch, tmp_path):
+    machine = _isolated_dialog_machine(tmp_path)
+    monkeypatch.setattr(voice_runtime_access.VoiceRuntimeAccess, "get_dialog_machine", lambda self: machine)
+    return machine
+
+
 def test_voice_command_executes_safe_high_confidence_light_command(monkeypatch, tmp_path):
     monkeypatch.setattr(voice_api, "_validate_token", lambda request: True)
-    monkeypatch.setattr(voice_api, "_get_dialog_machine", lambda: _isolated_dialog_machine(tmp_path))
+    _patch_runtime_dialog_machine(monkeypatch, tmp_path)
 
     app = _make_app()
     client = app.test_client()
@@ -56,7 +62,7 @@ def test_voice_command_executes_safe_high_confidence_light_command(monkeypatch, 
 
 def test_voice_command_requires_clarification_for_medium_confidence_ambiguous_request(monkeypatch, tmp_path):
     monkeypatch.setattr(voice_api, "_validate_token", lambda request: True)
-    monkeypatch.setattr(voice_api, "_get_dialog_machine", lambda: _isolated_dialog_machine(tmp_path))
+    _patch_runtime_dialog_machine(monkeypatch, tmp_path)
 
     app = _make_app()
     client = app.test_client()
@@ -80,7 +86,7 @@ def test_voice_command_requires_clarification_for_medium_confidence_ambiguous_re
 
 def test_voice_command_requires_confirmation_for_high_confidence_unsafe_request(monkeypatch, tmp_path):
     monkeypatch.setattr(voice_api, "_validate_token", lambda request: True)
-    monkeypatch.setattr(voice_api, "_get_dialog_machine", lambda: _isolated_dialog_machine(tmp_path))
+    _patch_runtime_dialog_machine(monkeypatch, tmp_path)
 
     app = _make_app()
     client = app.test_client()
@@ -106,7 +112,7 @@ def test_voice_command_requires_confirmation_for_high_confidence_unsafe_request(
 
 def test_voice_command_rejects_low_confidence_unknown_request(monkeypatch, tmp_path):
     monkeypatch.setattr(voice_api, "_validate_token", lambda request: True)
-    monkeypatch.setattr(voice_api, "_get_dialog_machine", lambda: _isolated_dialog_machine(tmp_path))
+    _patch_runtime_dialog_machine(monkeypatch, tmp_path)
 
     app = _make_app()
     client = app.test_client()
@@ -129,7 +135,7 @@ def test_voice_command_rejects_low_confidence_unknown_request(monkeypatch, tmp_p
 
 def test_voice_command_requires_utterance(monkeypatch, tmp_path):
     monkeypatch.setattr(voice_api, "_validate_token", lambda request: True)
-    monkeypatch.setattr(voice_api, "_get_dialog_machine", lambda: _isolated_dialog_machine(tmp_path))
+    _patch_runtime_dialog_machine(monkeypatch, tmp_path)
 
     app = _make_app()
     client = app.test_client()
@@ -146,8 +152,7 @@ def test_voice_command_requires_utterance(monkeypatch, tmp_path):
 
 def test_voice_command_confirm_executes_persisted_pending_action(monkeypatch, tmp_path):
     monkeypatch.setattr(voice_api, "_validate_token", lambda request: True)
-    machine = _isolated_dialog_machine(tmp_path)
-    monkeypatch.setattr(voice_api, "_get_dialog_machine", lambda: machine)
+    machine = _patch_runtime_dialog_machine(monkeypatch, tmp_path)
 
     app = _make_app()
     client = app.test_client()
@@ -181,8 +186,7 @@ def test_voice_command_confirm_executes_persisted_pending_action(monkeypatch, tm
 
 def test_voice_command_reject_clears_persisted_pending_action(monkeypatch, tmp_path):
     monkeypatch.setattr(voice_api, "_validate_token", lambda request: True)
-    machine = _isolated_dialog_machine(tmp_path)
-    monkeypatch.setattr(voice_api, "_get_dialog_machine", lambda: machine)
+    machine = _patch_runtime_dialog_machine(monkeypatch, tmp_path)
 
     app = _make_app()
     client = app.test_client()
@@ -215,8 +219,7 @@ def test_voice_command_reject_clears_persisted_pending_action(monkeypatch, tmp_p
 
 def test_voice_command_confirm_rejects_mismatched_confirmation_token(monkeypatch, tmp_path):
     monkeypatch.setattr(voice_api, "_validate_token", lambda request: True)
-    machine = _isolated_dialog_machine(tmp_path)
-    monkeypatch.setattr(voice_api, "_get_dialog_machine", lambda: machine)
+    machine = _patch_runtime_dialog_machine(monkeypatch, tmp_path)
 
     app = _make_app()
     client = app.test_client()
@@ -246,8 +249,7 @@ def test_voice_command_confirm_rejects_mismatched_confirmation_token(monkeypatch
 
 def test_voice_command_state_returns_pending_confirmation_projection(monkeypatch, tmp_path):
     monkeypatch.setattr(voice_api, "_validate_token", lambda request: True)
-    machine = _isolated_dialog_machine(tmp_path)
-    monkeypatch.setattr(voice_api, "_get_dialog_machine", lambda: machine)
+    machine = _patch_runtime_dialog_machine(monkeypatch, tmp_path)
 
     app = _make_app()
     client = app.test_client()
@@ -279,8 +281,7 @@ def test_voice_command_state_returns_pending_confirmation_projection(monkeypatch
 
 def test_voice_command_state_returns_idle_shape_for_other_session(monkeypatch, tmp_path):
     monkeypatch.setattr(voice_api, "_validate_token", lambda request: True)
-    machine = _isolated_dialog_machine(tmp_path)
-    monkeypatch.setattr(voice_api, "_get_dialog_machine", lambda: machine)
+    machine = _patch_runtime_dialog_machine(monkeypatch, tmp_path)
 
     app = _make_app()
     client = app.test_client()
@@ -311,8 +312,7 @@ def test_voice_command_state_returns_idle_shape_for_other_session(monkeypatch, t
 
 def test_voice_command_state_keeps_last_status_after_confirmation_follow_through(monkeypatch, tmp_path):
     monkeypatch.setattr(voice_api, "_validate_token", lambda request: True)
-    machine = _isolated_dialog_machine(tmp_path)
-    monkeypatch.setattr(voice_api, "_get_dialog_machine", lambda: machine)
+    machine = _patch_runtime_dialog_machine(monkeypatch, tmp_path)
 
     app = _make_app()
     client = app.test_client()
@@ -351,7 +351,7 @@ def test_voice_command_state_keeps_last_status_after_confirmation_follow_through
 
 def test_voice_command_state_requires_session_id(monkeypatch, tmp_path):
     monkeypatch.setattr(voice_api, "_validate_token", lambda request: True)
-    monkeypatch.setattr(voice_api, "_get_dialog_machine", lambda: _isolated_dialog_machine(tmp_path))
+    _patch_runtime_dialog_machine(monkeypatch, tmp_path)
 
     app = _make_app()
     client = app.test_client()
@@ -364,99 +364,87 @@ def test_voice_command_state_requires_session_id(monkeypatch, tmp_path):
     assert "session_id" in payload["message"]
 
 
-def test_voice_command_prefers_injected_runtime_seam(monkeypatch, tmp_path):
+def test_voice_command_route_delegates_to_command_flow_service(monkeypatch):
     monkeypatch.setattr(voice_api, "_validate_token", lambda request: True)
 
-    class _DummyHandler:
-        mood_engine = None
-        habitus_service = None
+    called = {}
 
-    class _DummyContext:
-        def to_dict(self):
-            return {"zone_name": "wohnzimmer"}
-
-    class _DummyContextBuilder:
-        def build_context(self, **kwargs):
-            return _DummyContext()
-
-    class _DummyIntent:
-        intent_type = type("IntentTypeValue", (), {"value": "light_on"})()
-        confidence = 0.95
-        slots = {}
-        language = "de"
-
-        def __init__(self, raw_text):
-            self.raw_text = raw_text
-
-        def to_dict(self):
+    class _DelegatingFlow:
+        def process(self, **kwargs):
+            called.update(kwargs)
             return {
-                "intent_type": "light_on",
-                "confidence": self.confidence,
-                "slots": self.slots,
-                "language": self.language,
-                "raw_text": self.raw_text,
+                "status": "executed",
+                "action": "light.turn_on",
+                "message": "delegated",
+                "confirmation_token": None,
+                "session_state": {"session_id": kwargs["session_id"]},
+                "intent": {"intent_type": "light_on"},
+                "context": {"zone_name": kwargs["zone_id"]},
+                "effective_confidence": kwargs["confidence"],
+                "response": {"actions": [{"domain": "light", "service": "turn_on", "data": {}}]},
             }
 
-    class _DummyResponse:
-        text = "Licht ist an"
-        tts_text = "Licht ist an"
-        requires_confirmation = False
-        actions = [{"domain": "light", "service": "turn_on", "data": {}}]
-        metadata = {}
+    def _should_not_be_called(*args, **kwargs):
+        raise AssertionError("voice route should delegate orchestration to command-flow service")
 
-        def to_dict(self):
+    monkeypatch.setattr(voice_api, "_get_command_flow", lambda: _DelegatingFlow())
+    monkeypatch.setattr(voice_api, "_get_intent_handler", _should_not_be_called)
+    monkeypatch.setattr(voice_api, "_get_context_builder", _should_not_be_called)
+    monkeypatch.setattr(voice_api, "_get_command_router", _should_not_be_called)
+    monkeypatch.setattr(voice_api, "_get_dialog_machine", _should_not_be_called)
+
+    app = _make_app()
+    response = app.test_client().post(
+        "/api/v1/voice/command",
+        json={
+            "session_id": "sess-delegated",
+            "utterance": "Mach das Licht an",
+            "confidence": "0.95",
+            "zone": "Wohnzimmer",
+            "context": {"user_preferences": {"language": "de"}},
+        },
+    )
+
+    assert response.status_code == 200, response.get_json()
+    assert called == {
+        "utterance": "Mach das Licht an",
+        "confidence": 0.95,
+        "intent_candidates": None,
+        "session_id": "sess-delegated",
+        "user_id": None,
+        "zone_id": "wohnzimmer",
+        "request_context": {"user_preferences": {"language": "de"}},
+    }
+    payload = response.get_json()
+    assert payload["status"] == "executed"
+    assert payload["context"]["zone_name"] == "wohnzimmer"
+
+
+def test_voice_command_prefers_injected_runtime_seam(monkeypatch):
+    monkeypatch.setattr(voice_api, "_validate_token", lambda request: True)
+
+    class _InjectedCommandFlow:
+        def process(self, **kwargs):
             return {
-                "text": self.text,
-                "tts_text": self.tts_text,
-                "requires_confirmation": self.requires_confirmation,
-                "actions": self.actions,
-                "metadata": self.metadata,
+                "status": "executed",
+                "action": "light.turn_on",
+                "message": "Licht ist an",
+                "confirmation_token": None,
+                "session_state": {"session_id": kwargs.get("session_id")},
+                "intent": {"intent_type": "light_on", "raw_text": kwargs.get("utterance")},
+                "context": {"zone_name": kwargs.get("zone_id")},
+                "effective_confidence": kwargs.get("confidence"),
+                "response": {"actions": [{"domain": "light", "service": "turn_on", "data": {}}]},
             }
-
-    class _InjectedRouter:
-        def route(self, **kwargs):
-            return {
-                "decision": type(
-                    "Decision",
-                    (),
-                    {
-                        "status": "executed",
-                        "action": "light.turn_on",
-                        "message": "Licht ist an",
-                        "confirmation_token": None,
-                        "action_payload": None,
-                        "session_state": {
-                            "state": "ACTIVE",
-                            "session_id": kwargs.get("session_id"),
-                            "user_id": kwargs.get("user_id"),
-                            "zone_id": kwargs.get("zone_id"),
-                        },
-                    },
-                )(),
-                "intent": _DummyIntent(kwargs.get("utterance")),
-                "normalized_intent": type("NormalizedIntent", (), {"value": "light_on"})(),
-                "effective_confidence": 0.95,
-                "response": _DummyResponse(),
-            }
-
-    machine = _isolated_dialog_machine(tmp_path)
 
     class _InjectedRuntime:
-        def get_intent_handler(self):
-            return _DummyHandler()
-
-        def get_context_builder(self):
-            return _DummyContextBuilder()
-
-        def get_command_router(self):
-            return _InjectedRouter()
-
-        def get_dialog_machine(self):
-            return machine
+        def get_command_flow(self):
+            return _InjectedCommandFlow()
 
     def _should_not_be_called(*args, **kwargs):
         raise AssertionError("fallback voice runtime construction should not run")
 
+    monkeypatch.setattr(voice_runtime_access.VoiceRuntimeAccess, "get_command_flow", _should_not_be_called)
     monkeypatch.setattr(voice_runtime_access.VoiceRuntimeAccess, "get_intent_handler", _should_not_be_called)
     monkeypatch.setattr(voice_runtime_access.VoiceRuntimeAccess, "get_context_builder", _should_not_be_called)
     monkeypatch.setattr(voice_runtime_access.VoiceRuntimeAccess, "get_command_router", _should_not_be_called)
