@@ -102,73 +102,25 @@ def _cache_generated_audio(audio_path: str) -> str:
     return get_voice_runtime().cache_generated_audio(audio_path)
 
 
-def _build_voice_runtime_status() -> Dict[str, Any]:
-    """Summarize the bounded STT/TTS runtime exposed by this API surface."""
-    runtime: Dict[str, Any] = {}
+def _get_voice_health_block() -> Dict[str, Any]:
+    """Resolve the shared voice runtime/capability truth ring.
 
-    try:
-        stt_engine = _get_stt_engine()
-        if hasattr(stt_engine, "availability_payload"):
-            runtime["stt"] = stt_engine.availability_payload()
-        else:
-            runtime["stt"] = {
-                "available": True,
-                "engine": "whisper",
-                "model": stt_engine.config.model,
-                "default_language": stt_engine.config.language or "de",
-            }
-    except Exception:
-        runtime["stt"] = {
-            "available": False,
-            "engine": "whisper",
-            "available_backends": [],
-        }
+    `/api/v1/voice/status`, health/readiness surfaces, and discovery should all
+    project the same bounded runtime and capability payload instead of each
+    rebuilding adjacent voice truth independently.
+    """
+    from copilot_core.voice.voice_health import get_voice_health_block
 
-    try:
-        tts_engine = _get_tts_engine()
-        if hasattr(tts_engine, "availability_payload"):
-            runtime["tts"] = tts_engine.availability_payload()
-        else:
-            runtime["tts"] = {
-                "available": True,
-                "engine": tts_engine.config.engine,
-                "voice": tts_engine.config.voice,
-            }
-    except Exception:
-        runtime["tts"] = {
-            "available": False,
-            "engine": "piper",
-            "available_backends": [],
-        }
-
-    try:
-        _get_nlu_engine()
-        runtime["nlu"] = {
-            "available": True,
-            "engine": "rule_based",
-            "supported_languages": ["de", "en"],
-        }
-    except Exception:
-        runtime["nlu"] = {
-            "available": False,
-            "engine": "rule_based",
-            "supported_languages": [],
-        }
-
-    return runtime
+    return get_voice_health_block()
 
 
-def _build_voice_capabilities(runtime: Dict[str, Any], *, intent_handler_available: bool) -> Dict[str, bool]:
-    """Project backend/runtime truth into one bounded HA-consumable capability gate."""
-    stt_available = bool(runtime.get("stt", {}).get("available"))
-    tts_available = bool(runtime.get("tts", {}).get("available"))
-    nlu_available = bool(runtime.get("nlu", {}).get("available"))
-
+def _extract_voice_capabilities(voice_block: Dict[str, Any]) -> Dict[str, bool]:
+    """Project the additive capability fields from the shared health block."""
     return {
-        "can_transcribe": stt_available,
-        "can_synthesize": tts_available,
-        "can_speak": tts_available,
-        "can_dialog": bool(intent_handler_available and stt_available and tts_available and nlu_available),
+        "can_transcribe": bool(voice_block.get("can_transcribe")),
+        "can_synthesize": bool(voice_block.get("can_synthesize")),
+        "can_speak": bool(voice_block.get("can_speak")),
+        "can_dialog": bool(voice_block.get("can_dialog")),
     }
 
 
@@ -786,7 +738,8 @@ def get_status():
         "runtime": {
             "stt": {"available": true, "engine": "whisper"},
             "tts": {"available": true, "engine": "piper"},
-            "nlu": {"available": true, "engine": "rule_based"}
+            "nlu": {"available": true, "engine": "rule_based"},
+            "intent_handler": {"available": true, "engine": "voice_handler", "default_language": "de"}
         },
         "capabilities": {
             "can_transcribe": true,
@@ -805,34 +758,35 @@ def get_status():
     try:
         # Check component availability
         components = {}
-        intent_handler_available = False
-        
+
         try:
             handler = _get_intent_handler()
             components["intent_handler"] = "available"
             components["mood_engine"] = "available" if handler.mood_engine else "unavailable"
             components["habitus_service"] = "available" if handler.habitus_service else "unavailable"
-            intent_handler_available = True
         except Exception:
             components["intent_handler"] = "unavailable"
-        
+            components["mood_engine"] = "unavailable"
+            components["habitus_service"] = "unavailable"
+
         try:
             _get_context_builder()
             components["context_builder"] = "available"
         except Exception:
             components["context_builder"] = "unavailable"
-        
+
         try:
             _get_proactive_hints()
             components["proactive_hints"] = "available"
         except Exception:
             components["proactive_hints"] = "unavailable"
-        
-        runtime = _build_voice_runtime_status()
-        components["stt_engine"] = "available" if runtime["stt"]["available"] else "unavailable"
-        components["tts_engine"] = "available" if runtime["tts"]["available"] else "unavailable"
-        components["nlu_engine"] = "available" if runtime["nlu"]["available"] else "unavailable"
-        capabilities = _build_voice_capabilities(runtime, intent_handler_available=intent_handler_available)
+
+        voice_block = _get_voice_health_block()
+        runtime = dict(voice_block.get("runtime", {}))
+        components["stt_engine"] = "available" if runtime.get("stt", {}).get("available") else "unavailable"
+        components["tts_engine"] = "available" if runtime.get("tts", {}).get("available") else "unavailable"
+        components["nlu_engine"] = "available" if runtime.get("nlu", {}).get("available") else "unavailable"
+        capabilities = _extract_voice_capabilities(voice_block)
 
         return jsonify({
             "status": "ok",
