@@ -43,10 +43,17 @@ class NLUResult:
     entities: List[Entity]
     slots: Dict[str, Any]
     raw_text: str
+    turn_context: list[str] = None  # Previous utterance snippets (F3.3)
+
+    def __post_init__(self):
+        if self.turn_context is None:
+            self.turn_context = []
 
 
 class NLUEngine:
     """Natural language understanding engine."""
+
+    MAX_TURN_CONTEXT: int = 5  # F3.3 — keep last 5 turns for context
 
     def __init__(self):
         self._intent_patterns: Dict[IntentType, List[str]] = {
@@ -79,13 +86,23 @@ class NLUEngine:
                 r"status\s+(.+)",
                 r"what\s+is\s+(.+)",
             ],
-        }
+        }  # close _intent_patterns dict
+
         self._entity_types = {
             "light": ["licht", "lampe", "light", "lights"],
             "thermostat": ["thermostat", "heizung", "temperature"],
             "cover": ["rollo", "vorhang", "blind", "cover"],
             "switch": ["schalter", "switch"],
-        }
+        }  # F3.3 — entity type keywords
+        self._recent_turns: list[str] = []  # F3.3 — rolling turn buffer
+
+    def _push_turn(self, text: str) -> None:
+        self._recent_turns.append(text)
+        if len(self._recent_turns) > self.MAX_TURN_CONTEXT:
+            self._recent_turns.pop(0)
+
+    def get_turn_context(self) -> list[str]:
+        return list(self._recent_turns)
 
     def process(self, text: str, language: str = "de") -> NLUResult:
         """Process utterance and extract intent plus entities."""
@@ -94,12 +111,14 @@ class NLUEngine:
         intent, confidence = self._match_intent(text_lower)
         entities = self._extract_entities(text_lower)
         slots = self._fill_slots(entities)
+        self._push_turn(text)
         return NLUResult(
             intent=intent,
             intent_confidence=confidence,
             entities=entities,
             slots=slots,
             raw_text=text,
+            turn_context=self.get_turn_context(),
         )
 
     def extract_intent(self, text: str, language: str = "de") -> Dict[str, Any]:
@@ -113,6 +132,7 @@ class NLUEngine:
             "confidence": result.intent_confidence,
             "slots": result.slots,
             "raw_text": result.raw_text,
+            "turn_context": result.turn_context,
         }
 
     def _match_intent(self, text: str) -> Tuple[IntentType, float]:
