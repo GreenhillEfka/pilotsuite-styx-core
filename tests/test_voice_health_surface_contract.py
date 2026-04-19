@@ -71,6 +71,16 @@ def _make_client(monkeypatch, voice_block):
             "available_backends": [
                 {"type": "tts", "backend": "piper", "status": "available"},
             ],
+            "components": {
+                "intent_handler": "unavailable",
+                "mood_engine": "unavailable",
+                "habitus_service": "unavailable",
+                "context_builder": "unavailable",
+                "proactive_hints": "unavailable",
+                "stt_engine": "unavailable",
+                "tts_engine": "available",
+                "nlu_engine": "unavailable",
+            },
             "runtime": {
                 "stt": {
                     "available": False,
@@ -97,6 +107,16 @@ def _make_client(monkeypatch, voice_block):
             "available_backends": [
                 {"type": "stt", "backend": "whisper", "status": "available"},
             ],
+            "components": {
+                "intent_handler": "unavailable",
+                "mood_engine": "unavailable",
+                "habitus_service": "unavailable",
+                "context_builder": "unavailable",
+                "proactive_hints": "unavailable",
+                "stt_engine": "available",
+                "tts_engine": "unavailable",
+                "nlu_engine": "unavailable",
+            },
             "runtime": {
                 "stt": {
                     "available": True,

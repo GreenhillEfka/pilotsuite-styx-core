@@ -421,3 +421,326 @@ def test_voice_status_prefers_injected_runtime_seam(monkeypatch):
         "can_speak": True,
         "can_dialog": True,
     }
+
+
+def test_voice_status_marks_null_injected_intent_handler_unavailable(monkeypatch):
+    monkeypatch.setattr(voice_api, "_validate_token", lambda request: True)
+
+    class _DummyHintsConfig:
+        hint_cooldown_seconds = 300
+        max_hints_per_hour = 6
+
+        class _Priority:
+            value = "low"
+
+        min_priority = _Priority()
+
+    class _DummyHints:
+        config = _DummyHintsConfig()
+
+    class _InjectedEngine:
+        def __init__(self, payload):
+            self._payload = payload
+
+        def availability_payload(self):
+            return self._payload
+
+    class _InjectedRuntime:
+        def get_intent_handler(self):
+            return None
+
+        def get_context_builder(self):
+            return object()
+
+        def get_stt_engine(self):
+            return _InjectedEngine({
+                "available": True,
+                "engine": "injected-whisper",
+                "available_backends": ["injected-whisper"],
+            })
+
+        def get_tts_engine(self):
+            return _InjectedEngine({
+                "available": True,
+                "engine": "injected-piper",
+                "available_backends": ["injected-piper"],
+            })
+
+        def get_nlu_engine(self):
+            return object()
+
+        def get_proactive_hints(self):
+            return _DummyHints()
+
+        def get_generated_audio_cache(self):
+            return {}
+
+        def cache_generated_audio(self, audio_path):
+            return "ignored"
+
+    app = Flask(__name__)
+    voice_runtime_access.init_voice_runtime(app, runtime=_InjectedRuntime())
+    app.register_blueprint(voice_api.bp)
+
+    response = app.test_client().get("/api/v1/voice/status")
+
+    assert response.status_code == 200, response.get_json()
+    payload = response.get_json()
+    assert payload["components"]["intent_handler"] == "unavailable"
+    assert payload["components"]["mood_engine"] == "unavailable"
+    assert payload["components"]["habitus_service"] == "unavailable"
+    assert payload["runtime"]["intent_handler"] == {
+        "available": False,
+        "engine": "voice_handler",
+        "default_language": "de",
+    }
+    assert payload["capabilities"] == {
+        "can_transcribe": True,
+        "can_synthesize": True,
+        "can_speak": True,
+        "can_dialog": False,
+    }
+
+
+def test_voice_status_marks_null_optional_runtime_components_unavailable(monkeypatch):
+    monkeypatch.setattr(voice_api, "_validate_token", lambda request: True)
+
+    class _InjectedEngine:
+        def __init__(self, payload):
+            self._payload = payload
+
+        def availability_payload(self):
+            return self._payload
+
+    class _InjectedHandler:
+        mood_engine = object()
+        habitus_service = object()
+        default_language = "de"
+
+    class _InjectedRuntime:
+        def get_intent_handler(self):
+            return _InjectedHandler()
+
+        def get_context_builder(self):
+            return None
+
+        def get_stt_engine(self):
+            return _InjectedEngine({
+                "available": True,
+                "engine": "injected-whisper",
+                "available_backends": ["injected-whisper"],
+            })
+
+        def get_tts_engine(self):
+            return _InjectedEngine({
+                "available": True,
+                "engine": "injected-piper",
+                "available_backends": ["injected-piper"],
+            })
+
+        def get_nlu_engine(self):
+            return object()
+
+        def get_proactive_hints(self):
+            return None
+
+        def get_generated_audio_cache(self):
+            return {}
+
+        def cache_generated_audio(self, audio_path):
+            return "ignored"
+
+    app = Flask(__name__)
+    voice_runtime_access.init_voice_runtime(app, runtime=_InjectedRuntime())
+    app.register_blueprint(voice_api.bp)
+
+    response = app.test_client().get("/api/v1/voice/status")
+
+    assert response.status_code == 200, response.get_json()
+    payload = response.get_json()
+    assert payload["components"]["intent_handler"] == "available"
+    assert payload["components"]["mood_engine"] == "available"
+    assert payload["components"]["habitus_service"] == "available"
+    assert payload["components"]["context_builder"] == "unavailable"
+    assert payload["components"]["proactive_hints"] == "unavailable"
+    assert payload["capabilities"] == {
+        "can_transcribe": True,
+        "can_synthesize": True,
+        "can_speak": True,
+        "can_dialog": True,
+    }
+    assert payload["config"] == {
+        "default_language": "de",
+        "supported_languages": ["de", "en"],
+        "hint_cooldown_seconds": 300,
+        "max_hints_per_hour": 6,
+        "min_priority": "low",
+    }
+
+
+def test_voice_status_fallback_keeps_standalone_mood_engine_unavailable(monkeypatch):
+    monkeypatch.setattr(voice_api, "_validate_token", lambda request: True)
+
+    class _DummyHintsConfig:
+        hint_cooldown_seconds = 300
+        max_hints_per_hour = 6
+
+        class _Priority:
+            value = "medium"
+
+        min_priority = _Priority()
+
+    class _DummyHints:
+        config = _DummyHintsConfig()
+
+    class _DummyHandler:
+        mood_engine = object()
+        habitus_service = None
+        default_language = "de"
+
+    monkeypatch.setattr(voice_api, "_get_intent_handler", lambda: _DummyHandler())
+    monkeypatch.setattr(voice_api, "_get_context_builder", lambda: object())
+    monkeypatch.setattr(voice_api, "_get_proactive_hints", lambda: _DummyHints())
+    monkeypatch.setattr(
+        voice_api,
+        "_get_voice_health_block",
+        lambda: {
+            "can_transcribe": False,
+            "can_synthesize": False,
+            "can_speak": False,
+            "can_dialog": False,
+            "available_backends": [],
+            "runtime": {
+                "stt": {
+                    "available": False,
+                    "engine": "stub",
+                    "available_backends": [],
+                },
+                "tts": {
+                    "available": False,
+                    "engine": "stub",
+                    "available_backends": [],
+                },
+                "nlu": {
+                    "available": True,
+                    "engine": "rule_based",
+                    "supported_languages": ["de", "en"],
+                },
+                "intent_handler": {
+                    "available": True,
+                    "engine": "voice_handler",
+                    "default_language": "de",
+                },
+            },
+        },
+    )
+
+    client = _make_app().test_client()
+    response = client.get("/api/v1/voice/status")
+
+    assert response.status_code == 200, response.get_json()
+    payload = response.get_json()
+    assert payload["components"]["intent_handler"] == "available"
+    assert payload["components"]["mood_engine"] == "unavailable"
+    assert payload["components"]["habitus_service"] == "unavailable"
+
+
+def test_voice_status_standalone_probe_keeps_helper_and_discovery_mood_engine_parity(monkeypatch):
+    from copilot_core.api.voice_discovery import voice_capabilities_module
+    from copilot_core.voice.voice_health import get_voice_health_block
+
+    monkeypatch.setattr(voice_api, "_validate_token", lambda request: True)
+
+    app = _make_app()
+    client = app.test_client()
+
+    response = client.get("/api/v1/voice/status")
+
+    assert response.status_code == 200, response.get_json()
+    payload = response.get_json()
+    with app.app_context():
+        helper_payload = get_voice_health_block()
+        discovery_payload = voice_capabilities_module()
+
+    assert payload["components"]["mood_engine"] == "unavailable"
+    assert helper_payload["components"]["mood_engine"] == "unavailable"
+    assert discovery_payload["runtime"]["components"]["mood_engine"] == "unavailable"
+    assert payload["components"] == helper_payload["components"]
+    assert discovery_payload["runtime"]["components"] == helper_payload["components"]
+
+
+def test_voice_status_fallback_preserves_installed_runtime_component_truth(monkeypatch):
+    monkeypatch.setattr(voice_api, "_validate_token", lambda request: True)
+
+    class _DummyHintsConfig:
+        hint_cooldown_seconds = 300
+        max_hints_per_hour = 6
+
+        class _Priority:
+            value = "medium"
+
+        min_priority = _Priority()
+
+    class _DummyHints:
+        config = _DummyHintsConfig()
+
+    class _DummyHandler:
+        mood_engine = object()
+        habitus_service = object()
+        default_language = "de"
+
+    class _InjectedRuntime:
+        def get_intent_handler(self):
+            return _DummyHandler()
+
+        def get_context_builder(self):
+            return object()
+
+        def get_proactive_hints(self):
+            return _DummyHints()
+
+    monkeypatch.setattr(
+        voice_api,
+        "_get_voice_health_block",
+        lambda: {
+            "can_transcribe": False,
+            "can_synthesize": False,
+            "can_speak": False,
+            "can_dialog": False,
+            "available_backends": [],
+            "runtime": {
+                "stt": {
+                    "available": False,
+                    "engine": "stub",
+                    "available_backends": [],
+                },
+                "tts": {
+                    "available": False,
+                    "engine": "stub",
+                    "available_backends": [],
+                },
+                "nlu": {
+                    "available": True,
+                    "engine": "rule_based",
+                    "supported_languages": ["de", "en"],
+                },
+                "intent_handler": {
+                    "available": True,
+                    "engine": "voice_handler",
+                    "default_language": "de",
+                },
+            },
+        },
+    )
+
+    app = Flask(__name__)
+    voice_runtime_access.init_voice_runtime(app, runtime=_InjectedRuntime())
+    app.register_blueprint(voice_api.bp)
+
+    response = app.test_client().get("/api/v1/voice/status")
+
+    assert response.status_code == 200, response.get_json()
+    payload = response.get_json()
+    assert payload["components"]["intent_handler"] == "available"
+    assert payload["components"]["mood_engine"] == "available"
+    assert payload["components"]["habitus_service"] == "available"

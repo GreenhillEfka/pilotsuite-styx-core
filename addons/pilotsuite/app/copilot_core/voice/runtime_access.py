@@ -13,15 +13,24 @@ from typing import Any, MutableMapping, Optional
 
 from flask import Flask, current_app
 
+from copilot_core.voice import (
+    SttEnginePort,
+    TtsEnginePort,
+    NluEnginePort,
+    _create_stt_engine,
+    _create_tts_engine,
+    _create_nlu_engine,
+    WhisperSTT,
+    PiperTTS,
+    NLUEngine,
+)
+
 from copilot_core.voice.command_flow import VoiceCommandFlow
 from copilot_core.voice.dialog_flow import VoiceDialogFlow
 from copilot_core.voice.command_router import VoiceCommandRouter
 from copilot_core.voice.context_builder import VoiceContextBuilder, VoiceContextRuntime
 from copilot_core.voice import dialog_state as dialog_state_module
-from copilot_core.voice.nlu_engine import NLUEngine
 from copilot_core.voice.proactive import HintConfig, HintPriority, ProactiveVoiceHints
-from copilot_core.voice.stt_whisper import STTConfig, WhisperSTT
-from copilot_core.voice.tts_piper import PiperTTS, TTSConfig
 from copilot_core.voice.voice_handler import VoiceIntentHandler
 
 _LOGGER = logging.getLogger(__name__)
@@ -119,19 +128,19 @@ class VoiceRuntimeAccess:
     def get_stt_engine(self) -> WhisperSTT:
         if self._stt_engine is None:
             override = self._get_override("voice_stt_engine", legacy_attr="_voice_stt_engine")
-            self._stt_engine = override or WhisperSTT(STTConfig(language="de"))
+            self._stt_engine = override or _create_stt_engine()
         return self._stt_engine
 
     def get_tts_engine(self) -> PiperTTS:
         if self._tts_engine is None:
             override = self._get_override("voice_tts_engine", legacy_attr="_voice_tts_engine")
-            self._tts_engine = override or PiperTTS(TTSConfig())
+            self._tts_engine = override or _create_tts_engine()
         return self._tts_engine
 
     def get_nlu_engine(self) -> NLUEngine:
         if self._nlu_engine is None:
             override = self._get_override("voice_nlu_engine", legacy_attr="_voice_nlu_engine")
-            self._nlu_engine = override or NLUEngine()
+            self._nlu_engine = override or _create_nlu_engine()
         return self._nlu_engine
 
     def get_generated_audio_cache(self) -> MutableMapping[str, str]:

@@ -21,9 +21,9 @@ Features:
 import asyncio
 import logging
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Dict, Optional
 
-from flask import Blueprint, jsonify, request, send_file
+from flask import Blueprint, current_app, jsonify, request, send_file
 
 from copilot_core.voice.voice_handler import VoiceIntent, IntentType
 from copilot_core.voice.context_builder import VoiceContext, VoiceContextBuilder
@@ -125,11 +125,21 @@ def _extract_voice_capabilities(voice_block: Dict[str, Any]) -> Dict[str, bool]:
 
 
 def _build_voice_status_config() -> Dict[str, Any]:
-    """Return stable voice config metadata even when proactive hints are unavailable."""
-    try:
-        config = _get_proactive_hints().config
-    except Exception:
-        config = HintConfig()
+    """Return stable voice config metadata without widening the standalone seam.
+
+    On the plain no-runtime status path we should keep the canonical default
+    hint config instead of auto-installing the runtime seam just to read the
+    same defaults. Otherwise `/api/v1/voice/status` mutates later helper and
+    discovery probes, reopening standalone/public component drift.
+    """
+    config = HintConfig()
+    if _has_installed_voice_runtime():
+        try:
+            hints = _get_proactive_hints()
+            if hints is not None:
+                config = hints.config
+        except Exception:
+            config = HintConfig()
 
     return {
         "default_language": "de",
@@ -138,6 +148,29 @@ def _build_voice_status_config() -> Dict[str, Any]:
         "max_hints_per_hour": config.max_hints_per_hour,
         "min_priority": config.min_priority.value,
     }
+
+
+def _resolve_optional_voice_component(factory: Callable[[], Any]) -> Any | None:
+    """Return a runtime component when present, otherwise None.
+
+    The injected runtime seam can truthfully signal a degraded optional component
+    by returning ``None`` instead of raising. Status surfaces should treat both
+    cases as unavailable instead of reporting a false positive.
+    """
+    try:
+        return factory()
+    except Exception:
+        return None
+
+
+def _has_installed_voice_runtime() -> bool:
+    """Return whether the current app already owns an installed voice runtime seam."""
+    extensions = getattr(current_app, "extensions", {})
+    if "copilot_core.voice_runtime" in extensions:
+        return True
+
+    services = current_app.config.get("COPILOT_SERVICES") if hasattr(current_app, "config") else None
+    return isinstance(services, dict) and services.get("voice_runtime") is not None
 
 
 def _collect_available_voice_backends(*, skip: Optional[str] = None) -> list[str]:
@@ -756,36 +789,41 @@ def get_status():
     }
     """
     try:
-        # Check component availability
-        components = {}
-
-        try:
-            handler = _get_intent_handler()
-            components["intent_handler"] = "available"
-            components["mood_engine"] = "available" if handler.mood_engine else "unavailable"
-            components["habitus_service"] = "available" if handler.habitus_service else "unavailable"
-        except Exception:
-            components["intent_handler"] = "unavailable"
-            components["mood_engine"] = "unavailable"
-            components["habitus_service"] = "unavailable"
-
-        try:
-            _get_context_builder()
-            components["context_builder"] = "available"
-        except Exception:
-            components["context_builder"] = "unavailable"
-
-        try:
-            _get_proactive_hints()
-            components["proactive_hints"] = "available"
-        except Exception:
-            components["proactive_hints"] = "unavailable"
-
         voice_block = _get_voice_health_block()
         runtime = dict(voice_block.get("runtime", {}))
-        components["stt_engine"] = "available" if runtime.get("stt", {}).get("available") else "unavailable"
-        components["tts_engine"] = "available" if runtime.get("tts", {}).get("available") else "unavailable"
-        components["nlu_engine"] = "available" if runtime.get("nlu", {}).get("available") else "unavailable"
+        components = dict(voice_block.get("components", {}))
+        if not components:
+            has_installed_runtime = _has_installed_voice_runtime()
+            handler = _resolve_optional_voice_component(_get_intent_handler)
+            if handler is None:
+                components["intent_handler"] = "unavailable"
+                components["mood_engine"] = "unavailable"
+                components["habitus_service"] = "unavailable"
+            else:
+                components["intent_handler"] = "available"
+                components["mood_engine"] = (
+                    "available"
+                    if has_installed_runtime and getattr(handler, "mood_engine", None)
+                    else "unavailable"
+                )
+                components["habitus_service"] = (
+                    "available"
+                    if has_installed_runtime and getattr(handler, "habitus_service", None)
+                    else "unavailable"
+                )
+
+            components["context_builder"] = (
+                "available" if _resolve_optional_voice_component(_get_context_builder) is not None else "unavailable"
+            )
+
+            components["proactive_hints"] = (
+                "available" if _resolve_optional_voice_component(_get_proactive_hints) is not None else "unavailable"
+            )
+
+            components["stt_engine"] = "available" if runtime.get("stt", {}).get("available") else "unavailable"
+            components["tts_engine"] = "available" if runtime.get("tts", {}).get("available") else "unavailable"
+            components["nlu_engine"] = "available" if runtime.get("nlu", {}).get("available") else "unavailable"
+
         capabilities = _extract_voice_capabilities(voice_block)
 
         return jsonify({

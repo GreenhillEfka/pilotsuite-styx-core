@@ -64,6 +64,16 @@ def test_voice_capabilities_module_preserves_nested_runtime_truth(monkeypatch):
             {"type": "stt", "backend": "whisper", "status": "available"},
             {"type": "tts", "backend": "piper", "status": "available"},
         ],
+        "components": {
+            "intent_handler": "available",
+            "mood_engine": "available",
+            "habitus_service": "unavailable",
+            "context_builder": "available",
+            "proactive_hints": "available",
+            "stt_engine": "available",
+            "tts_engine": "available",
+            "nlu_engine": "available",
+        },
         "runtime": {
             "stt": {
                 "available": True,
@@ -88,6 +98,35 @@ def test_voice_capabilities_module_preserves_nested_runtime_truth(monkeypatch):
     payload = voice_capabilities_module()
 
     assert payload["runtime"] == helper_payload
+
+
+def test_voice_capabilities_module_preserves_component_parity(monkeypatch):
+    from copilot_core.voice import voice_health
+
+    helper_payload = {
+        "can_transcribe": True,
+        "can_synthesize": True,
+        "can_speak": True,
+        "can_dialog": True,
+        "available_backends": [],
+        "components": {
+            "intent_handler": "available",
+            "mood_engine": "unavailable",
+            "habitus_service": "unavailable",
+            "context_builder": "available",
+            "proactive_hints": "available",
+            "stt_engine": "available",
+            "tts_engine": "available",
+            "nlu_engine": "available",
+        },
+        "runtime": {},
+    }
+
+    monkeypatch.setattr(voice_health, "get_voice_health_block", lambda: dict(helper_payload))
+
+    payload = voice_capabilities_module()
+
+    assert payload["runtime"]["components"] == helper_payload["components"]
 
 def test_create_app_capabilities_surface_keeps_one_canonical_voice_module_route(monkeypatch):
     _stub_create_app_dependencies(monkeypatch)

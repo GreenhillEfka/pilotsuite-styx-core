@@ -9,7 +9,7 @@ from __future__ import annotations
 import importlib
 from typing import Any, Callable
 
-from flask import has_app_context
+from flask import current_app, has_app_context
 
 from copilot_core.voice.runtime_access import get_voice_runtime
 
@@ -73,12 +73,23 @@ def get_voice_health_block() -> dict:
             "copilot_core.voice.voice_handler",
             "VoiceIntentHandler",
         )
+        components = _build_fallback_components_block(
+            stt_runtime=stt_runtime,
+            tts_runtime=tts_runtime,
+            nlu_runtime=nlu_runtime,
+        )
     else:
         stt_runtime = runtime_truth["stt_runtime"]
         tts_runtime = runtime_truth["tts_runtime"]
         nlu_runtime = runtime_truth["nlu_runtime"]
         intent_handler_runtime = runtime_truth["intent_handler_runtime"]
         intent_handler_available = runtime_truth["intent_handler_available"]
+        components = _build_runtime_components_block(
+            runtime_truth,
+            stt_runtime=stt_runtime,
+            tts_runtime=tts_runtime,
+            nlu_runtime=nlu_runtime,
+        )
 
     stt_available = bool(stt_runtime.get("available"))
     tts_available = bool(tts_runtime.get("available"))
@@ -108,6 +119,7 @@ def get_voice_health_block() -> dict:
         "can_speak": tts_available,
         "can_dialog": bool(intent_handler_available and stt_available and tts_available and nlu_available),
         "available_backends": available,
+        "components": components,
         "runtime": {
             "stt": dict(stt_runtime),
             "tts": dict(tts_runtime),
@@ -121,10 +133,18 @@ def _resolve_runtime_voice_truth() -> dict[str, Any] | None:
     if not has_app_context():
         return None
 
+    if not _has_installed_voice_runtime():
+        return None
+
     try:
         runtime = get_voice_runtime()
     except Exception:
         return None
+
+    get_intent_handler = getattr(runtime, "get_intent_handler", lambda: None)
+    get_context_builder = getattr(runtime, "get_context_builder", lambda: None)
+    get_proactive_hints = getattr(runtime, "get_proactive_hints", lambda: None)
+    handler = _resolve_runtime_component_instance(get_intent_handler)
 
     return {
         "stt_runtime": _resolve_runtime_backend_payload(
@@ -142,23 +162,42 @@ def _resolve_runtime_voice_truth() -> dict[str, Any] | None:
             default_payload=_DEFAULT_NLU_RUNTIME,
         ),
         "intent_handler_runtime": _resolve_runtime_intent_handler_payload(
-            runtime.get_intent_handler,
+            handler,
             default_payload=_DEFAULT_INTENT_HANDLER_RUNTIME,
         ),
-        "intent_handler_available": _resolve_runtime_component(runtime.get_intent_handler),
+        "intent_handler_available": handler is not None,
+        "context_builder_available": _resolve_runtime_component(get_context_builder),
+        "proactive_hints_available": _resolve_runtime_component(get_proactive_hints),
+        "mood_engine_available": bool(getattr(handler, "mood_engine", None)) if handler is not None else False,
+        "habitus_service_available": bool(getattr(handler, "habitus_service", None)) if handler is not None else False,
     }
 
 
-def _resolve_runtime_component(factory: Callable[[], Any], method_name: str | None = None) -> bool:
+def _has_installed_voice_runtime() -> bool:
+    extensions = getattr(current_app, "extensions", {})
+    if "copilot_core.voice_runtime" in extensions:
+        return True
+
+    services = current_app.config.get("COPILOT_SERVICES") if hasattr(current_app, "config") else None
+    return isinstance(services, dict) and services.get("voice_runtime") is not None
+
+
+def _resolve_runtime_component_instance(factory: Callable[[], Any]) -> Any | None:
     try:
-        component = factory()
+        return factory()
     except Exception:
+        return None
+
+
+def _resolve_runtime_component(factory: Callable[[], Any], method_name: str | None = None) -> bool:
+    component = _resolve_runtime_component_instance(factory)
+    if component is None:
         return False
 
     if method_name is not None:
         return _resolve_backend_availability(component, method_name)
 
-    return component is not None
+    return True
 
 
 def _resolve_runtime_backend_payload(
@@ -189,13 +228,11 @@ def _resolve_runtime_component_payload(
 
 
 def _resolve_runtime_intent_handler_payload(
-    factory: Callable[[], Any],
+    handler: Any | None,
     *,
     default_payload: dict[str, Any],
 ) -> dict[str, Any]:
-    try:
-        handler = factory()
-    except Exception:
+    if handler is None:
         return dict(default_payload)
 
     payload = dict(default_payload)
@@ -302,6 +339,59 @@ def _load_backend_class(module_path: str, class_name: str):
         return None
 
 
+def _build_runtime_components_block(
+    runtime_truth: dict[str, Any],
+    *,
+    stt_runtime: dict[str, Any],
+    tts_runtime: dict[str, Any],
+    nlu_runtime: dict[str, Any],
+) -> dict[str, str]:
+    return {
+        "intent_handler": "available" if runtime_truth.get("intent_handler_available") else "unavailable",
+        "mood_engine": "available" if runtime_truth.get("mood_engine_available") else "unavailable",
+        "habitus_service": "available" if runtime_truth.get("habitus_service_available") else "unavailable",
+        "context_builder": "available" if runtime_truth.get("context_builder_available") else "unavailable",
+        "proactive_hints": "available" if runtime_truth.get("proactive_hints_available") else "unavailable",
+        "stt_engine": "available" if stt_runtime.get("available") else "unavailable",
+        "tts_engine": "available" if tts_runtime.get("available") else "unavailable",
+        "nlu_engine": "available" if nlu_runtime.get("available") else "unavailable",
+    }
+
+
+def _build_fallback_components_block(
+    *,
+    stt_runtime: dict[str, Any],
+    tts_runtime: dict[str, Any],
+    nlu_runtime: dict[str, Any],
+) -> dict[str, str]:
+    handler = _load_component_instance("copilot_core.voice.voice_handler", "VoiceIntentHandler")
+    return {
+        "intent_handler": "available" if handler is not None else "unavailable",
+        "mood_engine": "available" if getattr(handler, "mood_engine", None) else "unavailable",
+        "habitus_service": "available" if getattr(handler, "habitus_service", None) else "unavailable",
+        "context_builder": "available"
+        if _component_available("copilot_core.voice.context_builder", "VoiceContextBuilder")
+        else "unavailable",
+        "proactive_hints": "available"
+        if _component_available("copilot_core.voice.proactive", "ProactiveVoiceHints")
+        else "unavailable",
+        "stt_engine": "available" if stt_runtime.get("available") else "unavailable",
+        "tts_engine": "available" if tts_runtime.get("available") else "unavailable",
+        "nlu_engine": "available" if nlu_runtime.get("available") else "unavailable",
+    }
+
+
+def _load_component_instance(module_path: str, class_name: str) -> Any | None:
+    component_class = _load_backend_class(module_path, class_name)
+    if component_class is None:
+        return None
+
+    try:
+        return component_class()
+    except Exception:
+        return None
+
+
 def _empty_block() -> dict:
     return {
         "can_transcribe": False,
@@ -309,6 +399,16 @@ def _empty_block() -> dict:
         "can_speak": False,
         "can_dialog": False,
         "available_backends": [],
+        "components": {
+            "intent_handler": "unavailable",
+            "mood_engine": "unavailable",
+            "habitus_service": "unavailable",
+            "context_builder": "unavailable",
+            "proactive_hints": "unavailable",
+            "stt_engine": "unavailable",
+            "tts_engine": "unavailable",
+            "nlu_engine": "unavailable",
+        },
         "runtime": {
             "stt": dict(_DEFAULT_STT_RUNTIME),
             "tts": dict(_DEFAULT_TTS_RUNTIME),

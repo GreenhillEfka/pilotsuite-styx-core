@@ -38,6 +38,16 @@ def voice_capabilities_module() -> dict[str, Any]:
             "can_speak": False,
             "can_dialog": False,
             "available_backends": [],
+            "components": {
+                "intent_handler": "unavailable",
+                "mood_engine": "unavailable",
+                "habitus_service": "unavailable",
+                "context_builder": "unavailable",
+                "proactive_hints": "unavailable",
+                "stt_engine": "unavailable",
+                "tts_engine": "unavailable",
+                "nlu_engine": "unavailable",
+            },
             "runtime": {
                 "stt": {
                     "available": False,

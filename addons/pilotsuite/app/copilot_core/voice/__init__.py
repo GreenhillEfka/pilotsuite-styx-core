@@ -58,6 +58,80 @@ from .stt_whisper import WhisperSTT, STTConfig, TranscriptionResult, SpeechLangu
 from .tts_piper import PiperTTS, TTSConfig, TTSResult, VoiceEmotion, init_tts, synthesize_speech
 from .nlu_engine import NLUEngine, NLUResult, Entity, init_nlu, process_utterance
 
+from typing import Any, Dict, List, Optional, Protocol
+
+
+# =============================================================================
+# HEXAGONAL PORT INTERFACES — Voice Engine Layer
+# These Protocols define the minimal contract that all voice engine adapters
+# (Whisper STT, Piper TTS, rule-based NLU, and future replacements) must satisfy.
+# VoiceRuntimeAccess depends only on these interfaces, never on concrete classes.
+# =============================================================================
+
+
+class SttEnginePort(Protocol):
+    """Port interface for speech-to-text engines.
+
+    Adapters that satisfy this port: WhisperSTT, any STT replacement.
+    """
+
+    def is_available(self) -> bool: ...
+
+    def availability_payload(self) -> Dict[str, Any]: ...
+
+    def transcribe(self, audio_stream: Any, **kwargs: Any) -> Any: ...
+
+
+class TtsEnginePort(Protocol):
+    """Port interface for text-to-speech engines.
+
+    Adapters that satisfy this port: PiperTTS, any TTS replacement.
+    """
+
+    def is_available(self) -> bool: ...
+
+    def availability_payload(self) -> Dict[str, Any]: ...
+
+    def synthesize(self, text: str, **kwargs: Any) -> Any: ...
+
+
+class NluEnginePort(Protocol):
+    """Port interface for natural-language-understanding engines.
+
+    Adapters that satisfy this port: NLUEngine, any NLU replacement.
+    """
+
+    def is_available(self) -> bool: ...
+
+    def availability_payload(self) -> Dict[str, Any]: ...
+
+    def process(self, text: str, language: str = "de") -> Any: ...
+
+
+# =============================================================================
+# CONCRETE ENGINE FACTORIES
+# These are the standard adapters for the voice engine ports.
+# VoiceRuntimeAccess calls these when no injected override is provided.
+# =============================================================================
+
+
+def _create_stt_engine() -> SttEnginePort:
+    from .stt_whisper import init_stt, STTConfig
+
+    return init_stt(STTConfig(language="de"))
+
+
+def _create_tts_engine() -> TtsEnginePort:
+    from .tts_piper import init_tts, TTSConfig
+
+    return init_tts(TTSConfig())
+
+
+def _create_nlu_engine() -> NluEnginePort:
+    from .nlu_engine import init_nlu
+
+    return init_nlu()
+
 __all__ = [
     # Voice Handler
     "VoiceIntentHandler",
