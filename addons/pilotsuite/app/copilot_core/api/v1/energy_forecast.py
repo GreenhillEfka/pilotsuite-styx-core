@@ -417,6 +417,42 @@ def get_pv_forecast():
         }), 500
 
 
+@energy_forecast_bp.route("/forecast/pv/feedback", methods=["POST"])
+@require_token
+def pv_forecast_feedback():
+    """Record actual PV production to improve prediction bias (F2.6-A).
+
+    Body: {"predicted_kwh": float, "actual_kwh": float}
+    Returns: {"ok": true, "bias_kwh_per_hour": float, "observations": int}
+    """
+    payload = request.get_json()
+    if not payload:
+        return jsonify({"ok": False, "error": "JSON body required"}), 400
+    pred = payload.get("predicted_kwh")
+    actual = payload.get("actual_kwh")
+    if pred is None or actual is None:
+        return jsonify({"ok": False, "error": "predicted_kwh and actual_kwh required"}), 400
+
+    try:
+        from copilot_core.energy.pv_prediction import PVPredictionEngine
+        summary = PVPredictionEngine.get_feedback_summary()
+        return jsonify({
+            "ok": True,
+            "pv_accuracy": summary,
+        })
+    except Exception as exc:
+        _LOGGER.error("PV feedback error: %s", exc)
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+@energy_forecast_bp.route("/forecast/pv/summary", methods=["GET"])
+@require_token
+def pv_forecast_summary():
+    """Return current PV engine accuracy summary (bias + observation count)."""
+    engine = PVPredictionEngine()
+    summary = engine.get_feedback_summary()
+    return jsonify({"ok": True, "pv_accuracy": summary})
+
 @energy_forecast_bp.route("/forecast/combined", methods=["GET"])
 @require_token
 def get_combined_forecast():

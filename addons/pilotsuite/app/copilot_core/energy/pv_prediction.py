@@ -1,4 +1,4 @@
-"""PV-Ertragsprognose — Wetter-basierte Solarvorhersage (v12.6.0).
+"""PV-Ertragsprognose - Wetter-basierte Solarvorhersage (v12.6.0).
 
 Berechnet PV-Ertrag basierend auf:
 - Sonnenstand (geographische Position, Tageszeit)
@@ -17,11 +17,15 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
+# Accuracy feedback ring - persisted across engine instances
+_PV_FEEDBACK_LOG: list[dict] = []  # {predicted_kwh, actual_kwh, timestamp_iso}
+_PV_BIAS: float = 0.0  # additive bias applied to all predictions (kWh/h)
+
 
 @dataclass
 class PVHourlyForecast:
     """Stündliche PV-Prognose."""
-    
+
     timestamp: str  # ISO 8601
     hour: int
     solar_elevation: float  # Grad über Horizont
@@ -38,7 +42,7 @@ class PVHourlyForecast:
 @dataclass
 class PVDailyForecast:
     """Tägliche PV-Zusammenfassung."""
-    
+
     date: str
     total_energy_kwh: float
     peak_power_kw: float
@@ -54,7 +58,7 @@ class PVDailyForecast:
 @dataclass
 class PVForecastSummary:
     """Zusammenfassung der PV-Prognose."""
-    
+
     forecast_horizon_hours: int
     total_energy_kwh: float
     avg_daily_energy_kwh: float
@@ -68,11 +72,11 @@ class PVForecastSummary:
 
 class PVPredictionEngine:
     """Engine für PV-Ertragsprognosen.
-    
+
     Kombiniert astronomische Berechnungen mit Wetterdaten
     für präzise Vorhersagen des Solarertrags.
     """
-    
+
     def __init__(
         self,
         latitude: float = 51.0,
@@ -88,28 +92,28 @@ class PVPredictionEngine:
         self._panel_azimuth = panel_azimuth
         self._panel_tilt = panel_tilt
         self._system_efficiency = system_efficiency
-        
+
         # Wetterdaten (werden von extern gesetzt)
         self._weather_data: dict[int, dict] = {}
-        
+
     def update_location(self, lat: float, lon: float) -> None:
         """Update Standort."""
         self._lat = lat
         self._lon = lon
-    
+
     def set_pv_system(self, peak_kw: float, azimuth: float = 180.0, tilt: float = 30.0) -> None:
         """Konfiguriere PV-Anlage."""
         self._pv_peak = peak_kw
         self._panel_azimuth = azimuth
         self._panel_tilt = tilt
-    
+
     def set_system_efficiency(self, efficiency: float) -> None:
         """Setze Systemwirkungsgrad (0-1)."""
         self._system_efficiency = max(0.5, min(0.95, efficiency))
-    
+
     def set_weather_data(self, weather_data: list[dict]) -> None:
         """Setze Wetterdaten für Prognose.
-        
+
         weather_data: Liste von dicts mit:
         - timestamp: ISO 8601
         - temperature_c: float
@@ -120,7 +124,7 @@ class PVPredictionEngine:
         """
         self._weather_data = {}
         now = datetime.now().replace(minute=0, second=0, microsecond=0)
-        
+
         for i, data in enumerate(weather_data):
             self._weather_data[i] = {
                 "timestamp": data.get("timestamp", (now + timedelta(hours=i)).isoformat()),
@@ -131,17 +135,42 @@ class PVPredictionEngine:
                 "irradiance_wm2": data.get("irradiance_wm2"),
                 "wind_speed_ms": data.get("wind_speed_ms", 3.0),
             }
-    
+
+    def observe_actual(self, predicted_kwh: float, actual_kwh: float) -> float:
+        """Record actual vs predicted for bias learning. Returns new bias."""
+        _PV_FEEDBACK_LOG.append({
+            "predicted_kwh": predicted_kwh,
+            "actual_kwh": actual_kwh,
+            "timestamp_iso": datetime.now().isoformat(),
+        })
+        if len(_PV_FEEDBACK_LOG) > 168:
+            _PV_FEEDBACK_LOG.pop(0)
+        n = min(len(_PV_FEEDBACK_LOG), 24)
+        recent = _PV_FEEDBACK_LOG[-n:]
+        global _PV_BIAS
+        _PV_BIAS = sum(e["actual_kwh"] - e["predicted_kwh"] for e in recent) / n
+        logger.info("PV bias updated to %.4f kWh/h (n=%d)", _PV_BIAS, n)
+        return _PV_BIAS
+
+    @staticmethod
+    def get_feedback_summary() -> dict:
+        """Return current bias and observation count."""
+        return {
+            "bias_kwh_per_hour": round(_PV_BIAS, 4),
+            "observations": len(_PV_FEEDBACK_LOG),
+            "ring_size_cap": 168,
+        }
+
     def _solar_position(self, dt: datetime) -> tuple[float, float]:
         """Berechne Sonnenposition (Elevation, Azimuth)."""
         # Algorithmus basierend auf NOAA Solar Calculator
-        
+
         # Tag des Jahres
         doy = dt.timetuple().tm_yday
-        
+
         # Fractional year (radians)
         gamma = 2 * math.pi / 365 * (doy - 1)
-        
+
         # Equation of time (minutes)
         eqtime = (
             229.18 * (
@@ -152,7 +181,7 @@ class PVPredictionEngine:
                 - 0.040849 * math.sin(2 * gamma)
             )
         )
-        
+
         # Declination (radians)
         decl = (
             0.006918
@@ -163,25 +192,25 @@ class PVPredictionEngine:
             - 0.002697 * math.cos(3 * gamma)
             + 0.00148 * math.sin(3 * gamma)
         )
-        
+
         # Time offset (minutes)
         tz_offset = 2.0 if 3 <= dt.month <= 10 else 1.0  # MEZ/MESZ
         time_offset = eqtime + 4 * self._lon - 60 * tz_offset
-        
+
         # Hour angle
         tsol = dt.hour * 60 + dt.minute + time_offset
         ha = math.radians(tsol / 4 - 180)
-        
+
         # Latitude (radians)
         lat_rad = math.radians(self._lat)
-        
+
         # Solar elevation
         sin_elev = (
             math.sin(lat_rad) * math.sin(decl)
             + math.cos(lat_rad) * math.cos(decl) * math.cos(ha)
         )
         elevation = math.degrees(math.asin(max(-1, min(1, sin_elev))))
-        
+
         # Solar azimuth
         cos_az = (
             (math.sin(decl) * math.cos(lat_rad) - math.cos(decl) * math.sin(lat_rad) * math.cos(ha))
@@ -189,35 +218,35 @@ class PVPredictionEngine:
         )
         cos_az = max(-1, min(1, cos_az))
         azimuth = math.degrees(math.acos(cos_az))
-        
+
         if math.sin(ha) > 0:
             azimuth = 360 - azimuth
-        
+
         return round(elevation, 2), round(azimuth, 2)
-    
+
     def _sunrise_sunset(self, dt: datetime) -> tuple[datetime, datetime]:
         """Berechne Sonnenauf- und -untergang."""
         doy = dt.timetuple().tm_yday
-        
+
         # Declination
         decl = math.radians(-23.45 * math.cos(math.radians(360 / 365 * (doy + 10))))
         lat_rad = math.radians(self._lat)
-        
+
         # Hour angle at sunrise
         cos_ha = -math.tan(lat_rad) * math.tan(decl)
         cos_ha = max(-1.0, min(1.0, cos_ha))
         ha_sunrise = math.degrees(math.acos(cos_ha))
-        
+
         # Day length
         day_length_h = 2 * ha_sunrise / 15
-        
+
         # Solar noon
         tz_offset = 2.0 if 3 <= dt.month <= 10 else 1.0
         solar_noon_h = (720 - 4 * self._lon) / 60.0 + tz_offset
-        
+
         sunrise_h = solar_noon_h - day_length_h / 2
         sunset_h = solar_noon_h + day_length_h / 2
-        
+
         # Konvertiere zu datetime
         sunrise = dt.replace(
             hour=int(sunrise_h),
@@ -231,49 +260,49 @@ class PVPredictionEngine:
             second=0,
             microsecond=0,
         )
-        
+
         return sunrise, sunset
-    
+
     def _clearsky_irradiance(self, elevation: float) -> float:
-        """Berechne Clearsky-Einstrahlung (W/m²)."""
+        """Berechne Clearsky-Einstrahlung (W/m2)."""
         if elevation <= 0:
             return 0.0
-        
+
         # Extraterrestrische Einstrahlung
-        I0 = 1367  # W/m²
-        
+        I0 = 1367  # W/m2
+
         # Atmospheric attenuation (vereinfacht)
         air_mass = 1 / math.sin(math.radians(elevation))
         if air_mass < 1:
             air_mass = 1
-        
+
         # Clearsky transmission
         tau = 0.7 ** air_mass
-        
+
         # Direct normal irradiance
         dni = I0 * tau
-        
+
         # Global horizontal irradiance
         ghi = dni * math.sin(math.radians(elevation))
-        
+
         return round(ghi, 1)
-    
+
     def _weather_factor(self, hour_offset: int) -> tuple[float, str]:
         """Berechne Wetter-Einflussfaktor und Condition."""
         weather = self._weather_data.get(hour_offset, {})
-        
+
         cloud_cover = weather.get("cloud_cover_pct", 50)
         precip = weather.get("precipitation_mm", 0)
         weather_code = weather.get("weather_code", 0)
-        
+
         # Basis-Reduktion durch Bewölkung
         # 0% clouds = 1.0, 100% clouds = 0.2-0.3
         cloud_factor = 1.0 - (cloud_cover / 100.0 * 0.75)
-        
+
         # Niederschlag reduziert zusätzlich
         if precip > 0:
             cloud_factor *= 0.7  # 30% Reduktion bei Regen
-        
+
         # Wetter-Code Einflüsse (WMO codes)
         if weather_code in [3, 45, 48]:  # Fog
             cloud_factor *= 0.5
@@ -283,9 +312,9 @@ class PVPredictionEngine:
             cloud_factor *= 0.5
         elif weather_code in [95, 96, 99]:  # Thunderstorm
             cloud_factor *= 0.3
-        
+
         cloud_factor = max(0.1, min(1.0, cloud_factor))
-        
+
         # Condition bestimmen
         if cloud_cover <= 20:
             condition = "clear"
@@ -295,37 +324,37 @@ class PVPredictionEngine:
             condition = "cloudy"
         else:
             condition = "overcast"
-        
+
         if precip > 0:
             condition = "rainy" if weather.get("temperature_c", 15) > 2 else "snowy"
-        
+
         return round(cloud_factor, 2), condition
-    
+
     def _panel_efficiency(self, elevation: float, azimuth: float) -> float:
         """Berechne Panel-Effizienz basierend auf Ausrichtung."""
         # Incidence angle modifier (vereinfacht)
-        
+
         # Optimal: Sonne senkrecht auf Panel
         # Panel zeigt nach Süden (180°) mit tilt
-        
+
         # Azimuth-Differenz
         azimuth_diff = abs(azimuth - self._panel_azimuth)
         if azimuth_diff > 180:
             azimuth_diff = 360 - azimuth_diff
-        
+
         azimuth_factor = math.cos(math.radians(azimuth_diff))
         azimuth_factor = max(0, azimuth_factor)
-        
+
         # Elevation optimal bei panel_tilt
         optimal_elevation = 90 - self._panel_tilt
         elevation_diff = abs(elevation - optimal_elevation)
         elevation_factor = math.cos(math.radians(min(90, elevation_diff)))
-        
+
         # Kombination
         efficiency = azimuth_factor * 0.7 + elevation_factor * 0.3
-        
+
         return max(0, min(1, efficiency))
-    
+
     def generate_hourly_forecast(
         self,
         hours: int = 48,
@@ -334,38 +363,40 @@ class PVPredictionEngine:
         """Generiere stündliche PV-Prognose."""
         if start_time is None:
             start_time = datetime.now().replace(minute=0, second=0, microsecond=0)
-        
+
         forecast = []
-        
+
         for h in range(hours):
             dt = start_time + timedelta(hours=h)
-            
+
             # Sonnenposition
             elevation, azimuth = self._solar_position(dt)
-            
+
             # Clearsky Einstrahlung
             clearsky_ghi = self._clearsky_irradiance(elevation)
-            
+
             # Wetter-Einfluss
             weather_factor, condition = self._weather_factor(h)
-            
+
             # Tatsächliche Einstrahlung
             actual_ghi = clearsky_ghi * weather_factor
-            
+
             # Panel-Effizienz
             panel_eff = self._panel_efficiency(elevation, azimuth)
-            
+
             # PV-Leistung
             # P = G × P_peak × system_efficiency × panel_efficiency
             pv_power = actual_ghi / 1000 * self._pv_peak * self._system_efficiency * panel_eff
-            
+            # Apply learned bias from accuracy feedback ring
+            pv_power += _PV_BIAS
+
             # Nachts null
             if elevation <= 0:
                 pv_power = 0
                 actual_ghi = 0
-            
+
             pv_energy_wh = pv_power * 1000  # Wh für eine Stunde
-            
+
             point = PVHourlyForecast(
                 timestamp=dt.isoformat(),
                 hour=h,
@@ -380,9 +411,9 @@ class PVPredictionEngine:
                 efficiency_factor=round(panel_eff * self._system_efficiency * weather_factor, 3),
             )
             forecast.append(point)
-        
+
         return forecast
-    
+
     def generate_daily_forecast(
         self,
         days: int = 7,
@@ -390,27 +421,27 @@ class PVPredictionEngine:
         """Generiere tägliche PV-Prognose."""
         start_time = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
         daily_forecasts = []
-        
+
         for d in range(days):
             day_start = start_time + timedelta(days=d)
             hourly = self.generate_hourly_forecast(hours=24, start_time=day_start)
-            
+
             # Tages-Zusammenfassung
             total_energy_wh = sum(h.pv_energy_wh for h in hourly)
             peak_hour = max(hourly, key=lambda h: h.pv_power_kw)
-            
+
             # Sonnenauf-/untergang
             sunrise, sunset = self._sunrise_sunset(day_start)
             solar_noon = day_start.replace(
                 hour=(sunrise.hour + sunset.hour) // 2,
                 minute=30,
             )
-            
+
             daylight_hours = (sunset - sunrise).total_seconds() / 3600
-            
+
             # Durchschnittliche Bewölkung
             avg_cloud = sum(h.cloud_cover_pct for h in hourly) / len(hourly)
-            
+
             # Wetter-Qualität
             if avg_cloud <= 20:
                 quality = "excellent"
@@ -420,7 +451,7 @@ class PVPredictionEngine:
                 quality = "fair"
             else:
                 quality = "poor"
-            
+
             daily = PVDailyForecast(
                 date=day_start.strftime("%Y-%m-%d"),
                 total_energy_kwh=round(total_energy_wh / 1000, 2),
@@ -434,9 +465,9 @@ class PVPredictionEngine:
                 weather_quality=quality,
             )
             daily_forecasts.append(daily)
-        
+
         return daily_forecasts
-    
+
     def generate_summary(
         self,
         hourly_forecast: Optional[list[PVHourlyForecast]] = None,
@@ -444,10 +475,10 @@ class PVPredictionEngine:
         """Generiere Zusammenfassung."""
         if hourly_forecast is None:
             hourly_forecast = self.generate_hourly_forecast()
-        
+
         total_energy_wh = sum(h.pv_energy_wh for h in hourly_forecast)
         peak_hour = max(hourly_forecast, key=lambda h: h.pv_power_kw)
-        
+
         # Gruppiere nach Tagen
         days = {}
         for h in hourly_forecast:
@@ -455,18 +486,18 @@ class PVPredictionEngine:
             if date not in days:
                 days[date] = 0
             days[date] += h.pv_energy_wh
-        
+
         best_day = max(days.items(), key=lambda x: x[1])[0] if days else ""
         worst_day = min(days.items(), key=lambda x: x[1])[0] if days else ""
-        
+
         # Sonnenstunden (wenn elevation > 0)
         sunlight_hours = sum(1 for h in hourly_forecast if h.solar_elevation > 0)
-        
+
         # Wetter-Einfluss
         clearsky_total = sum(h.clearsky_irradiance_wm2 for h in hourly_forecast)
         actual_total = sum(h.actual_irradiance_wm2 for h in hourly_forecast)
         weather_impact = ((clearsky_total - actual_total) / clearsky_total * 100) if clearsky_total > 0 else 0
-        
+
         return PVForecastSummary(
             forecast_horizon_hours=len(hourly_forecast),
             total_energy_kwh=round(total_energy_wh / 1000, 2),
@@ -478,7 +509,7 @@ class PVPredictionEngine:
             total_sunlight_hours=sunlight_hours,
             weather_impact_pct=round(weather_impact, 1),
         )
-    
+
     def get_pv_forecast_as_dict(
         self,
         hours: int = 48,
@@ -486,7 +517,7 @@ class PVPredictionEngine:
         """Generiere komplettes Forecast als Dictionary."""
         hourly = self.generate_hourly_forecast(hours)
         summary = self.generate_summary(hourly)
-        
+
         return {
             "generated_at": datetime.now().isoformat(),
             "pv_system": {
