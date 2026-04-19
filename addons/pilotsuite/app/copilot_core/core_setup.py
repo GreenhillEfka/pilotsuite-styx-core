@@ -1388,6 +1388,7 @@ def register_blueprints(app: Flask, services: dict) -> None:
         ("copilot_core.api.v1.analytics",          "analytics_bp",          None),
         ("copilot_core.api.v1.energy_forecast",  "energy_forecast_bp",   None),
         ("copilot_core.api.v1.plugins",           "bp",                   None),
+        ("copilot_core.api.v1.mqtt_api",            "bp",                   None),
         ("copilot_core.api.v1.tag_system",       "bp",                   None),
         ("copilot_core.api.v1.multihome",        "bp",                   None),
         ("copilot_core.api.v1.voice",            "bp",                   None),
