@@ -192,6 +192,59 @@ class PluginManager:
         self._states[plugin_id].config = config
         return True
 
+    def update_plugin(self, plugin_id: str, new_version: str) -> bool:
+        """Update a plugin to a new version (F7.2-A)."""
+        manifest = self._manifests.get(plugin_id)
+        if not manifest:
+            return False
+        updated_manifest = PluginManifest(
+            plugin_id=manifest.plugin_id,
+            name=manifest.name,
+            version=new_version,
+            author=manifest.author,
+            description=manifest.description,
+            category=manifest.category,
+            icon=manifest.icon,
+            requires=manifest.requires,
+            provides=manifest.provides,
+            config_schema=manifest.config_schema,
+        )
+        self._manifests[plugin_id] = updated_manifest
+        # Bump minor version in state
+        if plugin_id in self._states:
+            self._states[plugin_id].status = "updated"
+        return True
+
+    def resolve_plugin(self, plugin_id: str) -> dict[str, Any] | None:
+        """Resolve plugin dependency graph and return full status (F7.2-B)."""
+        manifest = self._manifests.get(plugin_id)
+        if not manifest:
+            return None
+        state = self._states.get(plugin_id, PluginState(plugin_id=plugin_id))
+        resolved = {
+            "plugin_id": plugin_id,
+            "name": manifest.name,
+            "version": manifest.version,
+            "status": state.status,
+            "dependencies": [],
+            "dependents": [],
+            "config": state.config,
+        }
+        for req in manifest.requires:
+            req_state = self._states.get(req)
+            resolved["dependencies"].append({
+                "plugin_id": req,
+                "status": req_state.status if req_state else "unknown",
+            })
+        for pid, m in self._manifests.items():
+            if plugin_id in m.requires:
+                dep_state = self._states.get(pid)
+                resolved["dependents"].append({
+                    "plugin_id": pid,
+                    "status": dep_state.status if dep_state else "unknown",
+                })
+        return resolved
+
     def list_manifests(self) -> dict[str, PluginManifest]:
         """Return a shallow copy of the registered plugin manifests."""
         return dict(self._manifests)

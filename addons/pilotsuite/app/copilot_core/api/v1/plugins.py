@@ -137,3 +137,30 @@ def deactivate_plugin(plugin_id: str):
 
     _LOGGER.info("Plugin deactivated: %s", plugin_id)
     return jsonify({"ok": True, "plugin_id": plugin_id})
+
+@bp.route("/<plugin_id>/update", methods=["POST"])
+@require_token
+def update_plugin(plugin_id: str):
+    """Update a plugin to a new version (F7.2-A)."""
+    payload = request.get_json() or {}
+    new_version = payload.get("version")
+    if not new_version:
+        return jsonify({"ok": False, "error": "version field required"}), 400
+
+    success = _manager().update_plugin(plugin_id, new_version)
+    if not success:
+        return jsonify({"ok": False, "error": "plugin not found"}), 404
+
+    _LOGGER.info("Plugin updated: %s -> %s", plugin_id, new_version)
+    return jsonify({"ok": True, "plugin_id": plugin_id, "version": new_version})
+
+
+@bp.route("/<plugin_id>/resolve", methods=["GET"])
+@require_token
+def resolve_plugin(plugin_id: str):
+    """Resolve plugin dependency graph and return full status (F7.2-B)."""
+    result = _manager().resolve_plugin(plugin_id)
+    if result is None:
+        return jsonify({"ok": False, "error": "plugin not found"}), 404
+
+    return jsonify({"ok": True, "plugin_id": plugin_id, "resolve": result})

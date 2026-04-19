@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 # Bypass auth before any app imports
 mock_security = MagicMock()
@@ -37,14 +37,17 @@ def _stub_shared_app_dependencies():
 class TestGraphTopology:
     """Verify GET /api/v1/graph/topology returns bounded topology shape."""
 
-    def test_returns_topology_shape(self):
+    def _build_app(self):
         import importlib
 
         _stub_shared_app_dependencies()
         sys.modules.pop("main", None)
 
         main = importlib.import_module("main")
-        app = main.create_app(options={})
+        return main.create_app(options={})
+
+    def test_returns_topology_shape(self):
+        app = self._build_app()
 
         client = app.test_client()
         response = client.get("/api/v1/graph/topology")
@@ -73,3 +76,26 @@ class TestGraphTopology:
         for edge in payload["edges"]:
             assert "from" in edge
             assert "to" in edge
+
+    def test_snapshot_svg_renders_lines_for_service_edge_shape(self):
+        app = self._build_app()
+        client = app.test_client()
+
+        fake_service = MagicMock()
+        fake_service.get_graph_state.return_value = {
+            "nodes": [
+                {"id": "node-a", "kind": "entity", "domain": "home", "label": "Node A"},
+                {"id": "node-b", "kind": "zone", "domain": "home", "label": "Node B"},
+            ],
+            "edges": [{"from_node": "node-a", "to_node": "node-b"}],
+        }
+
+        with patch("copilot_core.api.v1.graph._svc", return_value=fake_service):
+            response = client.get("/api/v1/graph/snapshot.svg")
+
+        assert response.status_code == 200
+        assert "image/svg+xml" in response.headers["Content-Type"]
+        svg = response.get_data(as_text=True)
+        assert "<line " in svg
+        assert "Node A" in svg
+        assert "Node B" in svg

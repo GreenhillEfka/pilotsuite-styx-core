@@ -79,7 +79,9 @@ a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
 .styx-left{display:flex;flex-direction:column;gap:12px;min-height:0}
 .styx-right{display:flex;flex-direction:column;gap:12px;min-height:0}
 .brain-wrap{flex:1;min-height:300px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);position:relative;overflow:hidden}
-.brain-wrap canvas{width:100%;height:100%;display:block}
+.brain-wrap .brain-snapshot{position:absolute;inset:0;z-index:0;pointer-events:none;opacity:.55}
+.brain-wrap .brain-snapshot svg{width:100%;height:100%;display:block}
+.brain-wrap canvas{width:100%;height:100%;display:block;position:absolute;inset:0;z-index:1}
 .brain-stats{display:flex;gap:8px;flex-wrap:wrap;flex-shrink:0}
 .brain-chip{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:6px 12px;font-size:11px;display:flex;align-items:center;gap:6px;flex:1;min-width:120px}
 .brain-chip .chip-v{font-weight:700;color:var(--accent2)}
@@ -192,7 +194,7 @@ a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}
   <div class="tab-content active" id="tab-styx">
     <div class="styx-layout">
       <div class="styx-left">
-        <div class="brain-wrap"><canvas id="brain-canvas"></canvas></div>
+        <div class="brain-wrap"><div class="brain-snapshot" id="brain-snapshot" aria-hidden="true"></div><canvas id="brain-canvas"></canvas></div>
         <div class="brain-stats" id="brain-stats"></div>
         <div class="brain-focus-panel" id="brain-focus-panel"></div>
       </div>
@@ -278,6 +280,7 @@ if (TOKEN) sessionStorage.setItem('styx-auth-token', TOKEN);
 let activeTab = 'styx', refreshTimer = null, liveRefreshTimer = null, moduleSchemas = {}, chatHistory = [];
 let brainData = { nodes: 0, edges: 0, totalEvents: 0 }, neuronsData = {}, liveSocket = null, graphDeltaState = null, brainDeltaAnimationId = null;
 let graphTopologyState = { nodes: [], edges: [], positions: {}, fetchedAt: 0 }, graphTopologyRefreshPromise = null;
+let graphSnapshotMarkup = '', graphSnapshotRefreshPromise = null;
 let graphHoverState = null, graphSelectionState = null, graphCanvasInteractionBound = false;
 const GRAPH_DELTA_TTL_MS = 4200;
 const GRAPH_TOPOLOGY_LIMITS = { nodes: 48, edges: 96 };
@@ -295,6 +298,10 @@ async function fetchJSON(url) {
 async function postJSON(url, body) {
   const h = { 'Content-Type': 'application/json' }; if (TOKEN) h['X-Auth-Token'] = TOKEN;
   try { const r = await fetch(BASE + url, { method: 'POST', headers: h, body: JSON.stringify(body), signal: AbortSignal.timeout(30000) }); return await r.json(); } catch { return null; }
+}
+async function fetchText(url) {
+  const h = {}; if (TOKEN) h['X-Auth-Token'] = TOKEN;
+  try { const r = await fetch(BASE + url, { headers: h, signal: AbortSignal.timeout(8000) }); if (!r.ok) return null; return await r.text(); } catch { return null; }
 }
 function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 function $(id) { return document.getElementById(id); }
@@ -522,6 +529,29 @@ async function refreshGraphTopology(force = false) {
   } finally {
     graphTopologyRefreshPromise = null;
   }
+}
+async function refreshGraphSnapshot(force = false) {
+  const stale = !graphTopologyState.fetchedAt || (Date.now() - graphTopologyState.fetchedAt) >= GRAPH_TOPOLOGY_REFRESH_MS;
+  if (!force && graphSnapshotMarkup && !stale) return graphSnapshotMarkup;
+  if (graphSnapshotRefreshPromise) return graphSnapshotRefreshPromise;
+  graphSnapshotRefreshPromise = (async () => {
+    const snapshotSvg = await fetchText('/api/v1/graph/snapshot.svg');
+    if (snapshotSvg?.includes('<svg')) {
+      graphSnapshotMarkup = snapshotSvg;
+      renderGraphSnapshot();
+    }
+    return graphSnapshotMarkup;
+  })();
+  try {
+    return await graphSnapshotRefreshPromise;
+  } finally {
+    graphSnapshotRefreshPromise = null;
+  }
+}
+function renderGraphSnapshot() {
+  const snapshot = $('brain-snapshot');
+  if (!snapshot) return;
+  snapshot.innerHTML = graphSnapshotMarkup || '';
 }
 function syncGraphTopologyWithDelta(payload) {
   const delta = payload?.delta || {};
@@ -798,13 +828,15 @@ function chip(label, value, color) { return `<div class="brain-chip"><span class
 // TAB 1: STYX
 // ══════════════════════════════════════════════════════════════════════
 async function loadStyx() {
-  const [health, graph, graphTopology, neurons, mood] = await Promise.all([fetchJSON('/api/v1/health/deep'), fetchJSON('/api/v1/graph/stats'), refreshGraphTopology(), fetchJSON('/api/v1/neurons'), fetchJSON('/api/v1/mood/state')]);
+  const [health, graph, graphTopology, graphSnapshot, neurons, mood] = await Promise.all([fetchJSON('/api/v1/health/deep'), fetchJSON('/api/v1/graph/stats'), refreshGraphTopology(), refreshGraphSnapshot(), fetchJSON('/api/v1/neurons'), fetchJSON('/api/v1/mood/state')]);
   if (health) {
     if (!liveSocket?.connected) setConnectionState(health.ok !== false, health.ok !== false ? 'Verbunden' : 'Fehler');
     $('ver-pill').textContent = 'v' + (health.version || health.data?.version || '--');
     if (health.uptime_s) $('uptime-text').textContent = formatUptime(health.uptime_s);
   }
   if (graphTopology?.nodes) graphTopologyState = graphTopology;
+  if (graphSnapshot) graphSnapshotMarkup = graphSnapshot;
+  renderGraphSnapshot();
   renderStyxSummary(mood, graph, neurons?.neurons || {});
   renderGraphFocusPanel();
 }

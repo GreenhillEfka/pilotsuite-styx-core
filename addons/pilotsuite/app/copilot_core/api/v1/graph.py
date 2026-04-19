@@ -213,8 +213,8 @@ def graph_snapshot_svg():
 
     # Draw edges
     for edge in edges:
-        src = node_pos.get(edge.get("from"))
-        tgt = node_pos.get(edge.get("to"))
+        src = node_pos.get(edge.get("from") or edge.get("from_node"))
+        tgt = node_pos.get(edge.get("to") or edge.get("to_node"))
         if src and tgt:
             parts.append(
                 f'  <line x1="{src[0]:.0f}" y1="{src[1]:.0f}" '

@@ -32,10 +32,18 @@ def test_styx_dashboard_template_uses_graph_update_delta_for_canvas_highlights()
     content = TEMPLATE.read_text(encoding="utf-8")
 
     assert '<div class="brain-focus-panel" id="brain-focus-panel"></div>' in content
+    assert '<div class="brain-wrap"><div class="brain-snapshot" id="brain-snapshot" aria-hidden="true"></div><canvas id="brain-canvas"></canvas></div>' in content
+    assert ".brain-wrap .brain-snapshot{position:absolute;inset:0;z-index:0;pointer-events:none;opacity:.55}" in content
     assert "let brainData = { nodes: 0, edges: 0, totalEvents: 0 }, neuronsData = {}, liveSocket = null, graphDeltaState = null, brainDeltaAnimationId = null;" in content
     assert "let graphTopologyState = { nodes: [], edges: [], positions: {}, fetchedAt: 0 }, graphTopologyRefreshPromise = null;" in content
+    assert "let graphSnapshotMarkup = '', graphSnapshotRefreshPromise = null;" in content
     assert "let graphHoverState = null, graphSelectionState = null, graphCanvasInteractionBound = false;" in content
     assert "const GRAPH_TOPOLOGY_LIMITS = { nodes: 48, edges: 96 };" in content
+    assert "async function fetchText(url)" in content
+    assert "async function refreshGraphSnapshot(force = false)" in content
+    assert "const snapshotSvg = await fetchText('/api/v1/graph/snapshot.svg');" in content
+    assert "function renderGraphSnapshot()" in content
+    assert "snapshot.innerHTML = graphSnapshotMarkup || '';" in content
     assert "function applyGraphRealtime(evt)" in content
     assert "function deriveGraphDeltaHighlight(payload)" in content
     assert "async function refreshGraphTopology(force = false)" in content
@@ -48,6 +56,7 @@ def test_styx_dashboard_template_uses_graph_update_delta_for_canvas_highlights()
     assert "canvas.addEventListener('click', handleBrainCanvasClick);" in content
     assert "drawGraphTopologyBackdrop(ctx, W, H);" in content
     assert "fetchJSON(`/api/v1/graph/state?limitNodes=${GRAPH_TOPOLOGY_LIMITS.nodes}&limitEdges=${GRAPH_TOPOLOGY_LIMITS.edges}`)" in content
+    assert "const [health, graph, graphTopology, graphSnapshot, neurons, mood] = await Promise.all([fetchJSON('/api/v1/health/deep'), fetchJSON('/api/v1/graph/stats'), refreshGraphTopology(), refreshGraphSnapshot(), fetchJSON('/api/v1/neurons'), fetchJSON('/api/v1/mood/state')]);" in content
     assert "function drawGraphDeltaOverlay(ctx, W, H, cx, cy)" in content
     assert "drawGraphDeltaOverlay(ctx, W, H, cx, cy);" in content
     assert "liveSocket.on('graph_update', applyGraphRealtime);" in content
