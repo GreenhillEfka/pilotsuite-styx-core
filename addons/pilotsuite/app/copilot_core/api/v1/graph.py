@@ -136,6 +136,40 @@ def graph_patterns():
     })
 
 
+@bp.get("/topology")
+def graph_topology():
+    """Return simplified brain graph topology for dashboard visibility.
+
+    Returns: nodes with kind/domain/label, edge pairs, node counts by kind.
+    Lightweight — uses get_graph_state with capped limits.
+    """
+    state = _svc().get_graph_state(limit_nodes=100, limit_edges=200)
+    nodes = state.get("nodes", [])
+    edges = state.get("edges", [])
+
+    kind_counts: dict[str, int] = {}
+    domain_counts: dict[str, int] = {}
+    for node in nodes:
+        kind = node.get("kind", "unknown")
+        domain = node.get("domain", "unknown")
+        kind_counts[kind] = kind_counts.get(kind, 0) + 1
+        domain_counts[domain] = domain_counts.get(domain, 0) + 1
+
+    return jsonify({
+        "ok": True,
+        "version": 1,
+        "generated_at_ms": int(time.time() * 1000),
+        "total_nodes": len(nodes),
+        "total_edges": len(edges),
+        "nodes_by_kind": kind_counts,
+        "nodes_by_domain": domain_counts,
+        "nodes": [
+            {"id": n["id"], "kind": n.get("kind"), "domain": n.get("domain"), "label": n.get("label", n["id"])}
+            for n in nodes
+        ],
+        "edges": [{"from": e["from_node"], "to": e["to_node"]} for e in edges],
+    })
+
 @bp.get("/snapshot.svg")
 def graph_snapshot_svg():
     """Generate a live SVG visualization of the brain graph."""
