@@ -154,6 +154,21 @@ That is one bounded slice, verifiable, no new HA integration required yet.
 - If richer billing semantics are still needed after the monthly route lands,
   park that as the exact next pull instead of widening `F2.5-A`.
 
+## Route-shape guard for F2.5-A
+
+- Land the first report surface on the existing `energy_forecast_bp` blueprint
+  as one bounded `GET /report` route, following the same route-family style the
+  file already uses for `/summary` and `/solar-surplus/status`.
+- Keep the auth and envelope shape aligned with the existing energy API seam:
+  `@require_token` plus `jsonify({"ok": True, ...})`, not a second auth path,
+  background job, or streaming/export variant.
+- Default the first response to one compact report payload with the additive
+  `solar_surplus` block, instead of inventing a second route-local service
+  wrapper, alternate endpoint family, or POST body contract.
+- If the route cannot stay on that existing blueprint/auth/envelope shape,
+  stop and log the exact next pull instead of widening `F2.5-A` inside the same
+  run.
+
 ---
 
 ## Files to Touch (F2.5-A)

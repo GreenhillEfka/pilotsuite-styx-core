@@ -18,6 +18,8 @@ from __future__ import annotations
 
 import inspect
 import logging
+import os
+import time
 from datetime import date, datetime, timezone
 from typing import Optional
 
@@ -852,7 +854,135 @@ def get_solar_surplus_status():
         return jsonify({"ok": False, "error": str(exc)}), 500
 
 
-@energy_forecast_bp.route("/summary", methods=["GET"])
+# ── F2.5-G3: Solar surplus HA notification trigger ──────────────────────────────
+
+_SURPLUS_LAST_TRIGGERED_MS: int | None = None
+_SURPLUS_COOLDOWN_MS: int = 15 * 60 * 1000  # 15 minutes minimum between triggers
+
+
+@energy_forecast_bp.route("/solar-surplus/notify", methods=["POST"])
+@require_token
+def trigger_solar_surplus_notification():
+    """Trigger a HomeAssistant notification for active solar surplus (F2.5-G3).
+
+    Evaluates current surplus state and fires an HA notification if:
+    - an active surplus window exists with >= 0.5 kWh available, AND
+    - at least 15 minutes have passed since the last trigger (cooldown).
+
+    Uses existing HANotifyAdapter (singleton). Falls back gracefully when
+    HA is not connected or no notify service is available.
+    """
+    global _SURPLUS_LAST_TRIGGERED_MS
+
+    now_ms = int(time.time() * 1000)
+
+    # Cooldown check
+    if (
+        _SURPLUS_LAST_TRIGGERED_MS is not None
+        and (now_ms - _SURPLUS_LAST_TRIGGERED_MS) < _SURPLUS_COOLDOWN_MS
+    ):
+        remaining_s = (_SURPLUS_COOLDOWN_MS - (now_ms - _SURPLUS_LAST_TRIGGERED_MS)) // 1000
+        return jsonify({
+            "ok": True,
+            "suppressed": True,
+            "reason": "cooldown_active",
+            "cooldown_remaining_s": remaining_s,
+        })
+
+    try:
+        optimizer = SolarSurplusOptimizer()
+        # Use optimizer's internal slot/candidate generation (same pattern as /status)
+        empty_slots: list[SolarSurplusSlot] = []
+        empty_candidates: list[SolarSurplusCandidate] = []
+        actions, summary = optimizer.recommend(empty_slots, empty_candidates)
+
+        if summary.total_slots == 0 or summary.recommendations_count == 0:
+            return jsonify({
+                "ok": True,
+                "suppressed": True,
+                "reason": "no_surplus",
+                "message": "No active surplus window or recommendations available.",
+            })
+
+        # Sum available surplus across slots
+        total_surplus_kwh = float(sum(getattr(s, 'available_surplus_kwh', 0.0) for s in empty_slots))
+        # For the trigger, use summary's grid_relief as proxy for surplus capacity
+        total_surplus_kwh = max(total_surplus_kwh, summary.expected_grid_relief_kwh)
+
+        if total_surplus_kwh < 0.5:
+            return jsonify({
+                "ok": True,
+                "suppressed": True,
+                "reason": "insufficient_surplus",
+                "available_kwh": round(total_surplus_kwh, 3),
+            })
+
+        # Build and send HA notification
+        message = (
+            f"☀️ Solarüberschuss: {total_surplus_kwh:.2f} kWh verfügbar "
+            f"über {summary.horizon_hours:.1f}h. "
+            f"{summary.recommendations_count} Verbraucher-Empfehlung(en), "
+            f"~{summary.expected_savings_eur:.2f}€ Ersparnis möglich."
+        )
+
+        notified = _try_send_ha_notify(message, priority="normal")
+
+        _SURPLUS_LAST_TRIGGERED_MS = now_ms
+
+        return jsonify({
+            "ok": True,
+            "notified": notified,
+            "surplus_kwh": round(total_surplus_kwh, 3),
+            "recommendations_count": summary.recommendations_count,
+            "horizon_hours": summary.horizon_hours,
+            "expected_savings_eur": summary.expected_savings_eur,
+        })
+
+    except Exception as exc:
+        _LOGGER.error("solar surplus notify failed: %s", exc)
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+def _try_send_ha_notify(message: str, priority: str = "normal") -> bool:
+    """Attempt to send via HANotifyAdapter. Return True on success, False on any failure."""
+    try:
+        from copilot_core.notifications.ha_notify_adapter import get_ha_notify_adapter
+        adapter = get_ha_notify_adapter()
+        if adapter.hass is None:
+            _LOGGER.warning("HA not connected, skipping notify")
+            return False
+        # Send to first registered device, fallback to persistent_notification
+        devices = adapter.get_all_devices()
+        if devices:
+            return adapter.send_to_ha_service(devices[0].id, message=message, priority=priority)
+        # Fallback: persistent notification via proactive_engine
+        _send_persistent_notification(message)
+        return True
+    except Exception as exc:
+        _LOGGER.warning("HA notify unavailable: %s", exc)
+        return False
+
+
+def _send_persistent_notification(message: str) -> None:
+    """Fallback: send via supervisor API directly."""
+    try:
+        import requests
+        supervisor_token = os.environ.get("SUPERVISOR_TOKEN", "")
+        if not supervisor_token:
+            return
+        requests.post(
+            f"http://supervisor/services/notify/persistent_notification",
+            headers={
+                "Authorization": f"Bearer {supervisor_token}",
+                "Content-Type": "application/json",
+            },
+            json={"message": message},
+            timeout=5,
+        )
+    except Exception:
+        pass  # graceful fallback
+
+
 @require_token
 def get_energy_summary():
     """Hole kompakte Energie-Übersicht für Dashboard.
