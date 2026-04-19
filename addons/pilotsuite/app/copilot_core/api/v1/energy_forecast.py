@@ -1077,13 +1077,32 @@ def export_usage_pattern_report():
             min_confidence=min_confidence,
         )
         return jsonify(report)
-    except ValueError as exc:
-        return jsonify({"error": str(exc)}), 400
-    except TypeError as exc:
-        return jsonify({"error": str(exc)}), 400
     except Exception as exc:
         _LOGGER.error("Usage pattern report export error: %s", exc)
         return jsonify({"error": str(exc)}), 500
+
+
+@energy_forecast_bp.route("/reports/usage-patterns/summary", methods=["GET"])
+@require_token
+def usage_patterns_summary():
+    """Lightweight usage-pattern summary for dashboard widget (F10.5-A).
+
+    Returns D1/D2/D3 summary for the last 30 days without requiring
+    explicit window parameters. Uses defaults from EnergyReportGenerator.
+    """
+    try:
+        generator = _get_energy_report_generator()
+        pattern_learner = _get_pattern_learner()
+        report = generator.export_usage_pattern_summary(
+            pattern_learner,
+            window_start=None,  # uses internal default
+            window_end=None,    # uses internal default
+            min_confidence=0.3,
+        )
+        return jsonify({"ok": True, "summary": report})
+    except Exception as exc:
+        _LOGGER.error("usage pattern summary failed: %s", exc)
+        return jsonify({"ok": False, "error": str(exc)}), 500
 
 
 @energy_forecast_bp.route("/demand-response/status", methods=["GET"])
