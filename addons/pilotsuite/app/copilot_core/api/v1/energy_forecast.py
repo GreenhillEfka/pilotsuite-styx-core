@@ -453,6 +453,61 @@ def pv_forecast_summary():
     summary = engine.get_feedback_summary()
     return jsonify({"ok": True, "pv_accuracy": summary})
 
+
+@energy_forecast_bp.route("/forecast/pv/hourly", methods=["GET"])
+@require_token
+def get_pv_forecast_hourly():
+    """Return PV forecast hourly list with predicted kWh per hour (bias-corrected)."""
+    try:
+        hours_raw = request.args.get("hours", "24")
+        hours = min(max(int(hours_raw), 1), 168)
+
+        engine = PVPredictionEngine()
+
+        energy_service = _get_energy_service()
+        if energy_service:
+            try:
+                location = energy_service.get_location()
+                if location:
+                    engine.update_location(location.get("lat", 51.0), location.get("lon", 10.0))
+            except Exception:
+                pass
+
+        weather_raw = _fetch_weather_forecast(hours)
+        if weather_raw:
+            weather_data = [
+                {
+                    "timestamp": w.get("timestamp"),
+                    "temperature_c": w.get("temperature_c"),
+                    "cloud_cover_pct": w.get("cloud_cover_pct", 50),
+                    "precipitation_mm": w.get("precipitation_mm", 0),
+                    "weather_code": w.get("weather_code", 0),
+                }
+                for w in weather_raw
+            ]
+            engine.set_weather_data(weather_data)
+
+        forecast = engine.get_pv_forecast_as_dict(hours=hours)
+
+        return jsonify({
+            "ok": True,
+            "hours": hours,
+            "hourly": [
+                {
+                    "hour": h["hour"],
+                    "predicted_kwh": round(h["pv_power_kw"], 3),
+                    "pv_power_kw": h["pv_power_kw"],
+                    "solar_elevation": h["solar_elevation"],
+                    "cloud_cover_pct": h["cloud_cover_pct"],
+                }
+                for h in forecast.get("hourly_forecast", [])
+            ],
+        })
+    except Exception as exc:
+        _LOGGER.error("PV hourly forecast error: %s", exc)
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
 @energy_forecast_bp.route("/forecast/combined", methods=["GET"])
 @require_token
 def get_combined_forecast():
