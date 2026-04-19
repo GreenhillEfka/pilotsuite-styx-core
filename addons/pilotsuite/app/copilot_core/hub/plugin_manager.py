@@ -192,6 +192,10 @@ class PluginManager:
         self._states[plugin_id].config = config
         return True
 
+    def list_manifests(self) -> dict[str, PluginManifest]:
+        """Return a shallow copy of the registered plugin manifests."""
+        return dict(self._manifests)
+
     def get_plugin(self, plugin_id: str) -> dict[str, Any] | None:
         """Get plugin info."""
         manifest = self._manifests.get(plugin_id)
@@ -214,6 +218,10 @@ class PluginManager:
             "config": state.config,
             "error": state.error,
         }
+
+    def deactivate_plugin(self, plugin_id: str) -> bool:
+        """Deactivate a plugin via the public API naming used by the route layer."""
+        return self.disable_plugin(plugin_id)
 
     def get_summary(self) -> PluginRegistrySummary:
         """Get plugin registry summary."""
