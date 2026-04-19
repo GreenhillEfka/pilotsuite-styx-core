@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import inspect
 import logging
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Optional
 
 from flask import Blueprint, jsonify, request, current_app
@@ -985,8 +985,32 @@ def energy_sankey_svg():
 @energy_forecast_bp.route("/reports/generate", methods=["GET"])
 @require_token
 def energy_reports_generate():
-    """Energy report — stub."""
-    return jsonify({"ok": True, "status": "not_configured", "report": None})
+    """Generate a structured energy report (daily / weekly / monthly).
+
+    Query params:
+        report_type : str = "daily" | "weekly" | "monthly" (default: weekly)
+        end_date    : str = YYYY-MM-DD, last day of period (default: today)
+    """
+    report_type = request.args.get("report_type", "weekly")
+    if report_type not in ("daily", "weekly", "monthly"):
+        return jsonify({"error": "report_type must be daily, weekly, or monthly"}), 400
+
+    end_date_str = request.args.get("end_date")
+    if end_date_str:
+        try:
+            end_date = date.fromisoformat(end_date_str)
+        except ValueError:
+            return jsonify({"error": "end_date must be YYYY-MM-DD"}), 400
+    else:
+        end_date = date.today()
+
+    try:
+        generator = _get_energy_report_generator()
+        report = generator.generate_report(report_type=report_type, end_date=end_date)
+        return jsonify({"ok": True, "status": "ready", "report": asdict(report)})
+    except Exception as exc:
+        _LOGGER.error("energy report generation failed: %s", exc)
+        return jsonify({"ok": False, "status": "error", "error": str(exc)}), 500
 
 
 @energy_forecast_bp.route("/reports/usage-patterns/export", methods=["GET"])
