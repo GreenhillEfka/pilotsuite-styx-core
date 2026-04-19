@@ -90,3 +90,18 @@ def get_suggestions():
         "mood": context.dominant_mood,
         "zone": context.current_zone,
     })
+
+@bp.route("/turn-context", methods=["GET"])
+def get_turn_context():
+    """Return current NLU turn context buffer (F3.3-B).
+
+    Returns last MAX_TURN_CONTEXT utterances from the NLU engine,
+    enabling downstream context-aware intent resolution.
+    """
+    from copilot_core.voice.nlu_engine import init_nlu
+    engine = init_nlu()
+    return jsonify({
+        "ok": True,
+        "turn_context": engine.get_turn_context(),
+        "max_turns": engine.MAX_TURN_CONTEXT,
+    })
