@@ -260,3 +260,53 @@ async def health():
         'client_count': len(snapshot.clients),
         'last_update': snapshot.timestamp
     })
+
+
+@unifi_bp.route('/devices/<mac>', methods=['GET'])
+@require_token
+async def get_device_detail(mac: str):
+    """Get detailed info for one client device by MAC (F9.1-A)."""
+    if not _unifi_service:
+        return jsonify({'error': 'UniFi service not initialized'}), 503
+
+    snapshot = await _unifi_service.get_snapshot()
+    for client in snapshot.clients:
+        if client.mac.lower() == mac.lower():
+            return jsonify({
+                'ok': True,
+                'device': {
+                    'mac': client.mac,
+                    'name': client.name,
+                    'ip': client.ip,
+                    'status': client.status,
+                    'device_type': client.device_type,
+                    'connected_ap': client.connected_ap,
+                    'signal_strength': getattr(client, 'signal_strength', None),
+                    'uptime_secs': getattr(client, 'uptime_secs', None),
+                    'tx_bytes': getattr(client, 'tx_bytes', None),
+                    'rx_bytes': getattr(client, 'rx_bytes', None),
+                },
+            })
+    return jsonify({'ok': False, 'error': 'device not found'}), 404
+
+
+@unifi_bp.route('/clients/summary', methods=['GET'])
+@require_token
+async def get_clients_summary():
+    """Return client count summary by type and status (F9.1-B)."""
+    if not _unifi_service:
+        return jsonify({'error': 'UniFi service not initialized'}), 503
+
+    clients = await _unifi_service.get_clients()
+    by_type: dict[str, int] = {}
+    by_status: dict[str, int] = {}
+    for c in clients:
+        by_type[c.device_type] = by_type.get(c.device_type, 0) + 1
+        by_status[c.status] = by_status.get(c.status, 0) + 1
+
+    return jsonify({
+        'ok': True,
+        'total': len(clients),
+        'by_type': by_type,
+        'by_status': by_status,
+    })
