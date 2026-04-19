@@ -91,3 +91,38 @@ class TestEnergyReportGenerate:
         payload = response.get_json()
         assert "error" in payload
         assert "report_type" in payload["error"]
+
+
+class TestSolarSurplusStatus:
+    """Verify GET /api/v1/energy/solar-surplus/status (F2.5-B)."""
+
+    def test_returns_surplus_status_shape(self):
+        import importlib
+
+        _stub_shared_app_dependencies()
+        sys.modules.pop("main", None)
+
+        main = importlib.import_module("main")
+        app = main.create_app(options={})
+
+        client = app.test_client()
+        response = client.get("/api/v1/energy/solar-surplus/status")
+
+        assert response.status_code == 200, f"got {response.status_code}: {response.get_json()}"
+        payload = response.get_json()
+
+        assert payload.get("ok") is True
+        assert "surplus" in payload
+        surplus = payload["surplus"]
+        required_fields = (
+            "generated_at",
+            "horizon_hours",
+            "total_slots",
+            "total_candidates",
+            "recommendations_count",
+            "expected_self_consumption_gain_pct",
+            "expected_savings_eur",
+            "expected_grid_relief_kwh",
+        )
+        for field in required_fields:
+            assert field in surplus, f"surplus missing required field: {field}"

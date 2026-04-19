@@ -29,7 +29,7 @@ from copilot_core.energy.forecast import EnergyForecastEngine
 from copilot_core.energy.pv_prediction import PVPredictionEngine
 from copilot_core.energy.report_generator import EnergyReportGenerator
 from copilot_core.energy.load_shifting import LoadShiftingEngine, ShiftableDevice
-from copilot_core.energy.solar_surplus_optimizer import SolarSurplusOptimizer
+from copilot_core.energy.solar_surplus_optimizer import SolarSurplusOptimizer, SolarSurplusSlot, SolarSurplusCandidate
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -816,6 +816,40 @@ def get_solar_surplus_recommendations():
             "ok": False,
             "error": str(e),
         }), 500
+
+
+@energy_forecast_bp.route("/solar-surplus/status", methods=["GET"])
+@require_token
+def get_solar_surplus_status():
+    """Return lightweight solar surplus dashboard status.
+
+    Calls SolarSurplusOptimizer.recommend() with default/zero inputs to get a
+    current-state summary without requiring full forecast payload.
+    Returns SolarSurplusSummary fields for dashboard widget display.
+    """
+    try:
+        optimizer = SolarSurplusOptimizer()
+        empty_slots: list[SolarSurplusSlot] = []
+        empty_candidates: list[SolarSurplusCandidate] = []
+        actions, summary = optimizer.recommend(empty_slots, empty_candidates)
+
+        return jsonify({
+            "ok": True,
+            "surplus": {
+                "generated_at": summary.generated_at,
+                "horizon_hours": summary.horizon_hours,
+                "total_slots": summary.total_slots,
+                "total_candidates": summary.total_candidates,
+                "recommendations_count": summary.recommendations_count,
+                "expected_self_consumption_gain_pct": summary.expected_self_consumption_gain_pct,
+                "expected_savings_eur": summary.expected_savings_eur,
+                "expected_grid_relief_kwh": summary.expected_grid_relief_kwh,
+            },
+            "configured": True,
+        })
+    except Exception as exc:
+        _LOGGER.error("solar surplus status failed: %s", exc)
+        return jsonify({"ok": False, "error": str(exc)}), 500
 
 
 @energy_forecast_bp.route("/summary", methods=["GET"])
