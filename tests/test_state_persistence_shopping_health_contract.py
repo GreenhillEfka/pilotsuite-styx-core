@@ -244,3 +244,40 @@ def test_lightweight_app_ready_exposes_runtime_persistence_truth(monkeypatch, tm
         "shopping_db_path": str(shopping_db_path),
         "shopping_db_accessible": True,
     }
+
+
+def test_main_health_exposes_runtime_persistence_truth(monkeypatch, tmp_path):
+    """Contract: GET /health now exposes persistence summary for all three DBs."""
+    _stub_main_dependencies(monkeypatch)
+
+    shopping_db_path = tmp_path / "shopping" / "health-shopping.db"
+    conversation_db_path = tmp_path / "memory" / "health-conversation.db"
+    vector_db_path = tmp_path / "vector" / "health-store.db"
+    monkeypatch.setenv("SHOPPING_DB_PATH", str(shopping_db_path))
+    monkeypatch.setenv("CONVERSATION_MEMORY_DB", str(conversation_db_path))
+    monkeypatch.setenv("COPILOT_VECTOR_DB_PATH", str(vector_db_path))
+    sys.modules.pop("main", None)
+
+    main = importlib.import_module("main")
+    app = main.create_app(options={})
+
+    monkeypatch.setattr(requests, "get", lambda *args, **kwargs: _FakeResponse())
+
+    # Make only conversation DB accessible to prove routing is correct
+    def _fake_exists(path: str) -> bool:
+        return path == str(conversation_db_path)
+
+    monkeypatch.setattr(main.os.path, "exists", _fake_exists)
+
+    response = app.test_client().get("/health")
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["ok"] is True
+    assert "persistence" in payload
+    assert payload["persistence"]["shopping_db_path"] == str(shopping_db_path)
+    assert payload["persistence"]["shopping_db_accessible"] is False
+    assert payload["persistence"]["conversation_memory_db_path"] == str(conversation_db_path)
+    assert payload["persistence"]["conversation_memory_db_accessible"] is True
+    assert payload["persistence"]["vector_store_db_path"] == str(vector_db_path)
+    assert payload["persistence"]["vector_store_db_accessible"] is False

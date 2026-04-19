@@ -260,6 +260,7 @@ def _register_routes(flask_app: Flask, startup_time: float) -> None:
     def health():
         services = flask_app.config.get("COPILOT_SERVICES", {})
         service_count = sum(1 for v in services.values() if v is not None)
+        from copilot_core.app import _get_runtime_persistence_summary
         return jsonify({
             "ok": True,
             "time": _now_iso(),
@@ -267,6 +268,7 @@ def _register_routes(flask_app: Flask, startup_time: float) -> None:
             "uptime_s": int(time.time() - startup_time),
             "services": service_count,
             "docs": "/api/v1/docs/",
+            "persistence": _get_runtime_persistence_summary(),
         })
 
     @flask_app.get("/ready")

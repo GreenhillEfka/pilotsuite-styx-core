@@ -298,6 +298,7 @@ def create_app() -> Flask:
             "time": _now_iso(),
             "port": int(os.environ.get("PORT", "8909")),
             "voice": voice_block,
+            "persistence": _get_runtime_persistence_summary(),
         })
 
     @app.get("/version")
