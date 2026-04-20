@@ -1279,3 +1279,272 @@ def get_execution_log():
         "count": len(executor._execution_log),
         "log": executor.get_execution_log(limit=limit),
     })
+
+
+# ---------------------------------------------------------------------------
+# F6.1 — Habit/Zone Configuration API
+# Zone-specific automation configuration + habitat settings
+# ---------------------------------------------------------------------------
+
+@bp.get("/zones/config")
+def graph_zones_config():
+    """Return all zone configurations with habitat settings (F6.1).
+
+    Aggregates zone state from brain graph + habitus_zones.
+    Each zone includes: id, kind, label, score, activity config, lighting prefs.
+    """
+    svc = _svc()
+    state = svc.get_graph_state(limit_nodes=2000, limit_edges=4000)
+    nodes = state.get("nodes", [])
+
+    # Get zone nodes from brain graph
+    zone_nodes = [n for n in nodes if n.get("kind") == "zone"]
+
+    # Also pull from habitus_zones
+    try:
+        from copilot_core.homeassistant.habitus_zones import get_all_zones, HABITUS_ZONES
+        habit_zones = get_all_zones()
+    except Exception:
+        habit_zones = {}
+
+    result = []
+    for z in zone_nodes:
+        zone_id = z.get("id", "")
+        zone_type = zone_id.split(".")[-1] if zone_id else zone_id
+        # Look up habitus config
+        habit = {}
+        for hz_key, hz_val in habit_zones.items():
+            if hz_key in zone_id or zone_id in hz_key:
+                habit = {
+                    "name_de": getattr(hz_val, "name_de", zone_id),
+                    "name_en": getattr(hz_val, "name_en", zone_id),
+                    "module_overrides": getattr(hz_val, "module_overrides", {}),
+                }
+                break
+
+        # Extract activity + lighting config from meta
+        meta = z.get("meta", {})
+        habitat_config = meta.get("habitat_config", {})
+        if not habitat_config:
+            habitat_config = {
+                "lighting": meta.get("preferred_lighting", "auto"),
+                "temperature": meta.get("preferred_temp", 21.0),
+                "activities": meta.get("activities", []),
+            }
+
+        result.append({
+            "zone_id": zone_id,
+            "label": z.get("label", zone_id),
+            "kind": z.get("kind", "zone"),
+            "score": z.get("score", 0.0),
+            "updated_at_ms": z.get("updated_at_ms", 0),
+            "habitus_type": zone_type,
+            "habitat_config": habitat_config,
+            "habitus_info": habit,
+        })
+
+    # Sort by label
+    result.sort(key=lambda x: x.get("label", ""))
+    return jsonify({
+        "ok": True,
+        "count": len(result),
+        "zones": result,
+    })
+
+
+@bp.put("/zones/<zone_id>/habitat")
+def graph_update_zone_habitat(zone_id: str):
+    """Update the habitat configuration for a zone (F6.1).
+
+    Request body:
+    {
+        "lighting": "bright" | "normal" | "dim" | "auto",
+        "temperature": float,
+        "activities": ["reading", "cooking", ...],
+        "module_overrides": {"light": {...}}
+    }
+    """
+    data = request.get_json() or {}
+    habitat_config = {
+        "lighting": data.get("lighting", "auto"),
+        "temperature": data.get("temperature", 21.0),
+        "activities": data.get("activities", []),
+        "module_overrides": data.get("module_overrides", {}),
+        "updated_at_ms": int(time.time() * 1000),
+    }
+
+    # Update in brain graph
+    svc = _svc()
+    try:
+        svc.update_node(
+            node_id=zone_id,
+            meta_update={"habitat_config": habitat_config},
+        )
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+    # Also inject into proactive engine
+    try:
+        from copilot_core.proactive_engine import ProactiveContextEngine
+        pe = ProactiveContextEngine()
+        pe.add_context("zone_habitat_update", {
+            "zone_id": zone_id,
+            "habitat_config": habitat_config,
+        })
+    except Exception:
+        pass
+
+    return jsonify({"ok": True, "zone_id": zone_id, "habitat_config": habitat_config})
+
+
+@bp.get("/zones/<zone_id>/status")
+def graph_zone_status(zone_id: str):
+    """Get current status of a zone including devices, mood, and activity (F6.1)."""
+    svc = _svc()
+    state = svc.get_graph_state(limit_nodes=2000, limit_edges=4000)
+    nodes = state.get("nodes", [])
+
+    # Find the zone node
+    zone_node = None
+    for n in nodes:
+        if n["id"] == zone_id:
+            zone_node = n
+            break
+
+    if not zone_node:
+        return jsonify({"ok": False, "error": "zone not found"}), 404
+
+    # Find connected devices and entities
+    edges = state.get("edges", [])
+    connected_nodes = set()
+    for e in edges:
+        if e.get("from_node") == zone_id:
+            connected_nodes.add(e.get("to_node"))
+        if e.get("to_node") == zone_id:
+            connected_nodes.add(e.get("from_node"))
+
+    device_nodes = [n for n in nodes if n["id"] in connected_nodes and n.get("kind") == "device"]
+    entity_nodes = [n for n in nodes if n["id"] in connected_nodes and n.get("kind") == "entity"]
+    person_nodes = [n for n in nodes if n["id"] in connected_nodes and n.get("kind") == "person"]
+
+    # Count anomalies in this zone
+    zone_anomalies = [
+        n for n in nodes
+        if n.get("meta", {}).get("anomaly_score") is not None
+        and n.get("meta", {}).get("zone_id") == zone_id
+    ]
+
+    return jsonify({
+        "ok": True,
+        "zone": {
+            "zone_id": zone_node["id"],
+            "label": zone_node.get("label", ""),
+            "kind": zone_node.get("kind", "zone"),
+            "score": zone_node.get("score", 0.0),
+            "habitat_config": zone_node.get("meta", {}).get("habitat_config", {}),
+            "updated_at_ms": zone_node.get("updated_at_ms", 0),
+        },
+        "devices": [{"id": d["id"], "label": d.get("label", ""), "score": d.get("score", 0.0)} for d in device_nodes],
+        "entities": [{"id": e["id"], "label": e.get("label", ""), "kind": e.get("kind", "entity")} for e in entity_nodes],
+        "persons": [{"id": p["id"], "label": p.get("label", "")} for p in person_nodes],
+        "anomaly_count": len(zone_anomalies),
+        "connected_count": len(connected_nodes),
+    })
+
+
+# ---------------------------------------------------------------------------
+# F6.2 — Dashboard Widget Bundle
+# Aggregated summary: PV + Anomalies + Automation + Brain Graph
+# ---------------------------------------------------------------------------
+
+@bp.get("/dashboard/summary")
+def graph_dashboard_summary():
+    """Aggregated dashboard summary for widget bundle (F6.2).
+
+    Returns:
+    - Brain graph state (nodes, edges, zones, devices)
+    - Active anomalies (count + latest)
+    - Active automation rules (count + triggered recently)
+    - PV forecast summary (if available)
+    - Proactive engine context buckets
+    """
+    svc = _svc()
+
+    # --- Brain graph ---
+    state = svc.get_graph_state(limit_nodes=1000, limit_edges=2000)
+    nodes = state.get("nodes", [])
+    edges = state.get("edges", [])
+    zone_nodes = [n for n in nodes if n.get("kind") == "zone"]
+    device_nodes = [n for n in nodes if n.get("kind") == "device"]
+
+    # --- Anomalies ---
+    try:
+        from copilot_core.ml.anomaly_detector import AnomalyDetector, AnomalyConfig
+        detector = AnomalyDetector(config=AnomalyConfig())
+        history = detector.get_anomaly_history(limit=20)
+        anomaly_entries = [r.to_dict() for r in history if r.is_anomaly]
+    except Exception:
+        anomaly_entries = []
+        history = []
+
+    # --- Automation rules ---
+    matcher = _get_rule_matcher()
+    active_rules = matcher.list_rules(status=None)
+    triggered_recent = [
+        r.to_dict() for r in active_rules
+        if r.last_triggered_ms and (int(time.time() * 1000) - r.last_triggered_ms) < 3600000
+    ]
+
+    # --- PV forecast (best effort) ---
+    pv_status = {}
+    try:
+        from copilot_core.energy.pv_prediction import PVPredictionEngine
+        pv_engine = PVPredictionEngine()
+        pv_state = pv_engine.get_current_state()
+        if pv_state:
+            pv_status = {
+                "current_power_kw": pv_state.get("current_power_kw", 0),
+                "peak_today_kw": pv_state.get("peak_today_kw", 0),
+                "today_energy_wh": pv_state.get("today_energy_wh", 0),
+            }
+    except Exception:
+        pv_status = {"available": False}
+
+    # --- Proactive context ---
+    try:
+        from copilot_core.proactive_engine import ProactiveContextEngine
+        pe = ProactiveContextEngine()
+        context_keys = list(pe._context_store.keys()) if hasattr(pe, "_context_store") else []
+        context_counts = {k: len(v) for k, v in pe._context_store.items()} if hasattr(pe, "_context_store") else {}
+    except Exception:
+        context_keys = []
+        context_counts = {}
+
+    # --- Execution log ---
+    executor = _get_rule_executor()
+    recent_executions = executor.get_execution_log(limit=5)
+
+    return jsonify({
+        "ok": True,
+        "generated_at_ms": int(time.time() * 1000),
+        "brain_graph": {
+            "nodes": len(nodes),
+            "edges": len(edges),
+            "zones": len(zone_nodes),
+            "devices": len(device_nodes),
+        },
+        "anomalies": {
+            "active_count": len(anomaly_entries),
+            "recent": anomaly_entries[:5],
+        },
+        "automation": {
+            "total_rules": len(active_rules),
+            "triggered_last_hour": len(triggered_recent),
+            "recent_executions": recent_executions,
+        },
+        "pv": pv_status,
+        "proactive_engine": {
+            "context_buckets": context_keys,
+            "context_counts": context_counts,
+        },
+    })
