@@ -291,3 +291,214 @@ def clear_cache():
         "message": "Cache cleared",
         "timestamp_ms": int(time.time() * 1000)
     })
+
+
+# ---------------------------------------------------------------------------
+# F4.3 — Brain Graph Anomaly Detection
+# Bridge: brain_graph service + anomaly_detector + proactive_engine
+# ---------------------------------------------------------------------------
+
+@bp.get("/anomalies")
+def graph_anomalies():
+    """Current anomalies from the ML anomaly detector.
+
+    Returns active anomaly entries with level, score, sensor_id, and
+    contributing features. Each can be acknowledged via
+    POST /graph/anomalies/{idx}/acknowledge.
+
+    Query params:
+        level: minimum AnomalyLevel (normal/low/medium/high/critical)
+        limit: max results (default 50)
+    """
+    try:
+        from copilot_core.ml.anomaly_detector import AnomalyDetector, AnomalyConfig
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"anomaly module unavailable: {e}"}), 503
+
+    level_map = {"normal": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
+    min_level = level_map.get(request.args.get("level", "low"), 1)
+    try:
+        limit = min(200, max(1, int(request.args.get("limit", 50))))
+    except (ValueError, TypeError):
+        limit = 50
+
+    detector = AnomalyDetector(config=AnomalyConfig())
+    history = detector.get_anomaly_history(limit=limit * 2)
+
+    filtered = []
+    for r in history:
+        if level_map.get(r.level.value, 0) >= min_level:
+            filtered.append(r)
+            if len(filtered) >= limit:
+                break
+
+    # Also pull anomaly-tagged nodes from brain graph
+    svc = _svc()
+    state = svc.get_graph_state(limit_nodes=300, limit_edges=600)
+    nodes = state.get("nodes", [])
+    anomaly_nodes = [
+        n for n in nodes
+        if n.get("meta", {}).get("anomaly_score") is not None
+    ]
+    for n in anomaly_nodes:
+        score = n["meta"].get("anomaly_score", 0.0)
+        level_str = "normal"
+        if score < -0.9:
+            level_str = "critical"
+        elif score < -0.7:
+            level_str = "high"
+        elif score < -0.5:
+            level_str = "medium"
+        elif score < -0.3:
+            level_str = "low"
+        filtered.append(_bg_anomaly_from_node(score, level_str, n["id"], n.get("updated_at_ms", 0)))
+
+    return jsonify({
+        "ok": True,
+        "count": len(filtered),
+        "anomalies": [r.to_dict() for r in filtered[:limit]],
+    })
+
+
+def _bg_anomaly_from_node(score: float, level_str: str, sensor_id: str, updated_at_ms: int):
+    """Build a lightweight anomaly-like object from a brain graph node."""
+    iso = ""
+    try:
+        from datetime import datetime, timezone
+        iso = datetime.fromtimestamp(updated_at_ms / 1000, tz=timezone.utc).isoformat()
+    except Exception:
+        iso = str(updated_at_ms)
+
+    class _Obj:
+        pass
+    obj = _Obj()
+    obj.score = score
+    obj.level = type("_Lvl", (), {"value": level_str})()
+    obj.sensor_id = sensor_id
+    obj.timestamp = type("_Ts", (), {"isoformat": lambda s: iso})()
+    obj.features = {}
+    obj.contributing_features = []
+    obj.is_anomaly = score < -0.3
+    obj.to_dict = lambda self: {
+        "score": self.score,
+        "level": self.level.value,
+        "sensor_id": self.sensor_id,
+        "timestamp": self.timestamp.isoformat(),
+        "features": self.features,
+        "contributing_features": self.contributing_features,
+        "is_anomaly": self.is_anomaly,
+    }
+    return obj
+
+
+@bp.get("/anomalies/history")
+def graph_anomalies_history():
+    """Full anomaly history with optional sensor filter."""
+    sensor_id = request.args.get("sensor_id")
+    limit = min(200, max(1, int(request.args.get("limit", 100))))
+
+    try:
+        from copilot_core.ml.anomaly_detector import AnomalyDetector, AnomalyConfig
+    except Exception:
+        return jsonify({"ok": False, "anomalies": [], "count": 0})
+
+    detector = AnomalyDetector(config=AnomalyConfig())
+    history = detector.get_anomaly_history(sensor_id=sensor_id, limit=limit)
+
+    seen = set()
+    unique = []
+    for r in history:
+        key = (r.sensor_id, int(r.timestamp.timestamp()))
+        if key not in seen:
+            seen.add(key)
+            unique.append(r)
+
+    return jsonify({
+        "ok": True,
+        "count": len(unique),
+        "anomalies": [u.to_dict() for u in unique],
+        "sensor_id": sensor_id,
+    })
+
+
+@bp.post("/anomalies/<int:anomaly_idx>/acknowledge")
+def graph_anomalies_acknowledge(anomaly_idx: int):
+    """Acknowledge and dismiss an anomaly entry (F4.3)."""
+    svc = _svc()
+    state = svc.get_graph_state(limit_nodes=500, limit_edges=1000)
+    nodes = state.get("nodes", [])
+    anomaly_nodes = [
+        n for n in nodes
+        if n.get("meta", {}).get("anomaly_score") is not None
+    ]
+    if anomaly_idx < 0 or anomaly_idx >= len(anomaly_nodes):
+        return jsonify({"ok": False, "error": "anomaly index out of range"}), 404
+
+    target = anomaly_nodes[anomaly_idx]
+    node_id = target["id"]
+
+    try:
+        svc.update_node(
+            node_id=node_id,
+            meta_update={"anomaly_acknowledged": True, "acknowledged_at_ms": int(time.time() * 1000)},
+        )
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+    try:
+        from copilot_core.proactive_engine import ProactiveContextEngine
+        pe = ProactiveContextEngine()
+        pe.add_context("anomaly_acknowledged", {
+            "entity_id": node_id,
+            "idx": anomaly_idx,
+            "ts": int(time.time()),
+        })
+    except Exception:
+        pass
+
+    return jsonify({"ok": True, "node_id": node_id, "acknowledged": True})
+
+
+@bp.get("/e2e/status")
+def graph_e2e_status():
+    """End-to-end system status: brain graph + anomaly + proactive."""
+    svc = _svc()
+    state = svc.get_graph_state(limit_nodes=1000, limit_edges=2000)
+    node_count = len(state.get("nodes", []))
+    edge_count = len(state.get("edges", []))
+    zone_nodes = [n for n in state.get("nodes", []) if n.get("kind") == "zone"]
+    device_nodes = [n for n in state.get("nodes", []) if n.get("kind") == "device"]
+
+    try:
+        from copilot_core.ml.anomaly_detector import AnomalyDetector, AnomalyConfig
+        detector = AnomalyDetector(config=AnomalyConfig())
+        history = detector.get_anomaly_history(limit=100)
+        anomaly_count = sum(1 for r in history if r.is_anomaly)
+        last_anomaly = history[-1].to_dict() if history else None
+    except Exception:
+        anomaly_count = -1
+        last_anomaly = None
+
+    try:
+        from copilot_core.proactive_engine import ProactiveContextEngine
+        pe = ProactiveContextEngine()
+        context_keys = list(pe._context_store.keys()) if hasattr(pe, "_context_store") else []
+    except Exception:
+        context_keys = []
+
+    return jsonify({
+        "ok": True,
+        "brain_graph": {
+            "nodes": node_count,
+            "edges": edge_count,
+            "zones": len(zone_nodes),
+            "devices": len(device_nodes),
+        },
+        "anomaly_detector": {
+            "active_anomalies": anomaly_count,
+            "last_anomaly": last_anomaly,
+        },
+        "proactive_engine": {
+            "context_buckets": context_keys,
+        },
+    })
