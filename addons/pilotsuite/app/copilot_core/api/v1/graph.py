@@ -750,3 +750,342 @@ def graph_snapshot_svg():
     resp = make_response("\n".join(parts), 200)
     resp.headers["Content-Type"] = "image/svg+xml; charset=utf-8"
     return resp
+
+
+# ---------------------------------------------------------------------------
+# F4.5 — Proactive Engine e2e Kabelung
+# Anomaly → Proactive Context → Suggestion → Automation Trigger
+# ---------------------------------------------------------------------------
+
+@bp.get("/suggestions")
+def graph_suggestions():
+    """Return current proactive suggestions driven by brain graph state.
+
+    This endpoint combines:
+    - Brain graph node state
+    - Active anomaly alerts
+    - Zone/presence context
+    - Habit patterns
+
+    Into actionable suggestions for the user.
+
+    Query params:
+        zone: filter by zone_id (optional)
+        type: filter by suggestion type (optional)
+        limit: max suggestions (default 10)
+    """
+    from copilot_core.proactive_engine import ProactiveContextEngine
+
+    try:
+        limit = min(50, max(1, int(request.args.get("limit", 10))))
+    except (ValueError, TypeError):
+        limit = 10
+
+    zone_filter = request.args.get("zone")
+    type_filter = request.args.get("type")
+
+    # Build context from brain graph
+    svc = _svc()
+    state = svc.get_graph_state(limit_nodes=500, limit_edges=1000)
+    nodes = state.get("nodes", [])
+
+    # --- Inject anomalies into proactive context ---
+    pe = ProactiveContextEngine()
+
+    # Push anomaly context
+    anomaly_nodes = [
+        n for n in nodes
+        if n.get("meta", {}).get("anomaly_score") is not None
+    ]
+    for n in anomaly_nodes:
+        score = n["meta"].get("anomaly_score", 0.0)
+        severity = "critical" if score < -0.8 else "high" if score < -0.6 else "warning"
+        pe.add_context("anomaly", {
+            "entity_id": n["id"],
+            "kind": n.get("kind", "unknown"),
+            "score": score,
+            "severity": severity,
+            "label": n.get("label", n["id"]),
+            "zone_id": n.get("meta", {}).get("zone_id"),
+        })
+
+    # Push zone context
+    zone_nodes = [n for n in nodes if n.get("kind") == "zone"]
+    for z in zone_nodes:
+        pe.add_context("zone", {
+            "zone_id": z["id"],
+            "label": z.get("label", z["id"]),
+            "score": z.get("score", 0.0),
+            "node_data": z,
+        })
+
+    # --- Build evaluation context ---
+    ctx = {
+        "zone_id": zone_filter or "unknown",
+        "persons_home": _extract_persons(nodes),
+        "total_home": len(_extract_persons(nodes)),
+    }
+    if zone_filter:
+        ctx["zone_id"] = zone_filter
+
+    # --- Get suggestions from proactive engine ---
+    all_suggestions = []
+    try:
+        all_suggestions = pe.get_suggestions(ctx)
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e), "suggestions": []}), 500
+
+    # Apply filters
+    if zone_filter:
+        all_suggestions = [s for s in all_suggestions if s.get("zone_id") == zone_filter or not s.get("zone_id")]
+    if type_filter:
+        all_suggestions = [s for s in all_suggestions if s.get("type") == type_filter]
+
+    return jsonify({
+        "ok": True,
+        "count": len(all_suggestions),
+        "anomaly_context_injected": len(anomaly_nodes),
+        "zone_context_injected": len(zone_nodes),
+        "suggestions": all_suggestions[:limit],
+    })
+
+
+def _extract_persons(nodes: list) -> list:
+    """Extract person node IDs from brain graph."""
+    return [n["id"] for n in nodes if n.get("kind") == "person"]
+
+
+@bp.post("/trigger/automation")
+def graph_trigger_automation():
+    """Manually trigger an automation action based on brain graph state.
+
+    This endpoint allows testing automation triggers and supports
+    manual invocation of habit-based automations.
+
+    Request body:
+    {
+        "trigger_type": "zone_entry | anomaly_detected | pattern_match | manual",
+        "entity_id": "sensor.xxx",
+        "zone_id": "zone.wohnzimmer",
+        "action": "notify | adjust | query",
+        "params": {}
+    }
+    """
+    from copilot_core.proactive_engine import ProactiveContextEngine
+
+    data = request.get_json() or {}
+    trigger_type = data.get("trigger_type", "manual")
+    entity_id = data.get("entity_id", "")
+    zone_id = data.get("zone_id", "")
+    action = data.get("action", "query")
+    params = data.get("params", {})
+
+    pe = ProactiveContextEngine()
+
+    if trigger_type == "anomaly_detected" and entity_id:
+        pe.add_context("anomaly", {
+            "entity_id": entity_id,
+            "triggered_by": "manual_api",
+            "zone_id": zone_id,
+            "params": params,
+        })
+    elif trigger_type == "zone_entry" and entity_id and zone_id:
+        pe.on_zone_entry(entity_id, zone_id)
+    elif trigger_type == "pattern_match" and entity_id:
+        pe.add_context("pattern", {
+            "entity_id": entity_id,
+            "params": params,
+        })
+
+    # Deliver the action
+    if action == "notify":
+        result = pe.deliver_suggestion({
+            "type": trigger_type,
+            "message": params.get("message", f"{trigger_type} triggered for {entity_id}"),
+            "entity_id": entity_id,
+        }, method="notification")
+    elif action == "adjust":
+        result = pe.deliver_suggestion({
+            "type": trigger_type,
+            "message": f"Automation triggered: {entity_id}",
+            "action_taken": params,
+        }, method="notification")
+    else:
+        result = {"delivered": True, "method": action}
+
+    return jsonify({
+        "ok": True,
+        "trigger_type": trigger_type,
+        "entity_id": entity_id,
+        "action": action,
+        "result": result,
+    })
+
+
+@bp.get("/context/buckets")
+def graph_context_buckets():
+    """Show what context buckets are currently active in the proactive engine.
+
+    Returns the live context store showing which signals are currently
+    influencing suggestions. Useful for debugging the e2e chain.
+    """
+    from copilot_core.proactive_engine import ProactiveContextEngine
+
+    pe = ProactiveContextEngine()
+    buckets = {}
+    try:
+        for key, entries in pe._context_store.items():
+            buckets[key] = {
+                "count": len(entries),
+                "latest_ts": max((e.get("ts", 0) for e in entries), default=0),
+                "sample": entries[-1] if entries else None,
+            }
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+    return jsonify({
+        "ok": True,
+        "buckets": buckets,
+        "ttl_seconds": pe.CONTEXT_TTL_SECONDS,
+    })
+
+
+# ---------------------------------------------------------------------------
+# F4.5 — Proactive Engine e2e Kabelung
+# Anomaly → Proactive Context → Suggestion → Automation Trigger
+# ---------------------------------------------------------------------------
+
+@bp.get("/suggestions")
+def graph_suggestions():
+    """Return current proactive suggestions driven by brain graph state.
+
+    Combines brain graph node state, active anomaly alerts, zone/presence
+    context, and habit patterns into actionable suggestions.
+    """
+    from copilot_core.proactive_engine import ProactiveContextEngine
+
+    try:
+        limit = min(50, max(1, int(request.args.get("limit", 10))))
+    except (ValueError, TypeError):
+        limit = 10
+
+    zone_filter = request.args.get("zone")
+    type_filter = request.args.get("type")
+
+    svc = _svc()
+    state = svc.get_graph_state(limit_nodes=500, limit_edges=1000)
+    nodes = state.get("nodes", [])
+
+    pe = ProactiveContextEngine()
+
+    # Push anomaly context from brain graph nodes
+    anomaly_nodes = [n for n in nodes if n.get("meta", {}).get("anomaly_score") is not None]
+    for n in anomaly_nodes:
+        score = n["meta"].get("anomaly_score", 0.0)
+        severity = "critical" if score < -0.8 else "high" if score < -0.6 else "warning"
+        pe.add_context("anomaly", {
+            "entity_id": n["id"],
+            "kind": n.get("kind", "unknown"),
+            "score": score,
+            "severity": severity,
+            "label": n.get("label", n["id"]),
+            "zone_id": n.get("meta", {}).get("zone_id"),
+        })
+
+    # Push zone context
+    for z in nodes:
+        if z.get("kind") == "zone":
+            pe.add_context("zone", {
+                "zone_id": z["id"],
+                "label": z.get("label", z["id"]),
+                "score": z.get("score", 0.0),
+            })
+
+    ctx = {"zone_id": zone_filter or "unknown", "persons_home": _ep(nodes), "total_home": 0}
+    if zone_filter:
+        ctx["zone_id"] = zone_filter
+
+    try:
+        suggestions = pe.get_suggestions(ctx)
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e), "suggestions": []}), 500
+
+    if zone_filter:
+        suggestions = [s for s in suggestions if not s.get("zone_id") or s.get("zone_id") == zone_filter]
+    if type_filter:
+        suggestions = [s for s in suggestions if s.get("type") == type_filter]
+
+    return jsonify({
+        "ok": True,
+        "count": len(suggestions),
+        "anomaly_context_injected": len(anomaly_nodes),
+        "zone_context_injected": sum(1 for n in nodes if n.get("kind") == "zone"),
+        "suggestions": suggestions[:limit],
+    })
+
+
+def _ep(nodes):
+    """Extract person node IDs from brain graph."""
+    return [n["id"] for n in nodes if n.get("kind") == "person"]
+
+
+@bp.post("/trigger/automation")
+def graph_trigger_automation():
+    """Manually trigger an automation action."""
+    from copilot_core.proactive_engine import ProactiveContextEngine
+
+    data = request.get_json() or {}
+    trigger_type = data.get("trigger_type", "manual")
+    entity_id = data.get("entity_id", "")
+    zone_id = data.get("zone_id", "")
+    action = data.get("action", "query")
+    params = data.get("params", {})
+
+    pe = ProactiveContextEngine()
+
+    if trigger_type == "anomaly_detected" and entity_id:
+        pe.add_context("anomaly", {
+            "entity_id": entity_id, "triggered_by": "manual_api",
+            "zone_id": zone_id, "params": params,
+        })
+    elif trigger_type == "zone_entry" and entity_id and zone_id:
+        pe.on_zone_entry(entity_id, zone_id)
+    elif trigger_type == "pattern_match" and entity_id:
+        pe.add_context("pattern", {"entity_id": entity_id, "params": params})
+
+    if action == "notify":
+        result = pe.deliver_suggestion({
+            "type": trigger_type,
+            "message": params.get("message", f"{trigger_type} for {entity_id}"),
+            "entity_id": entity_id,
+        }, method="notification")
+    elif action == "adjust":
+        result = pe.deliver_suggestion({
+            "type": trigger_type, "message": f"Automation: {entity_id}",
+            "action_taken": params,
+        }, method="notification")
+    else:
+        result = {"delivered": True, "method": action}
+
+    return jsonify({"ok": True, "trigger_type": trigger_type,
+                    "entity_id": entity_id, "action": action, "result": result})
+
+
+@bp.get("/context/buckets")
+def graph_context_buckets():
+    """Show live context buckets in the proactive engine."""
+    from copilot_core.proactive_engine import ProactiveContextEngine
+
+    pe = ProactiveContextEngine()
+    buckets = {}
+    try:
+        for key, entries in pe._context_store.items():
+            buckets[key] = {
+                "count": len(entries),
+                "latest_ts": max((e.get("ts", 0) for e in entries), default=0),
+                "sample": entries[-1] if entries else None,
+            }
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+    return jsonify({"ok": True, "buckets": buckets, "ttl_seconds": pe.CONTEXT_TTL_SECONDS})
