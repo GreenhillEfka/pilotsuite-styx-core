@@ -1089,3 +1089,193 @@ def graph_context_buckets():
         return jsonify({"ok": False, "error": str(e)}), 500
 
     return jsonify({"ok": True, "buckets": buckets, "ttl_seconds": pe.CONTEXT_TTL_SECONDS})
+
+
+# ---------------------------------------------------------------------------
+# F4.6 — Automation Rule Engine API
+# CRUD for rules + matcher evaluation endpoint
+# ---------------------------------------------------------------------------
+
+_rule_matcher: Optional["RuleMatcher"] = None
+_rule_executor: Optional["RuleExecutor"] = None
+
+def _get_rule_matcher() -> "RuleMatcher":
+    global _rule_matcher
+    if _rule_matcher is None:
+        from copilot_core.autonomy.rule_engine import RuleMatcher
+        _rule_matcher = RuleMatcher()
+        _rule_matcher.load_defaults()
+    return _rule_matcher
+
+def _get_rule_executor() -> "RuleExecutor":
+    global _rule_executor
+    if _rule_executor is None:
+        from copilot_core.autonomy.rule_engine import RuleExecutor
+        _rule_executor = RuleExecutor()
+    return _rule_executor
+
+
+@bp.get("/automation/rules")
+def list_automation_rules():
+    """List all automation rules (F4.6)."""
+    matcher = _get_rule_matcher()
+    tag = request.args.get("tag")
+    status = request.args.get("status")
+    rules = matcher.list_rules(tag=tag, status=status)
+    return jsonify({
+        "ok": True,
+        "count": len(rules),
+        "rules": [r.to_dict() for r in rules],
+    })
+
+
+@bp.post("/automation/rules")
+def create_automation_rule():
+    """Create a new automation rule (F4.6)."""
+    from copilot_core.autonomy.rule_engine import AutomationRule, RuleCondition, RuleAction, ConditionOp
+
+    data = request.get_json() or {}
+    rule_id = data.get("rule_id")
+    if not rule_id:
+        return jsonify({"ok": False, "error": "rule_id required"}), 400
+
+    matcher = _get_rule_matcher()
+    if rule_id in matcher._rules:
+        return jsonify({"ok": False, "error": "rule_id already exists"}), 409
+
+    conditions = []
+    for c in data.get("conditions", []):
+        op = ConditionOp(c.get("operator", "eq"))
+        conditions.append(RuleCondition(field=c.get("field", ""), operator=op, value=c.get("value")))
+
+    actions = []
+    for a in data.get("actions", []):
+        actions.append(RuleAction(
+            action_type=a.get("action_type", "notify"),
+            entity_id=a.get("entity_id", ""),
+            params=a.get("params", {}),
+        ))
+
+    rule = AutomationRule(
+        rule_id=rule_id,
+        name=data.get("name", rule_id),
+        description=data.get("description", ""),
+        conditions=conditions,
+        actions=actions,
+        cooldown_seconds=data.get("cooldown_seconds", 60),
+        require_all_conditions=data.get("require_all_conditions", True),
+        tags=data.get("tags", []),
+        priority=data.get("priority", 0),
+    )
+    matcher.add_rule(rule)
+    return jsonify({"ok": True, "rule": rule.to_dict()})
+
+
+@bp.get("/automation/rules/<rule_id>")
+def get_automation_rule(rule_id: str):
+    """Get a single rule by ID."""
+    matcher = _get_rule_matcher()
+    rule = matcher.get_rule(rule_id)
+    if not rule:
+        return jsonify({"ok": False, "error": "rule not found"}), 404
+    return jsonify({"ok": True, "rule": rule.to_dict()})
+
+
+@bp.delete("/automation/rules/<rule_id>")
+def delete_automation_rule(rule_id: str):
+    """Delete a rule."""
+    matcher = _get_rule_matcher()
+    removed = matcher.remove_rule(rule_id)
+    if not removed:
+        return jsonify({"ok": False, "error": "rule not found"}), 404
+    return jsonify({"ok": True, "deleted": rule_id})
+
+
+@bp.post("/automation/rules/<rule_id>/pause")
+def pause_automation_rule(rule_id: str):
+    """Pause a rule (F4.6)."""
+    from copilot_core.autonomy.rule_engine import RuleStatus
+    matcher = _get_rule_matcher()
+    rule = matcher.get_rule(rule_id)
+    if not rule:
+        return jsonify({"ok": False, "error": "rule not found"}), 404
+    rule.status = RuleStatus.PAUSED
+    return jsonify({"ok": True, "rule_id": rule_id, "status": "paused"})
+
+
+@bp.post("/automation/rules/<rule_id>/resume")
+def resume_automation_rule(rule_id: str):
+    """Resume a paused rule (F4.6)."""
+    from copilot_core.autonomy.rule_engine import RuleStatus
+    matcher = _get_rule_matcher()
+    rule = matcher.get_rule(rule_id)
+    if not rule:
+        return jsonify({"ok": False, "error": "rule not found"}), 404
+    rule.status = RuleStatus.ACTIVE
+    return jsonify({"ok": True, "rule_id": rule_id, "status": "active"})
+
+
+@bp.post("/automation/evaluate")
+def evaluate_automation():
+    """Evaluate all active rules against current context (F4.6).
+
+    Builds context from brain graph + anomaly detector + proactive engine,
+    runs the matcher, executes matched rules.
+    """
+    data = request.get_json() or {}
+    override_ctx = data.get("context", {})
+
+    svc = _svc()
+    state = svc.get_graph_state(limit_nodes=500, limit_edges=1000)
+    nodes = state.get("nodes", [])
+
+    # Build context from brain graph
+    ctx = dict(override_ctx)
+    ctx["nodes"] = nodes
+    ctx["node_count"] = len(nodes)
+    ctx["evaluated_at_ms"] = int(time.time() * 1000)
+
+    # Inject anomaly scores
+    anomaly_nodes = [n for n in nodes if n.get("meta", {}).get("anomaly_score") is not None]
+    if anomaly_nodes:
+        ctx["anomaly"] = {
+            "count": len(anomaly_nodes),
+            "score": min((n["meta"]["anomaly_score"] for n in anomaly_nodes), default=0.0),
+            "top_entity": anomaly_nodes[0]["id"] if anomaly_nodes else None,
+        }
+
+    # Inject zone context
+    zones = {n["id"]: n for n in nodes if n.get("kind") == "zone"}
+    ctx["zones"] = zones
+
+    # Inject presence
+    ctx["presence"] = {"persons_home": [n["id"] for n in nodes if n.get("kind") == "person"]}
+
+    matcher = _get_rule_matcher()
+    matched = matcher.match_all(ctx)
+
+    executor = _get_rule_executor()
+    results = []
+    for rule in matched:
+        result = executor.execute(rule, ctx)
+        results.append(result)
+
+    return jsonify({
+        "ok": True,
+        "context_keys": list(ctx.keys()),
+        "rules_evaluated": len(matcher._rules),
+        "rules_matched": len(matched),
+        "executions": results,
+    })
+
+
+@bp.get("/automation/execution-log")
+def get_execution_log():
+    """Get the rule execution log (F4.6)."""
+    executor = _get_rule_executor()
+    limit = min(100, max(1, int(request.args.get("limit", 50))))
+    return jsonify({
+        "ok": True,
+        "count": len(executor._execution_log),
+        "log": executor.get_execution_log(limit=limit),
+    })
