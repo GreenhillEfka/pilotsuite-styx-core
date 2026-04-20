@@ -170,7 +170,7 @@ def graph_topology():
         "edges": [{"from": e["from_node"], "to": e["to_node"]} for e in edges],
     })
 
-@bp.get("/snapshot.svg")
+@bp.get("/snapshot-legacy.svg")
 def graph_snapshot_svg():
     """Generate a live SVG visualization of the brain graph."""
     import math
@@ -502,3 +502,251 @@ def graph_e2e_status():
             "context_buckets": context_keys,
         },
     })
+
+
+# ---------------------------------------------------------------------------
+# F4.4 — Brain Graph Export & Snapshots
+# Full-state export + neuron summary + anomaly export
+# ---------------------------------------------------------------------------
+
+@bp.get("/export")
+def graph_export():
+    """Export the current brain graph state as JSON.
+
+    Returns the full node + edge set with metadata, scores, and
+    timestamps. Use this for backup, debugging, or downstream consumers.
+
+    Query params:
+        format: json (default, only json for now)
+        nodes: max nodes to include (default 500, max 2000)
+        edges: max edges to include (default 1000, max 4000)
+    """
+    try:
+        limit_nodes = min(2000, max(1, int(request.args.get("nodes", 500))))
+        limit_edges = min(4000, max(1, int(request.args.get("edges", 1000))))
+    except (ValueError, TypeError):
+        limit_nodes, limit_edges = 500, 1000
+
+    state = _svc().get_graph_state(
+        limit_nodes=limit_nodes,
+        limit_edges=limit_edges,
+    )
+
+    return jsonify({
+        "ok": True,
+        "exported_at_ms": int(time.time() * 1000),
+        "nodes": state.get("nodes", []),
+        "edges": state.get("edges", []),
+        "node_count": len(state.get("nodes", [])),
+        "edge_count": len(state.get("edges", [])),
+    })
+
+
+@bp.get("/neuron-summary")
+def graph_neuron_summary():
+    """Compact neuron summary for dashboard consumption.
+
+    Returns one entry per unique node kind + domain, with aggregated
+    node count, average score, and last-updated timestamp.
+    Used by the dashboard neuron panel.
+    """
+    state = _svc().get_graph_state(limit_nodes=2000, limit_edges=4000)
+    nodes = state.get("nodes", [])
+
+    summary: Dict[str, Dict[str, Any]] = {}
+    for node in nodes:
+        kind = node.get("kind", "unknown")
+        domain = node.get("domain", "unknown")
+        key = f"{kind}:{domain}"
+        if key not in summary:
+            summary[key] = {
+                "kind": kind,
+                "domain": domain,
+                "count": 0,
+                "score_sum": 0.0,
+                "updated_at_ms_min": None,
+                "updated_at_ms_max": None,
+            }
+        s = summary[key]
+        s["count"] += 1
+        s["score_sum"] += node.get("score", 0.0)
+        ms = node.get("updated_at_ms", 0)
+        if ms:
+            if s["updated_at_ms_min"] is None or ms < s["updated_at_ms_min"]:
+                s["updated_at_ms_min"] = ms
+            if s["updated_at_ms_max"] is None or ms > s["updated_at_ms_max"]:
+                s["updated_at_ms_max"] = ms
+
+    result = []
+    for key, s in summary.items():
+        avg_score = s["score_sum"] / s["count"] if s["count"] else 0.0
+        result.append({
+            "kind": s["kind"],
+            "domain": s["domain"],
+            "count": s["count"],
+            "avg_score": round(avg_score, 3),
+            "last_updated_ms": s["updated_at_ms_max"],
+            "oldest_node_ms": s["updated_at_ms_min"],
+        })
+
+    result.sort(key=lambda x: x["count"], reverse=True)
+    return jsonify({
+        "ok": True,
+        "neuron_groups": result,
+        "total_nodes": len(nodes),
+    })
+
+
+@bp.get("/export/anomalies")
+def graph_export_anomalies():
+    """Export full anomaly history as JSON for external consumers.
+
+    Query params:
+        sensor_id: filter by sensor (optional)
+        level: minimum level (low/medium/high/critical)
+        format: json (default)
+    """
+    sensor_id = request.args.get("sensor_id")
+    min_level = request.args.get("level", "low")
+    level_map = {"normal": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
+    min_idx = level_map.get(min_level, 1)
+    limit = min(200, max(1, int(request.args.get("limit", 100))))
+
+    try:
+        from copilot_core.ml.anomaly_detector import AnomalyDetector, AnomalyConfig
+        detector = AnomalyDetector(config=AnomalyConfig())
+        history = detector.get_anomaly_history(sensor_id=sensor_id, limit=limit)
+    except Exception:
+        history = []
+
+    filtered = []
+    for r in history:
+        if level_map.get(r.level.value, 0) >= min_idx:
+            filtered.append(r.to_dict())
+
+    return jsonify({
+        "ok": True,
+        "exported_at_ms": int(time.time() * 1000),
+        "anomaly_count": len(filtered),
+        "filter": {"sensor_id": sensor_id, "level": min_level},
+        "anomalies": filtered,
+    })
+
+
+@bp.get("/snapshot.svg")
+def graph_snapshot_svg():
+    """Enhanced SVG brain graph with anomaly overlay (F4.4).
+
+    Renders nodes with color-coded anomaly scores and provides
+    a visual summary layer for the dashboard.
+    """
+    import math
+
+    state = _svc().get_graph_state(limit_nodes=60, limit_edges=120)
+    nodes = state.get("nodes", [])
+    edges = state.get("edges", [])
+
+    if not nodes:
+        svg = (
+            '<?xml version="1.0" encoding="UTF-8"?>\n'
+            '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="120">\n'
+            '  <rect width="100%" height="100%" fill="#111"/>\n'
+            '  <text x="20" y="60" fill="#aaa" font-family="monospace" font-size="14">'
+            'Brain Graph: no nodes yet</text>\n'
+            '</svg>\n'
+        )
+        resp = make_response(svg, 200)
+        resp.headers["Content-Type"] = "image/svg+xml; charset=utf-8"
+        return resp
+
+    W, H = 900, 640
+    node_pos = {}
+    cx, cy, r = W / 2, H / 2, min(W, H) / 2 - 60
+    for i, node in enumerate(nodes):
+        angle = 2 * math.pi * i / len(nodes)
+        node_pos[node["id"]] = (cx + r * math.cos(angle), cy + r * math.sin(angle))
+
+    kind_colors = {
+        "entity": "#4fc3f7", "zone": "#81c784", "device": "#ffb74d",
+        "service": "#ff8a65", "action": "#ce93d8", "concept": "#90a4ae",
+        "person": "#f48fb1", "module": "#80cbc4", "event": "#ffd54f",
+    }
+
+    def _score_to_color(score: float) -> str:
+        """Color-code by anomaly score."""
+        if score <= -0.8:
+            return "#ef5350"  # critical - red
+        elif score <= -0.6:
+            return "#ff7043"  # high - orange
+        elif score <= -0.3:
+            return "#ffca28"  # medium - yellow
+        elif score <= 0.1:
+            return "#66bb6a"  # low/normal - green
+        else:
+            return "#42a5f5"  # positive - blue
+
+    parts = [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}">',
+        f'  <rect width="100%" height="100%" fill="#0d1117"/>',
+    ]
+
+    # Draw edges
+    for edge in edges:
+        src = node_pos.get(edge.get("from") or edge.get("from_node"))
+        tgt = node_pos.get(edge.get("to") or edge.get("to_node"))
+        if src and tgt:
+            parts.append(
+                f'  <line x1="{src[0]:.0f}" y1="{src[1]:.0f}" '
+                f'x2="{tgt[0]:.0f}" y2="{tgt[1]:.0f}" '
+                f'stroke="#263850" stroke-width="1" opacity="0.7"/>'
+            )
+
+    # Count anomaly nodes for overlay badge
+    anomaly_count = sum(
+        1 for n in nodes if n.get("meta", {}).get("anomaly_score") is not None
+    )
+
+    # Draw nodes
+    for node in nodes:
+        pos = node_pos.get(node["id"])
+        if not pos:
+            continue
+        meta = node.get("meta", {})
+        anomaly_score = meta.get("anomaly_score")
+        kind = node.get("kind", "entity")
+        base_color = kind_colors.get(kind, "#78909c")
+        label = node.get("label", node["id"])[:16]
+
+        if anomaly_score is not None:
+            node_color = _score_to_color(anomaly_score)
+            glow_r = 10
+            parts.append(
+                f'  <circle cx="{pos[0]:.0f}" cy="{pos[1]:.0f}" r="{glow_r}" '
+                f'fill="{node_color}" opacity="0.3"/>'
+            )
+        else:
+            node_color = base_color
+
+        parts.append(
+            f'  <circle cx="{pos[0]:.0f}" cy="{pos[1]:.0f}" r="6" fill="{node_color}"/>'
+        )
+        parts.append(
+            f'  <text x="{pos[0] + 8:.0f}" y="{pos[1] + 4:.0f}" fill="#ccc" '
+            f'font-family="monospace" font-size="9">{label}</text>'
+        )
+
+    # Status bar
+    parts.append(
+        f'  <text x="10" y="{H - 30}" fill="#7f8c8d" font-family="monospace" font-size="10">'
+        f'Neuronen: {len(nodes)} | Kanten: {len(edges)} | Anomalien: {anomaly_count}</text>'
+    )
+    parts.append(
+        f'  <text x="10" y="{H - 10}" fill="#555" font-family="monospace" font-size="9">'
+        f'PilotSuite Brain Graph {int(time.time())} | F4.4</text>'
+    )
+    parts.append('</svg>')
+
+    resp = make_response("\n".join(parts), 200)
+    resp.headers["Content-Type"] = "image/svg+xml; charset=utf-8"
+    return resp
