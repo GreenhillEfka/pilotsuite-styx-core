@@ -167,7 +167,7 @@ def graph_topology():
             {"id": n["id"], "kind": n.get("kind"), "domain": n.get("domain"), "label": n.get("label", n["id"])}
             for n in nodes
         ],
-        "edges": [{"from": e["from_node"], "to": e["to_node"]} for e in edges],
+        "edges": [{"from": e["from"], "to": e["to"]} for e in edges],
     })
 
 @bp.get("/snapshot-legacy.svg")
