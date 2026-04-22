@@ -1,9 +1,10 @@
 """CORE-AUTO-203-A proof ring: Zone/Habitus state -> Core rule decision -> notification."""
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 from copilot_core.autonomy.rule_engine import (
     RuleMatcher,
+    RuleExecutor,
     AutomationRule,
     RuleCondition,
     RuleAction,
@@ -11,7 +12,6 @@ from copilot_core.autonomy.rule_engine import (
     RuleStatus,
 )
 from copilot_core.notifications.engine import NotificationEngine
-from copilot_core.api.v1.notifications import NotificationType
 
 
 class TestZoneMoodAlertNotification:
@@ -89,6 +89,42 @@ class TestZoneMoodAlertNotification:
         matched = matcher.match_all(ctx_arrive)
         assert len(matched) == 1
         assert matched[0].rule_id == "person-arrive"
+
+    def test_rule_executor_zone_alert_executes_notification_with_interpolated_message(self):
+        """Matched zone alert rule executes the existing notification delivery seam."""
+        rule = AutomationRule(
+            rule_id="zone-mood-alert",
+            name="Zone Mood Alert Notification",
+            conditions=[
+                RuleCondition(field="zone_mood", operator=ConditionOp.EQ, value="alert")
+            ],
+            actions=[
+                RuleAction(
+                    action_type="notify",
+                    entity_id="mobile",
+                    params={"message": "Zone alert in {zone_id}"},
+                )
+            ],
+            tags=["zone", "notification"],
+        )
+        executor = RuleExecutor()
+        ctx_alert = {"zone_mood": "alert", "zone_id": "wohnzimmer"}
+
+        with patch("copilot_core.proactive_engine.ProactiveContextEngine") as proactive_cls:
+            proactive = proactive_cls.return_value
+            proactive.deliver_suggestion.return_value = {"ok": True, "method": "notification"}
+
+            result = executor.execute(rule, ctx_alert)
+
+        proactive.deliver_suggestion.assert_called_once_with(
+            {"type": "automation", "message": "Zone alert in wohnzimmer"},
+            method="notification",
+        )
+        assert result["action_results"][0]["ok"] is True
+        assert result["action_results"][0]["result"]["notified"] is True
+        assert result["action_results"][0]["result"]["message"] == "Zone alert in wohnzimmer"
+        assert rule.trigger_count == 1
+        assert executor.get_execution_log(limit=1)[0]["rule_id"] == "zone-mood-alert"
 
     def test_notification_engine_notify_returns_notification_object(self):
         """NotificationEngine.notify() returns a Notification object."""

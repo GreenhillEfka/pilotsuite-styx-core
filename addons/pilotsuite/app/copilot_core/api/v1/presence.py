@@ -415,6 +415,10 @@ def zone_presence_hold(zone_id: str):
             "error": f"Invalid hold state: {hold}. Must be one of: {VALID_HOLD_STATES}"
         }), 400
 
+    # Normalize zone_id to canonical form
+    if not zone_id.startswith("zone:"):
+        zone_id = f"zone:{zone_id}"
+
     # Store zone-level hold in a separate dict (not per-person)
     if not hasattr(presence_bp, "_zone_hold_map"):
         presence_bp._zone_hold_map = {}

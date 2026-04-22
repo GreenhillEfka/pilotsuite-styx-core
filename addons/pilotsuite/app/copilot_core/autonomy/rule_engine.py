@@ -12,6 +12,7 @@ Provides:
 
 from __future__ import annotations
 
+import json
 import logging
 import time
 from dataclasses import dataclass, field
@@ -207,8 +208,55 @@ class RuleMatcher:
             actions=[RuleAction(action_type="notify", params={"message": "SICHERHEITSALARM!", "priority": "critical"})],
             tags=["safety", "critical"], priority=100,
         ))
+
         self._default_rules_loaded = True
         logger.info("Default automation rules loaded: %d rules", len(self._rules))
+
+    def save(self, path: str) -> bool:
+        """Serialize all in-memory rules to a JSON file. Returns True on success, False on failure."""
+        try:
+            rules_data = [rule.to_dict() for rule in self._rules.values()]
+            payload = {"rules": rules_data}
+            with open(path, "w") as fh:
+                json.dump(payload, fh, indent=2)
+            return True
+        except Exception:
+            return False
+
+    def load(self, path: str) -> bool:
+        """Restore rules from a JSON file. Clears existing in-memory rules first. Returns True on success, False on failure."""
+        try:
+            with open(path) as fh:
+                payload = json.load(fh)
+            self._rules.clear()
+            self._default_rules_loaded = True
+            for rule_dict in payload.get("rules", []):
+                # Reconstruct RuleCondition and RuleAction from dict representations
+                conditions = [
+                    RuleCondition(
+                        field=c["field"],
+                        operator=ConditionOp(c["operator"]),
+                        value=c["value"],
+                    )
+                    for c in rule_dict.get("conditions", [])
+                ]
+                actions = [
+                    RuleAction(
+                        action_type=a["action_type"],
+                        entity_id=a.get("entity_id", ""),
+                        params=a.get("params", {}),
+                    )
+                    for a in rule_dict.get("actions", [])
+                ]
+                rule_dict_clean = dict(rule_dict)
+                rule_dict_clean["conditions"] = conditions
+                rule_dict_clean["actions"] = actions
+                if "status" in rule_dict_clean:
+                    rule_dict_clean["status"] = RuleStatus(rule_dict_clean["status"])
+                self.add_rule(AutomationRule(**rule_dict_clean))
+            return True
+        except Exception:
+            return False
 
 
 class RuleExecutor:

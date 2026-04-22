@@ -432,6 +432,7 @@ class ProactiveContextEngine:
         if not token:
             return {"ok": False, "error": "No SUPERVISOR_TOKEN"}
 
+        supervisor_api = os.environ.get("SUPERVISOR_API", SUPERVISOR_API)
         headers = {"Authorization": f"Bearer {token}",
                     "Content-Type": "application/json"}
         message = suggestion.get("message", "")
@@ -448,7 +449,7 @@ class ProactiveContextEngine:
             if tts_entity:
                 try:
                     requests.post(
-                        f"{SUPERVISOR_API}/services/tts/speak",
+                        f"{supervisor_api}/services/tts/speak",
                         json={"entity_id": tts_entity,
                               "message": message,
                               "cache": True},
@@ -460,13 +461,14 @@ class ProactiveContextEngine:
 
         # Fallback: persistent notification
         try:
-            requests.post(
-                f"{SUPERVISOR_API}/services/notify/persistent_notification",
+            response = requests.post(
+                f"{supervisor_api}/services/notify/persistent_notification",
                 json={"message": message, "title": "Styx"},
                 headers=headers, timeout=10,
             )
+            response.raise_for_status()
             return {"ok": True, "method": "notification"}
-        except Exception as exc:
+        except requests.RequestException as exc:
             return {"ok": False, "error": str(exc)}
 
     # ------------------------------------------------------------------
