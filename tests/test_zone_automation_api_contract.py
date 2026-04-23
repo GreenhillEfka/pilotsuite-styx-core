@@ -177,6 +177,25 @@ class TestZoneAutomationPresence:
                 )
                 data = r.get_json()
                 assert "actions" in data
+                actions = {a["action"] for a in data["actions"]}
+                assert "light.turn_on" in actions
+                assert "music.play" in actions
+
+    def test_post_presence_cleared_returns_light_and_music(self):
+        app = _make_app()
+        mock = _make_mock_controller()
+        with _with_auth():
+            with patch.object(zone_automation, '_controller', mock):
+                client = app.test_client()
+                r = client.post(
+                    "/api/v1/zone-automation/zones/wohnzimmer/presence",
+                    json={"detected": False},
+                )
+                assert r.status_code == 200, f"expected 200, got {r.status_code}"
+                data = r.get_json()
+                actions = {a["action"] for a in data["actions"]}
+                assert "light.turn_off" in actions
+                assert "music.stop" in actions
 
     def test_post_presence_requires_auth(self):
         app = _make_app()
