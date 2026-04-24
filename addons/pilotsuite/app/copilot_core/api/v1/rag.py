@@ -1000,7 +1000,70 @@ def rag_stats() -> Tuple[Any, int] | Any:
 
 
 # ══════════════════════════════════════════════════════════════════════════
-# ENDPOINT 6: POST /api/rag/index  –  Document Indexing
+# ENDPOINT 6: GET /api/rag/health  –  RAG Operational Readiness
+# ══════════════════════════════════════════════════════════════════════════
+
+@bp.route("/health", methods=["GET"])
+def rag_health() -> Tuple[Any, int] | Any:
+    """Return machine-checkable RAG operational readiness truth.
+
+    Returns BM25 readiness, semantic backend availability, and cache status.
+    No auth required — this is a read-only operational surface.
+    """
+    try:
+        bm25_ready = False
+        bm25_stats = {"available": False}
+        try:
+            bm25 = _get_bm25()
+            s = bm25.stats(namespace="default")
+            bm25_ready = True
+            bm25_stats = {
+                "available": True,
+                "doc_count": s.doc_count,
+                "term_count": s.term_count,
+            }
+        except Exception as e:
+            bm25_stats = {"available": False, "reason": str(e)}
+
+        semantic_available = False
+        semantic_reason = "semantic_backend_unavailable"
+        semantic_module = None
+        try:
+            backend = _load_semantic_backend()
+            if backend is not None:
+                semantic_available = True
+                semantic_reason = None
+                semantic_module = backend.module_path
+            else:
+                semantic_reason = "semantic_backend_unavailable"
+        except Exception:
+            semantic_reason = "semantic_backend_failed"
+
+        cache_status = {"available": False}
+        try:
+            cache = _get_rag_cache()
+            cache_status = {"available": True, "type": "redis" if hasattr(cache, 'redis') else "local"}
+        except Exception:
+            pass
+
+        healthy = bm25_ready and semantic_reason in (None, "semantic_backend_unavailable")
+        return jsonify({
+            "healthy": healthy,
+            "bm25": bm25_stats,
+            "semantic": {
+                "available": semantic_available,
+                "reason": semantic_reason,
+                "module": semantic_module,
+            },
+            "cache": cache_status,
+        })
+    except Exception as e:
+        logger.exception("RAG health check failed")
+        return jsonify({"healthy": False, "error": str(e)}), 500
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# ENDPOINT 6a: POST /api/rag/index  –  Document Indexing
 # ══════════════════════════════════════════════════════════════════════════
 
 @bp.route("/index", methods=["POST"])
@@ -1077,7 +1140,7 @@ def rag_index() -> Tuple[Any, int] | Any:
     except ValueError as exc:
         _metrics.record_error(str(exc))
         return jsonify({"error": str(exc)}), 400
-    except Exception:
+    except Exception as exc:
         _metrics.record_error(str(exc))
         logger.exception("RAG index failed")
         return jsonify({"error": "RAG index failed"}), 500
