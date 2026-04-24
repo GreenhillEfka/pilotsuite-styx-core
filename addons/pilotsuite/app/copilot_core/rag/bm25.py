@@ -503,6 +503,64 @@ class BM25SqliteIndex:
             }
         
         return result
+
+    def delete_document(self, *, namespace: str, doc_id: str) -> bool:
+        """Delete one document from the BM25 index.
+
+        Returns True when the document existed and was deleted, otherwise False.
+        """
+        if not doc_id:
+            return False
+
+        conn = self._get_conn()
+        now = datetime.now(timezone.utc).timestamp()
+
+        with self._lock:
+            row = conn.execute(
+                "SELECT doc_len FROM bm25_docs WHERE namespace = ? AND doc_id = ?",
+                (namespace, doc_id),
+            ).fetchone()
+            if row is None:
+                return False
+
+            doc_len = int(row["doc_len"] or 0)
+            terms = conn.execute(
+                "SELECT term FROM bm25_terms WHERE namespace = ? AND doc_id = ?",
+                (namespace, doc_id),
+            ).fetchall()
+
+            conn.execute(
+                "DELETE FROM bm25_terms WHERE namespace = ? AND doc_id = ?",
+                (namespace, doc_id),
+            )
+            conn.execute(
+                "DELETE FROM bm25_docs WHERE namespace = ? AND doc_id = ?",
+                (namespace, doc_id),
+            )
+
+            for term_row in terms:
+                term = str(term_row["term"])
+                conn.execute(
+                    "UPDATE bm25_term_stats SET df = df - 1 WHERE namespace = ? AND term = ?",
+                    (namespace, term),
+                )
+                conn.execute(
+                    "DELETE FROM bm25_term_stats WHERE namespace = ? AND term = ? AND df <= 0",
+                    (namespace, term),
+                )
+
+            conn.execute(
+                """
+                UPDATE bm25_namespace_stats
+                SET doc_count = CASE WHEN doc_count > 0 THEN doc_count - 1 ELSE 0 END,
+                    total_doc_len = CASE WHEN total_doc_len > ? THEN total_doc_len - ? ELSE 0 END,
+                    updated_at = ?
+                WHERE namespace = ?
+                """,
+                (doc_len, doc_len, now, namespace),
+            )
+            conn.commit()
+            return True
     
     def stats(self, *, namespace: str) -> BM25Stats:
         """Get index statistics."""

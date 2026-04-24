@@ -1385,6 +1385,140 @@ def rag_index() -> Tuple[Any, int] | Any:
 
 
 # ══════════════════════════════════════════════════════════════════════════
+# ENDPOINT 6a: POST /api/rag/documents  –  Single Document Create
+# ══════════════════════════════════════════════════════════════════════════
+
+@bp.route("/documents", methods=["POST"])
+def rag_documents_create() -> Tuple[Any, int] | Any:
+    """Create or update one document on the documented RAG document seam."""
+    rate_limit_response = _rate_limit_rag()
+    if rate_limit_response is not None:
+        return rate_limit_response
+
+    warnings: List[str] = []
+    ok = False
+    try:
+        data: Dict[str, Any] = request.get_json(silent=True) or {}
+        namespace = str(data.get("namespace", "default") or "default")
+        if not _validate_namespace(namespace):
+            return jsonify({"error": "invalid namespace format"}), 400
+
+        doc_id = str(data.get("doc_id", "") or "").strip()
+        content = str(data.get("content", "") or "").strip()
+        metadata = data.get("metadata")
+
+        if not doc_id:
+            return jsonify({"error": "doc_id required"}), 400
+        if not content:
+            return jsonify({"error": "content required"}), 400
+
+        bm25 = _get_bm25()
+        indexed, errors = bm25.upsert_documents(
+            namespace=namespace,
+            documents=[BM25Document(doc_id=doc_id, text=content, metadata=metadata)],
+        )
+
+        semantic_indexed = 0
+        semantic_degraded = False
+        semantic_reason = None
+        semantic_payload = [{"id": doc_id, "text": content, "metadata": metadata}]
+        semantic_indexed = _semantic_index(namespace=namespace, documents=semantic_payload, warnings=warnings)
+        if semantic_indexed == 0:
+            semantic_degraded = True
+            semantic_reason = "semantic_backend_unavailable_or_failed"
+
+        try:
+            cache = _get_rag_cache()
+            cache.invalidate_pattern(f"rag:*:{namespace}:*")
+        except Exception:
+            logger.debug("RAG cache invalidation failed after document create (non-critical)")
+
+        ok = True
+        return jsonify({
+            "namespace": namespace,
+            "doc_id": doc_id,
+            "created": indexed > 0,
+            "bm25_indexed": indexed > 0,
+            "semantic_indexed": semantic_indexed > 0,
+            "degraded": semantic_degraded,
+            "degraded_reason": semantic_reason,
+            "errors": errors,
+            "warnings": warnings,
+            "cache_invalidated": indexed > 0,
+        })
+    except ValueError as exc:
+        _metrics.record_error(str(exc))
+        return jsonify({"error": str(exc)}), 400
+    except Exception as exc:
+        _metrics.record_error(str(exc))
+        logger.exception("RAG document create failed")
+        return jsonify({"error": "RAG document create failed"}), 500
+    finally:
+        _metrics.record_index(ok=ok)
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# ENDPOINT 6aa: DELETE /api/rag/documents/<doc_id>  –  Single Document Delete
+# ══════════════════════════════════════════════════════════════════════════
+
+@bp.route("/documents/<doc_id>", methods=["DELETE"])
+def rag_documents_delete(doc_id: str) -> Tuple[Any, int] | Any:
+    """Delete one document on the documented RAG document seam."""
+    rate_limit_response = _rate_limit_rag()
+    if rate_limit_response is not None:
+        return rate_limit_response
+
+    warnings: List[str] = []
+    ok = False
+    try:
+        namespace = str(request.args.get("namespace", "default") or "default")
+        if not _validate_namespace(namespace):
+            return jsonify({"error": "invalid namespace format"}), 400
+
+        cleaned_doc_id = str(doc_id or "").strip()
+        if not cleaned_doc_id:
+            return jsonify({"error": "doc_id required"}), 400
+
+        bm25 = _get_bm25()
+        deleted = bm25.delete_document(namespace=namespace, doc_id=cleaned_doc_id)
+        if not deleted:
+            return jsonify({
+                "error": "document not found",
+                "namespace": namespace,
+                "doc_id": cleaned_doc_id,
+                "deleted": False,
+            }), 404
+
+        warnings.append("semantic delete unavailable; BM25 document deleted")
+        try:
+            cache = _get_rag_cache()
+            cache.invalidate_pattern(f"rag:*:{namespace}:*")
+        except Exception:
+            logger.debug("RAG cache invalidation failed after document delete (non-critical)")
+
+        ok = True
+        return jsonify({
+            "namespace": namespace,
+            "doc_id": cleaned_doc_id,
+            "deleted": True,
+            "semantic_deleted": False,
+            "degraded": True,
+            "degraded_reason": "semantic_delete_unavailable",
+            "warnings": warnings,
+            "cache_invalidated": True,
+        })
+    except ValueError as exc:
+        _metrics.record_error(str(exc))
+        return jsonify({"error": str(exc)}), 400
+    except Exception as exc:
+        _metrics.record_error(str(exc))
+        logger.exception("RAG document delete failed")
+        return jsonify({"error": "RAG document delete failed"}), 500
+    finally:
+        _metrics.record_index(ok=ok)
+
+
+# ══════════════════════════════════════════════════════════════════════════
 # ENDPOINT 6b: POST /api/rag/cache/clear  –  Clear RAG Cache
 # ══════════════════════════════════════════════════════════════════════════
 
