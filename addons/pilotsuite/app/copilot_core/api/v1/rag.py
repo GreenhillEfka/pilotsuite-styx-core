@@ -130,6 +130,13 @@ class _SemanticBackend:
     module_path: str
 
 
+@dataclass(frozen=True)
+class _SemanticSearchOutcome:
+    hits: List[RankedHit]
+    degraded: bool = False
+    degraded_reason: Optional[str] = None
+
+
 class _Metrics:
     """Thread-safe request metrics."""
 
@@ -377,11 +384,15 @@ def _semantic_search(
     query: str,
     top_k: int,
     warnings: List[str],
-) -> List[RankedHit]:
+) -> _SemanticSearchOutcome:
     backend = _load_semantic_backend()
     if backend is None:
         warnings.append("semantic backend not configured; returning BM25-only results")
-        return []
+        return _SemanticSearchOutcome(
+            hits=[],
+            degraded=True,
+            degraded_reason="semantic_backend_unavailable",
+        )
 
     try:
         raw = backend.search_fn(namespace=namespace, query=query, top_k=top_k)
@@ -391,11 +402,15 @@ def _semantic_search(
         logger.exception("Semantic search failed (namespace=%s)", namespace)
         warnings.append("semantic search failed; returning BM25-only results")
         _metrics.record_error(f"semantic search failed: {exc}")
-        return []
+        return _SemanticSearchOutcome(
+            hits=[],
+            degraded=True,
+            degraded_reason="semantic_backend_failed",
+        )
 
     hits: List[RankedHit] = []
     if not raw:
-        return hits
+        return _SemanticSearchOutcome(hits=hits)
 
     for i, item in enumerate(raw, start=1):
         doc_id: Optional[str] = None
@@ -424,7 +439,7 @@ def _semantic_search(
             continue
         hits.append(RankedHit(doc_id=str(doc_id), score=float(score), rank=int(i)))
 
-    return hits
+    return _SemanticSearchOutcome(hits=hits)
 
 
 def _clamp_top_k(raw: Any, default: int = 10) -> int:
@@ -557,8 +572,12 @@ def rag_search() -> Tuple[Any, int] | Any:
                 cache_hit = True
                 logger.debug("RAG cache HIT: %s", cache_key)
                 took_ms = (time.monotonic() - started) * 1000.0
+                cached_payload = dict(cached_result)
+                cached_payload.setdefault("effective_mode", cached_payload.get("mode"))
+                cached_payload.setdefault("degraded", False)
+                cached_payload.setdefault("degraded_reason", None)
                 return jsonify({
-                    **cached_result,
+                    **cached_payload,
                     "cache_hit": True,
                     "took_ms": round(took_ms, 3),
                 })
@@ -567,6 +586,7 @@ def rag_search() -> Tuple[Any, int] | Any:
 
         lexical_hits: List[BM25Hit] = []
         semantic_hits: List[RankedHit] = []
+        semantic_outcome = _SemanticSearchOutcome(hits=[])
 
         if use_lexical:
             lexical_hits = bm25.search(
@@ -575,11 +595,13 @@ def rag_search() -> Tuple[Any, int] | Any:
             )
 
         if use_semantic:
-            semantic_hits = _semantic_search(
+            semantic_outcome = _semantic_search(
                 namespace=namespace, query=query, top_k=top_k, warnings=warnings,
             )
+            semantic_hits = semantic_outcome.hits
 
         mode: str
+        effective_mode: str
         results: List[Dict[str, Any]] = []
 
         if use_lexical and use_semantic:
@@ -624,13 +646,22 @@ def rag_search() -> Tuple[Any, int] | Any:
                     semantic_score=round(h.score, 6), semantic_rank=h.rank,
                 ))
 
+        degraded = bool(use_semantic and semantic_outcome.degraded)
+        degraded_reason = semantic_outcome.degraded_reason if degraded else None
+        effective_mode = mode
+        if degraded:
+            effective_mode = "bm25" if use_lexical else "semantic"
+
         ok = True
         took_ms = (time.monotonic() - started) * 1000.0
-        
+
         response_data = {
             "namespace": namespace,
             "query": query,
             "mode": mode,
+            "effective_mode": effective_mode,
+            "degraded": degraded,
+            "degraded_reason": degraded_reason,
             "results": results,
             "result_count": len(results),
             "warnings": warnings,
@@ -647,6 +678,9 @@ def rag_search() -> Tuple[Any, int] | Any:
                     "namespace": namespace,
                     "query": query,
                     "mode": mode,
+                    "effective_mode": effective_mode,
+                    "degraded": degraded,
+                    "degraded_reason": degraded_reason,
                     "results": results,
                     "result_count": len(results),
                     "warnings": warnings,
@@ -778,9 +812,10 @@ def rag_search_semantic() -> Tuple[Any, int] | Any:
         include_text = bool(data.get("include_text", True))
         include_metadata = bool(data.get("include_metadata", True))
 
-        hits = _semantic_search(
+        semantic_outcome = _semantic_search(
             namespace=namespace, query=query, top_k=top_k, warnings=warnings,
         )
+        hits = semantic_outcome.hits
 
         bm25 = _get_bm25()
         doc_ids = [h.doc_id for h in hits[:top_k]]
@@ -1205,12 +1240,13 @@ def rag_search_enhanced() -> Tuple[Any, int] | Any:
         )
         
         # Semantic search (if backend configured)
-        semantic_hits = _semantic_search(
+        semantic_outcome = _semantic_search(
             namespace=namespace,
             query=query,
             top_k=top_k,
             warnings=warnings,
         )
+        semantic_hits = semantic_outcome.hits
         
         # Step 3: Web Search (SearXNG) if needed
         web_results: List[SearXNGResult] = []
@@ -1366,14 +1402,37 @@ def rag_search_enhanced() -> Tuple[Any, int] | Any:
             # For more sophisticated fusion, implement cross-source RRF
             results = local_results + web_result_dicts
             results = results[:top_k]
-        
+
+        degraded = False
+        degraded_reason: Optional[str] = None
+        effective_mode = mode
+
+        if mode == "local":
+            degraded = semantic_outcome.degraded
+            degraded_reason = semantic_outcome.degraded_reason if degraded else None
+            if lexical_hits and semantic_hits:
+                effective_mode = "local_hybrid"
+            elif lexical_hits:
+                effective_mode = "local_bm25"
+            elif semantic_hits:
+                effective_mode = "local_semantic"
+            else:
+                effective_mode = "local_bm25" if degraded else "local"
+        elif mode == "hybrid":
+            degraded = semantic_outcome.degraded
+            degraded_reason = semantic_outcome.degraded_reason if degraded else None
+            effective_mode = "hybrid_bm25_web" if degraded else "hybrid_local_web"
+
         ok = True
         took_ms = (time.monotonic() - started) * 1000.0
-        
+
         return jsonify({
             "namespace": namespace,
             "query": query,
             "mode": mode,
+            "effective_mode": effective_mode,
+            "degraded": degraded,
+            "degraded_reason": degraded_reason,
             "query_classification": {
                 "type": query_type.value,
                 "confidence": classification.confidence,
