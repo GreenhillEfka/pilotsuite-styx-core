@@ -1516,6 +1516,13 @@ def register_blueprints(app: Flask, services: dict) -> None:
     except Exception:
         _LOGGER.exception("Failed to register suggestions_bp")
 
+    # Register Delivery Interactive API — bounded acknowledgment seam (303-A)
+    from copilot_core.api.v1.delivery_interactive import delivery_bp
+    try:
+        app.register_blueprint(delivery_bp)
+    except Exception:
+        _LOGGER.exception("Failed to register delivery_bp")
+
     # Register Zone Automation API (presence-based light + music + entity management)
     from copilot_core.api.v1.zone_automation import zone_automation_bp, init_zone_automation_api
     try:
