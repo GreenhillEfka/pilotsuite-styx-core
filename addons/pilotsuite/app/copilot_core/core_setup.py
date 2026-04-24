@@ -1523,6 +1523,13 @@ def register_blueprints(app: Flask, services: dict) -> None:
     except Exception:
         _LOGGER.exception("Failed to register delivery_bp")
 
+    # Register Observability API — E2E proof chain (E2E-OBS-305)
+    from copilot_core.api.v1.observability import observability_bp
+    try:
+        app.register_blueprint(observability_bp)
+    except Exception:
+        _LOGGER.exception("Failed to register observability_bp")
+
     # Register Zone Automation API (presence-based light + music + entity management)
     from copilot_core.api.v1.zone_automation import zone_automation_bp, init_zone_automation_api
     try:
