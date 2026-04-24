@@ -117,11 +117,20 @@ def _build_proof(delivery_token: str, record: dict[str, Any] | None) -> dict[str
                 Checkpoint(cp_type.value, record.get("updated_at", datetime.now(timezone.utc))).to_dict()
             )
 
+    raw_meta = (record or {}).get("metadata", {})
+    raw_ctx = (raw_meta.get("context") or {}) if isinstance(raw_meta, dict) else {}
+    context = {
+        "zone": raw_ctx.get("zone") if isinstance(raw_ctx, dict) else None,
+        "surface": raw_ctx.get("surface") if isinstance(raw_ctx, dict) else None,
+        "prompt_label": raw_ctx.get("prompt_label") if isinstance(raw_ctx, dict) else None,
+    }
+
     return {
         "delivery_token": delivery_token,
         "state": state,
         "created_at": created_at.isoformat() if isinstance(created_at, datetime) else created_at,
         "checkpoints": checkpoints,
+        "context": context,
     }
 
 

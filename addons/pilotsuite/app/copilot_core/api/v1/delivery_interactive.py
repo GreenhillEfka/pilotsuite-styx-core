@@ -99,17 +99,33 @@ def _increment_attempt(record: dict[str, Any]) -> None:
     record["attempt_count"] = int(record.get("attempt_count", 0)) + 1
 
 
+def _build_context(metadata: Any) -> dict:
+    """Build canonical read-only context from stored metadata.
+
+    Always returns {zone, surface, prompt_label} — missing fields are explicit None.
+    """
+    raw = (metadata or {}).get("context", {}) if isinstance(metadata, dict) else {}
+    return {
+        "zone": raw.get("zone") if isinstance(raw, dict) else None,
+        "surface": raw.get("surface") if isinstance(raw, dict) else None,
+        "prompt_label": raw.get("prompt_label") if isinstance(raw, dict) else None,
+    }
+
+
 def _post_response(record: dict[str, Any]):
+    ctx = _build_context(record.get("metadata"))
     return jsonify({
         "ok": True,
         "delivery_token": record["delivery_token"],
         "state": record["state"],
         "timestamp": record["updated_at"].isoformat(),
         "metadata": record.get("metadata"),
+        "context": ctx,
     })
 
 
 def _status_response(record: dict[str, Any]):
+    ctx = _build_context(record.get("metadata"))
     return jsonify({
         "ok": True,
         "delivery_token": record["delivery_token"],
@@ -117,6 +133,7 @@ def _status_response(record: dict[str, Any]):
         "created_at": record["created_at"].isoformat(),
         "expires_at": record["expires_at"].isoformat(),
         "metadata": record.get("metadata"),
+        "context": ctx,
     })
 
 
@@ -127,6 +144,7 @@ def _pending_status_response(delivery_token: str, now: datetime):
         "state": DeliveryState.PENDING.value,
         "created_at": now.isoformat(),
         "expires_at": (now + timedelta(seconds=_TTL_SECONDS)).isoformat(),
+        "context": {"zone": None, "surface": None, "prompt_label": None},
     })
 
 
