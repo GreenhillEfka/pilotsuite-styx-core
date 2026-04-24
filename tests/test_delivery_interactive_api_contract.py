@@ -17,6 +17,7 @@ Semantics:
 """
 from __future__ import annotations
 
+from contextlib import contextmanager
 import sys
 import os
 import uuid
@@ -31,6 +32,7 @@ if str(ADDON_APP) not in sys.path:
     sys.path.insert(0, str(ADDON_APP))
 
 from flask import Flask, jsonify, request
+import copilot_core.api.v1.delivery_interactive as delivery_interactive
 from copilot_core.api.v1.delivery_interactive import (
     delivery_bp,
     _store,
@@ -38,6 +40,7 @@ from copilot_core.api.v1.delivery_interactive import (
     _TTL_SECONDS,
     DeliveryState,
 )
+from copilot_core.api.v1.delivery_intent_store import DeliveryIntentStore
 import copilot_core.api.security as security
 def _make_app():
     app = Flask(__name__)
@@ -46,6 +49,17 @@ def _make_app():
 
 
 from unittest.mock import patch
+
+
+@contextmanager
+def _with_temp_store(tmp_path):
+    original_store = delivery_interactive._intent_store
+    temp_store = DeliveryIntentStore(tmp_path / "delivery_intents.jsonl")
+    delivery_interactive._set_delivery_intent_store_for_testing(temp_store)
+    try:
+        yield temp_store
+    finally:
+        delivery_interactive._set_delivery_intent_store_for_testing(original_store)
 
 
 def _with_auth():
@@ -216,6 +230,40 @@ class TestDeliveryStatus:
         with _with_auth():
             d = app.test_client().get(f"/api/v1/delivery/{token}/status").get_json()
             assert d["state"] == DeliveryState.PENDING.value
+
+    def test_status_survives_store_reload(self, tmp_path):
+        app = _make_app()
+        token = _make_token()
+        with _with_temp_store(tmp_path), _with_auth():
+            c = app.test_client()
+            c.post(
+                "/api/v1/delivery/acknowledge",
+                json={"delivery_token": token, "action": "acknowledge"}
+            )
+            reloaded = DeliveryIntentStore(tmp_path / "delivery_intents.jsonl")
+            delivery_interactive._set_delivery_intent_store_for_testing(reloaded)
+            d = c.get(f"/api/v1/delivery/{token}/status").get_json()
+            assert d["state"] == DeliveryState.ACKNOWLEDGED.value
+
+    def test_store_load_failure_returns_503(self, tmp_path):
+        app = _make_app()
+        broken_path = tmp_path / "delivery_intents"
+        broken_path.mkdir()
+        with _with_auth():
+            original_store = delivery_interactive._intent_store
+            try:
+                delivery_interactive._set_delivery_intent_store_for_testing(
+                    DeliveryIntentStore(broken_path)
+                )
+                r = app.test_client().post(
+                    "/api/v1/delivery/acknowledge",
+                    json={"delivery_token": _make_token(), "action": "acknowledge"}
+                )
+                d = r.get_json()
+                assert r.status_code == 503
+                assert d["ok"] is False
+            finally:
+                delivery_interactive._set_delivery_intent_store_for_testing(original_store)
 
 
 class TestDeliverySmoke:
