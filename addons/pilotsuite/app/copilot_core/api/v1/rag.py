@@ -111,6 +111,7 @@ _SEARXNG_BASE_URL = os.getenv("COPILOT_CORE_RAG_SEARXNG_URL", "http://localhost:
 _MAX_DOCUMENTS_PER_REQUEST = 2000
 _MAX_TOP_K = 500
 _MAX_RERANK_HITS = 1000
+_MAX_MULTI_QUERY_VARIATIONS = 5
 
 
 # ── Auth guard ──────────────────────────────────────────────────────────
@@ -480,6 +481,89 @@ def _build_result_entry(
     return entry
 
 
+def _dedupe_preserve_order(values: Sequence[str]) -> List[str]:
+    seen: set[str] = set()
+    deduped: List[str] = []
+    for value in values:
+        if not value or value in seen:
+            continue
+        seen.add(value)
+        deduped.append(value)
+    return deduped
+
+
+def _normalize_multi_queries(raw_queries: Any) -> List[str]:
+    if not isinstance(raw_queries, list):
+        raise ValueError("queries must be a list")
+
+    queries: List[str] = []
+    for raw_query in raw_queries:
+        if not isinstance(raw_query, str):
+            raise ValueError("queries must contain only strings")
+        query = raw_query.strip()
+        if not query:
+            raise ValueError("queries must not contain blank values")
+        queries.append(query)
+
+    queries = _dedupe_preserve_order(queries)
+    if not queries:
+        raise ValueError("queries required")
+    if len(queries) > _MAX_MULTI_QUERY_VARIATIONS:
+        raise ValueError(
+            f"queries must contain between 1 and {_MAX_MULTI_QUERY_VARIATIONS} items"
+        )
+    return queries
+
+
+def _accumulate_multi_query_hits(
+    aggregate: Dict[str, Dict[str, Any]],
+    hits: Sequence[Any],
+    *,
+    query: str,
+    source: str,
+    weight: float,
+    rrf_k: int,
+) -> None:
+    for hit in hits:
+        doc_id = getattr(hit, "doc_id", None)
+        if not doc_id:
+            continue
+
+        try:
+            rank = int(getattr(hit, "rank", 1) or 1)
+        except (TypeError, ValueError):
+            rank = 1
+        if rank <= 0:
+            rank = 1
+
+        try:
+            score = float(getattr(hit, "score", 0.0))
+        except (TypeError, ValueError):
+            score = 0.0
+
+        item = aggregate.setdefault(str(doc_id), {
+            "score": 0.0,
+            "lexical_rank": None,
+            "semantic_rank": None,
+            "lexical_score": None,
+            "semantic_score": None,
+            "matched_queries": [],
+        })
+
+        item["score"] += float(weight) / float(rrf_k + rank)
+        item["matched_queries"] = _dedupe_preserve_order([*item["matched_queries"], query])
+
+        rank_key = f"{source}_rank"
+        score_key = f"{source}_score"
+
+        previous_rank = item.get(rank_key)
+        if previous_rank is None or rank < previous_rank:
+            item[rank_key] = rank
+            item[score_key] = score
+        elif item.get(score_key) is None or score > item[score_key]:
+            item[score_key] = score
+
+
 # ══════════════════════════════════════════════════════════════════════════
 # ENDPOINT 1: POST /api/rag/search  –  Hybrid Search (BM25 + Semantic + RRF)
 # ══════════════════════════════════════════════════════════════════════════
@@ -700,6 +784,158 @@ def rag_search() -> Tuple[Any, int] | Any:
         _metrics.record_error(str(exc))
         logger.exception("RAG hybrid search failed")
         return jsonify({"error": "RAG search failed"}), 500
+    finally:
+        took_ms = (time.monotonic() - started) * 1000.0
+        _metrics.record_search(took_ms, ok=ok)
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# ENDPOINT 1B: POST /api/rag/search/multi  –  Bounded Multi-Query Hybrid Search
+# ══════════════════════════════════════════════════════════════════════════
+
+@bp.route("/search/multi", methods=["POST"])
+def rag_search_multi() -> Tuple[Any, int] | Any:
+    """Bounded multi-query hybrid search on the existing RAG family."""
+    rate_limit_response = _rate_limit_rag()
+    if rate_limit_response is not None:
+        return rate_limit_response
+
+    started = time.monotonic()
+    warnings: List[str] = []
+    degraded_reasons: List[str] = []
+    ok = False
+
+    try:
+        data: Dict[str, Any] = request.get_json(silent=True) or {}
+        namespace = str(data.get("namespace", "default") or "default")
+
+        if not _validate_namespace(namespace):
+            return jsonify({"error": "invalid namespace format"}), 400
+
+        queries = _normalize_multi_queries(data.get("queries"))
+        top_k = _clamp_top_k(data.get("top_k", 10))
+        include_text = bool(data.get("include_text", True))
+        include_metadata = bool(data.get("include_metadata", True))
+        use_lexical = bool(data.get("use_lexical", True))
+        use_semantic = bool(data.get("use_semantic", True))
+        rrf_k = max(1, int(data.get("rrf_k", 60)))
+        lexical_weight = max(0.0, float(data.get("lexical_weight", 1.0)))
+        semantic_weight = max(0.0, float(data.get("semantic_weight", 1.0)))
+
+        if not use_lexical and not use_semantic:
+            return jsonify({"error": "at least one of use_lexical/use_semantic must be true"}), 400
+
+        bm25 = _get_bm25()
+        aggregate: Dict[str, Dict[str, Any]] = {}
+
+        for query in queries:
+            if use_lexical:
+                lexical_hits = bm25.search(
+                    namespace=namespace,
+                    query=query,
+                    top_k=top_k,
+                    include_text=False,
+                    include_metadata=False,
+                )
+                _accumulate_multi_query_hits(
+                    aggregate,
+                    lexical_hits,
+                    query=query,
+                    source="lexical",
+                    weight=lexical_weight,
+                    rrf_k=rrf_k,
+                )
+
+            if use_semantic:
+                semantic_outcome = _semantic_search(
+                    namespace=namespace,
+                    query=query,
+                    top_k=top_k,
+                    warnings=warnings,
+                )
+                if semantic_outcome.degraded and semantic_outcome.degraded_reason:
+                    degraded_reasons.append(semantic_outcome.degraded_reason)
+
+                _accumulate_multi_query_hits(
+                    aggregate,
+                    semantic_outcome.hits,
+                    query=query,
+                    source="semantic",
+                    weight=semantic_weight,
+                    rrf_k=rrf_k,
+                )
+
+        ranked = sorted(
+            aggregate.items(),
+            key=lambda item: (-float(item[1]["score"]), item[0]),
+        )[:top_k]
+        doc_ids = [doc_id for doc_id, _ in ranked]
+        docs = _enrich_results(bm25, namespace, doc_ids, include_text, include_metadata)
+
+        results: List[Dict[str, Any]] = []
+        for doc_id, item in ranked:
+            lexical_score = item.get("lexical_score")
+            semantic_score = item.get("semantic_score")
+            matched_queries = item.get("matched_queries", [])
+            results.append(_build_result_entry(
+                doc_id,
+                float(item["score"]),
+                docs,
+                include_text,
+                include_metadata,
+                fused_score=round(float(item["score"]), 6),
+                lexical_rank=item.get("lexical_rank"),
+                semantic_rank=item.get("semantic_rank"),
+                lexical_score=round(float(lexical_score), 6) if lexical_score is not None else None,
+                semantic_score=round(float(semantic_score), 6) if semantic_score is not None else None,
+                matched_queries=matched_queries,
+                query_match_count=len(matched_queries),
+            ))
+
+        if use_lexical and use_semantic:
+            mode = "multi_hybrid_rrf"
+        elif use_lexical:
+            mode = "multi_bm25"
+        else:
+            mode = "multi_semantic"
+
+        degraded = bool(degraded_reasons)
+        unique_degraded_reasons = _dedupe_preserve_order(degraded_reasons)
+        degraded_reason = None
+        if degraded:
+            degraded_reason = (
+                unique_degraded_reasons[0]
+                if len(unique_degraded_reasons) == 1
+                else "semantic_backend_partially_degraded"
+            )
+
+        effective_mode = mode
+        if degraded:
+            effective_mode = "multi_bm25" if use_lexical else "multi_semantic"
+
+        ok = True
+        took_ms = (time.monotonic() - started) * 1000.0
+        return jsonify({
+            "namespace": namespace,
+            "queries": queries,
+            "query_count": len(queries),
+            "mode": mode,
+            "effective_mode": effective_mode,
+            "degraded": degraded,
+            "degraded_reason": degraded_reason,
+            "results": results,
+            "result_count": len(results),
+            "warnings": _dedupe_preserve_order(warnings),
+            "took_ms": round(took_ms, 3),
+        })
+
+    except ValueError as exc:
+        _metrics.record_error(str(exc))
+        return jsonify({"error": str(exc)}), 400
+    except Exception as exc:
+        _metrics.record_error(str(exc))
+        logger.exception("RAG multi-query search failed")
+        return jsonify({"error": "RAG multi-query search failed"}), 500
     finally:
         took_ms = (time.monotonic() - started) * 1000.0
         _metrics.record_search(took_ms, ok=ok)
