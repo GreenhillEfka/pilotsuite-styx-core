@@ -38,6 +38,19 @@ class TestRAGSearchAPI:
         rag_routes = [p for p in routes if "/rag" in p]
         assert len(rag_routes) >= 1, f"No RAG routes found: {rag_routes}"
 
+    def test_specialized_search_routes_registered(self):
+        from flask import Flask
+        from copilot_core.api.v1.rag import bp as rag_bp
+
+        app = Flask(__name__)
+        app.register_blueprint(rag_bp)
+        routes = {str(r): r.methods for r in app.url_map.iter_rules()}
+
+        assert "/api/v1/rag/search/bm25" in routes
+        assert "POST" in routes["/api/v1/rag/search/bm25"]
+        assert "/api/v1/rag/search/semantic" in routes
+        assert "POST" in routes["/api/v1/rag/search/semantic"]
+
 
 class TestRAGSearchModels:
     """RAG Search data models contract."""

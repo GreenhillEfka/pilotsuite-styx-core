@@ -388,7 +388,7 @@ def _semantic_search(
 ) -> _SemanticSearchOutcome:
     backend = _load_semantic_backend()
     if backend is None:
-        warnings.append("semantic backend not configured; returning BM25-only results")
+        warnings.append("semantic backend not configured; semantic results unavailable")
         return _SemanticSearchOutcome(
             hits=[],
             degraded=True,
@@ -401,7 +401,7 @@ def _semantic_search(
         raw = backend.search_fn(query=query, top_k=top_k, namespace=namespace)
     except Exception as exc:
         logger.exception("Semantic search failed (namespace=%s)", namespace)
-        warnings.append("semantic search failed; returning BM25-only results")
+        warnings.append("semantic search failed; semantic results unavailable")
         _metrics.record_error(f"semantic search failed: {exc}")
         return _SemanticSearchOutcome(
             hits=[],
@@ -998,6 +998,9 @@ def rag_search_bm25() -> Tuple[Any, int] | Any:
             "namespace": namespace,
             "query": query,
             "mode": "bm25",
+            "effective_mode": "bm25",
+            "degraded": False,
+            "degraded_reason": None,
             "results": results,
             "result_count": len(results),
             "took_ms": round(took_ms, 3),
@@ -1053,9 +1056,11 @@ def rag_search_semantic() -> Tuple[Any, int] | Any:
         )
         hits = semantic_outcome.hits
 
-        bm25 = _get_bm25()
-        doc_ids = [h.doc_id for h in hits[:top_k]]
-        docs = _enrich_results(bm25, namespace, doc_ids, include_text, include_metadata)
+        docs: Dict[str, Dict[str, Any]] = {}
+        if hits:
+            bm25 = _get_bm25()
+            doc_ids = [h.doc_id for h in hits[:top_k]]
+            docs = _enrich_results(bm25, namespace, doc_ids, include_text, include_metadata)
 
         results: List[Dict[str, Any]] = []
         for h in hits[:top_k]:
@@ -1064,12 +1069,18 @@ def rag_search_semantic() -> Tuple[Any, int] | Any:
                 semantic_score=round(h.score, 6), semantic_rank=h.rank,
             ))
 
+        degraded = semantic_outcome.degraded
+        degraded_reason = semantic_outcome.degraded_reason if degraded else None
+
         ok = True
         took_ms = (time.monotonic() - started) * 1000.0
         return jsonify({
             "namespace": namespace,
             "query": query,
             "mode": "semantic",
+            "effective_mode": "semantic",
+            "degraded": degraded,
+            "degraded_reason": degraded_reason,
             "results": results,
             "result_count": len(results),
             "warnings": warnings,
