@@ -979,12 +979,14 @@ def rag_search_bm25() -> Tuple[Any, int] | Any:
             include_text=include_text, include_metadata=include_metadata,
         )
 
+        trimmed = hits[:top_k]
         results: List[Dict[str, Any]] = []
-        for h in hits:
+        for h in trimmed:
             entry: Dict[str, Any] = {
                 "id": h.doc_id,
                 "score": round(h.score, 6),
                 "rank": h.rank,
+                "lexical_rank": h.rank,
             }
             if include_text:
                 entry["text"] = h.text
