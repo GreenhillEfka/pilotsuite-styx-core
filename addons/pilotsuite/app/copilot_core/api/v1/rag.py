@@ -515,6 +515,39 @@ def _normalize_multi_queries(raw_queries: Any) -> List[str]:
     return queries
 
 
+def _parse_rerank_hits(raw_hits: Any, *, field_name: str) -> List[RankedHit]:
+    if raw_hits is None:
+        return []
+    if not isinstance(raw_hits, list):
+        raise ValueError(f"{field_name} must be a list")
+
+    hits: List[RankedHit] = []
+    for i, item in enumerate(raw_hits, start=1):
+        if not isinstance(item, dict):
+            raise ValueError(f"{field_name} entries must be objects")
+
+        doc_id = str(item.get("id") or item.get("doc_id", "")).strip()
+        if not doc_id:
+            continue
+
+        try:
+            score = float(item.get("score", 0.0))
+        except (TypeError, ValueError):
+            raise ValueError(f"{field_name} score must be numeric")
+
+        try:
+            rank = int(item.get("rank", i))
+        except (TypeError, ValueError):
+            raise ValueError(f"{field_name} rank must be an integer")
+
+        if rank <= 0:
+            raise ValueError(f"{field_name} rank must be >= 1")
+
+        hits.append(RankedHit(doc_id=doc_id, score=score, rank=rank))
+
+    return hits
+
+
 def _accumulate_multi_query_hits(
     aggregate: Dict[str, Dict[str, Any]],
     hits: Sequence[Any],
@@ -1125,6 +1158,11 @@ def rag_rerank() -> Tuple[Any, int] | Any:
         if not lexical_raw and not semantic_raw:
             return jsonify({"error": "at least one of lexical_hits/semantic_hits required"}), 400
 
+        if not isinstance(lexical_raw, list):
+            return jsonify({"error": "lexical_hits must be a list"}), 400
+        if not isinstance(semantic_raw, list):
+            return jsonify({"error": "semantic_hits must be a list"}), 400
+
         if len(lexical_raw) > _MAX_RERANK_HITS or len(semantic_raw) > _MAX_RERANK_HITS:
             return jsonify({"error": f"max {_MAX_RERANK_HITS} hits per list"}), 400
 
@@ -1133,19 +1171,11 @@ def rag_rerank() -> Tuple[Any, int] | Any:
         lexical_weight = max(0.0, float(data.get("lexical_weight", 1.0)))
         semantic_weight = max(0.0, float(data.get("semantic_weight", 1.0)))
 
-        def _parse_hits(raw: List[Dict[str, Any]]) -> List[RankedHit]:
-            hits: List[RankedHit] = []
-            for i, item in enumerate(raw, start=1):
-                doc_id = str(item.get("id") or item.get("doc_id", "")).strip()
-                if not doc_id:
-                    continue
-                score = float(item.get("score", 0.0))
-                rank = int(item.get("rank", i))
-                hits.append(RankedHit(doc_id=doc_id, score=score, rank=rank))
-            return hits
+        lexical_hits = _parse_rerank_hits(lexical_raw, field_name="lexical_hits")
+        semantic_hits = _parse_rerank_hits(semantic_raw, field_name="semantic_hits")
 
-        lexical_hits = _parse_hits(lexical_raw)
-        semantic_hits = _parse_hits(semantic_raw)
+        if not lexical_hits and not semantic_hits:
+            return jsonify({"error": "at least one of lexical_hits/semantic_hits required"}), 400
 
         fused = reciprocal_rank_fusion(
             lexical_hits=lexical_hits,
@@ -1155,10 +1185,12 @@ def rag_rerank() -> Tuple[Any, int] | Any:
         )
 
         results: List[Dict[str, Any]] = []
-        for f in fused:
+        for rank, f in enumerate(fused, start=1):
             results.append({
                 "id": f.doc_id,
+                "score": round(f.fused_score, 6),
                 "fused_score": round(f.fused_score, 6),
+                "rank": rank,
                 "lexical_rank": f.lexical_rank,
                 "semantic_rank": f.semantic_rank,
                 "lexical_score": f.lexical_score,
@@ -1168,8 +1200,13 @@ def rag_rerank() -> Tuple[Any, int] | Any:
         ok = True
         took_ms = (time.monotonic() - started) * 1000.0
         return jsonify({
+            "mode": "rerank_rrf",
+            "effective_mode": "rerank_rrf",
+            "degraded": False,
+            "degraded_reason": None,
             "results": results,
             "result_count": len(results),
+            "top_k": top_k,
             "rrf_k": rrf_k,
             "took_ms": round(took_ms, 3),
         })

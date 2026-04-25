@@ -50,6 +50,8 @@ class TestRAGSearchAPI:
         assert "POST" in routes["/api/v1/rag/search/bm25"]
         assert "/api/v1/rag/search/semantic" in routes
         assert "POST" in routes["/api/v1/rag/search/semantic"]
+        assert "/api/v1/rag/rerank" in routes
+        assert "POST" in routes["/api/v1/rag/rerank"]
 
 
 class TestRAGSearchModels:
