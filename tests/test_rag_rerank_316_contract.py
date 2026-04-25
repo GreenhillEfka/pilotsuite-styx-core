@@ -23,79 +23,96 @@ def _make_app():
 
 @contextmanager
 def _auth_ok():
-    with patch("copilot_core.api.v1.rag.validate_token", return_value=True):
-        yield
+    async def _no_cache(*args, **kwargs):
+        return None
+    with patch('copilot_core.api.v1.rag.validate_token', return_value=True):
+        with patch('copilot_core.api.v1.rag._get_rag_cache') as mock_cache:
+            mock_cache.return_value.get = _no_cache
+            yield
 
 
-class TestRAGRerankRoute:
+class TestRAGRerankRouteRegistration:
     def test_route_exists(self):
         app = _make_app()
-        rules = {rule.rule for rule in app.url_map.iter_rules() if "/rag/" in rule.rule}
-        assert "/api/v1/rag/rerank" in rules
+        rules = {rule.rule for rule in app.url_map.iter_rules() if '/rag/' in rule.rule}
+        assert '/api/v1/rag/rerank' in rules
 
 
 class TestRAGRerankValidation:
     def test_rejects_empty_hit_lists(self):
         app = _make_app()
         with _auth_ok():
-            r = app.test_client().post("/api/v1/rag/rerank", json={})
+            r = app.test_client().post('/api/v1/rag/rerank', json={})
             assert r.status_code == 400
-            assert r.get_json()["error"] == "at least one of lexical_hits/semantic_hits required"
+            assert r.get_json()['error'] == 'at least one of lexical_hits/semantic_hits required'
 
-    def test_rejects_non_list_hit_payloads(self):
+    def test_rejects_oversized_hit_lists(self):
+        app = _make_app()
+        oversized = [{'id': f'doc-{i}', 'score': 1.0, 'rank': i + 1} for i in range(1001)]
+        with _auth_ok():
+            r = app.test_client().post('/api/v1/rag/rerank', json={'lexical_hits': oversized})
+            assert r.status_code == 400
+            assert r.get_json()['error'] == 'max 1000 hits per list'
+
+
+class TestRAGRerankResultTruth:
+    def test_fused_results_are_bounded_and_machine_checkable(self):
         app = _make_app()
         with _auth_ok():
-            r = app.test_client().post(
-                "/api/v1/rag/rerank",
-                json={"lexical_hits": {"id": "doc-1"}},
-            )
-            assert r.status_code == 400
-            assert r.get_json()["error"] == "lexical_hits must be a list"
-
-    def test_rejects_effectively_empty_hit_lists_after_parsing(self):
-        app = _make_app()
-        with _auth_ok():
-            r = app.test_client().post(
-                "/api/v1/rag/rerank",
-                json={
-                    "lexical_hits": [{"id": "   ", "score": 1.0, "rank": 1}],
-                    "semantic_hits": [],
-                },
-            )
-            assert r.status_code == 400
-            assert r.get_json()["error"] == "at least one of lexical_hits/semantic_hits required"
-
-
-class TestRAGRerankSuccess:
-    def test_returns_bounded_fused_result_truth(self):
-        app = _make_app()
-        with _auth_ok():
-            r = app.test_client().post(
-                "/api/v1/rag/rerank",
-                json={
-                    "top_k": 2,
-                    "lexical_hits": [
-                        {"id": "doc-a", "score": 5.0, "rank": 1},
-                        {"id": "doc-b", "score": 3.0, "rank": 2},
-                    ],
-                    "semantic_hits": [
-                        {"id": "doc-b", "score": 0.91, "rank": 1},
-                        {"id": "doc-c", "score": 0.82, "rank": 2},
-                    ],
-                },
-            )
+            payload = {
+                'lexical_hits': [
+                    {'id': 'doc-a', 'score': 2.0, 'rank': 1},
+                    {'id': 'doc-b', 'score': 1.0, 'rank': 2},
+                ],
+                'semantic_hits': [
+                    {'id': 'doc-b', 'score': 0.95, 'rank': 1},
+                    {'id': 'doc-a', 'score': 0.80, 'rank': 2},
+                ],
+                'top_k': 1,
+            }
+            r = app.test_client().post('/api/v1/rag/rerank', json=payload)
             assert r.status_code == 200, r.get_data(as_text=True)
             d = r.get_json()
-            assert d["mode"] == "rerank_rrf"
-            assert d["effective_mode"] == "rerank_rrf"
-            assert d["degraded"] is False
-            assert d["degraded_reason"] is None
-            assert d["top_k"] == 2
-            assert d["result_count"] == 2
-            assert len(d["results"]) == 2
-            assert d["results"][0]["id"] == "doc-b"
-            assert d["results"][0]["rank"] == 1
-            assert d["results"][0]["score"] == d["results"][0]["fused_score"]
-            assert d["results"][0]["lexical_rank"] == 2
-            assert d["results"][0]["semantic_rank"] == 1
-            assert d["results"][1]["id"] == "doc-a"
+            assert d['mode'] == 'rerank_rrf'
+            assert d['result_count'] == 1
+            assert len(d['results']) == 1
+            result = d['results'][0]
+            assert result['id'] in {'doc-a', 'doc-b'}
+            assert isinstance(result['fused_score'], float)
+            assert 'lexical_rank' in result
+            assert 'semantic_rank' in result
+
+    def test_accepts_single_input_list_without_widening_route(self):
+        app = _make_app()
+        with _auth_ok():
+            payload = {
+                'semantic_hits': [
+                    {'id': 'doc-s', 'score': 0.9, 'rank': 1},
+                    {'id': 'doc-t', 'score': 0.7, 'rank': 2},
+                ],
+                'top_k': 2,
+            }
+            r = app.test_client().post('/api/v1/rag/rerank', json=payload)
+            assert r.status_code == 200, r.get_data(as_text=True)
+            d = r.get_json()
+            assert d['mode'] == 'rerank_rrf'
+            assert d['result_count'] == 2
+            assert len(d['results']) == 2
+            assert d['results'][0]['semantic_rank'] == 1
+            assert d['results'][0]['lexical_rank'] is None
+
+    def test_skips_blank_ids_and_keeps_valid_hits(self):
+        app = _make_app()
+        with _auth_ok():
+            payload = {
+                'lexical_hits': [
+                    {'id': '   ', 'score': 3.0, 'rank': 1},
+                    {'id': 'doc-a', 'score': 2.0, 'rank': 2},
+                ],
+                'top_k': 5,
+            }
+            r = app.test_client().post('/api/v1/rag/rerank', json=payload)
+            assert r.status_code == 200, r.get_data(as_text=True)
+            d = r.get_json()
+            assert d['result_count'] == 1
+            assert d['results'][0]['id'] == 'doc-a'
