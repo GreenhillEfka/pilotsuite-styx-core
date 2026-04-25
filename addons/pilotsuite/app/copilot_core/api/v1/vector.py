@@ -24,6 +24,8 @@ from copilot_core.vector_store.embeddings import get_embedding_engine, Embedding
 
 _LOGGER = logging.getLogger(__name__)
 
+_ENTRY_ID_PREFIXES = ("entity:", "user_pref:", "pattern:")
+
 bp = Blueprint("vector", __name__, url_prefix="/vector")
 
 from copilot_core.api.security import validate_token as _validate_token
@@ -59,6 +61,13 @@ def _store() -> VectorStore:
 def _engine() -> EmbeddingEngine:
     """Get the embedding engine singleton."""
     return get_embedding_engine()
+
+
+def _candidate_entry_ids(entry_id: str) -> list[str]:
+    """Return the bounded lookup candidates for an entry id."""
+    if entry_id.startswith(_ENTRY_ID_PREFIXES):
+        return [entry_id]
+    return [f"{prefix}{entry_id}" for prefix in _ENTRY_ID_PREFIXES]
 
 
 # ==================== Embeddings ====================
@@ -282,24 +291,30 @@ def list_vectors():
 def get_vector(entry_id: str):
     """Get a specific vector."""
     try:
-        # Normalize entry_id
-        if not entry_id.startswith(("entity:", "user_pref:", "pattern:")):
-            entry = None
-            for prefix in ["entity:", "user_pref:", "pattern:"]:
-                entry = _run_async(_store().get(f"{prefix}{entry_id}"))
-                if entry:
-                    break
-        else:
-            entry = _run_async(_store().get(entry_id))
+        lookup_candidates = _candidate_entry_ids(entry_id)
+        entry = None
+        lookup_id = None
+
+        for candidate in lookup_candidates:
+            entry = _run_async(_store().get(candidate))
+            if entry:
+                lookup_id = candidate
+                break
 
         if not entry:
             return jsonify({
                 "ok": False,
+                "found": False,
+                "requested_id": entry_id,
+                "attempted_ids": lookup_candidates,
                 "error": f"Entry not found: {entry_id}",
             }), 404
 
         return jsonify({
             "ok": True,
+            "found": True,
+            "requested_id": entry_id,
+            "lookup_id": lookup_id or entry.id,
             "entry": {
                 "id": entry.id,
                 "type": entry.entry_type,
@@ -320,25 +335,28 @@ def get_vector(entry_id: str):
 def delete_vector(entry_id: str):
     """Delete a vector."""
     try:
-        # Normalize entry_id
-        if not entry_id.startswith(("entity:", "user_pref:", "pattern:")):
-            for prefix in ["entity:", "user_pref:", "pattern:"]:
-                deleted = _run_async(_store().delete(f"{prefix}{entry_id}"))
-                if deleted:
-                    return jsonify({"ok": True, "deleted": f"{prefix}{entry_id}"})
-            return jsonify({
-                "ok": False,
-                "error": f"Entry not found: {entry_id}",
-            }), 404
-        else:
-            deleted = _run_async(_store().delete(entry_id))
-            if not deleted:
-                return jsonify({
-                    "ok": False,
-                    "error": f"Entry not found: {entry_id}",
-                }), 404
+        lookup_candidates = _candidate_entry_ids(entry_id)
 
-        return jsonify({"ok": True, "deleted": entry_id})
+        for candidate in lookup_candidates:
+            deleted = _run_async(_store().delete(candidate))
+            if deleted:
+                return jsonify({
+                    "ok": True,
+                    "found": True,
+                    "requested_id": entry_id,
+                    "deleted": candidate,
+                    "deleted_count": 1,
+                })
+
+        return jsonify({
+            "ok": False,
+            "found": False,
+            "requested_id": entry_id,
+            "attempted_ids": lookup_candidates,
+            "deleted": None,
+            "deleted_count": 0,
+            "error": f"Entry not found: {entry_id}",
+        }), 404
 
     except Exception as e:
         _LOGGER.exception("Failed to delete vector")

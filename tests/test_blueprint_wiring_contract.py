@@ -15,6 +15,8 @@ import importlib
 import sys
 from pathlib import Path
 
+from flask import Blueprint, Flask
+
 ROOT = Path(__file__).resolve().parents[1]
 ADDON_APP = ROOT / "addons" / "pilotsuite" / "app"
 if str(ADDON_APP) not in sys.path:
@@ -140,3 +142,25 @@ TestBlueprintAttributeExists = pytest.mark.parametrize(
 TestBlueprintUrlPrefix = pytest.mark.parametrize(
     "blueprint_spec", _BLUEPRINTS, scope="class"
 )(TestBlueprintUrlPrefix)
+
+
+class TestVectorBlueprintLiveRouting:
+    """Vector blueprint stays wired onto the live /api/v1/vector family."""
+
+    def test_vector_routes_register_under_api_v1(self):
+        from copilot_core.api.v1.vector import bp as vector_bp
+
+        app = Flask(__name__)
+        api_v1 = Blueprint("api_v1_test", __name__, url_prefix="/api/v1")
+        api_v1.register_blueprint(vector_bp)
+        app.register_blueprint(api_v1)
+
+        rules = {rule.rule for rule in app.url_map.iter_rules() if "/vector" in rule.rule}
+
+        assert "/api/v1/vector/embeddings" in rules
+        assert "/api/v1/vector/embeddings/bulk" in rules
+        assert "/api/v1/vector/similar/<path:entry_id>" in rules
+        assert "/api/v1/vector/similarity" in rules
+        assert "/api/v1/vector/vectors" in rules
+        assert "/api/v1/vector/vectors/<path:entry_id>" in rules
+        assert "/api/v1/vector/stats" in rules
