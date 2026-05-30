@@ -1,6 +1,6 @@
 # PilotSuite Core — Home Assistant Add-on
 
-**Version:** 20.0.8  
+**Version:** 20.0.10  
 **License:** MIT  
 **Author:** GreenhillEfka
 
