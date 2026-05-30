@@ -46,6 +46,11 @@ coverage.xml
 # Logs
 *.log
 
+# Generated add-on packaging shadow tree, canonical Core truth lives in addons/pilotsuite/app/
+addons/pilotsuite/rootfs/usr/src/app/**
+!addons/pilotsuite/rootfs/usr/src/app/main.py
+!addons/pilotsuite/rootfs/usr/src/app/requirements.txt
+
 # Dev artifacts
 .last-dev-check
 

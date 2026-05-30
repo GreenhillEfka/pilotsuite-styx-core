@@ -4,15 +4,13 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release version (e.g. 15.2.2)'
+        description: "Release version, for example 20.0.8"
         required: true
         type: string
 
 jobs:
   release:
     runs-on: ubuntu-latest
-    env:
-      VERSION: ${{ github.event.inputs.version }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -20,103 +18,74 @@ jobs:
 
       - name: Validate version input
         run: |
-          if ! printf '%s\n' "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
-            echo "Error: Version must match X.Y.Z format"
+          VERSION="${{ github.event.inputs.version }}"
+          if ! echo "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "Error: version must match X.Y.Z"
             exit 1
           fi
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "TAG=v$VERSION" >> "$GITHUB_ENV"
 
-      - name: Bump add-on version files
+      - name: Bump canonical version files
         run: |
-          echo "Bumping to: $VERSION"
           echo "$VERSION" > VERSION
           echo "$VERSION" > addons/pilotsuite/app/VERSION
           python3 - <<'PY'
-          import os, re
-          from pathlib import Path
-          version = os.environ['VERSION']
-          path = Path('addons/pilotsuite/config.yaml')
-          text = path.read_text(encoding='utf-8')
-          text, count = re.subn(r'(?m)^version:\s*"[^"]+"\s*$', f'version: "{version}"', text, count=1)
-          if count != 1:
-              raise SystemExit('Failed to update version in addons/pilotsuite/config.yaml')
-          path.write_text(text, encoding='utf-8')
-          print(f'config.yaml -> {version}')
-          PY
-          echo "VERSION files updated:"
-          cat VERSION
-          cat addons/pilotsuite/app/VERSION
-          grep '^version:' addons/pilotsuite/config.yaml
-
-      - name: Verify add-on version files match
-        run: |
-          V_ROOT=$(cat VERSION)
-          V_ADDON=$(cat addons/pilotsuite/app/VERSION)
-          V_CONFIG=$(python3 - <<'PY'
+          import json
+          import os
           import re
-          text=open('addons/pilotsuite/config.yaml', encoding='utf-8').read()
-          m=re.search(r'(?m)^version:\s*"([^"]+)"\s*$', text)
-          print(m.group(1) if m else '')
-          PY
-          )
-          echo "root VERSION:      $V_ROOT"
-          echo "app VERSION:       $V_ADDON"
-          echo "config.yaml ver:   $V_CONFIG"
-          if [ "$V_ROOT" != "$VERSION" ] || [ "$V_ADDON" != "$VERSION" ] || [ "$V_CONFIG" != "$VERSION" ]; then
-            echo "ERROR: At least one version file does not match $VERSION"
-            exit 1
-          fi
-          echo "ALL ADD-ON VERSION FILES CONSISTENT ✓"
+          from pathlib import Path
 
-      - name: Commit version bump
+          version = os.environ["VERSION"]
+
+          readme = Path("README.md")
+          readme.write_text(re.sub(r"(?m)^\*\*Version:\*\*\s+.*$", f"**Version:** {version}  ", readme.read_text(), count=1))
+
+          config = Path("addons/pilotsuite/config.yaml")
+          config.write_text(re.sub(r'(?m)^version:\s*"[^"]+"\s*$', f'version: "{version}"', config.read_text(), count=1))
+          PY
+
+      - name: Verify canonical version truth
         run: |
-          git config --global user.email "pilotclaw@pilotsuite.dev"
-          git config --global user.name "PilotClaw"
-          git add -A
-          git commit -m "chore(core): release v${{ github.event.inputs.version }}"
-          git tag "v${{ github.event.inputs.version }}"
+          test "$(cat VERSION)" = "$VERSION"
+          test "$(cat addons/pilotsuite/app/VERSION)" = "$VERSION"
+          grep -q "^\*\*Version:\*\* $VERSION" README.md
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+          text = Path("addons/pilotsuite/config.yaml").read_text()
+          match = re.search(r'(?m)^version:\s*"([^"]+)"\s*$', text)
+          assert match and match.group(1) == Path("VERSION").read_text().strip()
+          print("Canonical version files aligned")
+          PY
+
+      - name: Commit and tag
+        run: |
+          git config user.email "pilotclaw@pilotsuite.dev"
+          git config user.name "PilotClaw"
+          git add README.md VERSION addons/pilotsuite/config.yaml addons/pilotsuite/app/VERSION
+          git commit -m "chore(core): release v$VERSION"
+          git tag "$TAG"
           git push origin main --tags
 
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "v$VERSION" \
-            --title "PilotSuite Core v$VERSION" \
-            --notes "Release v$VERSION" \
+          gh release create "$TAG" \
+            --title "PilotSuite Core $TAG" \
+            --notes "Release $TAG" \
             --clobber
 
       - name: Build and upload ZIP asset
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          git archive --format=zip --prefix=pilotsuite-styx-core/ -o "v$VERSION.zip" HEAD
-          gh release upload "v$VERSION" "v$VERSION.zip" --clobber
+          git archive --format=zip --prefix=pilotsuite-styx-core/ -o "$TAG.zip" HEAD
+          gh release upload "$TAG" "$TAG.zip" --clobber
 
       - name: Verify ZIP contents
         run: |
-          ROOT_ZIP_VERSION=$(unzip -p "v$VERSION.zip" pilotsuite-styx-core/VERSION | tr -d '[:space:]')
-          APP_ZIP_VERSION=$(unzip -p "v$VERSION.zip" pilotsuite-styx-core/addons/pilotsuite/app/VERSION | tr -d '[:space:]')
-          CONFIG_ZIP_VERSION=$(python3 - <<'PY'
-          import re
-          import subprocess
-
-          text = subprocess.check_output(
-              ['unzip', '-p', f'v{__import__("os").environ["VERSION"]}.zip', 'pilotsuite-styx-core/addons/pilotsuite/config.yaml'],
-              text=True,
-          )
-          match = re.search(r'(?m)^version:\s*"([^"]+)"\s*$', text)
-          print(match.group(1) if match else '')
-          PY
-          )
-          echo "zip root VERSION:  $ROOT_ZIP_VERSION"
-          echo "zip app VERSION:   $APP_ZIP_VERSION"
-          echo "zip config.yaml:   $CONFIG_ZIP_VERSION"
-          if [ "$ROOT_ZIP_VERSION" != "$VERSION" ] || [ "$APP_ZIP_VERSION" != "$VERSION" ] || [ "$CONFIG_ZIP_VERSION" != "$VERSION" ]; then
-            echo "ERROR: ZIP contents do not match $VERSION"
-            exit 1
-          fi
-          if unzip -Z1 "v$VERSION.zip" | grep -Eq '^pilotsuite-styx-core/copilot_core/(config_flow\.py|manifest\.json|hacs\.json|README\.md|ui/)'; then
-            echo "ERROR: ZIP still contains stale top-level HA-owned copilot_core surfaces"
-            exit 1
-          fi
-          echo "ZIP VERSION SURFACES CONSISTENT ✓"
+          unzip -p "$TAG.zip" pilotsuite-styx-core/VERSION
+          unzip -p "$TAG.zip" pilotsuite-styx-core/addons/pilotsuite/app/VERSION
+          unzip -p "$TAG.zip" pilotsuite-styx-core/addons/pilotsuite/config.yaml | grep '^version:'

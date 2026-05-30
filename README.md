@@ -1,88 +1,55 @@
 # PilotSuite Core — Home Assistant Add-on
 
-**Version:** 20.0.0  
+**Version:** 20.0.8  
 **License:** MIT  
 **Author:** GreenhillEfka
 
-## Overview
+PilotSuite Core is the canonical Home Assistant add-on that runs the PilotSuite backend, API surface, and operator UI.
 
-PilotSuite Core is the brain of your AI-powered home. It provides semantic understanding, neural sensors, and intelligent automation logic.
+## Install order
 
-## Architecture
+1. Install **PilotSuite Core** from this repository.
+2. Install **PilotSuite HA** from `https://github.com/GreenhillEfka/pilotsuite-styx-ha`.
 
-```
-┌─────────────────────────────────────┐
-│  Home Assistant (HACS Integration)  │
-│  - Entities, Sensors, Cards         │
-│  - User Interface                   │
-└──────────────┬──────────────────────┘
-               │ HTTP API (Port 8909)
-               ▼
-┌─────────────────────────────────────┐
-│  PilotSuite Core (This Add-on)      │
-│  - Brain Architecture               │
-│  - Neural Sensors                   │
-│  - ML/AI Processing                 │
-│  - API Server                       │
-└─────────────────────────────────────┘
-```
+## Canonical repo layout
+
+- `README.md` , public entrypoint for this repository
+- `addons/pilotsuite/` , canonical add-on packaging tree
+- `addons/pilotsuite/app/` , canonical runtime application tree
+- `addons/pilotsuite/app/copilot_core/` , canonical Python package and API source
+- `copilot_core/` , legacy archive surface only, not release truth
 
 ## Installation
 
-### Via Add-on Store
+See [docs/INSTALLATION.md](docs/INSTALLATION.md) for the full path.
 
-1. Add repository: `https://github.com/GreenhillEfka/pilotsuite-styx-core`
-2. Install "PilotSuite Core"
-3. Configure (host, port, API keys)
-4. Start the add-on
+Quick path:
+1. Add `https://github.com/GreenhillEfka/pilotsuite-styx-core` to the Home Assistant add-on store.
+2. Install **PilotSuite Core**.
+3. Configure `log_level`, `ollama_host`, and `ollama_port`.
+4. Start the add-on.
+5. Open the add-on UI or connect to `http://<home-assistant-host>:8909`.
 
-### Configuration
+## First verification path
 
-```yaml
-log_level: info          # critical|error|warning|info|debug
-ollama_host: localhost   # Ollama server host
-ollama_port: 11434       # Ollama server port
-```
+1. Confirm the add-on is running.
+2. Check `GET /health` and `GET /version` on port `8909`.
+3. Open the add-on UI and confirm the runtime responds without path guessing.
 
-## API Endpoints
+## Smoke test path
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/health` | GET | Health check |
-| `/version` | GET | Version info |
-| `/api/v1/zones` | GET | Zone information |
-| `/api/v1/presence` | GET | Presence status |
-| `/api/v1/analytics` | GET | Analytics data |
-| `/api/v1/notifications` | POST | Send notification |
+- Runtime smoke: `GET /health`, `GET /version`
+- Repo smoke: see [docs/TESTING.md](docs/TESTING.md)
 
-Full API documentation: `docs/openapi.yaml`
+## Documentation
 
-## Features
-
-- 🧠 **Brain Graph** — Neural representation of home state
-- 🎯 **Presence Detection** — Multi-sensor fusion
-- ⚡ **Energy Forecasting** — LSTM-based predictions
-- 🗣️ **Voice Processing** — Local STT/TTS integration
-- 📊 **Analytics Engine** — Insights & recommendations
-- 🔔 **Notification System** — Smart alerting
-
-## Requirements
-
-- Home Assistant ≥ 2024.1.0
-- Ollama server (optional, for local LLM)
-- 2GB RAM minimum
-- Docker support
+- [Installation](docs/INSTALLATION.md)
+- [Testing](docs/TESTING.md)
+- [Troubleshooting](docs/TROUBLESHOOTING.md)
+- [API Reference](docs/API_REFERENCE.md)
 
 ## Support
 
 - Issues: https://github.com/GreenhillEfka/pilotsuite-styx-core/issues
-- Discord: PilotSuite Community
-- Documentation: https://docs.pilotsuite.ai
-
-## Changelog
-
-See [CHANGELOG.md](CHANGELOG.md) for version history.
-
----
-
-**Built with ❤️ by the PilotSuite Team**
+- HA integration repo: https://github.com/GreenhillEfka/pilotsuite-styx-ha
+- Changelog: [CHANGELOG.md](CHANGELOG.md)

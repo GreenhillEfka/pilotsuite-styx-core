@@ -18,20 +18,17 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install -r copilot_core/requirements.txt
+          pip install -r addons/pilotsuite/app/requirements.txt
           pip install pytest pytest-asyncio
 
-      - name: Run tests
+      - name: Run canonical add-on tests
         env:
           COPILOT_AUTH_REQUIRED: "false"
-          PYTHONPATH: copilot_core/rootfs/usr/src/app
+          PYTHONPATH: addons/pilotsuite/app
         run: |
-          python -m pytest copilot_core/rootfs/usr/src/app/tests/ \
-            -v --tb=short -q \
-            --ignore=copilot_core/rootfs/usr/src/app/tests/test_list_suggestions.py \
-            --ignore=copilot_core/rootfs/usr/src/app/tests/test_anomaly_detection.py
+          python -m pytest addons/pilotsuite/app/copilot_core/tests -q
 
-      - name: Syntax check
+      - name: Syntax check canonical add-on entrypoints
         run: |
-          python -m py_compile copilot_core/rootfs/usr/src/app/copilot_core/app.py
-          python -m py_compile copilot_core/rootfs/usr/src/app/main.py
+          python -m py_compile addons/pilotsuite/app/copilot_core/app.py
+          python -m py_compile addons/pilotsuite/app/main.py

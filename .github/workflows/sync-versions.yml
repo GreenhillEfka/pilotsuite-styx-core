@@ -1,131 +1,90 @@
-name: Sync HA+Core Versions
+name: Sync Core and HA Versions
 
 on:
   push:
     branches: [main]
-  schedule:
-    - cron: '*/20 * * * *'  # Alle 20 Min
   workflow_dispatch:
     inputs:
       force:
-        description: 'Force sync even if versions match'
+        description: "Force sync even when versions already match"
         required: false
-        default: 'false'
+        default: "false"
 
 jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout both repositories
+      - name: Checkout Core repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          path: main-repo
+          path: core-repo
 
       - name: Checkout HA repository
         uses: actions/checkout@v4
         with:
-          repository: ${{ github.repository_owner }}/pilotsuite-styx-ha
-          ref: main
+          repository: GreenhillEfka/pilotsuite-styx-ha
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
           path: ha-repo
 
-      - name: Check Version Sync
-        id: check
+      - name: Compare versions
+        id: compare
         run: |
-          cd $GITHUB_WORKSPACE/main-repo
-          CORE_VER=$(tr -d '[:space:]' < addons/pilotsuite/app/VERSION)
-          CORE_CONFIG_VER=$(python3 - <<'PY'
-          import re
-          text = open('addons/pilotsuite/config.yaml', encoding='utf-8').read()
-          match = re.search(r'(?m)^version:\s*"([^"]+)"\s*$', text)
-          print(match.group(1) if match else '')
-          PY
-          )
-          HA_ROOT_VER=$(tr -d '[:space:]' < ../ha-repo/VERSION)
-          HA_MANIFEST_VER=$(python3 - <<'PY'
-          import json
-          from pathlib import Path
-
-          path = Path('../ha-repo/custom_components/pilotsuite/manifest.json')
-          print(json.loads(path.read_text(encoding='utf-8'))['version'])
-          PY
-          )
-
-          echo "Core app version:      $CORE_VER"
-          echo "Core config version:   $CORE_CONFIG_VER"
-          echo "HA root version:       $HA_ROOT_VER"
-          echo "HA manifest version:   $HA_MANIFEST_VER"
-          echo "TARGET_VERSION=$CORE_VER" >> $GITHUB_OUTPUT
-
-          if [ "$CORE_VER" != "$CORE_CONFIG_VER" ]; then
-            echo "::error::Core add-on version surfaces are divergent: app=$CORE_VER config=$CORE_CONFIG_VER"
+          CORE_VERSION=$(tr -d '[:space:]' < core-repo/addons/pilotsuite/app/VERSION)
+          ROOT_CORE_VERSION=$(tr -d '[:space:]' < core-repo/VERSION)
+          HA_VERSION=$(tr -d '[:space:]' < ha-repo/VERSION)
+          if [ "$CORE_VERSION" != "$ROOT_CORE_VERSION" ]; then
+            echo "Core canonical version files disagree: addons/pilotsuite/app/VERSION=$CORE_VERSION VERSION=$ROOT_CORE_VERSION"
             exit 1
           fi
-
-          if [ "$CORE_VER" != "$HA_ROOT_VER" ] || [ "$CORE_VER" != "$HA_MANIFEST_VER" ] || [ "$HA_ROOT_VER" != "$HA_MANIFEST_VER" ]; then
-            echo "::warning::Version mismatch! Core: $CORE_VER, HA root: $HA_ROOT_VER, HA manifest: $HA_MANIFEST_VER"
-            echo "::warning::Auto-fixing HA version surfaces..."
-            echo "MISMATCH=true" >> $GITHUB_OUTPUT
+          echo "core=$CORE_VERSION" >> "$GITHUB_OUTPUT"
+          echo "ha=$HA_VERSION" >> "$GITHUB_OUTPUT"
+          if [ "$CORE_VERSION" != "$HA_VERSION" ] || [ "${{ github.event.inputs.force }}" = "true" ]; then
+            echo "sync=true" >> "$GITHUB_OUTPUT"
           else
-            echo "✅ Versions synchron: v$CORE_VER"
-            echo "MISMATCH=false" >> $GITHUB_OUTPUT
+            echo "sync=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Sync HA Version
-        if: steps.check.outputs.MISMATCH == 'true' || github.event.inputs.force == 'true'
-        env:
-          TARGET_VER: ${{ steps.check.outputs.TARGET_VERSION }}
+      - name: Update HA canonical version files
+        if: steps.compare.outputs.sync == 'true'
         run: |
-          cd $GITHUB_WORKSPACE/ha-repo
-
-          # Update authoritative HA version surfaces
-          echo "$TARGET_VER" > VERSION
+          export VERSION="${{ steps.compare.outputs.core }}"
+          cd ha-repo
+          echo "$VERSION" > VERSION
           python3 - <<'PY'
           import json
           import os
+          import re
           from pathlib import Path
 
-          version = os.environ['TARGET_VER']
-          path = Path('custom_components/pilotsuite/manifest.json')
-          data = json.loads(path.read_text(encoding='utf-8'))
-          old = data.get('version', '?')
-          data['version'] = version
-          path.write_text(json.dumps(data, indent=2) + '\n', encoding='utf-8')
-          print(f'manifest: {old} -> {version}')
+          version = os.environ["VERSION"]
+          readme = Path("README.md")
+          readme.write_text(re.sub(r"(?m)^\*\*Version:\*\*\s+.*$", f"**Version:** {version}  ", readme.read_text(), count=1))
+
+          for path_str in ["manifest.json", "custom_components/pilotsuite/manifest.json"]:
+              path = Path(path_str)
+              data = json.loads(path.read_text())
+              data["version"] = version
+              path.write_text(json.dumps(data, indent=2) + "\n")
           PY
 
-          # Sync CHANGELOG if exists in main repo
-          if [ -f ../main-repo/CHANGELOG.md ]; then
-            cp ../main-repo/CHANGELOG.md CHANGELOG.md
-          fi
-          
-          echo "✅ HA version updated to $TARGET_VER"
-
-      - name: Commit and Push
-        if: steps.check.outputs.MISMATCH == 'true' || github.event.inputs.force == 'true'
+      - name: Commit and push HA sync
+        if: steps.compare.outputs.sync == 'true'
         run: |
-          cd $GITHUB_WORKSPACE/ha-repo
-          
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action (Auto-Sync)"
-
-          git add VERSION custom_components/pilotsuite/manifest.json CHANGELOG.md 2>/dev/null || true
-          
+          cd ha-repo
+          git config user.email "action@github.com"
+          git config user.name "GitHub Action"
+          git add README.md VERSION manifest.json custom_components/pilotsuite/manifest.json
           if ! git diff --cached --quiet; then
-            git commit -m "chore: Auto-sync HA version to Core v${{ steps.check.outputs.TARGET_VERSION }}"
-            git push origin main || echo "Push failed (expected for protected branches)"
-            echo "✅ Changes committed and pushed"
+            git commit -m "chore(ha): sync version to core v${{ steps.compare.outputs.core }}"
+            git push origin main
           else
-            echo "ℹ️ No changes to commit"
+            echo "No version changes needed"
           fi
 
-      - name: Report Status
+      - name: Report status
         run: |
-          if [ "${{ steps.check.outputs.MISMATCH }}" == "true" ]; then
-            echo "🔧 Auto-Sync completed successfully!"
-            echo "HA version is now: ${{ steps.check.outputs.TARGET_VERSION }}"
-          else
-            echo "✅ No sync needed - versions already match"
-          fi
+          echo "Core version: ${{ steps.compare.outputs.core }}"
+          echo "HA version:   ${{ steps.compare.outputs.ha }}"
+          echo "Synced:       ${{ steps.compare.outputs.sync }}"
