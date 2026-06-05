@@ -1,6 +1,6 @@
 name: "PilotSuite Core"
 description: "The Platinum AI Engine"
-version: "16.0.4"
+version: "20.0.11"
 slug: "pilotsuite"
 panel_icon: "mdi:brain"
 startup: "system"

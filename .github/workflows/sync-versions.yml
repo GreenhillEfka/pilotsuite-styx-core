@@ -33,9 +33,17 @@ jobs:
         run: |
           CORE_VERSION=$(tr -d '[:space:]' < core-repo/addons/pilotsuite/app/VERSION)
           ROOT_CORE_VERSION=$(tr -d '[:space:]' < core-repo/VERSION)
+          LEGACY_CORE_VERSION=$(python3 - <<'PY'
+          import re
+          from pathlib import Path
+          text = Path('core-repo/pilotsuite/config.yaml').read_text()
+          match = re.search(r'(?m)^version:\s*"([^"]+)"\s*$', text)
+          print(match.group(1) if match else '')
+          PY
+          )
           HA_VERSION=$(tr -d '[:space:]' < ha-repo/VERSION)
-          if [ "$CORE_VERSION" != "$ROOT_CORE_VERSION" ]; then
-            echo "Core canonical version files disagree: addons/pilotsuite/app/VERSION=$CORE_VERSION VERSION=$ROOT_CORE_VERSION"
+          if [ "$CORE_VERSION" != "$ROOT_CORE_VERSION" ] || [ "$CORE_VERSION" != "$LEGACY_CORE_VERSION" ]; then
+            echo "Core canonical version files disagree: addons/pilotsuite/app/VERSION=$CORE_VERSION VERSION=$ROOT_CORE_VERSION pilotsuite/config.yaml=$LEGACY_CORE_VERSION"
             exit 1
           fi
           echo "core=$CORE_VERSION" >> "$GITHUB_OUTPUT"

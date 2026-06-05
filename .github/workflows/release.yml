@@ -43,6 +43,9 @@ jobs:
 
           config = Path("addons/pilotsuite/config.yaml")
           config.write_text(re.sub(r'(?m)^version:\s*"[^"]+"\s*$', f'version: "{version}"', config.read_text(), count=1))
+
+          legacy_config = Path("pilotsuite/config.yaml")
+          legacy_config.write_text(re.sub(r'(?m)^version:\s*"[^"]+"\s*$', f'version: "{version}"', legacy_config.read_text(), count=1))
           PY
 
       - name: Verify canonical version truth
@@ -53,9 +56,11 @@ jobs:
           python3 - <<'PY'
           import re
           from pathlib import Path
-          text = Path("addons/pilotsuite/config.yaml").read_text()
-          match = re.search(r'(?m)^version:\s*"([^"]+)"\s*$', text)
-          assert match and match.group(1) == Path("VERSION").read_text().strip()
+          want = Path("VERSION").read_text().strip()
+          for path_str in ["addons/pilotsuite/config.yaml", "pilotsuite/config.yaml"]:
+              text = Path(path_str).read_text()
+              match = re.search(r'(?m)^version:\s*"([^"]+)"\s*$', text)
+              assert match and match.group(1) == want, f"{path_str} version drift"
           print("Canonical version files aligned")
           PY
 
@@ -63,7 +68,7 @@ jobs:
         run: |
           git config user.email "pilotclaw@pilotsuite.dev"
           git config user.name "PilotClaw"
-          git add README.md VERSION addons/pilotsuite/config.yaml addons/pilotsuite/app/VERSION
+          git add README.md VERSION addons/pilotsuite/config.yaml addons/pilotsuite/app/VERSION pilotsuite/config.yaml
           git commit -m "chore(core): release v$VERSION"
           git tag "$TAG"
           git push origin main --tags
@@ -89,3 +94,4 @@ jobs:
           unzip -p "$TAG.zip" pilotsuite-styx-core/VERSION
           unzip -p "$TAG.zip" pilotsuite-styx-core/addons/pilotsuite/app/VERSION
           unzip -p "$TAG.zip" pilotsuite-styx-core/addons/pilotsuite/config.yaml | grep '^version:'
+          unzip -p "$TAG.zip" pilotsuite-styx-core/pilotsuite/config.yaml | grep '^version:'
